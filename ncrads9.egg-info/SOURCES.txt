@@ -70,6 +70,7 @@ ncrads9/frames/frame_manager.py
 ncrads9/frames/hls_frame.py
 ncrads9/frames/hsv_frame.py
 ncrads9/frames/rgb_frame.py
+ncrads9/frames/simple_frame_manager.py
 ncrads9/frames/tile_layout.py
 ncrads9/grid/__init__.py
 ncrads9/grid/ast_wrapper.py
@@ -179,7 +180,9 @@ ncrads9/ui/widgets/__init__.py
 ncrads9/ui/widgets/color_picker.py
 ncrads9/ui/widgets/colorbar_widget.py
 ncrads9/ui/widgets/coordinate_entry.py
+ncrads9/ui/widgets/image_viewer_with_regions.py
 ncrads9/ui/widgets/region_list.py
+ncrads9/ui/widgets/region_overlay.py
 ncrads9/ui/widgets/scale_widget.py
 ncrads9/ui/widgets/spinbox_slider.py
 ncrads9/utils/__init__.py

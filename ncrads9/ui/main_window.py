@@ -42,6 +42,8 @@ from .button_bar import ButtonBar
 from .status_bar import StatusBar
 from .image_viewer import ImageViewer
 from .widgets.colorbar_widget import ColorbarWidget
+from .widgets.image_viewer_with_regions import ImageViewerWithRegions
+from .widgets.region_overlay import RegionMode
 from .dialogs.statistics_dialog import StatisticsDialog
 from .dialogs.histogram_dialog import HistogramDialog
 from .dialogs.pixel_table_dialog import PixelTableDialog
@@ -53,6 +55,7 @@ from ..core.wcs_handler import WCSHandler
 from ..rendering.scale_algorithms import apply_scale, ScaleAlgorithm, compute_zscale_limits
 from ..colormaps.builtin_maps import get_colormap
 from ..regions.region_parser import RegionParser
+from ..frames.simple_frame_manager import FrameManager, Frame
 
 if TYPE_CHECKING:
     from ncrads9.utils.config import Config
@@ -75,10 +78,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(800, 600)
         
         # Initialize data storage
-        self.current_file = None
-        self.fits_handler = None
-        self.wcs_handler = None
-        self.image_data = None
+        self.frame_manager = FrameManager()
         self.current_scale = ScaleAlgorithm.LINEAR
         self.current_colormap = "grey"
         self.invert_colormap = False
@@ -90,6 +90,29 @@ class MainWindow(QMainWindow):
         self._setup_central_widget()
         self._setup_dock_widgets()
         self._setup_status_bar()
+    
+    @property
+    def image_data(self):
+        """Get current frame's image data."""
+        frame = self.frame_manager.current_frame
+        return frame.image_data if frame else None
+    
+    @property
+    def wcs_handler(self):
+        """Get current frame's WCS handler."""
+        frame = self.frame_manager.current_frame
+        return frame.wcs_handler if frame else None
+    
+    @property
+    def fits_handler(self):
+        """Get a temporary FITS handler for current frame."""
+        # For compatibility - create on-demand
+        frame = self.frame_manager.current_frame
+        if frame and frame.filepath:
+            handler = FITSHandler()
+            handler.load(str(frame.filepath))
+            return handler
+        return None
 
     def _setup_menu_bar(self) -> None:
         """Set up the menu bar."""
@@ -119,8 +142,13 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_show_toolbar.triggered.connect(self._toggle_toolbar)
         self.menu_bar.action_show_statusbar.triggered.connect(self._toggle_statusbar)
         
-        # Frame menu (stubs)
-        self.menu_bar.action_new_frame.triggered.connect(lambda: self.statusBar().showMessage("Multi-frame not implemented", 2000))
+        # Frame menu
+        self.menu_bar.action_new_frame.triggered.connect(self._new_frame)
+        self.menu_bar.action_delete_frame.triggered.connect(self._delete_frame)
+        self.menu_bar.action_first_frame.triggered.connect(self._first_frame)
+        self.menu_bar.action_prev_frame.triggered.connect(self._prev_frame)
+        self.menu_bar.action_next_frame.triggered.connect(self._next_frame)
+        self.menu_bar.action_last_frame.triggered.connect(self._last_frame)
         
         # Bin menu (stubs for now)
         self.menu_bar.action_bin_1.triggered.connect(lambda: self.statusBar().showMessage("Binning not implemented", 2000))
@@ -197,13 +225,15 @@ class MainWindow(QMainWindow):
         self.scroll_area.setWidgetResizable(False)
         self.scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        # Create interactive image viewer
-        self.image_viewer = ImageViewer()
+        # Create interactive image viewer with regions
+        self.image_viewer = ImageViewerWithRegions()
         self.image_viewer.setText("No image loaded")
         
         # Connect signals
         self.image_viewer.mouse_moved.connect(self._on_mouse_moved)
         self.image_viewer.contrast_changed.connect(self._on_contrast_changed)
+        self.image_viewer.region_created.connect(self._on_region_created)
+        self.image_viewer.region_selected.connect(self._on_region_selected)
         
         self.scroll_area.setWidget(self.image_viewer)
         self.setCentralWidget(self.scroll_area)
@@ -266,47 +296,61 @@ class MainWindow(QMainWindow):
     
     def _load_fits_file(self, filepath: str) -> None:
         """
-        Load a FITS file and display it.
+        Load a FITS file into current frame.
         
         Args:
             filepath: Path to the FITS file.
         """
+        # Get current frame
+        frame = self.frame_manager.current_frame
+        if not frame:
+            frame = self.frame_manager.new_frame()
+        
         # Load FITS file
-        self.fits_handler = FITSHandler()
-        self.fits_handler.load(filepath)
-        self.image_data = self.fits_handler.get_data()
-        self.current_file = filepath
+        fits_handler = FITSHandler()
+        fits_handler.load(filepath)
+        image_data = fits_handler.get_data()
         
         # Load WCS if available
-        header = self.fits_handler.get_header()
-        self.wcs_handler = WCSHandler(header)
+        header = fits_handler.get_header()
+        wcs_handler = WCSHandler(header)
+        
+        # Update frame
+        frame.filepath = Path(filepath)
+        frame.image_data = image_data
+        frame.header = header
+        frame.wcs_handler = wcs_handler
         
         # Update window title
         filename = Path(filepath).name
-        self.setWindowTitle(f"NCRADS9 - {filename}")
+        frame_info = f"Frame {self.frame_manager.current_index + 1}/{self.frame_manager.num_frames}"
+        self.setWindowTitle(f"NCRADS9 - {filename} [{frame_info}]")
         
         # Display the image
         self._display_image()
         
         # Update status bar image info
-        shape = self.image_data.shape
-        dtype = self.image_data.dtype
+        shape = image_data.shape
+        dtype = image_data.dtype
         self.status_bar.update_image_info(shape[1], shape[0])
         
         # Update temporary message
         stats_msg = f"Loaded: {shape[1]}x{shape[0]} pixels, {dtype}"
-        if self.wcs_handler.is_valid:
+        if wcs_handler.is_valid:
             stats_msg += " (WCS available)"
         self.statusBar().showMessage(stats_msg, 3000)
     
     def _display_image(self) -> None:
-        """Display the current image data."""
-        if self.image_data is None:
+        """Display the current frame's image data."""
+        frame = self.frame_manager.current_frame
+        if not frame or not frame.has_data:
             return
+        
+        image_data = frame.image_data
         
         # Compute scale limits using zscale (once, or when reset)
         if self.z1 is None or self.z2 is None:
-            self.z1, self.z2 = compute_zscale_limits(self.image_data)
+            self.z1, self.z2 = compute_zscale_limits(image_data)
         
         # Get contrast/brightness adjustments from viewer
         contrast, brightness = self.image_viewer.get_contrast_brightness()
@@ -511,7 +555,16 @@ class MainWindow(QMainWindow):
     
     def _on_button_bar_region(self, mode: str) -> None:
         """Handle region mode change from button bar."""
-        self.statusBar().showMessage(f"Region mode: {mode} (not implemented)", 2000)
+        mode_map = {
+            "None": RegionMode.NONE,
+            "Circle": RegionMode.CIRCLE,
+            "Ellipse": RegionMode.ELLIPSE,
+            "Box": RegionMode.BOX,
+            "Polygon": RegionMode.POLYGON,
+        }
+        region_mode = mode_map.get(mode, RegionMode.NONE)
+        self.image_viewer.set_region_mode(region_mode)
+        self.statusBar().showMessage(f"Region mode: {mode}", 2000)
     
     def _toggle_fullscreen(self, checked: bool) -> None:
         """Toggle fullscreen mode."""
@@ -686,6 +739,72 @@ class MainWindow(QMainWindow):
         )
         if filepath:
             self.statusBar().showMessage(f"Save as: {filepath}")
+    
+    def _new_frame(self) -> None:
+        """Create a new empty frame."""
+        frame = self.frame_manager.new_frame()
+        frame_info = f"Frame {self.frame_manager.current_index + 1}/{self.frame_manager.num_frames}"
+        self.setWindowTitle(f"NCRADS9 [{frame_info}]")
+        self.statusBar().showMessage(f"Created {frame.filename}", 2000)
+    
+    def _delete_frame(self) -> None:
+        """Delete current frame."""
+        if self.frame_manager.delete_frame():
+            self._display_image()
+            frame = self.frame_manager.current_frame
+            frame_info = f"Frame {self.frame_manager.current_index + 1}/{self.frame_manager.num_frames}"
+            if frame and frame.filepath:
+                self.setWindowTitle(f"NCRADS9 - {frame.filepath.name} [{frame_info}]")
+            else:
+                self.setWindowTitle(f"NCRADS9 [{frame_info}]")
+            self.statusBar().showMessage(f"Deleted frame, now at {frame_info}", 2000)
+        else:
+            self.statusBar().showMessage("Cannot delete last frame", 2000)
+    
+    def _first_frame(self) -> None:
+        """Go to first frame."""
+        self.frame_manager.first_frame()
+        self._display_image()
+        self._update_frame_title()
+    
+    def _prev_frame(self) -> None:
+        """Go to previous frame."""
+        self.frame_manager.prev_frame()
+        self._display_image()
+        self._update_frame_title()
+    
+    def _next_frame(self) -> None:
+        """Go to next frame."""
+        self.frame_manager.next_frame()
+        self._display_image()
+        self._update_frame_title()
+    
+    def _last_frame(self) -> None:
+        """Go to last frame."""
+        self.frame_manager.last_frame()
+        self._display_image()
+        self._update_frame_title()
+    
+    def _update_frame_title(self) -> None:
+        """Update window title with current frame info."""
+        frame = self.frame_manager.current_frame
+        frame_info = f"Frame {self.frame_manager.current_index + 1}/{self.frame_manager.num_frames}"
+        if frame and frame.filepath:
+            self.setWindowTitle(f"NCRADS9 - {frame.filepath.name} [{frame_info}]")
+        else:
+            self.setWindowTitle(f"NCRADS9 [{frame_info}]")
+        self.statusBar().showMessage(frame_info, 2000)
+    
+    def _on_region_created(self, region) -> None:
+        """Handle region creation."""
+        frame = self.frame_manager.current_frame
+        if frame:
+            frame.regions.append(region)
+        self.statusBar().showMessage(f"Created {region.mode.value} region", 2000)
+    
+    def _on_region_selected(self, region) -> None:
+        """Handle region selection."""
+        self.statusBar().showMessage(f"Selected {region.mode.value} region", 2000)
     
     def show_about(self) -> None:
         """Show the About dialog."""
