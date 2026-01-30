@@ -41,6 +41,7 @@ class ImageViewerWithRegions(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setMouseTracking(True)
         
         # Create layout
         layout = QVBoxLayout(self)
@@ -59,6 +60,9 @@ class ImageViewerWithRegions(QWidget):
         self.image_viewer.contrast_changed.connect(self.contrast_changed)
         self.region_overlay.region_created.connect(self.region_created)
         self.region_overlay.region_selected.connect(self.region_selected)
+
+        # Start in non-interactive mode so mouse events reach the image viewer
+        self.set_region_mode(RegionMode.NONE)
         
         # Track when middle button is pressed for centering
         self._middle_button_for_center = False

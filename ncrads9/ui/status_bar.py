@@ -44,17 +44,17 @@ class StatusBar(QStatusBar):
         # Image coordinates (pixel)
         self.pixel_coord_label = QLabel("X: --- Y: ---")
         self.pixel_coord_label.setMinimumWidth(120)
-        self.addPermanentWidget(self.pixel_coord_label)
+        self.addWidget(self.pixel_coord_label)
 
         # WCS coordinates
         self.wcs_coord_label = QLabel("RA: --- Dec: ---")
         self.wcs_coord_label.setMinimumWidth(200)
-        self.addPermanentWidget(self.wcs_coord_label)
+        self.addWidget(self.wcs_coord_label)
 
         # Pixel value
         self.pixel_value_label = QLabel("Value: ---")
         self.pixel_value_label.setMinimumWidth(120)
-        self.addPermanentWidget(self.pixel_value_label)
+        self.addWidget(self.pixel_value_label)
 
         # Image info (permanent widget on the right)
         self.image_info_label = QLabel("No image loaded")
