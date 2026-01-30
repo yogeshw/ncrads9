@@ -77,7 +77,11 @@ class StatusBar(QStatusBar):
         self.pixel_coord_label.setText(f"X: {x:d} Y: {y:d}")
 
     def update_wcs_coords(
-        self, ra: Optional[float] = None, dec: Optional[float] = None
+        self,
+        ra: Optional[float] = None,
+        dec: Optional[float] = None,
+        format_type: str = "sexagesimal",
+        labels: Tuple[str, str] = ("RA", "Dec"),
     ) -> None:
         """
         Update WCS coordinates display.
@@ -87,11 +91,38 @@ class StatusBar(QStatusBar):
             dec: Declination in degrees, or None if unavailable.
         """
         if ra is not None and dec is not None:
-            # Format as sexagesimal
-            ra_h = ra / 15.0
-            ra_hours = int(ra_h)
-            ra_min = int((ra_h - ra_hours) * 60)
-            ra_sec = ((ra_h - ra_hours) * 60 - ra_min) * 60
+            label_x, label_y = labels
+
+            if format_type == "degrees":
+                self.wcs_coord_label.setText(
+                    f"{label_x}: {ra:.5f} deg {label_y}: {dec:.5f} deg"
+                )
+                return
+
+            use_hours = label_x.lower() == "ra"
+            if use_hours:
+                ra_h = ra / 15.0
+                ra_hours = int(ra_h)
+                ra_min = int((ra_h - ra_hours) * 60)
+                ra_sec = ((ra_h - ra_hours) * 60 - ra_min) * 60
+
+                dec_sign = "+" if dec >= 0 else "-"
+                dec_abs = abs(dec)
+                dec_deg = int(dec_abs)
+                dec_min = int((dec_abs - dec_deg) * 60)
+                dec_sec = ((dec_abs - dec_deg) * 60 - dec_min) * 60
+
+                self.wcs_coord_label.setText(
+                    f"{label_x}: {ra_hours:02d}:{ra_min:02d}:{ra_sec:05.2f} "
+                    f"{label_y}: {dec_sign}{dec_deg:02d}:{dec_min:02d}:{dec_sec:04.1f}"
+                )
+                return
+
+            ra_sign = "+" if ra >= 0 else "-"
+            ra_abs = abs(ra)
+            ra_deg = int(ra_abs)
+            ra_min = int((ra_abs - ra_deg) * 60)
+            ra_sec = ((ra_abs - ra_deg) * 60 - ra_min) * 60
 
             dec_sign = "+" if dec >= 0 else "-"
             dec_abs = abs(dec)
@@ -100,8 +131,8 @@ class StatusBar(QStatusBar):
             dec_sec = ((dec_abs - dec_deg) * 60 - dec_min) * 60
 
             self.wcs_coord_label.setText(
-                f"RA: {ra_hours:02d}:{ra_min:02d}:{ra_sec:05.2f} "
-                f"Dec: {dec_sign}{dec_deg:02d}:{dec_min:02d}:{dec_sec:04.1f}"
+                f"{label_x}: {ra_sign}{ra_deg:02d}:{ra_min:02d}:{ra_sec:05.2f} "
+                f"{label_y}: {dec_sign}{dec_deg:02d}:{dec_min:02d}:{dec_sec:04.1f}"
             )
         else:
             self.wcs_coord_label.setText("RA: --- Dec: ---")
@@ -173,6 +204,8 @@ class StatusBar(QStatusBar):
         pixel_coords: Optional[Tuple[int, int]] = None,
         wcs_coords: Optional[Tuple[float, float]] = None,
         value: Optional[float] = None,
+        wcs_format: str = "sexagesimal",
+        wcs_labels: Tuple[str, str] = ("RA", "Dec"),
     ) -> None:
         """
         Update all coordinate displays at once.
@@ -185,6 +218,6 @@ class StatusBar(QStatusBar):
         if pixel_coords is not None:
             self.update_pixel_coords(*pixel_coords)
         if wcs_coords is not None:
-            self.update_wcs_coords(*wcs_coords)
+            self.update_wcs_coords(*wcs_coords, format_type=wcs_format, labels=wcs_labels)
         if value is not None:
             self.update_pixel_value(value)

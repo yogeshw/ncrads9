@@ -35,6 +35,15 @@ from PyQt6.QtWidgets import (
     QScrollArea,
 )
 import numpy as np
+from astropy.coordinates import (
+    SkyCoord,
+    FK5,
+    FK4,
+    ICRS,
+    Galactic,
+    BarycentricTrueEcliptic,
+)
+import astropy.units as u
 
 from .menu_bar import MenuBar
 from .toolbar import MainToolbar
@@ -83,6 +92,9 @@ class MainWindow(QMainWindow):
         self.current_colormap = "grey"
         self.invert_colormap = False
         self.current_bin = 1
+        self.current_wcs_system = "fk5"
+        self.current_wcs_format = "sexagesimal"
+        self._last_mouse_pos: Optional[tuple[int, int]] = None
         self.z1 = None  # Scale limits
         self.z2 = None
 
@@ -543,6 +555,8 @@ class MainWindow(QMainWindow):
         """Handle mouse movement over image."""
         if self.image_data is None:
             return
+
+        self._last_mouse_pos = (x, y)
         
         # Update pixel coordinates
         self.status_bar.update_pixel_coords(x, y)
@@ -554,8 +568,7 @@ class MainWindow(QMainWindow):
         
         # Update WCS coordinates if available
         if self.wcs_handler and self.wcs_handler.is_valid:
-            ra, dec = self.wcs_handler.pixel_to_world(x, y)
-            self.status_bar.update_wcs_coords(ra, dec)
+            self._update_wcs_display(x, y)
     
     def _on_contrast_changed(self, contrast: float, brightness: float) -> None:
         """Handle contrast/brightness change from mouse drag."""
@@ -680,6 +693,7 @@ class MainWindow(QMainWindow):
     
     def _set_wcs_system(self, system: str) -> None:
         """Set WCS coordinate system."""
+        self.current_wcs_system = system
         # Update menu checkmarks
         self.menu_bar.action_wcs_fk5.setChecked(system == "fk5")
         self.menu_bar.action_wcs_fk4.setChecked(system == "fk4")
@@ -687,12 +701,63 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_wcs_galactic.setChecked(system == "galactic")
         self.menu_bar.action_wcs_ecliptic.setChecked(system == "ecliptic")
         self.statusBar().showMessage(f"WCS system: {system.upper()}", 2000)
+        if self._last_mouse_pos is not None and self.wcs_handler and self.wcs_handler.is_valid:
+            self._update_wcs_display(*self._last_mouse_pos)
     
     def _set_wcs_format(self, format_type: str) -> None:
         """Set WCS format (sexagesimal or degrees)."""
+        self.current_wcs_format = format_type
         self.menu_bar.action_wcs_sexagesimal.setChecked(format_type == "sexagesimal")
         self.menu_bar.action_wcs_degrees.setChecked(format_type == "degrees")
         self.statusBar().showMessage(f"WCS format: {format_type}", 2000)
+        if self._last_mouse_pos is not None and self.wcs_handler and self.wcs_handler.is_valid:
+            self._update_wcs_display(*self._last_mouse_pos)
+
+    def _update_wcs_display(self, x: int, y: int) -> None:
+        """Update the status bar WCS display for the given pixel position."""
+        if not self.wcs_handler or not self.wcs_handler.is_valid:
+            return
+
+        ra, dec = self.wcs_handler.pixel_to_world(x, y)
+        base_coord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg, frame=ICRS())
+
+        system = self.current_wcs_system
+        if system == "fk5":
+            coord = base_coord.transform_to(FK5())
+            lon = coord.ra.deg
+            lat = coord.dec.deg
+            labels = ("RA", "Dec")
+        elif system == "fk4":
+            coord = base_coord.transform_to(FK4())
+            lon = coord.ra.deg
+            lat = coord.dec.deg
+            labels = ("RA", "Dec")
+        elif system == "icrs":
+            coord = base_coord.transform_to(ICRS())
+            lon = coord.ra.deg
+            lat = coord.dec.deg
+            labels = ("RA", "Dec")
+        elif system == "galactic":
+            coord = base_coord.transform_to(Galactic())
+            lon = coord.l.deg
+            lat = coord.b.deg
+            labels = ("l", "b")
+        elif system == "ecliptic":
+            coord = base_coord.transform_to(BarycentricTrueEcliptic())
+            lon = coord.lon.deg
+            lat = coord.lat.deg
+            labels = ("Lon", "Lat")
+        else:
+            lon = ra
+            lat = dec
+            labels = ("RA", "Dec")
+
+        self.status_bar.update_wcs_coords(
+            lon,
+            lat,
+            format_type=self.current_wcs_format,
+            labels=labels,
+        )
     
     def _show_statistics(self) -> None:
         """Show statistics dialog."""

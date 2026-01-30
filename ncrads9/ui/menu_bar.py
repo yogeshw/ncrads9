@@ -22,7 +22,7 @@ Author: Yogesh Wadadekar
 
 from typing import Optional
 
-from PyQt6.QtGui import QAction, QKeySequence
+from PyQt6.QtGui import QAction, QActionGroup, QKeySequence
 from PyQt6.QtWidgets import QMenuBar, QMenu, QWidget
 
 
@@ -324,26 +324,34 @@ class MenuBar(QMenuBar):
         """Set up the WCS menu."""
         self.wcs_menu: QMenu = self.addMenu("&WCS")
 
+        self.wcs_system_group = QActionGroup(self)
+        self.wcs_system_group.setExclusive(True)
+
         self.action_wcs_fk5: QAction = QAction("FK&5", self)
         self.action_wcs_fk5.setCheckable(True)
         self.action_wcs_fk5.setChecked(True)
         self.wcs_menu.addAction(self.action_wcs_fk5)
+        self.wcs_system_group.addAction(self.action_wcs_fk5)
 
         self.action_wcs_fk4: QAction = QAction("FK&4", self)
         self.action_wcs_fk4.setCheckable(True)
         self.wcs_menu.addAction(self.action_wcs_fk4)
+        self.wcs_system_group.addAction(self.action_wcs_fk4)
 
         self.action_wcs_icrs: QAction = QAction("&ICRS", self)
         self.action_wcs_icrs.setCheckable(True)
         self.wcs_menu.addAction(self.action_wcs_icrs)
+        self.wcs_system_group.addAction(self.action_wcs_icrs)
 
         self.action_wcs_galactic: QAction = QAction("&Galactic", self)
         self.action_wcs_galactic.setCheckable(True)
         self.wcs_menu.addAction(self.action_wcs_galactic)
+        self.wcs_system_group.addAction(self.action_wcs_galactic)
 
         self.action_wcs_ecliptic: QAction = QAction("&Ecliptic", self)
         self.action_wcs_ecliptic.setCheckable(True)
         self.wcs_menu.addAction(self.action_wcs_ecliptic)
+        self.wcs_system_group.addAction(self.action_wcs_ecliptic)
 
         self.wcs_menu.addSeparator()
 
