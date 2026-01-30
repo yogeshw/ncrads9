@@ -303,9 +303,9 @@ class MainWindow(QMainWindow):
         if filepath:
             try:
                 self._load_fits_file(filepath)
-                self.statusBar().showMessage(f"Opened: {filepath}")
+                self.statusBar().showMessage(f"Opened: {filepath}", 3000)
             except Exception as e:
-                self.statusBar().showMessage(f"Error loading file: {e}")
+                self.statusBar().showMessage(f"Error loading file: {e}", 5000)
                 from PyQt6.QtWidgets import QMessageBox
                 QMessageBox.critical(self, "Error Loading File", 
                                    f"Could not load FITS file:\n{filepath}\n\nError: {e}")
@@ -846,7 +846,7 @@ class MainWindow(QMainWindow):
     
     def save_file(self) -> None:
         """Save the current file."""
-        self.statusBar().showMessage("Save not yet implemented")
+        self.statusBar().showMessage("Save not yet implemented", 3000)
     
     def save_file_as(self) -> None:
         """Save the current file with a new name."""
@@ -857,7 +857,7 @@ class MainWindow(QMainWindow):
             "FITS Files (*.fits *.fit *.fts);;All Files (*)",
         )
         if filepath:
-            self.statusBar().showMessage(f"Save as: {filepath}")
+            self.statusBar().showMessage(f"Save as: {filepath}", 3000)
     
     def _new_frame(self) -> None:
         """Create a new empty frame."""

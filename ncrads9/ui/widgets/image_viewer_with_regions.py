@@ -74,7 +74,7 @@ class ImageViewerWithRegions(QWidget):
         
         # Enable/disable mouse events based on mode
         if mode == RegionMode.NONE:
-            self.region_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+            self.region_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         else:
             self.region_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
     
