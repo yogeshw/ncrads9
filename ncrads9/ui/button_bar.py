@@ -115,7 +115,7 @@ class ButtonBar(QWidget):
         self.color_button_group = QButtonGroup(self)
         self.color_button_group.setExclusive(True)
 
-        colormaps: list[str] = ["Gray", "Heat", "Cool", "Rainbow", "Viridis"]
+        colormaps: list[str] = ["Gray", "Heat", "Cool", "Rainbow"]
         self.color_buttons: dict[str, QPushButton] = {}
 
         for cmap in colormaps:

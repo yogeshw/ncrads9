@@ -98,24 +98,57 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_save_as.triggered.connect(self.save_file_as)
         self.menu_bar.action_exit.triggered.connect(self.close)
         
+        # Edit menu (stubs for now)
+        self.menu_bar.action_undo.triggered.connect(lambda: self.statusBar().showMessage("Undo not implemented", 2000))
+        self.menu_bar.action_redo.triggered.connect(lambda: self.statusBar().showMessage("Redo not implemented", 2000))
+        self.menu_bar.action_preferences.triggered.connect(lambda: self.statusBar().showMessage("Preferences not implemented", 2000))
+        
+        # View menu
+        self.menu_bar.action_fullscreen.triggered.connect(self._toggle_fullscreen)
+        self.menu_bar.action_show_toolbar.triggered.connect(self._toggle_toolbar)
+        self.menu_bar.action_show_statusbar.triggered.connect(self._toggle_statusbar)
+        
+        # Frame menu (stubs)
+        self.menu_bar.action_new_frame.triggered.connect(lambda: self.statusBar().showMessage("Multi-frame not implemented", 2000))
+        
+        # Bin menu (stubs for now)
+        self.menu_bar.action_bin_1.triggered.connect(lambda: self.statusBar().showMessage("Binning not implemented", 2000))
+        
         # Scale menu
         self.menu_bar.action_scale_linear.triggered.connect(lambda: self._set_scale(ScaleAlgorithm.LINEAR))
         self.menu_bar.action_scale_log.triggered.connect(lambda: self._set_scale(ScaleAlgorithm.LOG))
         self.menu_bar.action_scale_sqrt.triggered.connect(lambda: self._set_scale(ScaleAlgorithm.SQRT))
+        self.menu_bar.action_scale_squared.triggered.connect(lambda: self._set_scale(ScaleAlgorithm.POWER))
         self.menu_bar.action_scale_asinh.triggered.connect(lambda: self._set_scale(ScaleAlgorithm.ASINH))
-        self.menu_bar.action_scale_zscale.triggered.connect(self._display_image)
+        self.menu_bar.action_scale_histeq.triggered.connect(lambda: self._set_scale(ScaleAlgorithm.HISTOGRAM_EQUALIZATION))
+        self.menu_bar.action_scale_zscale.triggered.connect(self._reset_scale_limits)
+        self.menu_bar.action_scale_minmax.triggered.connect(self._scale_minmax)
         
         # Color menu
         self.menu_bar.action_cmap_gray.triggered.connect(lambda: self._set_colormap("grey"))
         self.menu_bar.action_cmap_heat.triggered.connect(lambda: self._set_colormap("heat"))
         self.menu_bar.action_cmap_cool.triggered.connect(lambda: self._set_colormap("cool"))
         self.menu_bar.action_cmap_rainbow.triggered.connect(lambda: self._set_colormap("rainbow"))
+        # Note: viridis not in DS9 builtin maps, skip connection
+        self.menu_bar.action_invert_colormap.triggered.connect(self._toggle_invert_colormap)
+        
+        # Region menu (stubs)
+        self.menu_bar.action_region_load.triggered.connect(lambda: self.statusBar().showMessage("Region loading not implemented", 2000))
+        self.menu_bar.action_region_save.triggered.connect(lambda: self.statusBar().showMessage("Region saving not implemented", 2000))
+        
+        # WCS menu (stubs)
+        self.menu_bar.action_wcs_fk5.triggered.connect(lambda: self.statusBar().showMessage("WCS system change not implemented", 2000))
+        
+        # Analysis menu (stubs)
+        self.menu_bar.action_statistics.triggered.connect(lambda: self.statusBar().showMessage("Statistics dialog not implemented", 2000))
+        self.menu_bar.action_histogram.triggered.connect(lambda: self.statusBar().showMessage("Histogram dialog not implemented", 2000))
         
         # Zoom menu
         self.menu_bar.action_zoom_in.triggered.connect(self._zoom_in)
         self.menu_bar.action_zoom_out.triggered.connect(self._zoom_out)
         self.menu_bar.action_zoom_fit.triggered.connect(self._zoom_fit)
         self.menu_bar.action_zoom_1.triggered.connect(self._zoom_actual)
+        self.menu_bar.action_zoom_center.triggered.connect(lambda: self.statusBar().showMessage("Center not implemented", 2000))
         
         # Help menu
         self.menu_bar.action_about.triggered.connect(self.show_about)
@@ -149,6 +182,13 @@ class MainWindow(QMainWindow):
         # Left dock for button bar
         self.button_bar_dock = QDockWidget("Controls", self)
         self.button_bar = ButtonBar(self)
+        
+        # Connect button bar signals
+        self.button_bar.zoom_changed.connect(self._on_button_bar_zoom)
+        self.button_bar.scale_changed.connect(self._on_button_bar_scale)
+        self.button_bar.colormap_changed.connect(self._on_button_bar_colormap)
+        self.button_bar.region_mode_changed.connect(self._on_button_bar_region)
+        
         self.button_bar_dock.setWidget(self.button_bar)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.button_bar_dock)
 
@@ -280,12 +320,26 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_scale_linear.setChecked(scale == ScaleAlgorithm.LINEAR)
         self.menu_bar.action_scale_log.setChecked(scale == ScaleAlgorithm.LOG)
         self.menu_bar.action_scale_sqrt.setChecked(scale == ScaleAlgorithm.SQRT)
+        self.menu_bar.action_scale_squared.setChecked(scale == ScaleAlgorithm.POWER)
         self.menu_bar.action_scale_asinh.setChecked(scale == ScaleAlgorithm.ASINH)
+        self.menu_bar.action_scale_histeq.setChecked(scale == ScaleAlgorithm.HISTOGRAM_EQUALIZATION)
+        
+        # Update button bar
+        scale_name_map = {
+            ScaleAlgorithm.LINEAR: "Linear",
+            ScaleAlgorithm.LOG: "Log",
+            ScaleAlgorithm.SQRT: "Sqrt",
+            ScaleAlgorithm.POWER: "Squared",
+            ScaleAlgorithm.ASINH: "Asinh",
+            ScaleAlgorithm.HISTOGRAM_EQUALIZATION: "HistEq",
+        }
+        if scale in scale_name_map:
+            self.button_bar.set_scale(scale_name_map[scale])
         
         # Redisplay with new scale
         if self.image_data is not None:
             self._display_image()
-            self.statusBar().showMessage(f"Scale: {scale.name}")
+            self.statusBar().showMessage(f"Scale: {scale.name}", 2000)
     
     def _set_colormap(self, colormap: str) -> None:
         """
@@ -301,6 +355,16 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_cmap_heat.setChecked(colormap == "heat")
         self.menu_bar.action_cmap_cool.setChecked(colormap == "cool")
         self.menu_bar.action_cmap_rainbow.setChecked(colormap == "rainbow")
+        
+        # Update button bar
+        cmap_name_map = {
+            "grey": "Gray",
+            "heat": "Heat",
+            "cool": "Cool",
+            "rainbow": "Rainbow",
+        }
+        if colormap in cmap_name_map:
+            self.button_bar.set_colormap(cmap_name_map[colormap])
         
         # Redisplay with new colormap
         if self.image_data is not None:
@@ -353,6 +417,93 @@ class MainWindow(QMainWindow):
         """Handle contrast/brightness change from mouse drag."""
         self._display_image()
         self.statusBar().showMessage(f"Contrast: {contrast:.2f}, Brightness: {brightness:.2f}", 1000)
+    
+    def _on_button_bar_zoom(self, level: str) -> None:
+        """Handle zoom change from button bar."""
+        if level == "Fit":
+            self._zoom_fit()
+        elif level == "1":
+            self._zoom_actual()
+        else:
+            try:
+                zoom_val = float(level)
+                self.image_viewer.zoom_to(zoom_val)
+                self.status_bar.update_zoom(zoom_val)
+                self.statusBar().showMessage(f"Zoom: {zoom_val}x", 1000)
+            except ValueError:
+                # Handle fractions like "1/2"
+                if "/" in level:
+                    parts = level.split("/")
+                    zoom_val = float(parts[0]) / float(parts[1])
+                    self.image_viewer.zoom_to(zoom_val)
+                    self.status_bar.update_zoom(zoom_val)
+                    self.statusBar().showMessage(f"Zoom: {level}", 1000)
+    
+    def _on_button_bar_scale(self, scale_name: str) -> None:
+        """Handle scale change from button bar."""
+        scale_map = {
+            "Linear": ScaleAlgorithm.LINEAR,
+            "Log": ScaleAlgorithm.LOG,
+            "Sqrt": ScaleAlgorithm.SQRT,
+            "Squared": ScaleAlgorithm.POWER,
+            "Asinh": ScaleAlgorithm.ASINH,
+            "HistEq": ScaleAlgorithm.HISTOGRAM_EQUALIZATION,
+        }
+        if scale_name in scale_map:
+            self._set_scale(scale_map[scale_name])
+    
+    def _on_button_bar_colormap(self, cmap_name: str) -> None:
+        """Handle colormap change from button bar."""
+        cmap_map = {
+            "Gray": "grey",
+            "Heat": "heat",
+            "Cool": "cool",
+            "Rainbow": "rainbow",
+        }
+        if cmap_name in cmap_map:
+            self._set_colormap(cmap_map[cmap_name])
+    
+    def _on_button_bar_region(self, mode: str) -> None:
+        """Handle region mode change from button bar."""
+        self.statusBar().showMessage(f"Region mode: {mode} (not implemented)", 2000)
+    
+    def _toggle_fullscreen(self, checked: bool) -> None:
+        """Toggle fullscreen mode."""
+        if checked:
+            self.showFullScreen()
+        else:
+            self.showNormal()
+    
+    def _toggle_toolbar(self, checked: bool) -> None:
+        """Toggle toolbar visibility."""
+        self.main_toolbar.setVisible(checked)
+    
+    def _toggle_statusbar(self, checked: bool) -> None:
+        """Toggle status bar visibility."""
+        self.statusBar().setVisible(checked)
+    
+    def _reset_scale_limits(self) -> None:
+        """Reset scale limits to ZScale auto-computed values."""
+        if self.image_data is not None:
+            self.z1 = None
+            self.z2 = None
+            self.image_viewer.reset_contrast_brightness()
+            self._display_image()
+            self.statusBar().showMessage("Reset to ZScale limits", 2000)
+    
+    def _scale_minmax(self) -> None:
+        """Set scale limits to data min/max."""
+        if self.image_data is not None:
+            self.z1 = float(np.nanmin(self.image_data))
+            self.z2 = float(np.nanmax(self.image_data))
+            self.image_viewer.reset_contrast_brightness()
+            self._display_image()
+            self.statusBar().showMessage(f"MinMax: {self.z1:.4g} to {self.z2:.4g}", 2000)
+    
+    def _toggle_invert_colormap(self, checked: bool) -> None:
+        """Toggle colormap inversion."""
+        # This would require modifying the colormap - stub for now
+        self.statusBar().showMessage("Invert colormap not implemented", 2000)
     
     def save_file(self) -> None:
         """Save the current file."""
