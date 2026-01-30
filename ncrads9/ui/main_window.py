@@ -40,6 +40,7 @@ from .menu_bar import MenuBar
 from .toolbar import MainToolbar
 from .button_bar import ButtonBar
 from .status_bar import StatusBar
+from .image_viewer import ImageViewer
 from ..core.fits_handler import FITSHandler
 from ..core.wcs_handler import WCSHandler
 from ..rendering.scale_algorithms import apply_scale, ScaleAlgorithm, compute_zscale_limits
@@ -72,6 +73,8 @@ class MainWindow(QMainWindow):
         self.image_data = None
         self.current_scale = ScaleAlgorithm.LINEAR
         self.current_colormap = "grey"
+        self.z1 = None  # Scale limits
+        self.z2 = None
 
         self._setup_menu_bar()
         self._setup_toolbar()
@@ -108,6 +111,12 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_cmap_cool.triggered.connect(lambda: self._set_colormap("cool"))
         self.menu_bar.action_cmap_rainbow.triggered.connect(lambda: self._set_colormap("rainbow"))
         
+        # Zoom menu
+        self.menu_bar.action_zoom_in.triggered.connect(self._zoom_in)
+        self.menu_bar.action_zoom_out.triggered.connect(self._zoom_out)
+        self.menu_bar.action_zoom_fit.triggered.connect(self._zoom_fit)
+        self.menu_bar.action_zoom_1.triggered.connect(self._zoom_actual)
+        
         # Help menu
         self.menu_bar.action_about.triggered.connect(self.show_about)
         self.menu_bar.action_about_qt.triggered.connect(self.show_about_qt)
@@ -124,13 +133,15 @@ class MainWindow(QMainWindow):
         self.scroll_area.setWidgetResizable(False)
         self.scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        # Create image label
-        self.image_label = QLabel()
-        self.image_label.setScaledContents(False)
-        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.image_label.setText("No image loaded")
+        # Create interactive image viewer
+        self.image_viewer = ImageViewer()
+        self.image_viewer.setText("No image loaded")
         
-        self.scroll_area.setWidget(self.image_label)
+        # Connect signals
+        self.image_viewer.mouse_moved.connect(self._on_mouse_moved)
+        self.image_viewer.contrast_changed.connect(self._on_contrast_changed)
+        
+        self.scroll_area.setWidget(self.image_viewer)
         self.setCentralWidget(self.scroll_area)
 
     def _setup_dock_widgets(self) -> None:
@@ -206,25 +217,39 @@ class MainWindow(QMainWindow):
         # Display the image
         self._display_image()
         
-        # Update status
+        # Update status bar image info
         shape = self.image_data.shape
         dtype = self.image_data.dtype
-        stats_msg = f"Image loaded: {shape[1]}x{shape[0]} pixels, {dtype}"
+        self.status_bar.update_image_info(shape[1], shape[0])
+        
+        # Update temporary message
+        stats_msg = f"Loaded: {shape[1]}x{shape[0]} pixels, {dtype}"
         if self.wcs_handler.is_valid:
             stats_msg += " (WCS available)"
-        self.statusBar().showMessage(stats_msg)
+        self.statusBar().showMessage(stats_msg, 3000)
     
     def _display_image(self) -> None:
         """Display the current image data."""
         if self.image_data is None:
             return
         
-        # Compute scale limits using zscale
-        z1, z2 = compute_zscale_limits(self.image_data)
+        # Compute scale limits using zscale (once, or when reset)
+        if self.z1 is None or self.z2 is None:
+            self.z1, self.z2 = compute_zscale_limits(self.image_data)
+        
+        # Get contrast/brightness adjustments from viewer
+        contrast, brightness = self.image_viewer.get_contrast_brightness()
+        
+        # Apply adjustments to scale limits
+        range_val = self.z2 - self.z1
+        center = (self.z1 + self.z2) / 2
+        new_range = range_val / contrast
+        adjusted_z1 = center - new_range / 2 + brightness * range_val
+        adjusted_z2 = center + new_range / 2 + brightness * range_val
         
         # Clip and scale the data
-        clipped = np.clip(self.image_data, z1, z2)
-        scaled = apply_scale(clipped, self.current_scale, vmin=z1, vmax=z2)
+        clipped = np.clip(self.image_data, adjusted_z1, adjusted_z2)
+        scaled = apply_scale(clipped, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
         
         # Apply colormap
         cmap = get_colormap(self.current_colormap)
@@ -237,8 +262,10 @@ class MainWindow(QMainWindow):
         
         # Create pixmap and display
         pixmap = QPixmap.fromImage(qimage)
-        self.image_label.setPixmap(pixmap)
-        self.image_label.resize(pixmap.size())
+        self.image_viewer.set_image(pixmap)
+        
+        # Update zoom display
+        self.status_bar.update_zoom(self.image_viewer.get_zoom())
     
     def _set_scale(self, scale: ScaleAlgorithm) -> None:
         """
@@ -278,7 +305,54 @@ class MainWindow(QMainWindow):
         # Redisplay with new colormap
         if self.image_data is not None:
             self._display_image()
-            self.statusBar().showMessage(f"Colormap: {colormap}")
+            self.statusBar().showMessage(f"Colormap: {colormap}", 2000)
+    
+    def _zoom_in(self) -> None:
+        """Zoom in."""
+        self.image_viewer.zoom_in()
+        self.status_bar.update_zoom(self.image_viewer.get_zoom())
+        self.statusBar().showMessage("Zoomed in", 1000)
+    
+    def _zoom_out(self) -> None:
+        """Zoom out."""
+        self.image_viewer.zoom_out()
+        self.status_bar.update_zoom(self.image_viewer.get_zoom())
+        self.statusBar().showMessage("Zoomed out", 1000)
+    
+    def _zoom_fit(self) -> None:
+        """Zoom to fit window."""
+        self.image_viewer.zoom_fit(self.scroll_area.viewport().size())
+        self.status_bar.update_zoom(self.image_viewer.get_zoom())
+        self.statusBar().showMessage("Zoom to fit", 1000)
+    
+    def _zoom_actual(self) -> None:
+        """Zoom to 1:1."""
+        self.image_viewer.zoom_actual()
+        self.status_bar.update_zoom(self.image_viewer.get_zoom())
+        self.statusBar().showMessage("Zoom 1:1", 1000)
+    
+    def _on_mouse_moved(self, x: int, y: int) -> None:
+        """Handle mouse movement over image."""
+        if self.image_data is None:
+            return
+        
+        # Update pixel coordinates
+        self.status_bar.update_pixel_coords(x, y)
+        
+        # Update pixel value
+        if 0 <= y < self.image_data.shape[0] and 0 <= x < self.image_data.shape[1]:
+            value = self.image_data[y, x]
+            self.status_bar.update_pixel_value(value)
+        
+        # Update WCS coordinates if available
+        if self.wcs_handler and self.wcs_handler.is_valid:
+            ra, dec = self.wcs_handler.pixel_to_world(x, y)
+            self.status_bar.update_wcs_coords(ra, dec)
+    
+    def _on_contrast_changed(self, contrast: float, brightness: float) -> None:
+        """Handle contrast/brightness change from mouse drag."""
+        self._display_image()
+        self.statusBar().showMessage(f"Contrast: {contrast:.2f}, Brightness: {brightness:.2f}", 1000)
     
     def save_file(self) -> None:
         """Save the current file."""
