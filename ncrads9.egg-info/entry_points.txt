@@ -1,0 +1,2 @@
+[console_scripts]
+ncrads9 = ncrads9.__main__:main

@@ -22,9 +22,18 @@ Author: Yogesh Wadadekar
 
 from __future__ import annotations
 
-import tomllib
+import sys
 from pathlib import Path
 from typing import Any
+
+# tomllib is available in Python 3.11+, use tomli for earlier versions
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    try:
+        import tomli as tomllib
+    except ImportError:
+        tomllib = None  # type: ignore
 
 
 class Config:

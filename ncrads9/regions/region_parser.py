@@ -33,6 +33,14 @@ from pathlib import Path
 from typing import Optional
 
 from .base_region import BaseRegion
+from .shapes.circle import Circle
+from .shapes.ellipse import Ellipse
+from .shapes.box import Box
+from .shapes.point import Point
+from .shapes.line import Line
+from .shapes.polygon import Polygon
+from .shapes.annulus import Annulus
+from .shapes.text import Text
 
 
 class RegionFormat(Enum):
@@ -318,9 +326,59 @@ class RegionParser:
         Returns:
             A BaseRegion subclass instance or None.
         """
-        # This is a placeholder - actual implementation would create
-        # specific shape instances based on shape_type
-        # For now, return None as we don't have concrete shape classes yet
+        color = properties.get("color", self._global_properties.get("color", "green"))
+        width = int(properties.get("width", self._global_properties.get("width", "1")))
+        text = properties.get("text", "")
+        font = properties.get("font", self._global_properties.get("font", "helvetica 10 normal roman"))
+        
+        try:
+            if shape_type == "circle":
+                x, y, r = float(params[0]), float(params[1]), float(params[2])
+                return Circle(center=(x, y), radius=r, color=color, width=width, text=text, font=font)
+            
+            elif shape_type == "ellipse":
+                x, y = float(params[0]), float(params[1])
+                a, b = float(params[2]), float(params[3])
+                angle = float(params[4]) if len(params) > 4 else 0.0
+                return Ellipse(center=(x, y), semi_major=a, semi_minor=b, angle=angle,
+                              color=color, width=width, text=text, font=font)
+            
+            elif shape_type == "box":
+                x, y = float(params[0]), float(params[1])
+                w, h = float(params[2]), float(params[3])
+                angle = float(params[4]) if len(params) > 4 else 0.0
+                return Box(center=(x, y), width_box=w, height_box=h, angle=angle,
+                          color=color, width=width, text=text, font=font)
+            
+            elif shape_type == "point":
+                x, y = float(params[0]), float(params[1])
+                return Point(center=(x, y), color=color, width=width, text=text, font=font)
+            
+            elif shape_type == "line":
+                x1, y1 = float(params[0]), float(params[1])
+                x2, y2 = float(params[2]), float(params[3])
+                return Line(start=(x1, y1), end=(x2, y2), color=color, width=width, text=text, font=font)
+            
+            elif shape_type == "polygon":
+                coords = [float(p) for p in params]
+                vertices = [(coords[i], coords[i+1]) for i in range(0, len(coords), 2)]
+                return Polygon(vertices=vertices, color=color, width=width, text=text, font=font)
+            
+            elif shape_type == "annulus":
+                x, y = float(params[0]), float(params[1])
+                inner_r = float(params[2])
+                outer_r = float(params[3])
+                return Annulus(center=(x, y), inner_radius=inner_r, outer_radius=outer_r,
+                              color=color, width=width, text=text, font=font)
+            
+            elif shape_type in ("text", "# text"):
+                x, y = float(params[0]), float(params[1])
+                return Text(center=(x, y), text=text, color=color, font=font)
+        
+        except (IndexError, ValueError) as e:
+            # Return None for malformed regions
+            return None
+        
         return None
 
     def _is_xy_format(self, content: str) -> bool:

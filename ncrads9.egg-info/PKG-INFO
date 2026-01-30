@@ -1,0 +1,24 @@
+Metadata-Version: 2.4
+Name: ncrads9
+Version: 0.1.0
+Summary: A Python/Qt6 clone of SAOImageDS9 for astronomical imaging
+Author: Yogesh Wadadekar
+License: GPL-3.0-or-later
+Requires-Python: >=3.10
+License-File: LICENSE
+Requires-Dist: PyQt6>=6.4
+Requires-Dist: PyOpenGL>=3.1
+Requires-Dist: astropy>=5.0
+Requires-Dist: astroquery>=0.4
+Requires-Dist: numpy>=1.23
+Requires-Dist: scipy>=1.9
+Requires-Dist: pillow>=9.0
+Requires-Dist: requests>=2.28
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-qt; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
+Requires-Dist: black; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
+Dynamic: license-file

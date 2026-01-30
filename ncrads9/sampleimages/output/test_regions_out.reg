@@ -1,0 +1,5 @@
+# Region file format: DS9 version 4.1
+image
+circle(256.0,256.0,50.0)
+ellipse(300.0,300.0,40.0,20.0,45.0)
+box(200.0,200.0,60.0,40.0,0.0)

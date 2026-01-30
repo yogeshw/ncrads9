@@ -302,3 +302,8 @@ def list_builtin_colormaps() -> List[str]:
         List of colormap names.
     """
     return BUILTIN_COLORMAPS.copy()
+
+
+# Convenience aliases
+get_colormap = get_builtin_colormap
+list_colormaps = list_builtin_colormaps

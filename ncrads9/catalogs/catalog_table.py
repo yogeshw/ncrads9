@@ -29,7 +29,7 @@ from astropy.coordinates import SkyCoord
 import astropy.units as u
 
 try:
-    from PyQt5.QtWidgets import (
+    from PyQt6.QtWidgets import (
         QTableWidget,
         QTableWidgetItem,
         QHeaderView,
@@ -44,7 +44,7 @@ try:
         QLineEdit,
         QComboBox,
     )
-    from PyQt5.QtCore import Qt, pyqtSignal
+    from PyQt6.QtCore import Qt, pyqtSignal
 
     HAS_QT = True
 except ImportError:
@@ -88,7 +88,7 @@ class CatalogTable(QWidget if HAS_QT else object):
             Astropy table to display.
         """
         if not HAS_QT:
-            raise ImportError("PyQt5 is required for CatalogTable widget")
+            raise ImportError("PyQt6 is required for CatalogTable widget")
 
         super().__init__(parent)
 
@@ -301,7 +301,7 @@ class CatalogTable(QWidget if HAS_QT else object):
         """Copy selected cell to clipboard."""
         selected = self._table_widget.selectedItems()
         if selected:
-            from PyQt5.QtWidgets import QApplication
+            from PyQt6.QtWidgets import QApplication
 
             QApplication.clipboard().setText(selected[0].text())
 
@@ -316,7 +316,7 @@ class CatalogTable(QWidget if HAS_QT else object):
             if item:
                 values.append(item.text())
 
-        from PyQt5.QtWidgets import QApplication
+        from PyQt6.QtWidgets import QApplication
 
         QApplication.clipboard().setText("\t".join(values))
 

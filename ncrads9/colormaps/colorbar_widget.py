@@ -21,9 +21,9 @@
 from typing import Optional, Tuple
 import numpy as np
 
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
-from PyQt5.QtGui import QPainter, QImage, QColor, QPen, QFont
-from PyQt5.QtCore import Qt, pyqtSignal, QRect
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
+from PyQt6.QtGui import QPainter, QImage, QColor, QPen, QFont
+from PyQt6.QtCore import Qt, pyqtSignal, QRect
 
 from .colormap import Colormap
 
@@ -254,7 +254,7 @@ class ColorbarWidget(QWidget):
 
     def sizeHint(self):
         """Return the recommended size for the widget."""
-        from PyQt5.QtCore import QSize
+        from PyQt6.QtCore import QSize
         if self._orientation == "horizontal":
             return QSize(300, 50)
         else:
