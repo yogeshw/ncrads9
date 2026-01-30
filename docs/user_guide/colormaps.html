@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Colormaps and Scale - NCRADS9 User Guide</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 900px; margin: 0 auto; padding: 2rem; line-height: 1.6; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 0.5rem; }
+        h2 { color: #34495e; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: #f4f4f4; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: 'Monaco', 'Menlo', monospace; }
+        .breadcrumb { margin-bottom: 1rem; color: #666; }
+        .breadcrumb a { color: #666; }
+        .nav-footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #eee; display: flex; justify-content: space-between; }
+        table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+        th, td { border: 1px solid #ddd; padding: 0.75rem; text-align: left; }
+        th { background: #f8f9fa; }
+    </style>
+</head>
+<body>
+    <div class="breadcrumb">
+        <a href="../index.html">Home</a> / <a href="index.html">User Guide</a> / Colormaps
+    </div>
+
+    <h1>Colormaps and Scale</h1>
+
+    <h2>Available Colormaps</h2>
+    <p>NCRADS9 provides a variety of colormaps for visualizing your data:</p>
+
+    <table>
+        <tr>
+            <th>Category</th>
+            <th>Colormaps</th>
+        </tr>
+        <tr>
+            <td>Grayscale</td>
+            <td>Grey, Heat, Cool</td>
+        </tr>
+        <tr>
+            <td>Astronomical</td>
+            <td>BB, HE, Rainbow, Standard</td>
+        </tr>
+        <tr>
+            <td>Scientific</td>
+            <td>Viridis, Plasma, Inferno, Magma</td>
+        </tr>
+        <tr>
+            <td>Diverging</td>
+            <td>Red-Blue, Blue-Red</td>
+        </tr>
+    </table>
+
+    <p>Access colormaps via <strong>Color → Colormap</strong> or the colormap dropdown in the toolbar.</p>
+
+    <h2>Scale Options</h2>
+    <p>The scale determines how pixel values map to display colors:</p>
+
+    <table>
+        <tr>
+            <th>Scale</th>
+            <th>Description</th>
+            <th>Best For</th>
+        </tr>
+        <tr>
+            <td>Linear</td>
+            <td>Direct mapping of values</td>
+            <td>Uniform data ranges</td>
+        </tr>
+        <tr>
+            <td>Log</td>
+            <td>Logarithmic mapping</td>
+            <td>Large dynamic range</td>
+        </tr>
+        <tr>
+            <td>Sqrt</td>
+            <td>Square root mapping</td>
+            <td>Moderate dynamic range</td>
+        </tr>
+        <tr>
+            <td>Squared</td>
+            <td>Squared mapping</td>
+            <td>Enhancing bright features</td>
+        </tr>
+        <tr>
+            <td>Asinh</td>
+            <td>Inverse hyperbolic sine</td>
+            <td>Wide range with negatives</td>
+        </tr>
+        <tr>
+            <td>Histogram Equalization</td>
+            <td>Equalizes histogram</td>
+            <td>Maximum detail</td>
+        </tr>
+    </table>
+
+    <p>Access scale options via <strong>Scale</strong> menu.</p>
+
+    <h2>Contrast and Bias</h2>
+    <p>Fine-tune the display using contrast and bias controls:</p>
+    <ul>
+        <li><strong>Contrast:</strong> Adjusts the range of values displayed (vertical mouse drag)</li>
+        <li><strong>Bias:</strong> Shifts the center of the display range (horizontal mouse drag)</li>
+    </ul>
+
+    <h3>Keyboard Shortcuts</h3>
+    <ul>
+        <li><code>Right-click + drag</code>: Adjust contrast and bias interactively</li>
+        <li><code>Ctrl+0</code>: Reset to default contrast/bias</li>
+    </ul>
+
+    <h2>Scale Limits</h2>
+    <p>Set specific minimum and maximum values via <strong>Scale → Scale Parameters</strong>:</p>
+    <ul>
+        <li><strong>Min/Max:</strong> Uses full data range</li>
+        <li><strong>ZScale:</strong> IRAF zscale algorithm</li>
+        <li><strong>User:</strong> Manual specification</li>
+        <li><strong>Percentile:</strong> Based on data percentiles</li>
+    </ul>
+
+    <div class="nav-footer">
+        <a href="regions.html">← Regions</a>
+        <a href="analysis.html">Analysis →</a>
+    </div>
+</body>
+</html>

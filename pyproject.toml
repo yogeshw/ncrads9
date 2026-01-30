@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ncrads9"
+version = "0.1.0"
+description = "A Python/Qt6 clone of SAOImageDS9 for astronomical imaging"
+authors = [
+    {name = "Yogesh Wadadekar"}
+]
+license = {text = "GPL-3.0-or-later"}
+requires-python = ">=3.10"
+dependencies = [
+    "PyQt6>=6.4",
+    "PyOpenGL>=3.1",
+    "astropy>=5.0",
+    "astroquery>=0.4",
+    "numpy>=1.23",
+    "scipy>=1.9",
+    "pillow>=9.0",
+    "requests>=2.28",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-qt",
+    "pytest-cov",
+    "black",
+    "ruff",
+    "mypy",
+]
+
+[project.scripts]
+ncrads9 = "ncrads9.__main__:main"

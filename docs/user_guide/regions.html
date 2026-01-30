@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Working with Regions - NCRADS9 User Guide</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 900px; margin: 0 auto; padding: 2rem; line-height: 1.6; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 0.5rem; }
+        h2 { color: #34495e; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: #f4f4f4; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: 'Monaco', 'Menlo', monospace; }
+        pre { background: #2c3e50; color: #ecf0f1; padding: 1rem; border-radius: 8px; overflow-x: auto; }
+        pre code { background: none; color: inherit; }
+        .breadcrumb { margin-bottom: 1rem; color: #666; }
+        .breadcrumb a { color: #666; }
+        .nav-footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #eee; display: flex; justify-content: space-between; }
+        .tip { background: #e8f4fd; border-left: 4px solid #3498db; padding: 1rem; margin: 1rem 0; }
+    </style>
+</head>
+<body>
+    <div class="breadcrumb">
+        <a href="../index.html">Home</a> / <a href="index.html">User Guide</a> / Regions
+    </div>
+
+    <h1>Working with Regions</h1>
+
+    <p>Regions allow you to define areas of interest on your image for analysis, annotation, or data extraction.</p>
+
+    <h2>Creating Regions</h2>
+    <p>To create a region, select a region shape from the <strong>Region</strong> menu or toolbar:</p>
+    <ul>
+        <li><strong>Circle:</strong> Click and drag to define radius</li>
+        <li><strong>Ellipse:</strong> Click and drag to define axes</li>
+        <li><strong>Box:</strong> Click and drag to define rectangle</li>
+        <li><strong>Polygon:</strong> Click to add vertices, double-click to close</li>
+        <li><strong>Line:</strong> Click and drag to define endpoints</li>
+        <li><strong>Point:</strong> Click to place a point marker</li>
+        <li><strong>Annulus:</strong> Click and drag for inner/outer radii</li>
+    </ul>
+
+    <h2>Editing Regions</h2>
+    <p>Select a region to edit by clicking on it. Selected regions show control handles:</p>
+    <ul>
+        <li><strong>Move:</strong> Drag the region center</li>
+        <li><strong>Resize:</strong> Drag the corner or edge handles</li>
+        <li><strong>Rotate:</strong> Drag the rotation handle (for supported shapes)</li>
+        <li><strong>Delete:</strong> Press <code>Delete</code> key</li>
+    </ul>
+
+    <h3>Region Properties</h3>
+    <p>Double-click a region to open the properties dialog where you can set:</p>
+    <ul>
+        <li>Precise position and size</li>
+        <li>Color and line width</li>
+        <li>Text label</li>
+        <li>Coordinate system (image, physical, WCS)</li>
+    </ul>
+
+    <h2>Saving and Loading Regions</h2>
+    <p>Regions can be saved in DS9 region format:</p>
+
+    <h3>Saving</h3>
+    <p>Select <strong>Region → Save Regions</strong> or <code>Ctrl+Shift+S</code></p>
+
+    <h3>Loading</h3>
+    <p>Select <strong>Region → Load Regions</strong> or <code>Ctrl+Shift+O</code></p>
+
+    <div class="tip">
+        <strong>Tip:</strong> Region files use the standard DS9 format (.reg) and are compatible with other astronomy software.
+    </div>
+
+    <h2>Region File Format</h2>
+    <p>Example region file:</p>
+    <pre><code># Region file format: DS9 version 4.1
+global color=green dashlist=8 3 width=1
+fk5
+circle(12:30:45.2,+12:23:45.6,30")
+box(12:30:50.0,+12:24:00.0,60",40",45)</code></pre>
+
+    <div class="nav-footer">
+        <a href="opening_files.html">← Opening Files</a>
+        <a href="colormaps.html">Colormaps →</a>
+    </div>
+</body>
+</html>

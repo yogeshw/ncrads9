@@ -1,0 +1,384 @@
+\documentclass[11pt,a4paper]{report}
+
+% Packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{longtable}
+
+% Page geometry
+\geometry{margin=1in}
+
+% Hyperref setup
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=cyan,
+    pdftitle={NCRADS9 Manual},
+    pdfauthor={Yogesh Wadadekar},
+}
+
+% Code listing style
+\lstset{
+    basicstyle=\ttfamily\small,
+    backgroundcolor=\color{gray!10},
+    frame=single,
+    framerule=0pt,
+    breaklines=true,
+    columns=fullflexible,
+    keepspaces=true,
+}
+
+% Header/footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\leftmark}
+\fancyhead[R]{NCRADS9 Manual}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+% Title formatting
+\titleformat{\chapter}[display]
+{\normalfont\huge\bfseries}{\chaptertitlename\ \thechapter}{20pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{0pt}{40pt}
+
+% Document info
+\title{
+    \vspace{2cm}
+    {\Huge\textbf{NCRADS9 Manual}}\\[1cm]
+    {\Large A FITS Image Viewer and Analysis Tool}\\[2cm]
+    {\large Version 1.0}
+}
+\author{
+    \textbf{Yogesh Wadadekar}\\[0.5cm]
+    National Centre for Radio Astrophysics\\
+    Tata Institute of Fundamental Research
+}
+\date{\today}
+
+\begin{document}
+
+% Title page
+\maketitle
+\thispagestyle{empty}
+\newpage
+
+% Table of contents
+\tableofcontents
+\newpage
+
+% List of figures and tables (optional)
+\listoffigures
+\listoftables
+\newpage
+
+%======================================================================
+\chapter{Introduction}
+%======================================================================
+
+\section{Overview}
+
+NCRADS9 is a powerful FITS image viewer and analysis tool designed for astronomical data visualization. It provides an intuitive interface for viewing, analyzing, and annotating FITS images commonly used in astronomy.
+
+\section{Features}
+
+NCRADS9 offers the following key features:
+
+\begin{itemize}
+    \item Support for standard FITS formats and compressed files
+    \item Multiple colormap options for data visualization
+    \item Flexible scaling algorithms (linear, log, sqrt, asinh, etc.)
+    \item Region creation and manipulation
+    \item Statistical analysis tools
+    \item World Coordinate System (WCS) support
+    \item Contour overlays
+    \item Cross-platform compatibility
+\end{itemize}
+
+\section{History}
+
+NCRADS9 was developed at the National Centre for Radio Astrophysics (NCRA) to provide a modern, Python-based alternative to traditional FITS viewers while maintaining compatibility with DS9 region files and workflows.
+
+%======================================================================
+\chapter{Installation}
+%======================================================================
+
+\section{Requirements}
+
+NCRADS9 requires the following:
+
+\begin{itemize}
+    \item Python 3.8 or later
+    \item NumPy
+    \item Astropy
+    \item PyQt5 or PyQt6
+    \item Matplotlib (optional, for additional plotting)
+\end{itemize}
+
+\section{Installation via pip}
+
+The simplest way to install NCRADS9 is using pip:
+
+\begin{lstlisting}[language=bash]
+pip install ncrads9
+\end{lstlisting}
+
+\section{Installation from Source}
+
+To install from source:
+
+\begin{lstlisting}[language=bash]
+git clone https://github.com/ncra/ncrads9.git
+cd ncrads9
+pip install -e .
+\end{lstlisting}
+
+\section{Verification}
+
+Verify your installation by running:
+
+\begin{lstlisting}[language=bash]
+ncrads9 --version
+\end{lstlisting}
+
+%======================================================================
+\chapter{User Guide}
+%======================================================================
+
+\section{Getting Started}
+
+\subsection{Launching NCRADS9}
+
+Launch NCRADS9 from the command line:
+
+\begin{lstlisting}[language=bash]
+ncrads9
+\end{lstlisting}
+
+To open a FITS file directly:
+
+\begin{lstlisting}[language=bash]
+ncrads9 image.fits
+\end{lstlisting}
+
+\subsection{Interface Overview}
+
+The NCRADS9 interface consists of:
+
+\begin{itemize}
+    \item \textbf{Main Display}: The central area showing the FITS image
+    \item \textbf{Menu Bar}: Access to file operations, view options, and analysis tools
+    \item \textbf{Toolbar}: Quick access buttons for common operations
+    \item \textbf{Status Bar}: Displays cursor position and pixel values
+\end{itemize}
+
+\section{Opening Files}
+
+\subsection{Supported Formats}
+
+NCRADS9 supports the following file formats:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Format} & \textbf{Extensions} & \textbf{Description} \\
+\midrule
+FITS & .fits, .fit, .fts & Standard FITS format \\
+Compressed FITS & .fits.gz, .fits.fz & Gzip or fpack compressed \\
+\bottomrule
+\end{tabular}
+\caption{Supported file formats}
+\end{table}
+
+\subsection{Multi-Extension FITS}
+
+For FITS files with multiple extensions, use the Frame menu to navigate between extensions or select specific extensions from the extension dropdown.
+
+\section{Working with Regions}
+
+\subsection{Creating Regions}
+
+Available region shapes:
+\begin{itemize}
+    \item Circle
+    \item Ellipse
+    \item Box (Rectangle)
+    \item Polygon
+    \item Line
+    \item Point
+    \item Annulus
+\end{itemize}
+
+\subsection{Saving and Loading Regions}
+
+Regions are saved in DS9-compatible format (.reg files):
+
+\begin{lstlisting}
+# Region file format: DS9 version 4.1
+global color=green width=1
+fk5
+circle(12:30:45.2,+12:23:45.6,30")
+\end{lstlisting}
+
+\section{Colormaps and Scaling}
+
+\subsection{Available Colormaps}
+
+NCRADS9 provides multiple colormaps including:
+\begin{itemize}
+    \item Grey, Heat, Cool (Grayscale family)
+    \item BB, HE, Rainbow, Standard (Astronomical)
+    \item Viridis, Plasma, Inferno, Magma (Scientific)
+\end{itemize}
+
+\subsection{Scale Options}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Scale} & \textbf{Best For} \\
+\midrule
+Linear & Uniform data ranges \\
+Log & Large dynamic range \\
+Sqrt & Moderate dynamic range \\
+Asinh & Wide range with negatives \\
+\bottomrule
+\end{tabular}
+\caption{Scale options and their use cases}
+\end{table}
+
+\section{Analysis Tools}
+
+\subsection{Statistics}
+
+The statistics tool computes sum, mean, median, standard deviation, min/max, and centroid for selected regions or the entire image.
+
+\subsection{Histogram}
+
+Display the distribution of pixel values with options for linear or logarithmic Y-axis and adjustable bins.
+
+\subsection{Coordinate Systems}
+
+Supported coordinate systems:
+\begin{itemize}
+    \item Image (pixel coordinates)
+    \item Physical
+    \item FK5 (J2000)
+    \item FK4 (B1950)
+    \item Galactic
+    \item Ecliptic
+\end{itemize}
+
+%======================================================================
+\chapter{API Reference}
+%======================================================================
+
+\section{Core Classes}
+
+\subsection{NCRADS9 Class}
+
+The main application class.
+
+\begin{lstlisting}[language=Python]
+from ncrads9 import NCRADS9
+
+app = NCRADS9()
+app.load_fits('image.fits')
+app.run()
+\end{lstlisting}
+
+\subsection{FITSImage Class}
+
+Represents a FITS image with associated metadata.
+
+\begin{lstlisting}[language=Python]
+from ncrads9.core import FITSImage
+
+img = FITSImage('image.fits')
+data = img.data
+header = img.header
+wcs = img.wcs
+\end{lstlisting}
+
+\section{Region Classes}
+
+\subsection{Region Base Class}
+
+All regions inherit from the base Region class.
+
+\begin{lstlisting}[language=Python]
+from ncrads9.regions import CircleRegion
+
+region = CircleRegion(x=100, y=100, radius=25)
+region.color = 'green'
+region.width = 2
+\end{lstlisting}
+
+\section{Analysis Functions}
+
+\subsection{Statistics}
+
+\begin{lstlisting}[language=Python]
+from ncrads9.analysis import compute_statistics
+
+stats = compute_statistics(data, region=None)
+print(stats['mean'], stats['std'])
+\end{lstlisting}
+
+\subsection{Histogram}
+
+\begin{lstlisting}[language=Python]
+from ncrads9.analysis import compute_histogram
+
+hist, edges = compute_histogram(data, bins=100)
+\end{lstlisting}
+
+%======================================================================
+% Appendices
+%======================================================================
+
+\appendix
+
+\chapter{Keyboard Shortcuts}
+
+\begin{longtable}{ll}
+\toprule
+\textbf{Shortcut} & \textbf{Action} \\
+\midrule
+\endhead
+Ctrl+O & Open file \\
+Ctrl+S & Save \\
+Ctrl+Q & Quit \\
+Ctrl+0 & Reset scale \\
+Home & Reset view \\
+F11 & Toggle fullscreen \\
+Delete & Delete selected region \\
+\bottomrule
+\end{longtable}
+
+\chapter{Configuration}
+
+NCRADS9 stores configuration in \texttt{\~{}/.ncrads9/config.json}.
+
+\begin{lstlisting}[language=json]
+{
+    "default_colormap": "grey",
+    "default_scale": "linear",
+    "region_color": "green",
+    "region_width": 1
+}
+\end{lstlisting}
+
+\end{document}

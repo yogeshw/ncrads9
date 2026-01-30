@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Getting Started - NCRADS9 User Guide</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 900px; margin: 0 auto; padding: 2rem; line-height: 1.6; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 0.5rem; }
+        h2 { color: #34495e; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: #f4f4f4; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: 'Monaco', 'Menlo', monospace; }
+        pre { background: #2c3e50; color: #ecf0f1; padding: 1rem; border-radius: 8px; overflow-x: auto; }
+        pre code { background: none; color: inherit; }
+        .breadcrumb { margin-bottom: 1rem; color: #666; }
+        .breadcrumb a { color: #666; }
+        .nav-footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #eee; display: flex; justify-content: space-between; }
+    </style>
+</head>
+<body>
+    <div class="breadcrumb">
+        <a href="../index.html">Home</a> / <a href="index.html">User Guide</a> / Getting Started
+    </div>
+
+    <h1>Getting Started with NCRADS9</h1>
+
+    <h2>Installation</h2>
+    <p>NCRADS9 can be installed using pip:</p>
+    <pre><code>pip install ncrads9</code></pre>
+
+    <p>Or install from source:</p>
+    <pre><code>git clone https://github.com/ncra/ncrads9.git
+cd ncrads9
+pip install -e .</code></pre>
+
+    <h2>Requirements</h2>
+    <ul>
+        <li>Python 3.8 or later</li>
+        <li>NumPy</li>
+        <li>Astropy</li>
+        <li>PyQt5 or PyQt6</li>
+    </ul>
+
+    <h2>Launching NCRADS9</h2>
+    <p>Once installed, you can launch NCRADS9 from the command line:</p>
+    <pre><code>ncrads9</code></pre>
+
+    <p>To open a FITS file directly:</p>
+    <pre><code>ncrads9 image.fits</code></pre>
+
+    <h2>Basic Navigation</h2>
+    <ul>
+        <li><strong>Zoom:</strong> Use the mouse scroll wheel to zoom in and out</li>
+        <li><strong>Pan:</strong> Click and drag to pan across the image</li>
+        <li><strong>Reset View:</strong> Press <code>Home</code> to reset the view</li>
+        <li><strong>Full Screen:</strong> Press <code>F11</code> to toggle full screen mode</li>
+    </ul>
+
+    <h2>Interface Overview</h2>
+    <p>The NCRADS9 interface consists of:</p>
+    <ul>
+        <li><strong>Main Display:</strong> The central area showing the FITS image</li>
+        <li><strong>Menu Bar:</strong> Access to file operations, view options, and analysis tools</li>
+        <li><strong>Toolbar:</strong> Quick access buttons for common operations</li>
+        <li><strong>Status Bar:</strong> Displays cursor position and pixel values</li>
+    </ul>
+
+    <div class="nav-footer">
+        <a href="index.html">← Table of Contents</a>
+        <a href="opening_files.html">Opening Files →</a>
+    </div>
+</body>
+</html>

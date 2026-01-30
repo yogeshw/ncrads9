@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Developer Guide - NCRADS9</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 900px; margin: 0 auto; padding: 2rem; line-height: 1.6; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 0.5rem; }
+        h2 { color: #34495e; margin-top: 2rem; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: #f4f4f4; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: 'Monaco', 'Menlo', monospace; }
+        pre { background: #2c3e50; color: #ecf0f1; padding: 1rem; border-radius: 8px; overflow-x: auto; }
+        pre code { background: none; color: inherit; }
+        .breadcrumb { margin-bottom: 1rem; color: #666; }
+        .breadcrumb a { color: #666; }
+        .section { background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin: 1rem 0; }
+    </style>
+</head>
+<body>
+    <div class="breadcrumb">
+        <a href="../index.html">Home</a> / Developer Guide
+    </div>
+
+    <h1>NCRADS9 Developer Guide</h1>
+    <p>This guide provides information for developers who want to contribute to NCRADS9 or extend its functionality.</p>
+
+    <h2>Setting Up the Development Environment</h2>
+    <div class="section">
+        <h3>Clone the Repository</h3>
+        <pre><code>git clone https://github.com/ncra/ncrads9.git
+cd ncrads9</code></pre>
+
+        <h3>Create a Virtual Environment</h3>
+        <pre><code>python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate</code></pre>
+
+        <h3>Install Development Dependencies</h3>
+        <pre><code>pip install -e ".[dev]"</code></pre>
+    </div>
+
+    <h2>Project Structure</h2>
+    <div class="section">
+        <pre><code>ncrads9/
+├── ncrads9/           # Main package
+│   ├── __init__.py
+│   ├── core/          # Core functionality
+│   ├── regions/       # Region handling
+│   ├── analysis/      # Analysis tools
+│   └── ui/            # User interface
+├── tests/             # Test suite
+├── docs/              # Documentation
+├── resources/         # Static resources
+└── pyproject.toml     # Project configuration</code></pre>
+    </div>
+
+    <h2>Running Tests</h2>
+    <div class="section">
+        <p>Run the test suite using pytest:</p>
+        <pre><code>pytest tests/</code></pre>
+
+        <p>Run with coverage:</p>
+        <pre><code>pytest --cov=ncrads9 tests/</code></pre>
+    </div>
+
+    <h2>Code Style</h2>
+    <div class="section">
+        <p>NCRADS9 follows PEP 8 style guidelines. Use the following tools:</p>
+        <ul>
+            <li><strong>Black</strong> for code formatting</li>
+            <li><strong>isort</strong> for import sorting</li>
+            <li><strong>flake8</strong> for linting</li>
+            <li><strong>mypy</strong> for type checking</li>
+        </ul>
+
+        <p>Run all checks:</p>
+        <pre><code>black ncrads9/
+isort ncrads9/
+flake8 ncrads9/
+mypy ncrads9/</code></pre>
+    </div>
+
+    <h2>Contributing</h2>
+    <div class="section">
+        <ol>
+            <li>Fork the repository</li>
+            <li>Create a feature branch: <code>git checkout -b feature/my-feature</code></li>
+            <li>Make your changes and add tests</li>
+            <li>Run the test suite to ensure all tests pass</li>
+            <li>Commit your changes: <code>git commit -m "Add my feature"</code></li>
+            <li>Push to your fork: <code>git push origin feature/my-feature</code></li>
+            <li>Open a Pull Request</li>
+        </ol>
+    </div>
+
+    <h2>Building Documentation</h2>
+    <div class="section">
+        <p>Build the LaTeX documentation:</p>
+        <pre><code>cd docs
+make pdf</code></pre>
+    </div>
+
+    <h2>Architecture Overview</h2>
+    <div class="section">
+        <h3>Core Components</h3>
+        <ul>
+            <li><strong>FITSImage</strong>: Handles FITS file I/O and data management</li>
+            <li><strong>Display</strong>: Manages image rendering and visualization</li>
+            <li><strong>RegionManager</strong>: Handles region creation, editing, and serialization</li>
+            <li><strong>WCSHandler</strong>: Provides coordinate transformations</li>
+            <li><strong>AnalysisTools</strong>: Statistical and analytical functions</li>
+        </ul>
+
+        <h3>UI Framework</h3>
+        <p>NCRADS9 uses PyQt5/PyQt6 for the graphical interface. The UI is organized into:</p>
+        <ul>
+            <li><strong>MainWindow</strong>: Primary application window</li>
+            <li><strong>ImageCanvas</strong>: Image display widget</li>
+            <li><strong>Dialogs</strong>: Various dialog windows for settings and tools</li>
+        </ul>
+    </div>
+</body>
+</html>
