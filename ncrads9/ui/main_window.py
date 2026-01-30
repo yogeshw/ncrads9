@@ -66,6 +66,21 @@ class MainWindow(QMainWindow):
         """Set up the menu bar."""
         self.menu_bar = MenuBar(self)
         self.setMenuBar(self.menu_bar)
+        
+        # Connect menu actions to handlers
+        self._connect_menu_actions()
+    
+    def _connect_menu_actions(self) -> None:
+        """Connect menu actions to their handlers."""
+        # File menu
+        self.menu_bar.action_open.triggered.connect(self.open_file)
+        self.menu_bar.action_save.triggered.connect(self.save_file)
+        self.menu_bar.action_save_as.triggered.connect(self.save_file_as)
+        self.menu_bar.action_exit.triggered.connect(self.close)
+        
+        # Help menu
+        self.menu_bar.action_about.triggered.connect(self.show_about)
+        self.menu_bar.action_about_qt.triggered.connect(self.show_about_qt)
 
     def _setup_toolbar(self) -> None:
         """Set up the main toolbar."""
@@ -98,14 +113,19 @@ class MainWindow(QMainWindow):
         self.status_bar = StatusBar(self)
         self.setStatusBar(self.status_bar)
 
-    def open_file(self, filepath: Optional[str] = None) -> None:
+    def open_file(self, checked: bool = False, filepath: Optional[str] = None) -> None:
         """
         Open a FITS file.
 
         Args:
+            checked: Ignored (from Qt signal).
             filepath: Optional path to the file. If None, shows a file dialog.
         """
-        if filepath is None:
+        # Handle case where checked is actually a filepath string
+        if isinstance(checked, str):
+            filepath = checked
+            
+        if filepath is None or filepath is False:
             filepath, _ = QFileDialog.getOpenFileName(
                 self,
                 "Open FITS File",
@@ -115,4 +135,37 @@ class MainWindow(QMainWindow):
 
         if filepath:
             # TODO: Implement file loading logic
-            self.status_bar.show_message(f"Opened: {filepath}")
+            self.statusBar().showMessage(f"Opened: {filepath}")
+    
+    def save_file(self) -> None:
+        """Save the current file."""
+        self.statusBar().showMessage("Save not yet implemented")
+    
+    def save_file_as(self) -> None:
+        """Save the current file with a new name."""
+        filepath, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save FITS File",
+            "",
+            "FITS Files (*.fits *.fit *.fts);;All Files (*)",
+        )
+        if filepath:
+            self.statusBar().showMessage(f"Save as: {filepath}")
+    
+    def show_about(self) -> None:
+        """Show the About dialog."""
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.about(
+            self,
+            "About NCRADS9",
+            "<h2>NCRADS9</h2>"
+            "<p>A Python/Qt6 clone of SAOImageDS9</p>"
+            "<p>Version 0.1.0</p>"
+            "<p>Copyright © 2026 Yogesh Wadadekar</p>"
+            "<p>Licensed under GPL v3</p>"
+        )
+    
+    def show_about_qt(self) -> None:
+        """Show the About Qt dialog."""
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.aboutQt(self, "About Qt")
