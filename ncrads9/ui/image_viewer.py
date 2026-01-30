@@ -43,6 +43,11 @@ class ImageViewer(QLabel):
         self.setScaledContents(False)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
+        # Set size policy to expand in both directions
+        from PyQt6.QtWidgets import QSizePolicy
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.setMinimumSize(100, 100)
+        
         # Image data
         self._pixmap: Optional[QPixmap] = None
         self._zoom = 1.0
@@ -76,7 +81,8 @@ class ImageViewer(QLabel):
         )
         
         self.setPixmap(scaled_pixmap)
-        self.resize(scaled_pixmap.size())
+        # Don't call resize() here - let parent layout manage size
+        # self.resize(scaled_pixmap.size())
     
     def zoom_in(self) -> None:
         """Zoom in by 20%."""

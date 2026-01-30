@@ -222,7 +222,7 @@ class MainWindow(QMainWindow):
         """Set up the central widget."""
         # Create scroll area for image display
         self.scroll_area = QScrollArea(self)
-        self.scroll_area.setWidgetResizable(False)
+        self.scroll_area.setWidgetResizable(True)  # Allow widget to use full viewport
         self.scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # Create interactive image viewer with regions
@@ -363,7 +363,7 @@ class MainWindow(QMainWindow):
         adjusted_z2 = center + new_range / 2 + brightness * range_val
         
         # Clip and scale the data
-        clipped = np.clip(self.image_data, adjusted_z1, adjusted_z2)
+        clipped = np.clip(image_data, adjusted_z1, adjusted_z2)
         scaled = apply_scale(clipped, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
         
         # Apply colormap
