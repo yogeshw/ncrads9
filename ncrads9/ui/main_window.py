@@ -41,10 +41,14 @@ from .toolbar import MainToolbar
 from .button_bar import ButtonBar
 from .status_bar import StatusBar
 from .image_viewer import ImageViewer
+from .widgets.colorbar_widget import ColorbarWidget
+from .dialogs.statistics_dialog import StatisticsDialog
+from .dialogs.histogram_dialog import HistogramDialog
 from ..core.fits_handler import FITSHandler
 from ..core.wcs_handler import WCSHandler
 from ..rendering.scale_algorithms import apply_scale, ScaleAlgorithm, compute_zscale_limits
 from ..colormaps.builtin_maps import get_colormap
+from ..regions.region_parser import RegionParser
 
 if TYPE_CHECKING:
     from ncrads9.utils.config import Config
@@ -73,6 +77,7 @@ class MainWindow(QMainWindow):
         self.image_data = None
         self.current_scale = ScaleAlgorithm.LINEAR
         self.current_colormap = "grey"
+        self.invert_colormap = False
         self.z1 = None  # Scale limits
         self.z2 = None
 
@@ -133,15 +138,15 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_invert_colormap.triggered.connect(self._toggle_invert_colormap)
         
         # Region menu (stubs)
-        self.menu_bar.action_region_load.triggered.connect(lambda: self.statusBar().showMessage("Region loading not implemented", 2000))
+        self.menu_bar.action_region_load.triggered.connect(self._load_regions)
         self.menu_bar.action_region_save.triggered.connect(lambda: self.statusBar().showMessage("Region saving not implemented", 2000))
         
-        # WCS menu (stubs)
-        self.menu_bar.action_wcs_fk5.triggered.connect(lambda: self.statusBar().showMessage("WCS system change not implemented", 2000))
+        # WCS menu
+        self.menu_bar.action_wcs_fk5.triggered.connect(self._toggle_wcs_grid)
         
-        # Analysis menu (stubs)
-        self.menu_bar.action_statistics.triggered.connect(lambda: self.statusBar().showMessage("Statistics dialog not implemented", 2000))
-        self.menu_bar.action_histogram.triggered.connect(lambda: self.statusBar().showMessage("Histogram dialog not implemented", 2000))
+        # Analysis menu
+        self.menu_bar.action_statistics.triggered.connect(self._show_statistics)
+        self.menu_bar.action_histogram.triggered.connect(self._show_histogram)
         
         # Zoom menu
         self.menu_bar.action_zoom_in.triggered.connect(self._zoom_in)
@@ -158,6 +163,16 @@ class MainWindow(QMainWindow):
         """Set up the main toolbar."""
         self.main_toolbar = MainToolbar(self)
         self.addToolBar(self.main_toolbar)
+        
+        # Connect toolbar actions
+        self.main_toolbar.action_open.triggered.connect(self.open_file)
+        self.main_toolbar.action_save.triggered.connect(self.save_file)
+        self.main_toolbar.action_zoom_in.triggered.connect(self._zoom_in)
+        self.main_toolbar.action_zoom_out.triggered.connect(self._zoom_out)
+        self.main_toolbar.action_zoom_fit.triggered.connect(self._zoom_fit)
+        self.main_toolbar.action_zoom_1.triggered.connect(self._zoom_actual)
+        self.main_toolbar.action_statistics.triggered.connect(self._show_statistics)
+        self.main_toolbar.action_histogram.triggered.connect(self._show_histogram)
 
     def _setup_central_widget(self) -> None:
         """Set up the central widget."""
@@ -192,11 +207,11 @@ class MainWindow(QMainWindow):
         self.button_bar_dock.setWidget(self.button_bar)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.button_bar_dock)
 
-        # Right dock for info panel (placeholder)
-        self.info_dock = QDockWidget("Info", self)
-        self.info_widget = QWidget(self)
-        self.info_dock.setWidget(self.info_widget)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.info_dock)
+        # Right dock for colorbar
+        self.colorbar_dock = QDockWidget("Colorbar", self)
+        self.colorbar_widget = ColorbarWidget(self)
+        self.colorbar_dock.setWidget(self.colorbar_widget)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.colorbar_dock)
 
     def _setup_status_bar(self) -> None:
         """Set up the status bar."""
@@ -293,7 +308,22 @@ class MainWindow(QMainWindow):
         
         # Apply colormap
         cmap = get_colormap(self.current_colormap)
+        
+        # Invert colormap if needed
+        if self.invert_colormap:
+            # Get colormap data and invert
+            cmap_data = cmap.colors.copy()
+            cmap_data = cmap_data[::-1]  # Reverse the colormap
+            from ..colormaps.colormap import Colormap
+            cmap = Colormap(f"{self.current_colormap}_inverted", cmap_data)
+        
         rgb = cmap.apply(scaled)
+        
+        # Update colorbar
+        self.colorbar_widget.set_colormap(
+            cmap.colors, adjusted_z1, adjusted_z2, 
+            self.current_colormap, self.invert_colormap
+        )
         
         # Convert to QImage
         height, width = rgb.shape[:2]
@@ -502,8 +532,50 @@ class MainWindow(QMainWindow):
     
     def _toggle_invert_colormap(self, checked: bool) -> None:
         """Toggle colormap inversion."""
-        # This would require modifying the colormap - stub for now
-        self.statusBar().showMessage("Invert colormap not implemented", 2000)
+        self.invert_colormap = checked
+        if self.image_data is not None:
+            self._display_image()
+            inv_str = "inverted" if checked else "normal"
+            self.statusBar().showMessage(f"Colormap {inv_str}", 2000)
+    
+    def _load_regions(self) -> None:
+        """Load region file."""
+        filepath, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load Region File",
+            "",
+            "Region Files (*.reg);;All Files (*)",
+        )
+        if filepath:
+            try:
+                parser = RegionParser()
+                regions = parser.parse_file(filepath)
+                self.statusBar().showMessage(f"Loaded {len(regions)} regions from {filepath}", 3000)
+                # TODO: Display regions on image
+            except Exception as e:
+                self.statusBar().showMessage(f"Error loading regions: {e}", 3000)
+    
+    def _toggle_wcs_grid(self) -> None:
+        """Toggle WCS coordinate grid overlay."""
+        self.statusBar().showMessage("WCS grid overlay not yet implemented", 2000)
+    
+    def _show_statistics(self) -> None:
+        """Show statistics dialog."""
+        if self.image_data is None:
+            self.statusBar().showMessage("No image loaded", 2000)
+            return
+        
+        dialog = StatisticsDialog(self.image_data, self)
+        dialog.exec()
+    
+    def _show_histogram(self) -> None:
+        """Show histogram dialog."""
+        if self.image_data is None:
+            self.statusBar().showMessage("No image loaded", 2000)
+            return
+        
+        dialog = HistogramDialog(self.image_data, self)
+        dialog.exec()
     
     def save_file(self) -> None:
         """Save the current file."""
