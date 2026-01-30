@@ -149,10 +149,14 @@ ncrads9/ui/toolbar.py
 ncrads9/ui/dialogs/__init__.py
 ncrads9/ui/dialogs/colormap_dialog.py
 ncrads9/ui/dialogs/contour_dialog.py
+ncrads9/ui/dialogs/export_dialog.py
 ncrads9/ui/dialogs/grid_dialog.py
 ncrads9/ui/dialogs/header_dialog.py
+ncrads9/ui/dialogs/help_contents_dialog.py
 ncrads9/ui/dialogs/histogram_dialog.py
+ncrads9/ui/dialogs/keyboard_shortcuts_dialog.py
 ncrads9/ui/dialogs/open_dialog.py
+ncrads9/ui/dialogs/pixel_table_dialog.py
 ncrads9/ui/dialogs/preferences_dialog.py
 ncrads9/ui/dialogs/region_dialog.py
 ncrads9/ui/dialogs/save_dialog.py

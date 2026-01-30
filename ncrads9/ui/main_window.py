@@ -44,6 +44,10 @@ from .image_viewer import ImageViewer
 from .widgets.colorbar_widget import ColorbarWidget
 from .dialogs.statistics_dialog import StatisticsDialog
 from .dialogs.histogram_dialog import HistogramDialog
+from .dialogs.pixel_table_dialog import PixelTableDialog
+from .dialogs.keyboard_shortcuts_dialog import KeyboardShortcutsDialog
+from .dialogs.help_contents_dialog import HelpContentsDialog
+from .dialogs.export_dialog import ExportDialog
 from ..core.fits_handler import FITSHandler
 from ..core.wcs_handler import WCSHandler
 from ..rendering.scale_algorithms import apply_scale, ScaleAlgorithm, compute_zscale_limits
@@ -101,6 +105,8 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_open.triggered.connect(self.open_file)
         self.menu_bar.action_save.triggered.connect(self.save_file)
         self.menu_bar.action_save_as.triggered.connect(self.save_file_as)
+        self.menu_bar.action_export.triggered.connect(self._export_image)
+        self.menu_bar.action_print.triggered.connect(self._print_image)
         self.menu_bar.action_exit.triggered.connect(self.close)
         
         # Edit menu (stubs for now)
@@ -141,12 +147,20 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_region_load.triggered.connect(self._load_regions)
         self.menu_bar.action_region_save.triggered.connect(lambda: self.statusBar().showMessage("Region saving not implemented", 2000))
         
-        # WCS menu
-        self.menu_bar.action_wcs_fk5.triggered.connect(self._toggle_wcs_grid)
+        # WCS menu - connect all coordinate system options
+        self.menu_bar.action_wcs_fk5.triggered.connect(lambda: self._set_wcs_system("fk5"))
+        self.menu_bar.action_wcs_fk4.triggered.connect(lambda: self._set_wcs_system("fk4"))
+        self.menu_bar.action_wcs_icrs.triggered.connect(lambda: self._set_wcs_system("icrs"))
+        self.menu_bar.action_wcs_galactic.triggered.connect(lambda: self._set_wcs_system("galactic"))
+        self.menu_bar.action_wcs_ecliptic.triggered.connect(lambda: self._set_wcs_system("ecliptic"))
+        self.menu_bar.action_wcs_sexagesimal.triggered.connect(lambda: self._set_wcs_format("sexagesimal"))
+        self.menu_bar.action_wcs_degrees.triggered.connect(lambda: self._set_wcs_format("degrees"))
         
-        # Analysis menu
+        # Analysis menu - connect all tools
         self.menu_bar.action_statistics.triggered.connect(self._show_statistics)
         self.menu_bar.action_histogram.triggered.connect(self._show_histogram)
+        self.menu_bar.action_pixel_table.triggered.connect(self._show_pixel_table)
+        self.menu_bar.action_fits_header.triggered.connect(self._show_fits_header)
         
         # Zoom menu
         self.menu_bar.action_zoom_in.triggered.connect(self._zoom_in)
@@ -156,6 +170,8 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_zoom_center.triggered.connect(lambda: self.statusBar().showMessage("Center not implemented", 2000))
         
         # Help menu
+        self.menu_bar.action_help_contents.triggered.connect(self._show_help_contents)
+        self.menu_bar.action_keyboard_shortcuts.triggered.connect(self._show_keyboard_shortcuts)
         self.menu_bar.action_about.triggered.connect(self.show_about)
         self.menu_bar.action_about_qt.triggered.connect(self.show_about_qt)
 
@@ -555,9 +571,21 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 self.statusBar().showMessage(f"Error loading regions: {e}", 3000)
     
-    def _toggle_wcs_grid(self) -> None:
-        """Toggle WCS coordinate grid overlay."""
-        self.statusBar().showMessage("WCS grid overlay not yet implemented", 2000)
+    def _set_wcs_system(self, system: str) -> None:
+        """Set WCS coordinate system."""
+        # Update menu checkmarks
+        self.menu_bar.action_wcs_fk5.setChecked(system == "fk5")
+        self.menu_bar.action_wcs_fk4.setChecked(system == "fk4")
+        self.menu_bar.action_wcs_icrs.setChecked(system == "icrs")
+        self.menu_bar.action_wcs_galactic.setChecked(system == "galactic")
+        self.menu_bar.action_wcs_ecliptic.setChecked(system == "ecliptic")
+        self.statusBar().showMessage(f"WCS system: {system.upper()}", 2000)
+    
+    def _set_wcs_format(self, format_type: str) -> None:
+        """Set WCS format (sexagesimal or degrees)."""
+        self.menu_bar.action_wcs_sexagesimal.setChecked(format_type == "sexagesimal")
+        self.menu_bar.action_wcs_degrees.setChecked(format_type == "degrees")
+        self.statusBar().showMessage(f"WCS format: {format_type}", 2000)
     
     def _show_statistics(self) -> None:
         """Show statistics dialog."""
@@ -576,6 +604,73 @@ class MainWindow(QMainWindow):
         
         dialog = HistogramDialog(self.image_data, self)
         dialog.exec()
+    
+    def _show_pixel_table(self) -> None:
+        """Show pixel table dialog."""
+        if self.image_data is None:
+            self.statusBar().showMessage("No image loaded", 2000)
+            return
+        
+        # Use image center as default
+        height, width = self.image_data.shape
+        x, y = width // 2, height // 2
+        
+        dialog = PixelTableDialog(self.image_data, x, y, size=11, parent=self)
+        dialog.exec()
+    
+    def _show_fits_header(self) -> None:
+        """Show FITS header dialog."""
+        if self.fits_handler is None:
+            self.statusBar().showMessage("No FITS file loaded", 2000)
+            return
+        
+        from .dialogs.header_dialog import HeaderDialog
+        header = self.fits_handler.get_header()
+        dialog = HeaderDialog(header, self)
+        dialog.exec()
+    
+    def _show_help_contents(self) -> None:
+        """Show help contents dialog."""
+        dialog = HelpContentsDialog(self)
+        dialog.exec()
+    
+    def _show_keyboard_shortcuts(self) -> None:
+        """Show keyboard shortcuts dialog."""
+        dialog = KeyboardShortcutsDialog(self)
+        dialog.exec()
+    
+    def _export_image(self) -> None:
+        """Export current image view."""
+        if self.image_viewer.pixmap() is None:
+            self.statusBar().showMessage("No image to export", 2000)
+            return
+        
+        dialog = ExportDialog(self.image_viewer.pixmap(), self)
+        if dialog.exec():
+            self.statusBar().showMessage(f"Exported to {dialog.export_path}", 3000)
+    
+    def _print_image(self) -> None:
+        """Print current image view."""
+        if self.image_viewer.pixmap() is None:
+            self.statusBar().showMessage("No image to print", 2000)
+            return
+        
+        from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
+        from PyQt6.QtGui import QPainter
+        
+        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+        dialog = QPrintDialog(printer, self)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            painter = QPainter(printer)
+            rect = painter.viewport()
+            size = self.image_viewer.pixmap().size()
+            size.scale(rect.size(), Qt.AspectRatioMode.KeepAspectRatio)
+            painter.setViewport(rect.x(), rect.y(), size.width(), size.height())
+            painter.setWindow(self.image_viewer.pixmap().rect())
+            painter.drawPixmap(0, 0, self.image_viewer.pixmap())
+            painter.end()
+            self.statusBar().showMessage("Print completed", 2000)
     
     def save_file(self) -> None:
         """Save the current file."""

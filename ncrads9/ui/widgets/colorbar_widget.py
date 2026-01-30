@@ -110,13 +110,20 @@ class ColorbarWidget(QWidget):
         width = 40
         height = self.colorbar_label.height() or 150
         
+        # Ensure colormap data is uint8 (0-255 range)
+        if self.colormap_data.dtype == np.float64 or self.colormap_data.dtype == np.float32:
+            # Convert from 0-1 to 0-255
+            cmap_uint8 = (self.colormap_data * 255).astype(np.uint8)
+        else:
+            cmap_uint8 = self.colormap_data.astype(np.uint8)
+        
         # Create gradient by repeating colormap vertically
         colorbar = np.zeros((height, width, 3), dtype=np.uint8)
         
         # Map height pixels to 256 colormap entries (flip for top=max)
         indices = np.linspace(255, 0, height).astype(int)
         for i, idx in enumerate(indices):
-            colorbar[i, :] = self.colormap_data[idx]
+            colorbar[i, :] = cmap_uint8[idx]
         
         # Convert to QImage and QPixmap
         qimage = QImage(
