@@ -20,7 +20,7 @@ Main window for NCRADS9 application.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
@@ -36,18 +36,23 @@ from .toolbar import MainToolbar
 from .button_bar import ButtonBar
 from .status_bar import StatusBar
 
+if TYPE_CHECKING:
+    from ncrads9.utils.config import Config
+
 
 class MainWindow(QMainWindow):
     """Main application window for NCRADS9."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, config: Optional["Config"] = None, parent: Optional[QWidget] = None) -> None:
         """
         Initialize the main window.
 
         Args:
+            config: Application configuration.
             parent: Optional parent widget.
         """
         super().__init__(parent)
+        self.config = config
         self.setWindowTitle("NCRADS9 - FITS Viewer")
         self.setMinimumSize(800, 600)
 
