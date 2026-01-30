@@ -82,6 +82,7 @@ class MainWindow(QMainWindow):
         self.current_scale = ScaleAlgorithm.LINEAR
         self.current_colormap = "grey"
         self.invert_colormap = False
+        self.current_bin = 1
         self.z1 = None  # Scale limits
         self.z2 = None
 
@@ -150,8 +151,11 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_next_frame.triggered.connect(self._next_frame)
         self.menu_bar.action_last_frame.triggered.connect(self._last_frame)
         
-        # Bin menu (stubs for now)
-        self.menu_bar.action_bin_1.triggered.connect(lambda: self.statusBar().showMessage("Binning not implemented", 2000))
+        # Bin menu
+        self.menu_bar.action_bin_1.triggered.connect(lambda: self._set_bin(1))
+        self.menu_bar.action_bin_2.triggered.connect(lambda: self._set_bin(2))
+        self.menu_bar.action_bin_4.triggered.connect(lambda: self._set_bin(4))
+        self.menu_bar.action_bin_8.triggered.connect(lambda: self._set_bin(8))
         
         # Scale menu
         self.menu_bar.action_scale_linear.triggered.connect(lambda: self._set_scale(ScaleAlgorithm.LINEAR))
@@ -318,6 +322,8 @@ class MainWindow(QMainWindow):
         # Update frame
         frame.filepath = Path(filepath)
         frame.image_data = image_data
+        frame.original_image_data = image_data
+        frame.bin_factor = 1
         frame.header = header
         frame.wcs_handler = wcs_handler
         
@@ -396,6 +402,7 @@ class MainWindow(QMainWindow):
         
         # Update zoom display
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
+        self._update_bin_menu_checks(getattr(frame, "bin_factor", 1))
     
     def _set_scale(self, scale: ScaleAlgorithm) -> None:
         """
@@ -460,6 +467,53 @@ class MainWindow(QMainWindow):
         if self.image_data is not None:
             self._display_image()
             self.statusBar().showMessage(f"Colormap: {colormap}", 2000)
+
+    def _update_bin_menu_checks(self, factor: int) -> None:
+        """Update Bin menu checkmarks based on current factor."""
+        self.menu_bar.action_bin_1.setChecked(factor == 1)
+        self.menu_bar.action_bin_2.setChecked(factor == 2)
+        self.menu_bar.action_bin_4.setChecked(factor == 4)
+        self.menu_bar.action_bin_8.setChecked(factor == 8)
+
+    def _rebin_image(self, data: np.ndarray, factor: int) -> np.ndarray:
+        """Rebin image by an integer factor using block mean."""
+        if factor <= 1:
+            return data
+
+        height, width = data.shape[:2]
+        new_height = (height // factor) * factor
+        new_width = (width // factor) * factor
+        if new_height == 0 or new_width == 0:
+            return data
+
+        trimmed = data[:new_height, :new_width]
+        reshaped = trimmed.reshape(new_height // factor, factor, new_width // factor, factor)
+        return np.nanmean(reshaped, axis=(1, 3)).astype(np.float32)
+
+    def _set_bin(self, factor: int) -> None:
+        """Set binning factor for the current frame."""
+        frame = self.frame_manager.current_frame
+        if not frame or not frame.has_data:
+            self.statusBar().showMessage("No image loaded", 2000)
+            return
+
+        if frame.original_image_data is None:
+            frame.original_image_data = frame.image_data
+
+        if factor == 1:
+            frame.image_data = frame.original_image_data
+        else:
+            frame.image_data = self._rebin_image(frame.original_image_data, factor)
+
+        frame.bin_factor = factor
+        self.current_bin = factor
+        self.z1 = None
+        self.z2 = None
+
+        self._update_bin_menu_checks(factor)
+        self._display_image()
+        self.status_bar.update_image_info(frame.image_data.shape[1], frame.image_data.shape[0])
+        self.statusBar().showMessage(f"Binning: {factor}x{factor}", 2000)
     
     def _zoom_in(self) -> None:
         """Zoom in."""

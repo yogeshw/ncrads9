@@ -36,6 +36,8 @@ class Frame:
     header: Optional[dict] = None
     wcs_handler: Optional[object] = None
     regions: List = None
+    original_image_data: Optional[np.ndarray] = None
+    bin_factor: int = 1
     
     def __post_init__(self):
         if self.regions is None:
