@@ -96,6 +96,11 @@ class ImageViewerWithRegions(QWidget):
         self.image_viewer.zoom_out()
         self._update_overlay_transform()
     
+    def zoom_to(self, zoom: float) -> None:
+        """Set specific zoom level."""
+        self.image_viewer.zoom_to(zoom)
+        self._update_overlay_transform()
+    
     def zoom_fit(self, viewport_size: QSize) -> None:
         """Zoom to fit viewport."""
         self.image_viewer.zoom_fit(viewport_size)
