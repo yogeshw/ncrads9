@@ -24,7 +24,7 @@ from typing import Optional
 from PyQt6.QtCore import Qt, QPoint, pyqtSignal, QSize
 from PyQt6.QtGui import QPixmap, QWheelEvent, QMouseEvent
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
-from .image_viewer import ImageViewer
+from ..image_viewer import ImageViewer
 from .region_overlay import RegionOverlay, RegionMode, Region
 
 
