@@ -160,6 +160,11 @@ class ImageViewerWithRegions(QWidget):
     
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Handle mouse press - check for middle button center."""
+        # Right button is ALWAYS for contrast/brightness - forward to image viewer
+        if event.button() == Qt.MouseButton.RightButton:
+            self.image_viewer.mousePressEvent(event)
+            return
+        
         if event.button() == Qt.MouseButton.MiddleButton:
             # Check if we should center (Ctrl modifier) or pan (default)
             if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
@@ -167,8 +172,12 @@ class ImageViewerWithRegions(QWidget):
                 self._center_on_point(event.position().x(), event.position().y())
                 event.accept()
                 return
+            else:
+                # Pan mode - forward to image viewer
+                self.image_viewer.mousePressEvent(event)
+                return
         
-        # Forward to region overlay or image viewer
+        # Left button - forward to region overlay or image viewer
         if self.region_overlay.mode != RegionMode.NONE:
             self.region_overlay.mousePressEvent(event)
         else:
@@ -176,6 +185,12 @@ class ImageViewerWithRegions(QWidget):
     
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         """Forward mouse move events."""
+        # If adjusting contrast (right button) or panning (middle button), forward to image viewer
+        if self.image_viewer._adjusting_contrast or self.image_viewer._panning:
+            self.image_viewer.mouseMoveEvent(event)
+            return
+        
+        # Otherwise handle regions
         if self.region_overlay.mode != RegionMode.NONE or self.region_overlay.selected_region:
             self.region_overlay.mouseMoveEvent(event)
         else:
@@ -183,11 +198,16 @@ class ImageViewerWithRegions(QWidget):
     
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         """Forward mouse release events."""
-        if event.button() == Qt.MouseButton.MiddleButton and self._middle_button_for_center:
-            self._middle_button_for_center = False
-            event.accept()
+        # Right button or middle button - forward to image viewer
+        if event.button() == Qt.MouseButton.RightButton or event.button() == Qt.MouseButton.MiddleButton:
+            if self._middle_button_for_center and event.button() == Qt.MouseButton.MiddleButton:
+                self._middle_button_for_center = False
+                event.accept()
+                return
+            self.image_viewer.mouseReleaseEvent(event)
             return
         
+        # Left button - handle regions
         if self.region_overlay.mode != RegionMode.NONE:
             self.region_overlay.mouseReleaseEvent(event)
         else:
