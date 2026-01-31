@@ -139,7 +139,8 @@ class GLImageViewerWithRegions(QWidget):
         self._brightness_offset = 0.0
 
     def set_pan(self, pan_x: float, pan_y: float) -> None:
-        self.gl_canvas.pan_offset = (pan_x, pan_y)
+        self.gl_canvas._pan_x = pan_x
+        self.gl_canvas._pan_y = pan_y
         self.gl_canvas.pan_changed.emit(pan_x, pan_y)
         self.gl_canvas.update()
 
