@@ -134,6 +134,10 @@ class ImageViewerWithRegions(QWidget):
     def setText(self, text: str) -> None:
         """Set text (for empty state)."""
         self.image_viewer.setText(text)
+
+    def set_background_color(self, color_hex: str) -> None:
+        """Set viewer background color."""
+        self.image_viewer.setStyleSheet(f"background-color: {color_hex};")
     
     def _update_overlay_geometry(self) -> None:
         """Update region overlay geometry to match image viewer."""

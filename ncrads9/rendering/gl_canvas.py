@@ -23,13 +23,18 @@ Provides a QOpenGLWidget-based canvas with zoom, pan, and image rendering
 capabilities optimized for astronomical data visualization.
 """
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Callable
 
 import numpy as np
 from numpy.typing import NDArray
 from PyQt6.QtCore import Qt, QPointF, pyqtSignal
 from PyQt6.QtGui import QMouseEvent, QWheelEvent
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
+
+from OpenGL import GL
+
+from .tile_renderer import TileRenderer, Viewport
+from .texture_manager import TextureManager
 
 
 class GLCanvas(QOpenGLWidget):
@@ -62,6 +67,12 @@ class GLCanvas(QOpenGLWidget):
         self._texture_id: Optional[int] = None
         self._min_zoom: float = 0.1
         self._max_zoom: float = 100.0
+        self._image_width: int = 0
+        self._image_height: int = 0
+        self._texture_manager = TextureManager()
+        self._tile_renderer = TileRenderer(self._texture_manager)
+        self._tile_provider: Optional[Callable[[int, int, int, int], NDArray[np.uint8]]] = None
+        self._bg_color: Tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
 
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -91,7 +102,45 @@ class GLCanvas(QOpenGLWidget):
             data: 2D numpy array of image data.
         """
         self._image_data = data.astype(np.float32)
-        self._upload_texture()
+        self._image_height, self._image_width = self._image_data.shape[:2]
+        self.update()
+
+    def set_value_source(self, data: NDArray[np.float32]) -> None:
+        """Set image data source for cursor value sampling."""
+        self._image_data = data.astype(np.float32)
+        self._image_height, self._image_width = self._image_data.shape[:2]
+
+    def set_tile_provider(
+        self,
+        width: int,
+        height: int,
+        data_provider: Callable[[int, int, int, int], NDArray[np.uint8]],
+    ) -> None:
+        """Set tile provider for GPU rendering."""
+        self._image_width = width
+        self._image_height = height
+        self._tile_provider = data_provider
+        self._tile_renderer.set_image(width, height, data_provider)
+        self.update()
+
+    def set_tile_size(self, tile_size: int) -> None:
+        """Update tile size and rebuild tile grid."""
+        self._tile_renderer = TileRenderer(self._texture_manager, tile_size=tile_size)
+        if self._tile_provider and self._image_width > 0 and self._image_height > 0:
+            self._tile_renderer.set_image(self._image_width, self._image_height, self._tile_provider)
+        self.update()
+
+    def set_cache_size_mb(self, cache_size_mb: int) -> None:
+        """Update GPU texture cache size in MB."""
+        self._texture_manager.max_cache_size = int(cache_size_mb) * 1024 * 1024
+
+    def set_background_color(self, color: Tuple[float, float, float, float]) -> None:
+        """Set GL background color (RGBA in 0-1 range)."""
+        self._bg_color = color
+        if self.context() is not None:
+            self.makeCurrent()
+            GL.glClearColor(*self._bg_color)
+            self.doneCurrent()
         self.update()
 
     def reset_view(self) -> None:
@@ -105,11 +154,10 @@ class GLCanvas(QOpenGLWidget):
 
     def zoom_to_fit(self) -> None:
         """Adjust zoom to fit entire image in view."""
-        if self._image_data is None:
+        if self._image_width == 0 or self._image_height == 0:
             return
-        img_h, img_w = self._image_data.shape[:2]
         view_w, view_h = self.width(), self.height()
-        self._zoom = min(view_w / img_w, view_h / img_h)
+        self._zoom = min(view_w / self._image_width, view_h / self._image_height)
         self._pan_x = 0.0
         self._pan_y = 0.0
         self.zoom_changed.emit(self._zoom)
@@ -151,7 +199,11 @@ class GLCanvas(QOpenGLWidget):
 
     def initializeGL(self) -> None:
         """Initialize OpenGL context and resources."""
-        pass  # Implementation depends on OpenGL version
+        GL.glClearColor(*self._bg_color)
+        GL.glDisable(GL.GL_DEPTH_TEST)
+        GL.glEnable(GL.GL_TEXTURE_2D)
+        GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1)
+        self._texture_manager.initialize()
 
     def resizeGL(self, width: int, height: int) -> None:
         """
@@ -161,11 +213,41 @@ class GLCanvas(QOpenGLWidget):
             width: New width in pixels.
             height: New height in pixels.
         """
-        pass  # Update viewport
+        GL.glViewport(0, 0, width, height)
 
     def paintGL(self) -> None:
         """Render the image with current zoom and pan."""
-        pass  # Render textured quad
+        GL.glClear(GL.GL_COLOR_BUFFER_BIT)
+
+        if self._image_width == 0 or self._image_height == 0:
+            return
+
+        view_w = self.width() / self._zoom
+        view_h = self.height() / self._zoom
+        viewport_x = self._pan_x - view_w / 2
+        viewport_y = self._pan_y - view_h / 2
+
+        GL.glMatrixMode(GL.GL_PROJECTION)
+        GL.glLoadIdentity()
+        GL.glOrtho(
+            viewport_x,
+            viewport_x + view_w,
+            viewport_y + view_h,
+            viewport_y,
+            -1.0,
+            1.0,
+        )
+        GL.glMatrixMode(GL.GL_MODELVIEW)
+        GL.glLoadIdentity()
+
+        viewport = Viewport(
+            x=viewport_x,
+            y=viewport_y,
+            width=view_w,
+            height=view_h,
+            zoom=self._zoom,
+        )
+        self._tile_renderer.render(viewport)
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         """
@@ -228,4 +310,4 @@ class GLCanvas(QOpenGLWidget):
 
     def _upload_texture(self) -> None:
         """Upload image data to GPU texture."""
-        pass  # Implementation depends on OpenGL version
+        return

@@ -29,6 +29,8 @@ from typing import Dict, Optional, Tuple
 import numpy as np
 from numpy.typing import NDArray
 
+from OpenGL import GL
+
 
 @dataclass
 class TextureInfo:
@@ -276,9 +278,59 @@ class TextureManager:
         Returns:
             OpenGL texture ID.
         """
-        # Placeholder - actual OpenGL calls would go here
-        # glGenTextures, glBindTexture, glTexImage2D, etc.
-        return hash(data.tobytes()) % (2**31)
+        if data.ndim == 2:
+            height, width = data.shape
+            channels = 1
+        else:
+            height, width, channels = data.shape
+
+        if data.dtype == np.uint8:
+            if channels == 1:
+                internal_format = GL.GL_R8
+                pixel_format = GL.GL_RED
+            elif channels == 3:
+                internal_format = GL.GL_RGB8
+                pixel_format = GL.GL_RGB
+            else:
+                internal_format = GL.GL_RGBA8
+                pixel_format = GL.GL_RGBA
+            pixel_type = GL.GL_UNSIGNED_BYTE
+        else:
+            if channels == 1:
+                internal_format = GL.GL_R32F
+                pixel_format = GL.GL_RED
+            elif channels == 3:
+                internal_format = GL.GL_RGB32F
+                pixel_format = GL.GL_RGB
+            else:
+                internal_format = GL.GL_RGBA32F
+                pixel_format = GL.GL_RGBA
+            pixel_type = GL.GL_FLOAT
+
+        texture_id = GL.glGenTextures(1)
+        GL.glBindTexture(GL.GL_TEXTURE_2D, texture_id)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_S, GL.GL_CLAMP_TO_EDGE)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_T, GL.GL_CLAMP_TO_EDGE)
+        GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1)
+        GL.glTexImage2D(
+            GL.GL_TEXTURE_2D,
+            0,
+            internal_format,
+            width,
+            height,
+            0,
+            pixel_format,
+            pixel_type,
+            data,
+        )
+
+        if generate_mipmap:
+            GL.glGenerateMipmap(GL.GL_TEXTURE_2D)
+
+        GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
+        return int(texture_id)
 
     def _update_gl_texture(
         self,
@@ -294,9 +346,43 @@ class TextureManager:
             data: New image data.
             offset: Update offset.
         """
-        # Placeholder - actual OpenGL calls would go here
-        # glBindTexture, glTexSubImage2D, etc.
-        pass
+        if data.ndim == 2:
+            height, width = data.shape
+            channels = 1
+        else:
+            height, width, channels = data.shape
+
+        if data.dtype == np.uint8:
+            if channels == 1:
+                pixel_format = GL.GL_RED
+            elif channels == 3:
+                pixel_format = GL.GL_RGB
+            else:
+                pixel_format = GL.GL_RGBA
+            pixel_type = GL.GL_UNSIGNED_BYTE
+        else:
+            if channels == 1:
+                pixel_format = GL.GL_RED
+            elif channels == 3:
+                pixel_format = GL.GL_RGB
+            else:
+                pixel_format = GL.GL_RGBA
+            pixel_type = GL.GL_FLOAT
+
+        GL.glBindTexture(GL.GL_TEXTURE_2D, texture_id)
+        GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1)
+        GL.glTexSubImage2D(
+            GL.GL_TEXTURE_2D,
+            0,
+            offset[0],
+            offset[1],
+            width,
+            height,
+            pixel_format,
+            pixel_type,
+            data,
+        )
+        GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
 
     def _delete_gl_texture(self, texture_id: int) -> None:
         """
@@ -305,6 +391,5 @@ class TextureManager:
         Args:
             texture_id: OpenGL texture ID.
         """
-        # Placeholder - actual OpenGL call would go here
-        # glDeleteTextures
-        pass
+        if texture_id:
+            GL.glDeleteTextures([texture_id])

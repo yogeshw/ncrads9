@@ -24,7 +24,7 @@ from typing import Optional, TYPE_CHECKING
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtGui import QImage, QPixmap, QColor
 from PyQt6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -35,6 +35,7 @@ from PyQt6.QtWidgets import (
     QScrollArea,
 )
 import numpy as np
+from numpy.typing import NDArray
 from astropy.coordinates import (
     SkyCoord,
     FK5,
@@ -52,6 +53,7 @@ from .status_bar import StatusBar
 from .image_viewer import ImageViewer
 from .widgets.colorbar_widget import ColorbarWidget
 from .widgets.image_viewer_with_regions import ImageViewerWithRegions
+from .widgets.gl_image_viewer_with_regions import GLImageViewerWithRegions
 from .widgets.region_overlay import RegionMode
 from .dialogs.statistics_dialog import StatisticsDialog
 from .dialogs.histogram_dialog import HistogramDialog
@@ -59,12 +61,14 @@ from .dialogs.pixel_table_dialog import PixelTableDialog
 from .dialogs.keyboard_shortcuts_dialog import KeyboardShortcutsDialog
 from .dialogs.help_contents_dialog import HelpContentsDialog
 from .dialogs.export_dialog import ExportDialog
+from .dialogs.preferences_dialog import PreferencesDialog
 from ..core.fits_handler import FITSHandler
 from ..core.wcs_handler import WCSHandler
 from ..rendering.scale_algorithms import apply_scale, ScaleAlgorithm, compute_zscale_limits
 from ..colormaps.builtin_maps import get_colormap
 from ..regions.region_parser import RegionParser
 from ..frames.simple_frame_manager import FrameManager, Frame
+from ..utils.preferences import Preferences
 
 if TYPE_CHECKING:
     from ncrads9.utils.config import Config
@@ -95,6 +99,9 @@ class MainWindow(QMainWindow):
         self.current_wcs_system = "fk5"
         self.current_wcs_format = "sexagesimal"
         self._last_mouse_pos: Optional[tuple[int, int]] = None
+        self.preferences = Preferences(self._preferences_path())
+        self.use_gpu_rendering = bool(self.preferences.get("use_gpu", True))
+        self.using_gpu_rendering = False
         self.z1 = None  # Scale limits
         self.z2 = None
 
@@ -103,6 +110,7 @@ class MainWindow(QMainWindow):
         self._setup_central_widget()
         self._setup_dock_widgets()
         self._setup_status_bar()
+        self._apply_preferences(self._get_preferences_dict(), persist=False, show_message=False)
     
     @property
     def image_data(self):
@@ -145,10 +153,10 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_print.triggered.connect(self._print_image)
         self.menu_bar.action_exit.triggered.connect(self.close)
         
-        # Edit menu (stubs for now)
+        # Edit menu
         self.menu_bar.action_undo.triggered.connect(lambda: self.statusBar().showMessage("Undo not implemented", 2000))
         self.menu_bar.action_redo.triggered.connect(lambda: self.statusBar().showMessage("Redo not implemented", 2000))
-        self.menu_bar.action_preferences.triggered.connect(lambda: self.statusBar().showMessage("Preferences not implemented", 2000))
+        self.menu_bar.action_preferences.triggered.connect(self._show_preferences)
         
         # View menu
         self.menu_bar.action_fullscreen.triggered.connect(self._toggle_fullscreen)
@@ -242,17 +250,30 @@ class MainWindow(QMainWindow):
         self.scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # Create interactive image viewer with regions
-        self.image_viewer = ImageViewerWithRegions()
-        self.image_viewer.setText("No image loaded")
-        
-        # Connect signals
-        self.image_viewer.mouse_moved.connect(self._on_mouse_moved)
-        self.image_viewer.contrast_changed.connect(self._on_contrast_changed)
-        self.image_viewer.region_created.connect(self._on_region_created)
-        self.image_viewer.region_selected.connect(self._on_region_selected)
-        
+        self.image_viewer = self._create_image_viewer(self.use_gpu_rendering)
+
         self.scroll_area.setWidget(self.image_viewer)
         self.setCentralWidget(self.scroll_area)
+
+    def _create_image_viewer(self, use_gpu: bool):
+        """Create an image viewer and connect signals."""
+        if use_gpu:
+            try:
+                viewer = GLImageViewerWithRegions()
+                self.using_gpu_rendering = True
+            except Exception:
+                viewer = ImageViewerWithRegions()
+                self.using_gpu_rendering = False
+        else:
+            viewer = ImageViewerWithRegions()
+            self.using_gpu_rendering = False
+
+        viewer.setText("No image loaded")
+        viewer.mouse_moved.connect(self._on_mouse_moved)
+        viewer.contrast_changed.connect(self._on_contrast_changed)
+        viewer.region_created.connect(self._on_region_created)
+        viewer.region_selected.connect(self._on_region_selected)
+        return viewer
 
     def _setup_dock_widgets(self) -> None:
         """Set up dock widgets."""
@@ -279,6 +300,102 @@ class MainWindow(QMainWindow):
         """Set up the status bar."""
         self.status_bar = StatusBar(self)
         self.setStatusBar(self.status_bar)
+
+    def _preferences_path(self) -> Path:
+        """Return the default preferences file path."""
+        return Path.home() / ".ncrads9" / "preferences.json"
+
+    def _get_preferences_dict(self) -> dict:
+        """Get current preferences as a dict with defaults."""
+        return {
+            "use_gpu": self.preferences.get("use_gpu", True),
+            "tile_size": self.preferences.get("tile_size", 512),
+            "cache_size_mb": self.preferences.get("cache_size_mb", 1000),
+            "background_color": self.preferences.get("background_color", "#000000"),
+            "default_scale": self.preferences.get("default_scale", "Linear"),
+            "default_colormap": self.preferences.get("default_colormap", "gray"),
+            "anti_aliasing": self.preferences.get("anti_aliasing", True),
+        }
+
+    def _show_preferences(self) -> None:
+        """Show preferences dialog."""
+        dialog = PreferencesDialog(self)
+        dialog.load_preferences(self._get_preferences_dict())
+        dialog.preferences_changed.connect(self._apply_preferences)
+        dialog.exec()
+
+    def _apply_preferences(
+        self,
+        prefs: dict,
+        persist: bool = True,
+        show_message: bool = True,
+    ) -> None:
+        """Apply preferences and optionally persist them."""
+        if persist:
+            for key, value in prefs.items():
+                self.preferences.set(key, value, save=False)
+            self.preferences.save()
+
+        use_gpu = bool(prefs.get("use_gpu", self.use_gpu_rendering))
+        if use_gpu != self.use_gpu_rendering:
+            self._rebuild_image_viewer(use_gpu)
+
+        tile_size = int(prefs.get("tile_size", 512))
+        cache_size_mb = int(prefs.get("cache_size_mb", 1000))
+        if self.using_gpu_rendering:
+            if hasattr(self.image_viewer, "set_tile_size"):
+                self.image_viewer.set_tile_size(tile_size)
+            if hasattr(self.image_viewer, "set_cache_size_mb"):
+                self.image_viewer.set_cache_size_mb(cache_size_mb)
+
+        background_color = prefs.get("background_color", "#000000")
+        self._apply_background_color(background_color)
+
+        default_scale = prefs.get("default_scale", "Linear")
+        scale_map = {
+            "Linear": ScaleAlgorithm.LINEAR,
+            "Log": ScaleAlgorithm.LOG,
+            "Sqrt": ScaleAlgorithm.SQRT,
+            "Power": ScaleAlgorithm.POWER,
+            "Asinh": ScaleAlgorithm.ASINH,
+        }
+        if default_scale in scale_map:
+            self._set_scale(scale_map[default_scale])
+
+        default_colormap = prefs.get("default_colormap", "gray")
+        cmap_map = {
+            "gray": "grey",
+            "grey": "grey",
+            "heat": "heat",
+            "cool": "cool",
+            "rainbow": "rainbow",
+        }
+        if default_colormap in cmap_map:
+            self._set_colormap(cmap_map[default_colormap])
+
+        if self.image_data is not None:
+            self._display_image()
+
+        if show_message:
+            self.statusBar().showMessage("Preferences updated", 2000)
+
+    def _rebuild_image_viewer(self, use_gpu: bool) -> None:
+        """Recreate the image viewer based on GPU setting."""
+        self.use_gpu_rendering = use_gpu
+        new_viewer = self._create_image_viewer(use_gpu)
+        old_viewer = self.image_viewer
+        self.image_viewer = new_viewer
+        self.scroll_area.setWidget(self.image_viewer)
+        old_viewer.deleteLater()
+        if self.image_data is not None:
+            self._display_image()
+
+    def _apply_background_color(self, color_hex: str) -> None:
+        """Apply background color to the viewer."""
+        if self.using_gpu_rendering and hasattr(self.image_viewer, "set_background_color"):
+            self.image_viewer.set_background_color(color_hex)
+        elif hasattr(self.image_viewer, "set_background_color"):
+            self.image_viewer.set_background_color(color_hex)
 
     def open_file(self, checked: bool = False, filepath: Optional[str] = None) -> None:
         """
@@ -380,13 +497,9 @@ class MainWindow(QMainWindow):
         adjusted_z1 = center - new_range / 2 + brightness * range_val
         adjusted_z2 = center + new_range / 2 + brightness * range_val
         
-        # Clip and scale the data
-        clipped = np.clip(image_data, adjusted_z1, adjusted_z2)
-        scaled = apply_scale(clipped, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
-        
         # Apply colormap
         cmap = get_colormap(self.current_colormap)
-        
+
         # Invert colormap if needed
         if self.invert_colormap:
             # Get colormap data and invert
@@ -395,22 +508,35 @@ class MainWindow(QMainWindow):
             from ..colormaps.colormap import Colormap
             cmap = Colormap(f"{self.current_colormap}_inverted", cmap_data)
         
-        rgb = cmap.apply(scaled)
-        
         # Update colorbar
         self.colorbar_widget.set_colormap(
             cmap.colors, adjusted_z1, adjusted_z2, 
             self.current_colormap, self.invert_colormap
         )
         
-        # Convert to QImage
-        height, width = rgb.shape[:2]
-        bytes_per_line = 3 * width
-        qimage = QImage(rgb.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
-        
-        # Create pixmap and display
-        pixmap = QPixmap.fromImage(qimage)
-        self.image_viewer.set_image(pixmap)
+        if self.using_gpu_rendering:
+            def tile_provider(x: int, y: int, w: int, h: int) -> NDArray[np.uint8]:
+                tile = image_data[y : y + h, x : x + w]
+                clipped = np.clip(tile, adjusted_z1, adjusted_z2)
+                scaled = apply_scale(clipped, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
+                return cmap.apply(scaled)
+
+            self.image_viewer.set_tile_provider(image_data.shape[1], image_data.shape[0], tile_provider)
+            self.image_viewer.set_value_source(image_data)
+        else:
+            # Clip and scale the data
+            clipped = np.clip(image_data, adjusted_z1, adjusted_z2)
+            scaled = apply_scale(clipped, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
+            rgb = cmap.apply(scaled)
+
+            # Convert to QImage
+            height, width = rgb.shape[:2]
+            bytes_per_line = 3 * width
+            qimage = QImage(rgb.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
+            
+            # Create pixmap and display
+            pixmap = QPixmap.fromImage(qimage)
+            self.image_viewer.set_image(pixmap)
         
         # Update zoom display
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
@@ -813,17 +939,19 @@ class MainWindow(QMainWindow):
     
     def _export_image(self) -> None:
         """Export current image view."""
-        if self.image_viewer.pixmap() is None:
+        pixmap = self._get_current_pixmap()
+        if pixmap is None:
             self.statusBar().showMessage("No image to export", 2000)
             return
-        
-        dialog = ExportDialog(self.image_viewer.pixmap(), self)
+
+        dialog = ExportDialog(pixmap, self)
         if dialog.exec():
             self.statusBar().showMessage(f"Exported to {dialog.export_path}", 3000)
     
     def _print_image(self) -> None:
         """Print current image view."""
-        if self.image_viewer.pixmap() is None:
+        pixmap = self._get_current_pixmap()
+        if pixmap is None:
             self.statusBar().showMessage("No image to print", 2000)
             return
         
@@ -836,13 +964,46 @@ class MainWindow(QMainWindow):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             painter = QPainter(printer)
             rect = painter.viewport()
-            size = self.image_viewer.pixmap().size()
+            size = pixmap.size()
             size.scale(rect.size(), Qt.AspectRatioMode.KeepAspectRatio)
             painter.setViewport(rect.x(), rect.y(), size.width(), size.height())
-            painter.setWindow(self.image_viewer.pixmap().rect())
-            painter.drawPixmap(0, 0, self.image_viewer.pixmap())
+            painter.setWindow(pixmap.rect())
+            painter.drawPixmap(0, 0, pixmap)
             painter.end()
             self.statusBar().showMessage("Print completed", 2000)
+
+    def _get_current_pixmap(self) -> Optional[QPixmap]:
+        """Get a pixmap of the current image for export/print."""
+        if self.image_data is None:
+            return None
+
+        image_data = self.image_data
+
+        if self.z1 is None or self.z2 is None:
+            self.z1, self.z2 = compute_zscale_limits(image_data)
+
+        contrast, brightness = self.image_viewer.get_contrast_brightness()
+        range_val = self.z2 - self.z1
+        center = (self.z1 + self.z2) / 2
+        new_range = range_val / contrast
+        adjusted_z1 = center - new_range / 2 + brightness * range_val
+        adjusted_z2 = center + new_range / 2 + brightness * range_val
+
+        clipped = np.clip(image_data, adjusted_z1, adjusted_z2)
+        scaled = apply_scale(clipped, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
+
+        cmap = get_colormap(self.current_colormap)
+        if self.invert_colormap:
+            cmap_data = cmap.colors.copy()
+            cmap_data = cmap_data[::-1]
+            from ..colormaps.colormap import Colormap
+            cmap = Colormap(f"{self.current_colormap}_inverted", cmap_data)
+
+        rgb = cmap.apply(scaled)
+        height, width = rgb.shape[:2]
+        bytes_per_line = 3 * width
+        qimage = QImage(rgb.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
+        return QPixmap.fromImage(qimage)
     
     def save_file(self) -> None:
         """Save the current file."""

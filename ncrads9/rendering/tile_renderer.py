@@ -30,6 +30,8 @@ from typing import Callable, Iterator, List, Optional, Tuple
 import numpy as np
 from numpy.typing import NDArray
 
+from OpenGL import GL
+
 from .texture_manager import TextureManager
 
 
@@ -258,7 +260,7 @@ class TileRenderer:
 
         self._texture_manager.create_texture(
             tile.texture_key,
-            data.astype(np.float32),
+            data,
         )
         tile.loaded = True
 
@@ -308,10 +310,23 @@ class TileRenderer:
         if texture_id is None:
             return
 
-        # Calculate screen coordinates for tile
-        # Placeholder - actual OpenGL rendering would go here
-        # glBindTexture, set uniforms, draw quad, etc.
-        pass
+        x0 = tile.x_pixel
+        y0 = tile.y_pixel
+        x1 = tile.x_pixel + tile.width
+        y1 = tile.y_pixel + tile.height
+
+        GL.glBindTexture(GL.GL_TEXTURE_2D, texture_id)
+        GL.glBegin(GL.GL_QUADS)
+        GL.glTexCoord2f(0.0, 0.0)
+        GL.glVertex2f(x0, y0)
+        GL.glTexCoord2f(1.0, 0.0)
+        GL.glVertex2f(x1, y0)
+        GL.glTexCoord2f(1.0, 1.0)
+        GL.glVertex2f(x1, y1)
+        GL.glTexCoord2f(0.0, 1.0)
+        GL.glVertex2f(x0, y1)
+        GL.glEnd()
+        GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
 
     def cleanup_distant_tiles(self, viewport: Viewport, distance: int = 3) -> None:
         """
