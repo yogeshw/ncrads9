@@ -180,6 +180,8 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_prev_frame.triggered.connect(self._prev_frame)
         self.menu_bar.action_next_frame.triggered.connect(self._next_frame)
         self.menu_bar.action_last_frame.triggered.connect(self._last_frame)
+        self.menu_bar.action_match_image.triggered.connect(self._match_frames_image)
+        self.menu_bar.action_match_wcs.triggered.connect(self._match_frames_wcs)
         self.menu_bar.action_tile_frames.triggered.connect(self._tile_frames)
         self.menu_bar.action_blink_frames.triggered.connect(self._toggle_blink)
         
@@ -412,6 +414,17 @@ class MainWindow(QMainWindow):
         elif hasattr(self.image_viewer, "set_background_color"):
             self.image_viewer.set_background_color(color_hex)
 
+    def _apply_frame_pan(self, frame: Frame) -> None:
+        """Apply stored pan to the GPU canvas."""
+        if not (self.using_gpu_rendering and hasattr(self.image_viewer, "gl_canvas")):
+            return
+        if frame.pan_x == 0.0 and frame.pan_y == 0.0:
+            return
+        canvas = self.image_viewer.gl_canvas
+        canvas.pan_offset = (frame.pan_x, frame.pan_y)
+        canvas.pan_changed.emit(frame.pan_x, frame.pan_y)
+        canvas.update()
+
     def open_file(self, checked: bool = False, filepath: Optional[str] = None) -> None:
         """
         Open a FITS file.
@@ -470,6 +483,11 @@ class MainWindow(QMainWindow):
         frame.bin_factor = 1
         frame.header = header
         frame.wcs_handler = wcs_handler
+        frame.colormap = self.current_colormap
+        frame.scale = self.current_scale
+        frame.invert_colormap = self.invert_colormap
+        frame.z1 = None
+        frame.z2 = None
 
         # Reset display state for new data
         self.z1 = None
@@ -563,6 +581,7 @@ class MainWindow(QMainWindow):
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
         self._update_bin_menu_checks(getattr(frame, "bin_factor", 1))
         self._update_regions_for_frame(frame)
+        self._sync_frame_view_state()
         if self._contour_settings is not None:
             self._update_contours()
     
@@ -574,6 +593,7 @@ class MainWindow(QMainWindow):
             scale: The scaling algorithm to use.
         """
         self.current_scale = scale
+        self._persist_frame_view_state()
         
         # Update menu checkboxes
         self.menu_bar.action_scale_linear.setChecked(scale == ScaleAlgorithm.LINEAR)
@@ -608,6 +628,7 @@ class MainWindow(QMainWindow):
             colormap: Name of the colormap to use.
         """
         self.current_colormap = colormap
+        self._persist_frame_view_state()
         
         # Update menu checkboxes
         self.menu_bar.action_cmap_gray.setChecked(colormap == "grey")
@@ -671,6 +692,8 @@ class MainWindow(QMainWindow):
         self.current_bin = factor
         self.z1 = None
         self.z2 = None
+        frame.z1 = None
+        frame.z2 = None
 
         self._update_bin_menu_checks(factor)
         self._display_image()
@@ -681,24 +704,28 @@ class MainWindow(QMainWindow):
         """Zoom in."""
         self.image_viewer.zoom_in()
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
+        self._persist_frame_view_state()
         self.statusBar().showMessage("Zoomed in", 1000)
     
     def _zoom_out(self) -> None:
         """Zoom out."""
         self.image_viewer.zoom_out()
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
+        self._persist_frame_view_state()
         self.statusBar().showMessage("Zoomed out", 1000)
     
     def _zoom_fit(self) -> None:
         """Zoom to fit window."""
         self.image_viewer.zoom_fit(self.scroll_area.viewport().size())
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
+        self._persist_frame_view_state()
         self.statusBar().showMessage("Zoom to fit", 1000)
     
     def _zoom_actual(self) -> None:
         """Zoom to 1:1."""
         self.image_viewer.zoom_actual()
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
+        self._persist_frame_view_state()
         self.statusBar().showMessage("Zoom 1:1", 1000)
     
     def _on_mouse_moved(self, x: int, y: int) -> None:
@@ -723,6 +750,7 @@ class MainWindow(QMainWindow):
     def _on_contrast_changed(self, contrast: float, brightness: float) -> None:
         """Handle contrast/brightness change from mouse drag."""
         self._display_image()
+        self._persist_frame_view_state()
         self.statusBar().showMessage(f"Contrast: {contrast:.2f}, Brightness: {brightness:.2f}", 1000)
     
     def _on_button_bar_zoom(self, level: str) -> None:
@@ -736,6 +764,7 @@ class MainWindow(QMainWindow):
                 zoom_val = float(level)
                 self.image_viewer.zoom_to(zoom_val)
                 self.status_bar.update_zoom(zoom_val)
+                self._persist_frame_view_state()
                 self.statusBar().showMessage(f"Zoom: {zoom_val}x", 1000)
             except ValueError:
                 # Handle fractions like "1/2"
@@ -744,6 +773,7 @@ class MainWindow(QMainWindow):
                     zoom_val = float(parts[0]) / float(parts[1])
                     self.image_viewer.zoom_to(zoom_val)
                     self.status_bar.update_zoom(zoom_val)
+                    self._persist_frame_view_state()
                     self.statusBar().showMessage(f"Zoom: {level}", 1000)
     
     def _on_button_bar_scale(self, scale_name: str) -> None:
@@ -803,6 +833,10 @@ class MainWindow(QMainWindow):
         if self.image_data is not None:
             self.z1 = None
             self.z2 = None
+            frame = self.frame_manager.current_frame
+            if frame:
+                frame.z1 = None
+                frame.z2 = None
             self.image_viewer.reset_contrast_brightness()
             self._display_image()
             self.statusBar().showMessage("Reset to ZScale limits", 2000)
@@ -812,6 +846,10 @@ class MainWindow(QMainWindow):
         if self.image_data is not None:
             self.z1 = float(np.nanmin(self.image_data))
             self.z2 = float(np.nanmax(self.image_data))
+            frame = self.frame_manager.current_frame
+            if frame:
+                frame.z1 = self.z1
+                frame.z2 = self.z2
             self.image_viewer.reset_contrast_brightness()
             self._display_image()
             self.statusBar().showMessage(f"MinMax: {self.z1:.4g} to {self.z2:.4g}", 2000)
@@ -819,6 +857,7 @@ class MainWindow(QMainWindow):
     def _toggle_invert_colormap(self, checked: bool) -> None:
         """Toggle colormap inversion."""
         self.invert_colormap = checked
+        self._persist_frame_view_state()
         if self.image_data is not None:
             self._display_image()
             inv_str = "inverted" if checked else "normal"
@@ -1273,10 +1312,13 @@ class MainWindow(QMainWindow):
         frame = self.frame_manager.current_frame
         self._update_regions_for_frame(frame)
         if frame and frame.has_data:
+            self._apply_frame_view_state(frame)
             self._display_image()
             self.status_bar.update_image_info(frame.image_data.shape[1], frame.image_data.shape[0])
             if self.using_gpu_rendering and hasattr(self.image_viewer, "gl_canvas"):
                 self.image_viewer.gl_canvas.reset_view()
+                if frame.zoom:
+                    self.image_viewer.zoom_to(frame.zoom)
         else:
             self.status_bar.update_image_info(None, None)
         self._update_frame_title()
@@ -1316,6 +1358,118 @@ class MainWindow(QMainWindow):
     def _tile_frames(self) -> None:
         """Tile frames (not yet implemented)."""
         self.statusBar().showMessage("Frame tiling not implemented", 2000)
+
+    def _persist_frame_view_state(self) -> None:
+        """Persist display settings to the current frame."""
+        frame = self.frame_manager.current_frame
+        if not frame:
+            return
+        frame.colormap = self.current_colormap
+        frame.scale = self.current_scale
+        frame.invert_colormap = self.invert_colormap
+        frame.z1 = self.z1
+        frame.z2 = self.z2
+        frame.zoom = self.image_viewer.get_zoom()
+        frame.contrast, frame.brightness = self.image_viewer.get_contrast_brightness()
+        if self.using_gpu_rendering and hasattr(self.image_viewer, "gl_canvas"):
+            frame.pan_x, frame.pan_y = self.image_viewer.gl_canvas.pan_offset
+
+    def _apply_frame_view_state(self, frame: Frame) -> None:
+        """Apply stored display settings from the frame."""
+        self.current_colormap = frame.colormap
+        self.current_scale = frame.scale
+        self.invert_colormap = frame.invert_colormap
+        self.z1 = frame.z1
+        self.z2 = frame.z2
+        self.menu_bar.action_cmap_gray.setChecked(self.current_colormap == "grey")
+        self.menu_bar.action_cmap_heat.setChecked(self.current_colormap == "heat")
+        self.menu_bar.action_cmap_cool.setChecked(self.current_colormap == "cool")
+        self.menu_bar.action_cmap_rainbow.setChecked(self.current_colormap == "rainbow")
+        self.menu_bar.action_invert_colormap.setChecked(self.invert_colormap)
+        self.menu_bar.action_scale_linear.setChecked(self.current_scale == ScaleAlgorithm.LINEAR)
+        self.menu_bar.action_scale_log.setChecked(self.current_scale == ScaleAlgorithm.LOG)
+        self.menu_bar.action_scale_sqrt.setChecked(self.current_scale == ScaleAlgorithm.SQRT)
+        self.menu_bar.action_scale_squared.setChecked(self.current_scale == ScaleAlgorithm.POWER)
+        self.menu_bar.action_scale_asinh.setChecked(self.current_scale == ScaleAlgorithm.ASINH)
+        self.menu_bar.action_scale_histeq.setChecked(
+            self.current_scale == ScaleAlgorithm.HISTOGRAM_EQUALIZATION
+        )
+        cmap_name_map = {
+            "grey": "Gray",
+            "heat": "Heat",
+            "cool": "Cool",
+            "rainbow": "Rainbow",
+        }
+        if self.current_colormap in cmap_name_map:
+            self.button_bar.set_colormap(cmap_name_map[self.current_colormap])
+        scale_name_map = {
+            ScaleAlgorithm.LINEAR: "Linear",
+            ScaleAlgorithm.LOG: "Log",
+            ScaleAlgorithm.SQRT: "Sqrt",
+            ScaleAlgorithm.POWER: "Squared",
+            ScaleAlgorithm.ASINH: "Asinh",
+            ScaleAlgorithm.HISTOGRAM_EQUALIZATION: "HistEq",
+        }
+        if self.current_scale in scale_name_map:
+            self.button_bar.set_scale(scale_name_map[self.current_scale])
+        if hasattr(self.image_viewer, "set_contrast_brightness"):
+            self.image_viewer.set_contrast_brightness(frame.contrast, frame.brightness)
+        if self.using_gpu_rendering and hasattr(self.image_viewer, "set_pan"):
+            self.image_viewer.set_pan(frame.pan_x, frame.pan_y)
+
+    def _sync_frame_view_state(self) -> None:
+        """Persist current view state after rendering."""
+        self._persist_frame_view_state()
+
+    def _match_frames_image(self) -> None:
+        """Match all frames to current image view settings."""
+        source = self.frame_manager.current_frame
+        if not source:
+            self.statusBar().showMessage("No frame to match", 2000)
+            return
+        for frame in self.frame_manager.frames:
+            if frame is source:
+                continue
+            frame.colormap = source.colormap
+            frame.scale = source.scale
+            frame.invert_colormap = source.invert_colormap
+            frame.z1 = source.z1
+            frame.z2 = source.z2
+            frame.zoom = source.zoom
+            frame.pan_x = source.pan_x
+            frame.pan_y = source.pan_y
+            frame.contrast = source.contrast
+            frame.brightness = source.brightness
+        self.statusBar().showMessage("Matched frames (image)", 2000)
+
+    def _match_frames_wcs(self) -> None:
+        """Match all frames to current frame using WCS."""
+        source = self.frame_manager.current_frame
+        if not source or not source.wcs_handler or not source.wcs_handler.is_valid:
+            self.statusBar().showMessage("Current frame has no valid WCS", 2000)
+            return
+        if source.image_data is None:
+            self.statusBar().showMessage("Current frame has no image data", 2000)
+            return
+        cx = source.image_data.shape[1] / 2
+        cy = source.image_data.shape[0] / 2
+        ra, dec = source.wcs_handler.pixel_to_world(cx, cy)
+        for frame in self.frame_manager.frames:
+            if frame is source:
+                continue
+            if frame.wcs_handler and frame.wcs_handler.is_valid:
+                fx, fy = frame.wcs_handler.world_to_pixel(ra, dec)
+                frame.pan_x = float(fx)
+                frame.pan_y = float(fy)
+                frame.zoom = source.zoom
+                frame.colormap = source.colormap
+                frame.scale = source.scale
+                frame.invert_colormap = source.invert_colormap
+                frame.z1 = source.z1
+                frame.z2 = source.z2
+                frame.contrast = source.contrast
+                frame.brightness = source.brightness
+        self.statusBar().showMessage("Matched frames (WCS)", 2000)
     
     def _on_region_created(self, region) -> None:
         """Handle region creation."""

@@ -25,6 +25,8 @@ from dataclasses import dataclass
 import numpy as np
 from pathlib import Path
 
+from ..rendering.scale_algorithms import ScaleAlgorithm
+
 
 @dataclass
 class Frame:
@@ -38,6 +40,16 @@ class Frame:
     regions: List = None
     original_image_data: Optional[np.ndarray] = None
     bin_factor: int = 1
+    colormap: str = "grey"
+    scale: ScaleAlgorithm = ScaleAlgorithm.LINEAR
+    invert_colormap: bool = False
+    z1: Optional[float] = None
+    z2: Optional[float] = None
+    zoom: float = 1.0
+    pan_x: float = 0.0
+    pan_y: float = 0.0
+    contrast: float = 1.0
+    brightness: float = 0.0
     
     def __post_init__(self):
         if self.regions is None:
@@ -83,6 +95,11 @@ class FrameManager:
     def num_frames(self) -> int:
         """Get total number of frames."""
         return len(self._frames)
+
+    @property
+    def frames(self) -> List[Frame]:
+        """Get list of frames."""
+        return self._frames
     
     def new_frame(self) -> Frame:
         """Create a new empty frame."""

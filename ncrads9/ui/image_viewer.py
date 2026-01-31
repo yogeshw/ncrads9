@@ -121,6 +121,11 @@ class ImageViewer(QLabel):
     def get_contrast_brightness(self) -> tuple[float, float]:
         """Get current contrast and brightness adjustments."""
         return self._contrast_scale, self._brightness_offset
+
+    def set_contrast_brightness(self, contrast: float, brightness: float) -> None:
+        """Set contrast and brightness adjustments."""
+        self._contrast_scale = max(0.1, min(contrast, 10.0))
+        self._brightness_offset = max(-1.0, min(brightness, 1.0))
     
     def reset_contrast_brightness(self) -> None:
         """Reset contrast and brightness to defaults."""

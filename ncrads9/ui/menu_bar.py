@@ -160,6 +160,14 @@ class MenuBar(QMenuBar):
 
         self.frame_menu.addSeparator()
 
+        self.match_menu: QMenu = self.frame_menu.addMenu("&Match")
+        self.action_match_image: QAction = QAction("&Image", self)
+        self.match_menu.addAction(self.action_match_image)
+        self.action_match_wcs: QAction = QAction("&WCS", self)
+        self.match_menu.addAction(self.action_match_wcs)
+
+        self.frame_menu.addSeparator()
+
         self.action_tile_frames: QAction = QAction("&Tile", self)
         self.frame_menu.addAction(self.action_tile_frames)
 

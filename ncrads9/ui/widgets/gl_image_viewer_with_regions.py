@@ -130,9 +130,18 @@ class GLImageViewerWithRegions(QWidget):
     def get_contrast_brightness(self) -> tuple[float, float]:
         return (self._contrast_scale, self._brightness_offset)
 
+    def set_contrast_brightness(self, contrast: float, brightness: float) -> None:
+        self._contrast_scale = max(0.1, min(contrast, 10.0))
+        self._brightness_offset = max(-1.0, min(brightness, 1.0))
+
     def reset_contrast_brightness(self) -> None:
         self._contrast_scale = 1.0
         self._brightness_offset = 0.0
+
+    def set_pan(self, pan_x: float, pan_y: float) -> None:
+        self.gl_canvas.pan_offset = (pan_x, pan_y)
+        self.gl_canvas.pan_changed.emit(pan_x, pan_y)
+        self.gl_canvas.update()
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.RightButton:
