@@ -23,7 +23,7 @@ Author: Yogesh Wadadekar
 from typing import Optional, TYPE_CHECKING
 from pathlib import Path
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QImage, QPixmap, QColor
 from PyQt6.QtWidgets import (
     QMainWindow,
@@ -69,6 +69,7 @@ from ..rendering.scale_algorithms import apply_scale, ScaleAlgorithm, compute_zs
 from ..colormaps.builtin_maps import get_colormap
 from ..regions.region_parser import RegionParser
 from ..frames.simple_frame_manager import FrameManager, Frame
+from ..frames.blink_controller import BlinkController
 from ..analysis.contour import ContourGenerator
 from ..utils.preferences import Preferences
 
@@ -109,6 +110,10 @@ class MainWindow(QMainWindow):
         self._contour_settings: Optional[dict] = None
         self._contour_paths: Optional[list] = None
         self._contour_levels: Optional[list] = None
+        self._blink_controller = BlinkController(self.frame_manager)
+        self._blink_timer = QTimer(self)
+        self._blink_timer.setInterval(100)
+        self._blink_timer.timeout.connect(self._update_blink)
 
         self._setup_menu_bar()
         self._setup_toolbar()
@@ -175,6 +180,8 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_prev_frame.triggered.connect(self._prev_frame)
         self.menu_bar.action_next_frame.triggered.connect(self._next_frame)
         self.menu_bar.action_last_frame.triggered.connect(self._last_frame)
+        self.menu_bar.action_tile_frames.triggered.connect(self._tile_frames)
+        self.menu_bar.action_blink_frames.triggered.connect(self._toggle_blink)
         
         # Bin menu
         self.menu_bar.action_bin_1.triggered.connect(lambda: self._set_bin(1))
@@ -247,6 +254,8 @@ class MainWindow(QMainWindow):
         self.main_toolbar.action_zoom_1.triggered.connect(self._zoom_actual)
         self.main_toolbar.action_statistics.triggered.connect(self._show_statistics)
         self.main_toolbar.action_histogram.triggered.connect(self._show_histogram)
+        self.main_toolbar.action_prev_frame.triggered.connect(self._prev_frame)
+        self.main_toolbar.action_next_frame.triggered.connect(self._next_frame)
 
     def _setup_central_widget(self) -> None:
         """Set up the central widget."""
@@ -461,6 +470,12 @@ class MainWindow(QMainWindow):
         frame.bin_factor = 1
         frame.header = header
         frame.wcs_handler = wcs_handler
+
+        # Reset display state for new data
+        self.z1 = None
+        self.z2 = None
+        if hasattr(self.image_viewer, "reset_contrast_brightness"):
+            self.image_viewer.reset_contrast_brightness()
         
         # Update window title
         filename = Path(filepath).name
@@ -547,6 +562,7 @@ class MainWindow(QMainWindow):
         # Update zoom display
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
         self._update_bin_menu_checks(getattr(frame, "bin_factor", 1))
+        self._update_regions_for_frame(frame)
         if self._contour_settings is not None:
             self._update_contours()
     
@@ -1186,20 +1202,22 @@ class MainWindow(QMainWindow):
     def _new_frame(self) -> None:
         """Create a new empty frame."""
         frame = self.frame_manager.new_frame()
-        frame_info = f"Frame {self.frame_manager.current_index + 1}/{self.frame_manager.num_frames}"
-        self.setWindowTitle(f"NCRADS9 [{frame_info}]")
+        self.z1 = None
+        self.z2 = None
+        if hasattr(self.image_viewer, "reset_contrast_brightness"):
+            self.image_viewer.reset_contrast_brightness()
+        self._update_frame_display()
         self.statusBar().showMessage(f"Created {frame.filename}", 2000)
     
     def _delete_frame(self) -> None:
         """Delete current frame."""
         if self.frame_manager.delete_frame():
-            self._display_image()
-            frame = self.frame_manager.current_frame
+            self.z1 = None
+            self.z2 = None
+            if hasattr(self.image_viewer, "reset_contrast_brightness"):
+                self.image_viewer.reset_contrast_brightness()
+            self._update_frame_display()
             frame_info = f"Frame {self.frame_manager.current_index + 1}/{self.frame_manager.num_frames}"
-            if frame and frame.filepath:
-                self.setWindowTitle(f"NCRADS9 - {frame.filepath.name} [{frame_info}]")
-            else:
-                self.setWindowTitle(f"NCRADS9 [{frame_info}]")
             self.statusBar().showMessage(f"Deleted frame, now at {frame_info}", 2000)
         else:
             self.statusBar().showMessage("Cannot delete last frame", 2000)
@@ -1207,26 +1225,38 @@ class MainWindow(QMainWindow):
     def _first_frame(self) -> None:
         """Go to first frame."""
         self.frame_manager.first_frame()
-        self._display_image()
-        self._update_frame_title()
+        self.z1 = None
+        self.z2 = None
+        if hasattr(self.image_viewer, "reset_contrast_brightness"):
+            self.image_viewer.reset_contrast_brightness()
+        self._update_frame_display()
     
     def _prev_frame(self) -> None:
         """Go to previous frame."""
         self.frame_manager.prev_frame()
-        self._display_image()
-        self._update_frame_title()
+        self.z1 = None
+        self.z2 = None
+        if hasattr(self.image_viewer, "reset_contrast_brightness"):
+            self.image_viewer.reset_contrast_brightness()
+        self._update_frame_display()
     
     def _next_frame(self) -> None:
         """Go to next frame."""
         self.frame_manager.next_frame()
-        self._display_image()
-        self._update_frame_title()
+        self.z1 = None
+        self.z2 = None
+        if hasattr(self.image_viewer, "reset_contrast_brightness"):
+            self.image_viewer.reset_contrast_brightness()
+        self._update_frame_display()
     
     def _last_frame(self) -> None:
         """Go to last frame."""
         self.frame_manager.last_frame()
-        self._display_image()
-        self._update_frame_title()
+        self.z1 = None
+        self.z2 = None
+        if hasattr(self.image_viewer, "reset_contrast_brightness"):
+            self.image_viewer.reset_contrast_brightness()
+        self._update_frame_display()
     
     def _update_frame_title(self) -> None:
         """Update window title with current frame info."""
@@ -1237,6 +1267,55 @@ class MainWindow(QMainWindow):
         else:
             self.setWindowTitle(f"NCRADS9 [{frame_info}]")
         self.statusBar().showMessage(frame_info, 2000)
+
+    def _update_frame_display(self) -> None:
+        """Update UI to reflect the current frame."""
+        frame = self.frame_manager.current_frame
+        self._update_regions_for_frame(frame)
+        if frame and frame.has_data:
+            self._display_image()
+            self.status_bar.update_image_info(frame.image_data.shape[1], frame.image_data.shape[0])
+            if self.using_gpu_rendering and hasattr(self.image_viewer, "gl_canvas"):
+                self.image_viewer.gl_canvas.reset_view()
+        else:
+            self.status_bar.update_image_info(None, None)
+        self._update_frame_title()
+
+    def _update_regions_for_frame(self, frame: Optional[Frame]) -> None:
+        """Sync region overlay with current frame."""
+        if not hasattr(self.image_viewer, "clear_regions"):
+            return
+        self.image_viewer.clear_regions()
+        if frame:
+            for region in frame.regions:
+                self.image_viewer.add_region(region)
+
+    def _update_blink(self) -> None:
+        """Advance blink animation and refresh display."""
+        if self._blink_controller.update():
+            self._update_frame_display()
+
+    def _toggle_blink(self, checked: bool) -> None:
+        """Start/stop frame blinking."""
+        if checked:
+            if self.frame_manager.num_frames <= 1:
+                self.menu_bar.action_blink_frames.setChecked(False)
+                self.statusBar().showMessage("Need at least two frames to blink", 2000)
+                return
+            if not self._blink_controller.start():
+                self.menu_bar.action_blink_frames.setChecked(False)
+                self.statusBar().showMessage("No frames available for blinking", 2000)
+                return
+            self._blink_timer.start()
+            self.statusBar().showMessage("Blinking started", 2000)
+        else:
+            self._blink_timer.stop()
+            self._blink_controller.stop()
+            self.statusBar().showMessage("Blinking stopped", 2000)
+
+    def _tile_frames(self) -> None:
+        """Tile frames (not yet implemented)."""
+        self.statusBar().showMessage("Frame tiling not implemented", 2000)
     
     def _on_region_created(self, region) -> None:
         """Handle region creation."""

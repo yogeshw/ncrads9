@@ -164,6 +164,7 @@ class MenuBar(QMenuBar):
         self.frame_menu.addAction(self.action_tile_frames)
 
         self.action_blink_frames: QAction = QAction("&Blink", self)
+        self.action_blink_frames.setCheckable(True)
         self.frame_menu.addAction(self.action_blink_frames)
 
     def _setup_bin_menu(self) -> None:
