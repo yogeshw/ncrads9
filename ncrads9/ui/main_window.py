@@ -61,6 +61,7 @@ from .dialogs.pixel_table_dialog import PixelTableDialog
 from .dialogs.keyboard_shortcuts_dialog import KeyboardShortcutsDialog
 from .dialogs.help_contents_dialog import HelpContentsDialog
 from .dialogs.export_dialog import ExportDialog
+from .dialogs.contour_dialog import ContourDialog
 from .dialogs.preferences_dialog import PreferencesDialog
 from ..core.fits_handler import FITSHandler
 from ..core.wcs_handler import WCSHandler
@@ -68,6 +69,7 @@ from ..rendering.scale_algorithms import apply_scale, ScaleAlgorithm, compute_zs
 from ..colormaps.builtin_maps import get_colormap
 from ..regions.region_parser import RegionParser
 from ..frames.simple_frame_manager import FrameManager, Frame
+from ..analysis.contour import ContourGenerator
 from ..utils.preferences import Preferences
 
 if TYPE_CHECKING:
@@ -104,6 +106,9 @@ class MainWindow(QMainWindow):
         self.using_gpu_rendering = False
         self.z1 = None  # Scale limits
         self.z2 = None
+        self._contour_settings: Optional[dict] = None
+        self._contour_paths: Optional[list] = None
+        self._contour_levels: Optional[list] = None
 
         self._setup_menu_bar()
         self._setup_toolbar()
@@ -211,6 +216,7 @@ class MainWindow(QMainWindow):
         # Analysis menu - connect all tools
         self.menu_bar.action_statistics.triggered.connect(self._show_statistics)
         self.menu_bar.action_histogram.triggered.connect(self._show_histogram)
+        self.menu_bar.action_contours.triggered.connect(self._show_contours)
         self.menu_bar.action_pixel_table.triggered.connect(self._show_pixel_table)
         self.menu_bar.action_fits_header.triggered.connect(self._show_fits_header)
         
@@ -541,6 +547,8 @@ class MainWindow(QMainWindow):
         # Update zoom display
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
         self._update_bin_menu_checks(getattr(frame, "bin_factor", 1))
+        if self._contour_settings is not None:
+            self._update_contours()
     
     def _set_scale(self, scale: ScaleAlgorithm) -> None:
         """
@@ -902,6 +910,161 @@ class MainWindow(QMainWindow):
         
         dialog = HistogramDialog(self.image_data, self)
         dialog.exec()
+
+    def _show_contours(self) -> None:
+        """Show contour dialog and apply contours."""
+        if self.image_data is None:
+            self.statusBar().showMessage("No image loaded", 2000)
+            return
+
+        dialog = ContourDialog(self)
+        if self._contour_settings is not None:
+            dialog.load_settings(self._contour_settings)
+        dialog.contours_changed.connect(self._apply_contours)
+        dialog.contours_export_requested.connect(self._export_contours)
+        dialog.exec()
+
+    def _apply_contours(self, settings: dict) -> None:
+        """Compute and display contours based on settings."""
+        self._contour_settings = settings
+        self._update_contours()
+
+    def _update_contours(self) -> None:
+        """Recompute contours for current image."""
+        if self.image_data is None or self._contour_settings is None:
+            if hasattr(self.image_viewer, "clear_contours"):
+                self.image_viewer.clear_contours()
+            return
+
+        settings = self._contour_settings
+        smooth_sigma = settings.get("smooth_sigma", 1.0) if settings.get("smooth") else None
+        generator = ContourGenerator(self.image_data, smooth=smooth_sigma)
+
+        levels = self._compute_contour_levels(generator, settings)
+
+        try:
+            contours = generator.find_contours(levels)
+            contour_paths = self._convert_skimage_contours(contours)
+        except Exception:
+            contours = generator.find_contours_scipy(levels)
+            contour_paths = self._convert_scipy_contours(contours)
+
+        self._contour_paths = contour_paths
+        self._contour_levels = levels
+
+        style = self._contour_style_from_settings(settings)
+        if hasattr(self.image_viewer, "set_contours"):
+            self.image_viewer.set_contours(contour_paths, levels, style)
+
+    def _compute_contour_levels(self, generator: ContourGenerator, settings: dict) -> list:
+        """Compute contour levels based on settings."""
+        if settings.get("use_sigma"):
+            sigmas = settings.get("sigma_levels") or [3.0, 5.0, 10.0]
+            base = settings.get("sigma_base", "Median")
+            if base == "Mean":
+                base_level = float(np.nanmean(generator.data))
+            else:
+                base_level = float(np.nanmedian(generator.data))
+            return generator.generate_sigma_levels(sigmas, base_level=base_level)
+
+        method = settings.get("method", "Linear")
+        num_levels = settings.get("num_levels", 10)
+        vmin = settings.get("min_level")
+        vmax = settings.get("max_level")
+
+        if vmin is not None and vmax is not None and vmin >= vmax:
+            vmin = None
+            vmax = None
+
+        if method == "Custom":
+            custom = settings.get("custom_levels") or []
+            return list(custom)
+
+        if method == "Logarithmic":
+            return generator.generate_levels(num_levels, vmin=vmin, vmax=vmax, log_scale=True)
+
+        if method == "Square Root":
+            valid = generator.data[~np.isnan(generator.data)]
+            if vmin is None:
+                vmin = float(np.min(valid))
+            if vmax is None:
+                vmax = float(np.max(valid))
+            vmin = max(0.0, vmin)
+            vmax = max(vmin + 1e-12, vmax)
+            levels = np.linspace(np.sqrt(vmin), np.sqrt(vmax), num_levels) ** 2
+            return list(levels)
+
+        return generator.generate_levels(num_levels, vmin=vmin, vmax=vmax, log_scale=False)
+
+    def _convert_skimage_contours(self, contours: list) -> list:
+        """Convert skimage contours to x/y arrays."""
+        contour_paths: list = []
+        for level_paths in contours:
+            converted = []
+            for path in level_paths:
+                if path.ndim == 2 and path.shape[1] == 2:
+                    coords = np.column_stack([path[:, 1], path[:, 0]]).astype(np.float64)
+                    converted.append(coords)
+            contour_paths.append(converted)
+        return contour_paths
+
+    def _convert_scipy_contours(self, contours: list) -> list:
+        """Convert scipy contours to x/y arrays."""
+        contour_paths: list = []
+        for level_paths in contours:
+            converted = []
+            for x_coords, y_coords in level_paths:
+                coords = np.column_stack([x_coords, y_coords]).astype(np.float64)
+                converted.append(coords)
+            contour_paths.append(converted)
+        return contour_paths
+
+    def _contour_style_from_settings(self, settings: dict):
+        """Build contour style tuple for overlay."""
+        color = QColor(settings.get("color", "#00ff00"))
+        line_width = float(settings.get("line_width", 1.0))
+        line_style = settings.get("line_style", "Solid")
+        style_map = {
+            "Solid": Qt.PenStyle.SolidLine,
+            "Dashed": Qt.PenStyle.DashLine,
+            "Dotted": Qt.PenStyle.DotLine,
+            "Dash-Dot": Qt.PenStyle.DashDotLine,
+        }
+        pen_style = style_map.get(line_style, Qt.PenStyle.SolidLine)
+        show_labels = bool(settings.get("show_labels", False))
+        return (color, line_width, pen_style, show_labels)
+
+    def _export_contours(self, settings: dict) -> None:
+        """Export current contours to a file."""
+        if self._contour_paths is None or self._contour_levels is None:
+            self._apply_contours(settings)
+            if self._contour_paths is None or self._contour_levels is None:
+                self.statusBar().showMessage("No contours to export", 2000)
+                return
+
+        filepath, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Contours",
+            "",
+            "JSON Files (*.json);;All Files (*)",
+        )
+        if not filepath:
+            return
+
+        export_data = {
+            "levels": self._contour_levels,
+            "contours": [
+                [path.tolist() for path in level_paths]
+                for level_paths in self._contour_paths
+            ],
+            "settings": settings,
+        }
+
+        import json
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(export_data, f, indent=2)
+        self.statusBar().showMessage(f"Exported contours to {filepath}", 3000)
     
     def _show_pixel_table(self) -> None:
         """Show pixel table dialog."""

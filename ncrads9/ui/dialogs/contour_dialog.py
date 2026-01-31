@@ -20,7 +20,7 @@ Contour settings dialog.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
@@ -36,6 +36,7 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QCheckBox,
     QColorDialog,
+    QFileDialog,
 )
 from PyQt6.QtGui import QColor
 
@@ -44,6 +45,7 @@ class ContourDialog(QDialog):
     """Dialog for configuring contour overlay settings."""
 
     contours_changed = pyqtSignal(dict)
+    contours_export_requested = pyqtSignal(dict)
 
     def __init__(self, parent: Optional[QDialog] = None) -> None:
         """Initialize the contour dialog.
@@ -90,6 +92,20 @@ class ContourDialog(QDialog):
         self._custom_levels_edit.setEnabled(False)
         level_layout.addRow("Custom levels:", self._custom_levels_edit)
 
+        self._sigma_check = QCheckBox("Use sigma levels")
+        self._sigma_check.toggled.connect(self._on_sigma_changed)
+        level_layout.addRow("", self._sigma_check)
+
+        self._sigma_levels_edit = QLineEdit()
+        self._sigma_levels_edit.setPlaceholderText("e.g., 3, 5, 10, 20")
+        self._sigma_levels_edit.setEnabled(False)
+        level_layout.addRow("Sigma levels:", self._sigma_levels_edit)
+
+        self._sigma_base_combo = QComboBox()
+        self._sigma_base_combo.addItems(["Median", "Mean"])
+        self._sigma_base_combo.setEnabled(False)
+        level_layout.addRow("Sigma base:", self._sigma_base_combo)
+
         layout.addWidget(level_group)
 
         # Appearance settings
@@ -116,7 +132,15 @@ class ContourDialog(QDialog):
         appearance_layout.addRow("Line style:", self._line_style_combo)
 
         self._smooth_check = QCheckBox("Smooth contours")
+        self._smooth_check.toggled.connect(lambda checked: self._smooth_sigma_spin.setEnabled(checked))
         appearance_layout.addRow("", self._smooth_check)
+
+        self._smooth_sigma_spin = QDoubleSpinBox()
+        self._smooth_sigma_spin.setRange(0.1, 10.0)
+        self._smooth_sigma_spin.setSingleStep(0.1)
+        self._smooth_sigma_spin.setValue(1.0)
+        self._smooth_sigma_spin.setEnabled(False)
+        appearance_layout.addRow("Smooth sigma:", self._smooth_sigma_spin)
 
         self._labels_check = QCheckBox("Show labels")
         appearance_layout.addRow("", self._labels_check)
@@ -126,6 +150,10 @@ class ContourDialog(QDialog):
         # Button row
         button_layout = QHBoxLayout()
         button_layout.addStretch()
+
+        export_btn = QPushButton("Export...")
+        export_btn.clicked.connect(self._export)
+        button_layout.addWidget(export_btn)
 
         apply_btn = QPushButton("Apply")
         apply_btn.clicked.connect(self._apply)
@@ -150,6 +178,10 @@ class ContourDialog(QDialog):
         is_custom = method == "Custom"
         self._custom_levels_edit.setEnabled(is_custom)
         self._num_levels_spin.setEnabled(not is_custom)
+
+    def _on_sigma_changed(self, checked: bool) -> None:
+        self._sigma_levels_edit.setEnabled(checked)
+        self._sigma_base_combo.setEnabled(checked)
 
     def _choose_color(self) -> None:
         """Open color picker dialog."""
@@ -176,10 +208,14 @@ class ContourDialog(QDialog):
             "min_level": self._min_level_spin.value(),
             "max_level": self._max_level_spin.value(),
             "custom_levels": self._parse_custom_levels(),
+            "use_sigma": self._sigma_check.isChecked(),
+            "sigma_levels": self._parse_sigma_levels(),
+            "sigma_base": self._sigma_base_combo.currentText(),
             "color": self._contour_color.name(),
             "line_width": self._line_width_spin.value(),
             "line_style": self._line_style_combo.currentText(),
             "smooth": self._smooth_check.isChecked(),
+            "smooth_sigma": self._smooth_sigma_spin.value(),
             "show_labels": self._labels_check.isChecked(),
         }
 
@@ -197,6 +233,15 @@ class ContourDialog(QDialog):
         except ValueError:
             return []
 
+    def _parse_sigma_levels(self) -> List[float]:
+        text = self._sigma_levels_edit.text()
+        if not text:
+            return []
+        try:
+            return [float(x.strip()) for x in text.split(",")]
+        except ValueError:
+            return []
+
     def _apply(self) -> None:
         """Apply current settings."""
         self.contours_changed.emit(self._get_settings())
@@ -205,3 +250,40 @@ class ContourDialog(QDialog):
         """Apply settings and close dialog."""
         self._apply()
         self.accept()
+
+    def _export(self) -> None:
+        """Request contour export."""
+        self.contours_export_requested.emit(self._get_settings())
+
+    def load_settings(self, settings: Dict[str, Any]) -> None:
+        """Load settings into the dialog."""
+        if "method" in settings:
+            self._method_combo.setCurrentText(settings["method"])
+        if "num_levels" in settings:
+            self._num_levels_spin.setValue(settings["num_levels"])
+        if "min_level" in settings:
+            self._min_level_spin.setValue(settings["min_level"])
+        if "max_level" in settings:
+            self._max_level_spin.setValue(settings["max_level"])
+        if "custom_levels" in settings:
+            self._custom_levels_edit.setText(", ".join(str(x) for x in settings["custom_levels"]))
+        if "use_sigma" in settings:
+            self._sigma_check.setChecked(settings["use_sigma"])
+            self._on_sigma_changed(settings["use_sigma"])
+        if "sigma_levels" in settings:
+            self._sigma_levels_edit.setText(", ".join(str(x) for x in settings["sigma_levels"]))
+        if "sigma_base" in settings:
+            self._sigma_base_combo.setCurrentText(settings["sigma_base"])
+        if "color" in settings:
+            self._contour_color = QColor(settings["color"])
+            self._update_color_button()
+        if "line_width" in settings:
+            self._line_width_spin.setValue(settings["line_width"])
+        if "line_style" in settings:
+            self._line_style_combo.setCurrentText(settings["line_style"])
+        if "smooth" in settings:
+            self._smooth_check.setChecked(settings["smooth"])
+        if "smooth_sigma" in settings:
+            self._smooth_sigma_spin.setValue(settings["smooth_sigma"])
+        if "show_labels" in settings:
+            self._labels_check.setChecked(settings["show_labels"])

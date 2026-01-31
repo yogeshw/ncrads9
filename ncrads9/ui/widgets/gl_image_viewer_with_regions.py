@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout
 
 from ...rendering.gl_canvas import GLCanvas
 from .region_overlay import RegionOverlay, RegionMode, Region
+from .contour_overlay import ContourOverlay
 
 
 class GLImageViewerWithRegions(QWidget):
@@ -55,6 +56,7 @@ class GLImageViewerWithRegions(QWidget):
         layout.addWidget(self.gl_canvas)
 
         self.region_overlay = RegionOverlay(self.gl_canvas)
+        self.contour_overlay = ContourOverlay(self.gl_canvas)
 
         self.gl_canvas.cursor_moved.connect(self._on_cursor_moved)
         self.gl_canvas.zoom_changed.connect(lambda _: self._update_overlay_transform())
@@ -91,6 +93,15 @@ class GLImageViewerWithRegions(QWidget):
             self.region_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         else:
             self.region_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+
+    def set_contours(self, contours, levels, style) -> None:
+        """Set contour paths and styling."""
+        self.contour_overlay.set_contours(contours, levels)
+        self.contour_overlay.set_style(*style)
+
+    def clear_contours(self) -> None:
+        """Clear contours overlay."""
+        self.contour_overlay.clear()
 
     def add_region(self, region: Region) -> None:
         self.region_overlay.add_region(region)
@@ -169,8 +180,10 @@ class GLImageViewerWithRegions(QWidget):
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self.region_overlay.setGeometry(self.gl_canvas.geometry())
+        self.contour_overlay.setGeometry(self.gl_canvas.geometry())
         self._update_overlay_transform()
 
     def _update_overlay_transform(self) -> None:
         x_offset, y_offset = self.gl_canvas.image_to_screen(0.0, 0.0)
         self.region_overlay.set_zoom(self.gl_canvas.zoom, (x_offset, y_offset))
+        self.contour_overlay.set_zoom(self.gl_canvas.zoom, (x_offset, y_offset))

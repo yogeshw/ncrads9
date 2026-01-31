@@ -26,6 +26,7 @@ from PyQt6.QtGui import QPixmap, QWheelEvent, QMouseEvent
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 from ..image_viewer import ImageViewer
 from .region_overlay import RegionOverlay, RegionMode, Region
+from .contour_overlay import ContourOverlay
 
 
 class ImageViewerWithRegions(QWidget):
@@ -54,6 +55,9 @@ class ImageViewerWithRegions(QWidget):
         
         # Create region overlay on top
         self.region_overlay = RegionOverlay(self.image_viewer)
+
+        # Create contour overlay on top
+        self.contour_overlay = ContourOverlay(self.image_viewer)
         
         # Connect signals
         self.image_viewer.mouse_moved.connect(self.mouse_moved)
@@ -81,6 +85,15 @@ class ImageViewerWithRegions(QWidget):
             self.region_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         else:
             self.region_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+
+    def set_contours(self, contours, levels, style) -> None:
+        """Set contour paths and styling."""
+        self.contour_overlay.set_contours(contours, levels)
+        self.contour_overlay.set_style(*style)
+
+    def clear_contours(self) -> None:
+        """Clear contours overlay."""
+        self.contour_overlay.clear()
     
     def add_region(self, region: Region) -> None:
         """Add a region to display."""
@@ -142,6 +155,7 @@ class ImageViewerWithRegions(QWidget):
     def _update_overlay_geometry(self) -> None:
         """Update region overlay geometry to match image viewer."""
         self.region_overlay.setGeometry(self.image_viewer.geometry())
+        self.contour_overlay.setGeometry(self.image_viewer.geometry())
         self._update_overlay_transform()
     
     def _update_overlay_transform(self) -> None:
@@ -155,6 +169,7 @@ class ImageViewerWithRegions(QWidget):
             y_offset = (viewer_rect.height() - pixmap_rect.height()) / 2
             
             self.region_overlay.set_zoom(self.image_viewer.get_zoom(), (x_offset, y_offset))
+            self.contour_overlay.set_zoom(self.image_viewer.get_zoom(), (x_offset, y_offset))
     
     def resizeEvent(self, event) -> None:
         """Handle resize events."""
