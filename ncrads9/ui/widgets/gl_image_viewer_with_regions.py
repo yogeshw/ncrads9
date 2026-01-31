@@ -42,6 +42,11 @@ class GLImageViewerWithRegions(QWidget):
         super().__init__(parent)
         self.setMouseTracking(True)
 
+        self._contrast_scale = 1.0
+        self._brightness_offset = 0.0
+        self._adjusting_contrast = False
+        self._last_pos = None
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -112,10 +117,41 @@ class GLImageViewerWithRegions(QWidget):
         return self.gl_canvas.zoom
 
     def get_contrast_brightness(self) -> tuple[float, float]:
-        return (1.0, 0.0)
+        return (self._contrast_scale, self._brightness_offset)
 
     def reset_contrast_brightness(self) -> None:
-        return
+        self._contrast_scale = 1.0
+        self._brightness_offset = 0.0
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.RightButton:
+            self._adjusting_contrast = True
+            self._last_pos = event.position()
+            event.accept()
+            return
+        self.gl_canvas.mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._adjusting_contrast and self._last_pos is not None:
+            delta = event.position() - self._last_pos
+            contrast_delta = delta.x() * 0.002
+            brightness_delta = -delta.y() * 0.002
+
+            self._contrast_scale = max(0.1, min(self._contrast_scale + contrast_delta, 10.0))
+            self._brightness_offset = max(-1.0, min(self._brightness_offset + brightness_delta, 1.0))
+            self._last_pos = event.position()
+            self.contrast_changed.emit(self._contrast_scale, self._brightness_offset)
+            event.accept()
+            return
+        self.gl_canvas.mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.RightButton:
+            self._adjusting_contrast = False
+            self._last_pos = None
+            event.accept()
+            return
+        self.gl_canvas.mouseReleaseEvent(event)
 
     def pixmap(self):
         return None
