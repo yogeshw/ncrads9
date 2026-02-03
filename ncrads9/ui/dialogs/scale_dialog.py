@@ -50,9 +50,22 @@ class ScaleDialog(QDialog):
         Args:
             parent: Parent widget.
         """
-        super().__init__(parent)
+        # Pass None as parent to make dialog independent
+        super().__init__(None)
         self.setWindowTitle("Scale Parameters")
         self.setMinimumWidth(400)
+        
+        # Set window flags to make dialog independent and always on top
+        self.setWindowFlags(
+            Qt.WindowType.Window |  # Make it a top-level window
+            Qt.WindowType.WindowCloseButtonHint |
+            Qt.WindowType.WindowTitleHint |
+            Qt.WindowType.WindowStaysOnTopHint  # Keep on top
+        )
+        
+        # Set modality to allow interaction with main window
+        self.setWindowModality(Qt.WindowModality.NonModal)
+        
         self._setup_ui()
 
     def _setup_ui(self) -> None:

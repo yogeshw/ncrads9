@@ -58,7 +58,10 @@ from .widgets.colorbar_widget import ColorbarWidget
 from .widgets.image_viewer_with_regions import ImageViewerWithRegions
 from .widgets.gl_image_viewer_with_regions import GLImageViewerWithRegions
 from .widgets.region_overlay import RegionMode, Region
+from .panels.panner import PannerPanel
+from .panels.magnifier import MagnifierPanel
 from .dialogs.statistics_dialog import StatisticsDialog
+from .dialogs.scale_dialog import ScaleDialog
 from .dialogs.histogram_dialog import HistogramDialog
 from .dialogs.pixel_table_dialog import PixelTableDialog
 from .dialogs.keyboard_shortcuts_dialog import KeyboardShortcutsDialog
@@ -216,6 +219,7 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_scale_histeq.triggered.connect(lambda: self._set_scale(ScaleAlgorithm.HISTOGRAM_EQUALIZATION))
         self.menu_bar.action_scale_zscale.triggered.connect(self._reset_scale_limits)
         self.menu_bar.action_scale_minmax.triggered.connect(self._scale_minmax)
+        self.menu_bar.action_scale_params.triggered.connect(self._show_scale_dialog)
         
         # Color menu
         self.menu_bar.action_cmap_gray.triggered.connect(lambda: self._set_colormap("grey"))
@@ -342,6 +346,19 @@ class MainWindow(QMainWindow):
         self.colorbar_widget = ColorbarWidget(self)
         self.colorbar_dock.setWidget(self.colorbar_widget)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.colorbar_dock)
+        
+        # Top-right dock for panner (DS9 style)
+        self.panner_dock = QDockWidget("Panner", self)
+        self.panner_panel = PannerPanel(self)
+        self.panner_panel.pan_to.connect(self._on_panner_pan)
+        self.panner_dock.setWidget(self.panner_panel)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.panner_dock)
+        
+        # Top-right dock for magnifier (DS9 style)
+        self.magnifier_dock = QDockWidget("Magnifier", self)
+        self.magnifier_panel = MagnifierPanel(self)
+        self.magnifier_dock.setWidget(self.magnifier_panel)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.magnifier_dock)
 
     def _setup_status_bar(self) -> None:
         """Set up the status bar."""
@@ -533,6 +550,9 @@ class MainWindow(QMainWindow):
         # Display the image
         self._display_image()
         
+        # Fit image to window on initial load
+        self._zoom_fit()
+        
         # Update status bar image info
         shape = image_data.shape
         dtype = image_data.dtype
@@ -588,24 +608,38 @@ class MainWindow(QMainWindow):
                 tile = image_data[y : y + h, x : x + w]
                 clipped = np.clip(tile, adjusted_z1, adjusted_z2)
                 scaled = apply_scale(clipped, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
-                return cmap.apply(scaled)
+                rgb = cmap.apply(scaled)
+                return rgb
 
             self.image_viewer.set_tile_provider(image_data.shape[1], image_data.shape[0], tile_provider)
             self.image_viewer.set_value_source(image_data)
+            
+            # For GPU mode, pre-render a small version for panner/magnifier
+            clipped_full = np.clip(image_data, adjusted_z1, adjusted_z2)
+            scaled_full = apply_scale(clipped_full, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
+            rgb_full = cmap.apply(scaled_full)
         else:
             # Clip and scale the data
             clipped = np.clip(image_data, adjusted_z1, adjusted_z2)
             scaled = apply_scale(clipped, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
-            rgb = cmap.apply(scaled)
+            rgb_full = cmap.apply(scaled)
 
             # Convert to QImage
-            height, width = rgb.shape[:2]
+            height, width = rgb_full.shape[:2]
             bytes_per_line = 3 * width
-            qimage = QImage(rgb.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
+            qimage = QImage(rgb_full.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
             
             # Create pixmap and display
             pixmap = QPixmap.fromImage(qimage)
             self.image_viewer.set_image(pixmap)
+        
+        # Update panner panel with RGB data (DS9 style)
+        if hasattr(self, 'panner_panel'):
+            self.panner_panel.set_image(rgb_full)
+        
+        # Update magnifier panel with RGB data (DS9 style)
+        if hasattr(self, 'magnifier_panel'):
+            self.magnifier_panel.set_image(rgb_full)
         
         # Update zoom display
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
@@ -776,12 +810,55 @@ class MainWindow(QMainWindow):
         # Update WCS coordinates if available
         if self.wcs_handler and self.wcs_handler.is_valid:
             self._update_wcs_display(x, y)
+        
+        # Update magnifier panel (DS9 style)
+        if hasattr(self, 'magnifier_panel'):
+            self.magnifier_panel.update_cursor_position(x, y)
     
     def _on_contrast_changed(self, contrast: float, brightness: float) -> None:
         """Handle contrast/brightness change from mouse drag."""
         self._display_image()
         self._persist_frame_view_state()
         self.statusBar().showMessage(f"Contrast: {contrast:.2f}, Brightness: {brightness:.2f}", 1000)
+    
+    def _on_panner_pan(self, x: float, y: float) -> None:
+        """Handle pan request from panner panel."""
+        if self.image_data is None:
+            return
+        
+        # x, y are image coordinates where user clicked in panner
+        # Center the main view on this position
+        
+        if self.using_gpu_rendering:
+            # For GPU mode: set pan to the clicked position
+            # The pan coordinates represent the image point at viewport center
+            self.image_viewer.set_pan(x, y)
+            self.statusBar().showMessage(f"Panned to ({x:.0f}, {y:.0f})", 1000)
+        else:
+            # For CPU mode: calculate scroll bar positions
+            # Get current zoom
+            zoom = self.image_viewer.get_zoom()
+            
+            # Calculate where this image point should be in widget coordinates
+            # We want it centered in the viewport
+            viewport = self.scroll_area.viewport()
+            viewport_center_x = viewport.width() / 2
+            viewport_center_y = viewport.height() / 2
+            
+            # Image point at (x, y) in zoomed coordinates
+            zoomed_x = x * zoom
+            zoomed_y = y * zoom
+            
+            # Scroll position to center this point
+            scroll_x = int(zoomed_x - viewport_center_x)
+            scroll_y = int(zoomed_y - viewport_center_y)
+            
+            self.scroll_area.horizontalScrollBar().setValue(scroll_x)
+            self.scroll_area.verticalScrollBar().setValue(scroll_y)
+            self.statusBar().showMessage(f"Panned to ({x:.0f}, {y:.0f})", 1000)
+        
+        # Persist the new pan state
+        self._persist_frame_view_state()
     
     def _on_button_bar_zoom(self, level: str) -> None:
         """Handle zoom change from button bar."""
@@ -1083,6 +1160,53 @@ class MainWindow(QMainWindow):
         
         dialog = HistogramDialog(self.image_data, self)
         dialog.exec()
+    
+    def _show_scale_dialog(self) -> None:
+        """Show scale parameters dialog (DS9 style)."""
+        if self.image_data is None:
+            self.statusBar().showMessage("No image loaded", 2000)
+            return
+        
+        dialog = ScaleDialog(self)
+        # Connect the signal BEFORE showing the dialog so Apply button works
+        dialog.scale_changed.connect(self._apply_scale_params)
+        dialog.exec()
+    
+    def _apply_scale_params(self, params: dict) -> None:
+        """Apply scale parameters from the scale dialog."""
+        # Map dialog scale names to ScaleAlgorithm enum
+        scale_map = {
+            "Linear": ScaleAlgorithm.LINEAR,
+            "Log": ScaleAlgorithm.LOG,
+            "Power": ScaleAlgorithm.POWER,
+            "Sqrt": ScaleAlgorithm.SQRT,
+            "Squared": ScaleAlgorithm.POWER,
+            "Asinh": ScaleAlgorithm.ASINH,
+            "Sinh": ScaleAlgorithm.ASINH,  # Map to asinh for now
+            "Histogram Equalization": ScaleAlgorithm.HISTOGRAM_EQUALIZATION,
+        }
+        
+        scale_name = params.get("scale_function", "Linear")
+        if scale_name in scale_map:
+            self.current_scale = scale_map[scale_name]
+        
+        # Apply min/max limits if not auto
+        if not params.get("auto_limits", True):
+            self.z1 = params.get("min_value", self.z1)
+            self.z2 = params.get("max_value", self.z2)
+        
+        # Apply contrast/bias adjustments
+        # Contrast slider: 0-100 → 0-2.0 (50 = 1.0 neutral)
+        contrast = params.get("contrast", 1.0)
+        # Bias slider: 0-100 → -1.0 to +1.0 (50 = 0.0 neutral)
+        bias_value = params.get("bias", 1.0)  # This is 0-2 range from slider/50
+        brightness = bias_value - 1.0  # Convert to -1 to +1 range
+        self.image_viewer.set_contrast_brightness(contrast, brightness)
+        
+        # Redisplay image with new settings
+        self._display_image()
+        self._persist_frame_view_state()
+        self.statusBar().showMessage(f"Scale: {scale_name}, Contrast: {contrast:.2f}, Brightness: {brightness:.2f}", 2000)
 
     def _show_contours(self) -> None:
         """Show contour dialog and apply contours."""

@@ -44,8 +44,8 @@ class ColorbarWidget(QWidget):
         self.colormap_name = "grey"
         self.inverted = False
         
-        self.setMinimumSize(60, 200)
-        self.setMaximumWidth(100)
+        self.setMinimumSize(120, 200)  # Wider for labels
+        self.setMaximumWidth(150)
         
         layout = QVBoxLayout()
         layout.setContentsMargins(5, 5, 5, 5)
@@ -59,17 +59,6 @@ class ColorbarWidget(QWidget):
         self.colorbar_label = QLabel()
         self.colorbar_label.setMinimumHeight(150)
         layout.addWidget(self.colorbar_label, 1)
-        
-        # Min/max value labels
-        self.max_label = QLabel(f"{self.vmax:.3g}")
-        self.max_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.max_label.setStyleSheet("font-size: 9px;")
-        layout.insertWidget(1, self.max_label)
-        
-        self.min_label = QLabel(f"{self.vmin:.3g}")
-        self.min_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.min_label.setStyleSheet("font-size: 9px;")
-        layout.addWidget(self.min_label)
         
         self.setLayout(layout)
 
@@ -92,22 +81,21 @@ class ColorbarWidget(QWidget):
         self.colormap_name = name
         self.inverted = inverted
         
-        # Update labels
+        # Update name label
         name_display = f"{name} (inv)" if inverted else name
         self.name_label.setText(name_display)
-        self.max_label.setText(f"{self.vmax:.3g}")
-        self.min_label.setText(f"{self.vmin:.3g}")
         
-        # Create colorbar image
+        # Create colorbar image with ticks
         self._update_colorbar()
 
     def _update_colorbar(self) -> None:
-        """Update the colorbar display."""
+        """Update the colorbar display with ticks and labels."""
         if self.colormap_data is None:
             return
         
         # Create vertical colorbar image (width x height)
-        width = 40
+        bar_width = 40
+        tick_width = 60  # Extra space for ticks and labels
         height = self.colorbar_label.height() or 150
         
         # Ensure colormap data is uint8 (0-255 range)
@@ -118,7 +106,7 @@ class ColorbarWidget(QWidget):
             cmap_uint8 = self.colormap_data.astype(np.uint8)
         
         # Create gradient by repeating colormap vertically
-        colorbar = np.zeros((height, width, 3), dtype=np.uint8)
+        colorbar = np.zeros((height, bar_width, 3), dtype=np.uint8)
         
         # Map height pixels to 256 colormap entries (flip for top=max)
         indices = np.linspace(255, 0, height).astype(int)
@@ -127,14 +115,46 @@ class ColorbarWidget(QWidget):
         
         # Convert to QImage and QPixmap
         qimage = QImage(
-            colorbar.data,
-            width,
+            colorbar.tobytes(),  # Use tobytes for PyQt6
+            bar_width,
             height,
-            width * 3,
+            bar_width * 3,
             QImage.Format.Format_RGB888,
         )
         pixmap = QPixmap.fromImage(qimage)
-        self.colorbar_label.setPixmap(pixmap)
+        
+        # Create a larger pixmap with space for ticks and labels
+        full_width = bar_width + tick_width
+        full_pixmap = QPixmap(full_width, height)
+        full_pixmap.fill(Qt.GlobalColor.transparent)
+        
+        # Draw colorbar
+        painter = QPainter(full_pixmap)
+        painter.drawPixmap(0, 0, pixmap)
+        
+        # Draw tick marks and labels (7 ticks total for good spacing)
+        num_ticks = 7
+        tick_length = 5
+        font = QFont("Arial", 8)
+        painter.setFont(font)
+        
+        for i in range(num_ticks):
+            # Calculate position from top (0) to bottom (height-1)
+            y_pos = int(i * (height - 1) / (num_ticks - 1))
+            
+            # Calculate value (top = vmax, bottom = vmin)
+            value = self.vmax - (self.vmax - self.vmin) * i / (num_ticks - 1)
+            
+            # Draw tick mark
+            painter.drawLine(bar_width, y_pos, bar_width + tick_length, y_pos)
+            
+            # Draw label
+            label = f"{value:.3g}"
+            painter.drawText(bar_width + tick_length + 2, y_pos + 4, label)
+        
+        painter.end()
+        
+        self.colorbar_label.setPixmap(full_pixmap)
     
     def resizeEvent(self, event) -> None:
         """Handle resize events."""

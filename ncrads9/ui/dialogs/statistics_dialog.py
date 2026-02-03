@@ -47,7 +47,18 @@ class StatisticsDialog(QDialog):
             image_data: The image data to analyze.
             parent: Optional parent widget.
         """
-        super().__init__(parent)
+        # Pass None as parent to make dialog independent
+        super().__init__(None)
+        
+        # Set window flags for independent draggable window
+        self.setWindowFlags(
+            Qt.WindowType.Window |
+            Qt.WindowType.WindowCloseButtonHint |
+            Qt.WindowType.WindowTitleHint |
+            Qt.WindowType.WindowStaysOnTopHint
+        )
+        self.setWindowModality(Qt.WindowModality.NonModal)
+        
         self.image_data = image_data
         self.setWindowTitle("Image Statistics")
         self.setMinimumSize(400, 300)

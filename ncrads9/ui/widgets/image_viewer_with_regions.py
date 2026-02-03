@@ -23,7 +23,7 @@ Author: Yogesh Wadadekar
 from typing import Optional
 from PyQt6.QtCore import Qt, QPoint, pyqtSignal, QSize
 from PyQt6.QtGui import QPixmap, QWheelEvent, QMouseEvent
-from PyQt6.QtWidgets import QWidget, QVBoxLayout
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QScrollArea
 from ..image_viewer import ImageViewer
 from .region_overlay import RegionOverlay, RegionMode, Region
 from .contour_overlay import ContourOverlay
@@ -189,16 +189,11 @@ class ImageViewerWithRegions(QWidget):
             return
         
         if event.button() == Qt.MouseButton.MiddleButton:
-            # Check if we should center (Ctrl modifier) or pan (default)
-            if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-                self._middle_button_for_center = True
-                self._center_on_point(event.position().x(), event.position().y())
-                event.accept()
-                return
-            else:
-                # Pan mode - forward to image viewer
-                self.image_viewer.mousePressEvent(event)
-                return
+            # Middle-click centers image at cursor (DS9 style)
+            self._middle_button_for_center = True
+            self._center_on_point(event.position().x(), event.position().y())
+            event.accept()
+            return
         
         # Left button - forward to region overlay or image viewer
         if self.region_overlay.mode != RegionMode.NONE:
@@ -237,7 +232,39 @@ class ImageViewerWithRegions(QWidget):
             self.image_viewer.mouseReleaseEvent(event)
     
     def _center_on_point(self, x: float, y: float) -> None:
-        """Center image on the given point (Ctrl+Middle click)."""
-        # This is a simplified version - just emit a signal
-        # The main window can handle recentering the scroll area
-        pass  # TODO: Implement centering logic in main window
+        """Center image on the given point (Middle click, DS9 style)."""
+        if self.image_viewer.pixmap() is None:
+            return
+        
+        # Convert widget coordinates to image coordinates
+        viewer_rect = self.image_viewer.rect()
+        pixmap_rect = self.image_viewer.pixmap().rect()
+        
+        x_offset = (viewer_rect.width() - pixmap_rect.width()) / 2
+        y_offset = (viewer_rect.height() - pixmap_rect.height()) / 2
+        
+        # Image coordinates of clicked point
+        img_x = (x - x_offset) / self.image_viewer.get_zoom()
+        img_y = (y - y_offset) / self.image_viewer.get_zoom()
+        
+        # For scroll area-based viewer, we need to scroll to center this point
+        # Get the scroll area from parent hierarchy
+        parent = self.parent()
+        while parent and not isinstance(parent, QScrollArea):
+            parent = parent.parent()
+        
+        if parent and isinstance(parent, QScrollArea):
+            # Calculate the scroll position to center this image point
+            viewport_size = parent.viewport().size()
+            zoom = self.image_viewer.get_zoom()
+            
+            # Position in zoomed coordinates where clicked point is
+            zoomed_x = img_x * zoom
+            zoomed_y = img_y * zoom
+            
+            # Scroll to center this point in viewport
+            scroll_x = int(zoomed_x - viewport_size.width() / 2)
+            scroll_y = int(zoomed_y - viewport_size.height() / 2)
+            
+            parent.horizontalScrollBar().setValue(scroll_x)
+            parent.verticalScrollBar().setValue(scroll_y)

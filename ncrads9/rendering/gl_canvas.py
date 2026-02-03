@@ -120,6 +120,11 @@ class GLCanvas(QOpenGLWidget):
         self._image_width = width
         self._image_height = height
         self._tile_provider = data_provider
+        
+        # Center the image when loading
+        self._pan_x = width / 2.0
+        self._pan_y = height / 2.0
+        
         self._tile_renderer.set_image(width, height, data_provider)
         self.update()
 
@@ -158,9 +163,11 @@ class GLCanvas(QOpenGLWidget):
             return
         view_w, view_h = self.width(), self.height()
         self._zoom = min(view_w / self._image_width, view_h / self._image_height)
-        self._pan_x = 0.0
-        self._pan_y = 0.0
+        # Center the image by panning to image center
+        self._pan_x = self._image_width / 2.0
+        self._pan_y = self._image_height / 2.0
         self.zoom_changed.emit(self._zoom)
+        self.pan_changed.emit(self._pan_x, self._pan_y)
         self.update()
 
     def screen_to_image(self, screen_x: float, screen_y: float) -> Tuple[float, float]:

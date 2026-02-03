@@ -129,37 +129,74 @@ class MagnifierPanel(QDockWidget):
 
         region = self._current_image[y1:y2, x1:x2]
 
-        # Normalize to 0-255
-        if region.size > 0:
-            vmin, vmax = np.nanmin(region), np.nanmax(region)
-            if vmax > vmin:
-                normalized = ((region - vmin) / (vmax - vmin) * 255).astype(np.uint8)
+        # Check if RGB or grayscale
+        is_rgb = len(region.shape) == 3 and region.shape[2] == 3
+        
+        if is_rgb:
+            # Already RGB, just use it directly
+            if region.dtype != np.uint8:
+                # Normalize if not already uint8
+                vmin, vmax = np.nanmin(region), np.nanmax(region)
+                if vmax > vmin:
+                    normalized = ((region - vmin) / (vmax - vmin) * 255).astype(np.uint8)
+                else:
+                    normalized = np.zeros_like(region, dtype=np.uint8)
             else:
-                normalized = np.zeros_like(region, dtype=np.uint8)
-
-            # Create QImage and scale
+                normalized = region
+            
+            # Create RGB QImage
+            # Need to ensure data is contiguous for QImage
+            if not normalized.flags['C_CONTIGUOUS']:
+                normalized = np.ascontiguousarray(normalized)
+            
+            height, width = normalized.shape[:2]
+            bytes_per_line = width * 3
+            
             qimage = QImage(
-                normalized.data,
-                normalized.shape[1],
-                normalized.shape[0],
-                normalized.strides[0],
-                QImage.Format.Format_Grayscale8,
+                normalized.tobytes(),  # Convert to bytes instead of using .data
+                width,
+                height,
+                bytes_per_line,
+                QImage.Format.Format_RGB888,
             )
+        else:
+            # Grayscale - normalize to 0-255
+            if region.size > 0:
+                vmin, vmax = np.nanmin(region), np.nanmax(region)
+                if vmax > vmin:
+                    normalized = ((region - vmin) / (vmax - vmin) * 255).astype(np.uint8)
+                else:
+                    normalized = np.zeros_like(region, dtype=np.uint8)
+                
+                # Ensure contiguous for QImage
+                if not normalized.flags['C_CONTIGUOUS']:
+                    normalized = np.ascontiguousarray(normalized)
 
-            scaled_size = self._region_size * self._zoom_factor
-            pixmap = QPixmap.fromImage(qimage).scaled(
-                scaled_size,
-                scaled_size,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.FastTransformation,
-            )
+                # Create grayscale QImage
+                qimage = QImage(
+                    normalized.tobytes(),
+                    normalized.shape[1],
+                    normalized.shape[0],
+                    normalized.strides[0],
+                    QImage.Format.Format_Grayscale8,
+                )
+            else:
+                return
 
-            # Draw crosshair
-            painter = QPainter(pixmap)
-            painter.setPen(QPen(QColor(255, 0, 0), 1))
-            center = pixmap.width() // 2
-            painter.drawLine(center, 0, center, pixmap.height())
-            painter.drawLine(0, center, pixmap.width(), center)
-            painter.end()
+        scaled_size = self._region_size * self._zoom_factor
+        pixmap = QPixmap.fromImage(qimage).scaled(
+            scaled_size,
+            scaled_size,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.FastTransformation,
+        )
 
-            self._magnifier_label.setPixmap(pixmap)
+        # Draw crosshair
+        painter = QPainter(pixmap)
+        painter.setPen(QPen(QColor(255, 0, 0), 1))
+        center = pixmap.width() // 2
+        painter.drawLine(center, 0, center, pixmap.height())
+        painter.drawLine(0, center, pixmap.width(), center)
+        painter.end()
+
+        self._magnifier_label.setPixmap(pixmap)

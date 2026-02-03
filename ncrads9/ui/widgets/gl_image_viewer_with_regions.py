@@ -22,8 +22,8 @@ from typing import Optional, Callable
 
 import numpy as np
 from numpy.typing import NDArray
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor
+from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QObject
+from PyQt6.QtGui import QColor, QMouseEvent
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 
 from ...rendering.gl_canvas import GLCanvas
@@ -54,6 +54,9 @@ class GLImageViewerWithRegions(QWidget):
 
         self.gl_canvas = GLCanvas(self)
         layout.addWidget(self.gl_canvas)
+        
+        # Install event filter to intercept mouse events before gl_canvas handles them
+        self.gl_canvas.installEventFilter(self)
 
         self.region_overlay = RegionOverlay(self.gl_canvas)
         self.contour_overlay = ContourOverlay(self.gl_canvas)
@@ -143,36 +146,81 @@ class GLImageViewerWithRegions(QWidget):
         self.gl_canvas._pan_y = pan_y
         self.gl_canvas.pan_changed.emit(pan_x, pan_y)
         self.gl_canvas.update()
-
-    def mousePressEvent(self, event) -> None:
-        if event.button() == Qt.MouseButton.RightButton:
-            self._adjusting_contrast = True
-            self._last_pos = event.position()
-            event.accept()
+    
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        """Filter events from gl_canvas to handle middle/right mouse buttons."""
+        if obj != self.gl_canvas:
+            return False
+        
+        # Handle mouse press events
+        if event.type() == QEvent.Type.MouseButtonPress:
+            mouse_event = event
+            # Debug: print what button was pressed
+            # print(f"Mouse press: button={mouse_event.button()}, Middle={Qt.MouseButton.MiddleButton}, Right={Qt.MouseButton.RightButton}")
+            
+            if mouse_event.button() == Qt.MouseButton.MiddleButton:
+                # Middle-click centers image at cursor (DS9 style)
+                print("Middle button detected in event filter")
+                self._center_on_point(mouse_event.position().x(), mouse_event.position().y())
+                return True  # Event handled, don't pass to gl_canvas
+            
+            elif mouse_event.button() == Qt.MouseButton.RightButton:
+                # Right-drag for contrast/brightness
+                print("Right button detected in event filter")
+                self._adjusting_contrast = True
+                self._last_pos = mouse_event.position()
+                return True  # Event handled
+        
+        # Handle mouse move events
+        elif event.type() == QEvent.Type.MouseMove:
+            if self._adjusting_contrast and self._last_pos is not None:
+                mouse_event = event
+                delta = mouse_event.position() - self._last_pos
+                contrast_delta = delta.x() * 0.002
+                brightness_delta = -delta.y() * 0.002
+                
+                self._contrast_scale = max(0.1, min(self._contrast_scale + contrast_delta, 10.0))
+                self._brightness_offset = max(-1.0, min(self._brightness_offset + brightness_delta, 1.0))
+                self._last_pos = mouse_event.position()
+                print(f"Contrast: {self._contrast_scale:.2f}, Brightness: {self._brightness_offset:.2f}")
+                self.contrast_changed.emit(self._contrast_scale, self._brightness_offset)
+                return True  # Event handled
+        
+        # Handle mouse release events
+        elif event.type() == QEvent.Type.MouseButtonRelease:
+            mouse_event = event
+            if mouse_event.button() == Qt.MouseButton.RightButton:
+                print("Right button released")
+                self._adjusting_contrast = False
+                self._last_pos = None
+                return True  # Event handled
+        
+        # Let gl_canvas handle other events (left button pan, wheel zoom, etc.)
+        return False
+    
+    def _center_on_point(self, x: float, y: float) -> None:
+        """Center image at the clicked point (DS9 middle-click behavior)."""
+        # Convert screen coordinates to image coordinates
+        img_x, img_y = self.gl_canvas.screen_to_image(x, y)
+        if img_x is None or img_y is None:
             return
-        self.gl_canvas.mousePressEvent(event)
-
-    def mouseMoveEvent(self, event) -> None:
-        if self._adjusting_contrast and self._last_pos is not None:
-            delta = event.position() - self._last_pos
-            contrast_delta = delta.x() * 0.002
-            brightness_delta = -delta.y() * 0.002
-
-            self._contrast_scale = max(0.1, min(self._contrast_scale + contrast_delta, 10.0))
-            self._brightness_offset = max(-1.0, min(self._brightness_offset + brightness_delta, 1.0))
-            self._last_pos = event.position()
-            self.contrast_changed.emit(self._contrast_scale, self._brightness_offset)
-            event.accept()
-            return
-        self.gl_canvas.mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event) -> None:
-        if event.button() == Qt.MouseButton.RightButton:
-            self._adjusting_contrast = False
-            self._last_pos = None
-            event.accept()
-            return
-        self.gl_canvas.mouseReleaseEvent(event)
+        
+        # Get viewport center
+        viewport_center_x = self.gl_canvas.width() / 2
+        viewport_center_y = self.gl_canvas.height() / 2
+        
+        # Calculate new pan to center the clicked point
+        # Current pan takes clicked point to screen position (x, y)
+        # We want it to go to screen position (center_x, center_y)
+        # So adjust pan by the difference
+        dx = x - viewport_center_x
+        dy = y - viewport_center_y
+        
+        # Adjust pan (moving in opposite direction of offset)
+        self.gl_canvas._pan_x -= dx
+        self.gl_canvas._pan_y -= dy
+        self.gl_canvas.pan_changed.emit(self.gl_canvas._pan_x, self.gl_canvas._pan_y)
+        self.gl_canvas.update()
 
     def pixmap(self):
         return None

@@ -133,7 +133,18 @@ class HelpContentsDialog(QDialog):
         Args:
             parent: Optional parent widget.
         """
-        super().__init__(parent)
+        # Pass None as parent to make dialog independent
+        super().__init__(None)
+        
+        # Set window flags for independent draggable window
+        self.setWindowFlags(
+            Qt.WindowType.Window |
+            Qt.WindowType.WindowCloseButtonHint |
+            Qt.WindowType.WindowTitleHint |
+            Qt.WindowType.WindowStaysOnTopHint
+        )
+        self.setWindowModality(Qt.WindowModality.NonModal)
+        
         self.setWindowTitle("NCRADS9 Help")
         self.setMinimumSize(700, 600)
         
