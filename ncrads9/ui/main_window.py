@@ -22,8 +22,10 @@ Author: Yogesh Wadadekar
 
 from typing import Optional, TYPE_CHECKING
 from pathlib import Path
+import tempfile
 
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QPointF
+from PyQt6.QtWidgets import QDialog
 from PyQt6.QtGui import QImage, QPixmap, QColor
 from PyQt6.QtWidgets import (
     QMainWindow,
@@ -36,6 +38,7 @@ from PyQt6.QtWidgets import (
 )
 import numpy as np
 from numpy.typing import NDArray
+from astropy.table import Table
 from astropy.coordinates import (
     SkyCoord,
     FK5,
@@ -54,7 +57,7 @@ from .image_viewer import ImageViewer
 from .widgets.colorbar_widget import ColorbarWidget
 from .widgets.image_viewer_with_regions import ImageViewerWithRegions
 from .widgets.gl_image_viewer_with_regions import GLImageViewerWithRegions
-from .widgets.region_overlay import RegionMode
+from .widgets.region_overlay import RegionMode, Region
 from .dialogs.statistics_dialog import StatisticsDialog
 from .dialogs.histogram_dialog import HistogramDialog
 from .dialogs.pixel_table_dialog import PixelTableDialog
@@ -68,10 +71,20 @@ from ..core.wcs_handler import WCSHandler
 from ..rendering.scale_algorithms import apply_scale, ScaleAlgorithm, compute_zscale_limits
 from ..colormaps.builtin_maps import get_colormap
 from ..regions.region_parser import RegionParser
+from ..regions.region_writer import RegionWriter
+from ..regions.shapes.circle import Circle
+from ..regions.shapes.ellipse import Ellipse
+from ..regions.shapes.box import Box
+from ..regions.shapes.line import Line
+from ..regions.shapes.point import Point
+from ..regions.shapes.polygon import Polygon
 from ..frames.simple_frame_manager import FrameManager, Frame
 from ..frames.blink_controller import BlinkController
 from ..analysis.contour import ContourGenerator
 from ..utils.preferences import Preferences
+from ..image_servers.sia_client import SIAClient
+from ..catalogs.vizier import VizierCatalog
+from .dialogs.vo_query_dialog import VOQueryDialog
 
 if TYPE_CHECKING:
     from ncrads9.utils.config import Config
@@ -148,7 +161,10 @@ class MainWindow(QMainWindow):
     def _setup_menu_bar(self) -> None:
         """Set up the menu bar."""
         self.menu_bar = MenuBar(self)
+        if hasattr(self.menu_bar, "setNativeMenuBar"):
+            self.menu_bar.setNativeMenuBar(False)
         self.setMenuBar(self.menu_bar)
+        self.menu_bar.update()
         
         # Connect menu actions to handlers
         self._connect_menu_actions()
@@ -209,9 +225,20 @@ class MainWindow(QMainWindow):
         # Note: viridis not in DS9 builtin maps, skip connection
         self.menu_bar.action_invert_colormap.triggered.connect(self._toggle_invert_colormap)
         
-        # Region menu (stubs)
+        # Region menu
+        self.menu_bar.action_region_circle.triggered.connect(lambda: self._set_region_mode(RegionMode.CIRCLE))
+        self.menu_bar.action_region_ellipse.triggered.connect(lambda: self._set_region_mode(RegionMode.ELLIPSE))
+        self.menu_bar.action_region_box.triggered.connect(lambda: self._set_region_mode(RegionMode.BOX))
+        self.menu_bar.action_region_polygon.triggered.connect(lambda: self._set_region_mode(RegionMode.POLYGON))
+        self.menu_bar.action_region_line.triggered.connect(lambda: self._set_region_mode(RegionMode.LINE))
+        self.menu_bar.action_region_point.triggered.connect(lambda: self._set_region_mode(RegionMode.POINT))
         self.menu_bar.action_region_load.triggered.connect(self._load_regions)
-        self.menu_bar.action_region_save.triggered.connect(lambda: self.statusBar().showMessage("Region saving not implemented", 2000))
+        self.menu_bar.action_region_save.triggered.connect(self._save_regions)
+        self.menu_bar.action_region_delete_all.triggered.connect(self._clear_regions)
+
+        # VO menu
+        self.menu_bar.action_siap_2mass.triggered.connect(self._vo_siap_2mass)
+        self.menu_bar.action_catalog_vizier.triggered.connect(self._vo_catalog_vizier)
         
         # WCS menu - connect all coordinate system options
         self.menu_bar.action_wcs_fk5.triggered.connect(lambda: self._set_wcs_system("fk5"))
@@ -258,6 +285,9 @@ class MainWindow(QMainWindow):
         self.main_toolbar.action_histogram.triggered.connect(self._show_histogram)
         self.main_toolbar.action_prev_frame.triggered.connect(self._prev_frame)
         self.main_toolbar.action_next_frame.triggered.connect(self._next_frame)
+        self.main_toolbar.action_region_circle.triggered.connect(lambda: self._set_region_mode(RegionMode.CIRCLE))
+        self.main_toolbar.action_region_box.triggered.connect(lambda: self._set_region_mode(RegionMode.BOX))
+        self.main_toolbar.action_region_polygon.triggered.connect(lambda: self._set_region_mode(RegionMode.POLYGON))
 
     def _setup_central_widget(self) -> None:
         """Set up the central widget."""
@@ -808,10 +838,10 @@ class MainWindow(QMainWindow):
             "Ellipse": RegionMode.ELLIPSE,
             "Box": RegionMode.BOX,
             "Polygon": RegionMode.POLYGON,
+            "Line": RegionMode.LINE,
         }
         region_mode = mode_map.get(mode, RegionMode.NONE)
-        self.image_viewer.set_region_mode(region_mode)
-        self.statusBar().showMessage(f"Region mode: {mode}", 2000)
+        self._set_region_mode(region_mode)
     
     def _toggle_fullscreen(self, checked: bool) -> None:
         """Toggle fullscreen mode."""
@@ -874,11 +904,99 @@ class MainWindow(QMainWindow):
         if filepath:
             try:
                 parser = RegionParser()
-                regions = parser.parse_file(filepath)
-                self.statusBar().showMessage(f"Loaded {len(regions)} regions from {filepath}", 3000)
-                # TODO: Display regions on image
+                base_regions = parser.parse_file(filepath)
+                overlay_regions = []
+                for base_region in base_regions:
+                    overlay = self._base_region_to_overlay(base_region)
+                    if overlay is not None:
+                        overlay_regions.append(overlay)
+                frame = self.frame_manager.current_frame
+                if frame:
+                    frame.regions = overlay_regions
+                    self._update_regions_for_frame(frame)
+                self.statusBar().showMessage(f"Loaded {len(overlay_regions)} regions from {filepath}", 3000)
             except Exception as e:
                 self.statusBar().showMessage(f"Error loading regions: {e}", 3000)
+
+    def _vo_siap_2mass(self) -> None:
+        """Query 2MASS via SIAP and load image into new frame."""
+        ra, dec = self._get_query_coordinates()
+        dialog = VOQueryDialog(self, ra, dec, radius_deg=0.1, title="2MASS SIAP Query")
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        ra, dec, radius = dialog.values()
+
+        client = SIAClient(SIAClient.get_known_services()["2MASS"])
+        table = client.query(ra, dec, size=radius, format="image/fits")
+        if table is None or len(table) == 0:
+            self.statusBar().showMessage("No SIAP images found", 3000)
+            return
+
+        access_url = self._pick_siap_access_url(table)
+        if not access_url:
+            self.statusBar().showMessage("No SIAP access URL found", 3000)
+            return
+
+        try:
+            data = client.get_image(access_url)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".fits") as tmp:
+                tmp.write(data)
+                tmp_path = tmp.name
+            self._new_frame()
+            self._load_fits_file(tmp_path)
+            self.statusBar().showMessage("Loaded SIAP image into new frame", 3000)
+        except Exception as e:
+            self.statusBar().showMessage(f"SIAP load error: {e}", 3000)
+
+    def _vo_catalog_vizier(self) -> None:
+        """Query VizieR and overlay catalog sources."""
+        ra, dec = self._get_query_coordinates()
+        dialog = VOQueryDialog(self, ra, dec, radius_deg=0.05, title="VizieR Catalog Query")
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        ra, dec, radius = dialog.values()
+
+        catalog = VizierCatalog(catalog="II/246/out")
+        coord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg, frame="icrs")
+        table = catalog.query_region(coord, radius=radius * u.deg)
+        if table is None or len(table) == 0:
+            self.statusBar().showMessage("No VizieR sources found", 3000)
+            return
+        coords = catalog.get_coordinates(table)
+        if not coords:
+            self.statusBar().showMessage("Catalog has no usable coordinates", 3000)
+            return
+        if not self.wcs_handler or not self.wcs_handler.is_valid:
+            self.statusBar().showMessage("Current frame has no WCS for overlay", 3000)
+            return
+
+        for coord in coords:
+            x, y = self.wcs_handler.world_to_pixel(coord.ra.deg, coord.dec.deg)
+            region = Region(mode=RegionMode.POINT, points=[QPointF(x, y)])
+            self._on_region_created(region)
+            self.image_viewer.add_region(region)
+
+        self.statusBar().showMessage(f"Overlayed {len(coords)} catalog sources", 3000)
+
+    def _get_query_coordinates(self) -> tuple[float, float]:
+        """Get query coordinates from cursor WCS or image center."""
+        if self._last_mouse_pos is not None and self.wcs_handler and self.wcs_handler.is_valid:
+            x, y = self._last_mouse_pos
+            ra, dec = self.wcs_handler.pixel_to_world(x, y)
+            return ra, dec
+        if self.image_data is not None and self.wcs_handler and self.wcs_handler.is_valid:
+            cx = self.image_data.shape[1] / 2
+            cy = self.image_data.shape[0] / 2
+            ra, dec = self.wcs_handler.pixel_to_world(cx, cy)
+            return ra, dec
+        return (0.0, 0.0)
+
+    def _pick_siap_access_url(self, table: Table) -> str:
+        """Pick access URL from SIAP table."""
+        for col in ("access_url", "download", "url", "accessURL", "AccessURL"):
+            if col in table.colnames:
+                return str(table[col][0])
+        return ""
     
     def _set_wcs_system(self, system: str) -> None:
         """Set WCS coordinate system."""
@@ -1481,6 +1599,137 @@ class MainWindow(QMainWindow):
     def _on_region_selected(self, region) -> None:
         """Handle region selection."""
         self.statusBar().showMessage(f"Selected {region.mode.value} region", 2000)
+
+    def _set_region_mode(self, mode: RegionMode) -> None:
+        """Set current region mode and sync UI."""
+        self.image_viewer.set_region_mode(mode)
+        mode_name_map = {
+            RegionMode.NONE: "None",
+            RegionMode.CIRCLE: "Circle",
+            RegionMode.ELLIPSE: "Ellipse",
+            RegionMode.BOX: "Box",
+            RegionMode.POLYGON: "Polygon",
+            RegionMode.LINE: "Line",
+            RegionMode.POINT: "Point",
+        }
+        mode_name = mode_name_map.get(mode, "None")
+        self.button_bar.set_region_mode(mode_name)
+        self.statusBar().showMessage(f"Region mode: {mode_name}", 2000)
+
+    def _clear_regions(self) -> None:
+        """Clear all regions from the current frame."""
+        frame = self.frame_manager.current_frame
+        if frame:
+            frame.regions.clear()
+        if hasattr(self.image_viewer, "clear_regions"):
+            self.image_viewer.clear_regions()
+        self.statusBar().showMessage("Cleared all regions", 2000)
+
+    def _save_regions(self) -> None:
+        """Save regions to a DS9 region file."""
+        frame = self.frame_manager.current_frame
+        if not frame or not frame.regions:
+            self.statusBar().showMessage("No regions to save", 2000)
+            return
+        filepath, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Region File",
+            "",
+            "Region Files (*.reg);;All Files (*)",
+        )
+        if not filepath:
+            return
+        base_regions = self._overlay_regions_to_base(frame.regions)
+        if not base_regions:
+            self.statusBar().showMessage("No supported regions to save", 2000)
+            return
+        writer = RegionWriter()
+        writer.write_file(base_regions, filepath)
+        self.statusBar().showMessage(f"Saved regions to {filepath}", 3000)
+
+    def _overlay_regions_to_base(self, regions: list[Region]) -> list:
+        """Convert overlay regions to DS9 BaseRegion instances."""
+        converted = []
+        for region in regions:
+            if region.mode == RegionMode.CIRCLE and len(region.points) >= 2:
+                center = region.points[0]
+                edge = region.points[1]
+                radius = ((edge.x() - center.x()) ** 2 + (edge.y() - center.y()) ** 2) ** 0.5
+                converted.append(Circle(center=(center.x(), center.y()), radius=radius))
+            elif region.mode == RegionMode.ELLIPSE and len(region.points) >= 2:
+                p1, p2 = region.points[0], region.points[1]
+                center = ((p1.x() + p2.x()) / 2, (p1.y() + p2.y()) / 2)
+                semi_major = abs(p2.x() - p1.x()) / 2
+                semi_minor = abs(p2.y() - p1.y()) / 2
+                converted.append(Ellipse(center=center, semi_major=semi_major, semi_minor=semi_minor))
+            elif region.mode == RegionMode.BOX and len(region.points) >= 2:
+                p1, p2 = region.points[0], region.points[1]
+                center = ((p1.x() + p2.x()) / 2, (p1.y() + p2.y()) / 2)
+                width_box = abs(p2.x() - p1.x())
+                height_box = abs(p2.y() - p1.y())
+                converted.append(Box(center=center, width_box=width_box, height_box=height_box))
+            elif region.mode == RegionMode.LINE and len(region.points) >= 2:
+                p1, p2 = region.points[0], region.points[1]
+                converted.append(Line(start=(p1.x(), p1.y()), end=(p2.x(), p2.y())))
+            elif region.mode == RegionMode.POINT and len(region.points) >= 1:
+                p1 = region.points[0]
+                converted.append(Point(center=(p1.x(), p1.y())))
+            elif region.mode == RegionMode.POLYGON and len(region.points) >= 3:
+                vertices = [(p.x(), p.y()) for p in region.points]
+                converted.append(Polygon(vertices=vertices))
+        return converted
+
+    def _base_region_to_overlay(self, region) -> Optional[Region]:
+        """Convert a BaseRegion to an overlay Region."""
+        if isinstance(region, Circle):
+            cx, cy = region.center
+            r = region.radius
+            return Region(
+                mode=RegionMode.CIRCLE,
+                points=[QPointF(cx, cy), QPointF(cx + r, cy)],
+                color=QColor(region.color)
+            )
+        if isinstance(region, Ellipse):
+            cx, cy = region.center
+            a = region.semi_major
+            b = region.semi_minor
+            return Region(
+                mode=RegionMode.ELLIPSE,
+                points=[QPointF(cx - a, cy - b), QPointF(cx + a, cy + b)],
+                color=QColor(region.color)
+            )
+        if isinstance(region, Box):
+            cx, cy = region.center
+            half_w = region.width_box / 2
+            half_h = region.height_box / 2
+            return Region(
+                mode=RegionMode.BOX,
+                points=[QPointF(cx - half_w, cy - half_h), QPointF(cx + half_w, cy + half_h)],
+                color=QColor(region.color)
+            )
+        if isinstance(region, Line):
+            x1, y1 = region.start
+            x2, y2 = region.end
+            return Region(
+                mode=RegionMode.LINE,
+                points=[QPointF(x1, y1), QPointF(x2, y2)],
+                color=QColor(region.color)
+            )
+        if isinstance(region, Point):
+            cx, cy = region.center
+            return Region(
+                mode=RegionMode.POINT,
+                points=[QPointF(cx, cy)],
+                color=QColor(region.color)
+            )
+        if isinstance(region, Polygon):
+            points = [QPointF(x, y) for x, y in region.vertices]
+            return Region(
+                mode=RegionMode.POLYGON,
+                points=points,
+                color=QColor(region.color)
+            )
+        return None
     
     def show_about(self) -> None:
         """Show the About dialog."""

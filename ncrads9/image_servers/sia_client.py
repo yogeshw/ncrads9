@@ -23,6 +23,11 @@ Author: Yogesh Wadadekar
 
 from typing import Optional, Any
 from pathlib import Path
+from io import BytesIO
+
+import requests
+from astropy.io.votable import parse_single_table
+from astropy.table import Table
 
 
 class SIAClient:
@@ -43,9 +48,9 @@ class SIAClient:
         self,
         ra: float,
         dec: float,
-        size: float = 0.1,
+        size: Any = 0.1,
         format: Optional[str] = None,
-    ) -> list[dict[str, Any]]:
+    ) -> Optional[Table]:
         """
         Query the SIA service for images.
 
@@ -62,10 +67,18 @@ class SIAClient:
 
         Returns
         -------
-        list[dict[str, Any]]
-            List of matching image records.
+        Table or None
+            VOTable results parsed into an Astropy table.
         """
-        raise NotImplementedError("Subclasses must implement query")
+        params: dict[str, Any] = {"POS": f"{ra},{dec}", "SIZE": size}
+        if format:
+            params["FORMAT"] = format
+        try:
+            response = requests.get(self.service_url, params=params, timeout=60)
+            response.raise_for_status()
+            return self._parse_votable(response.content)
+        except requests.RequestException:
+            return None
 
     def query_region(
         self,
@@ -74,7 +87,7 @@ class SIAClient:
         width: float,
         height: Optional[float] = None,
         format: Optional[str] = None,
-    ) -> list[dict[str, Any]]:
+    ) -> Optional[Table]:
         """
         Query the SIA service for images in a rectangular region.
 
@@ -93,10 +106,11 @@ class SIAClient:
 
         Returns
         -------
-        list[dict[str, Any]]
-            List of matching image records.
+        Table or None
+            VOTable results parsed into an Astropy table.
         """
-        raise NotImplementedError("Subclasses must implement query_region")
+        size = width if height is None else f"{width},{height}"
+        return self.query(ra, dec, size=size, format=format)
 
     def get_image(self, access_url: str) -> bytes:
         """
@@ -112,7 +126,9 @@ class SIAClient:
         bytes
             Image data.
         """
-        raise NotImplementedError("Subclasses must implement get_image")
+        response = requests.get(access_url, timeout=60)
+        response.raise_for_status()
+        return response.content
 
     def save_image(self, access_url: str, output_path: Path) -> Path:
         """
@@ -130,7 +146,9 @@ class SIAClient:
         Path
             Path to the saved image file.
         """
-        raise NotImplementedError("Subclasses must implement save_image")
+        image_data = self.get_image(access_url)
+        output_path.write_bytes(image_data)
+        return output_path
 
     def get_service_capabilities(self) -> dict[str, Any]:
         """
@@ -141,7 +159,7 @@ class SIAClient:
         dict[str, Any]
             Service capabilities metadata.
         """
-        raise NotImplementedError("Subclasses must implement get_service_capabilities")
+        return {"url": self.service_url}
 
     def is_available(self) -> bool:
         """
@@ -152,7 +170,19 @@ class SIAClient:
         bool
             True if the service responds correctly.
         """
-        raise NotImplementedError("Subclasses must implement is_available")
+        try:
+            response = requests.get(self.service_url, timeout=10)
+            return response.status_code == 200
+        except requests.RequestException:
+            return False
+
+    def _parse_votable(self, content: bytes) -> Optional[Table]:
+        """Parse a VOTable response into a Table."""
+        try:
+            table = parse_single_table(BytesIO(content)).to_table()
+            return table
+        except Exception:
+            return None
 
     @staticmethod
     def get_known_services() -> dict[str, str]:

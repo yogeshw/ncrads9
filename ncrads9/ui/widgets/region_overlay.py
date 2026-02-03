@@ -80,6 +80,28 @@ class Region:
             if len(self.points) >= 3:
                 poly = QPolygonF(self.points)
                 return poly.containsPoint(point, Qt.FillRule.OddEvenFill)
+
+        elif self.mode == RegionMode.LINE:
+            if len(self.points) >= 2:
+                p1 = self.points[0]
+                p2 = self.points[1]
+                dx = p2.x() - p1.x()
+                dy = p2.y() - p1.y()
+                if dx == 0 and dy == 0:
+                    dist = math.sqrt((point.x() - p1.x()) ** 2 + (point.y() - p1.y()) ** 2)
+                    return dist <= tolerance
+                t = ((point.x() - p1.x()) * dx + (point.y() - p1.y()) * dy) / (dx * dx + dy * dy)
+                t = max(0.0, min(1.0, t))
+                proj_x = p1.x() + t * dx
+                proj_y = p1.y() + t * dy
+                dist = math.sqrt((point.x() - proj_x) ** 2 + (point.y() - proj_y) ** 2)
+                return dist <= tolerance
+
+        elif self.mode == RegionMode.POINT:
+            if len(self.points) >= 1:
+                center = self.points[0]
+                dist = math.sqrt((point.x() - center.x())**2 + (point.y() - center.y())**2)
+                return dist <= tolerance
         
         return False
 
@@ -170,16 +192,30 @@ class RegionOverlay(QWidget):
         # Drawing mode
         if event.button() == Qt.MouseButton.LeftButton:
             img_point = self._widget_to_image_coords(event.position())
-            
+
             if self.mode == RegionMode.POLYGON:
                 # Polygon: accumulate points
                 self.current_points.append(img_point)
                 self.is_drawing = True
+            elif self.mode == RegionMode.POINT:
+                # Point: place immediately
+                region = Region(
+                    mode=self.mode,
+                    points=[img_point],
+                    color=QColor(0, 255, 0)
+                )
+                self.regions.append(region)
+                self.region_created.emit(region)
+                self.current_points = []
+                self.is_drawing = False
+                self.update()
+                event.accept()
+                return
             else:
                 # Circle, Box, Ellipse: start new region
                 self.current_points = [img_point]
                 self.is_drawing = True
-            
+
             self.update()
             event.accept()
     
@@ -206,7 +242,7 @@ class RegionOverlay(QWidget):
             # Update preview
             img_point = self._widget_to_image_coords(event.position())
             
-            if self.mode in [RegionMode.CIRCLE, RegionMode.BOX, RegionMode.ELLIPSE]:
+            if self.mode in [RegionMode.CIRCLE, RegionMode.BOX, RegionMode.ELLIPSE, RegionMode.LINE]:
                 # For these, we update the second point
                 if len(self.current_points) == 1:
                     self.current_points.append(img_point)
@@ -228,8 +264,17 @@ class RegionOverlay(QWidget):
                 # Polygon continues until double-click or right-click
                 pass
             else:
-                # Finalize region for circle, box, ellipse
-                if len(self.current_points) >= 2:
+                # Finalize region for circle, box, ellipse, line, point
+                if self.mode == RegionMode.POINT:
+                    if len(self.current_points) >= 1:
+                        region = Region(
+                            mode=self.mode,
+                            points=[self.current_points[0]],
+                            color=QColor(0, 255, 0)
+                        )
+                        self.regions.append(region)
+                        self.region_created.emit(region)
+                elif len(self.current_points) >= 2:
                     region = Region(
                         mode=self.mode,
                         points=self.current_points.copy(),
@@ -259,6 +304,24 @@ class RegionOverlay(QWidget):
             self.is_drawing = False
             self.update()
             event.accept()
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        """Handle double click to finalize polygon."""
+        if self.mode == RegionMode.POLYGON and event.button() == Qt.MouseButton.LeftButton:
+            if len(self.current_points) >= 3:
+                region = Region(
+                    mode=RegionMode.POLYGON,
+                    points=self.current_points.copy(),
+                    color=QColor(0, 255, 0)
+                )
+                self.regions.append(region)
+                self.region_created.emit(region)
+            self.current_points = []
+            self.is_drawing = False
+            self.update()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
     
     def paintEvent(self, event) -> None:
         """Paint regions on overlay."""
@@ -291,6 +354,14 @@ class RegionOverlay(QWidget):
             elif region.mode == RegionMode.POLYGON and len(widget_points) >= 3:
                 poly = QPolygonF(widget_points)
                 painter.drawPolygon(poly)
+
+            elif region.mode == RegionMode.LINE and len(widget_points) >= 2:
+                painter.drawLine(widget_points[0], widget_points[1])
+
+            elif region.mode == RegionMode.POINT and len(widget_points) >= 1:
+                center = widget_points[0]
+                radius = 4
+                painter.drawEllipse(center, radius, radius)
         
         # Draw current drawing preview
         if self.is_drawing and len(self.current_points) > 0:
@@ -313,7 +384,10 @@ class RegionOverlay(QWidget):
             elif self.mode == RegionMode.ELLIPSE and len(widget_points) >= 2:
                 rect = QRectF(widget_points[0], widget_points[1])
                 painter.drawEllipse(rect)
-            
+
             elif self.mode == RegionMode.POLYGON and len(widget_points) >= 2:
                 poly = QPolygonF(widget_points)
                 painter.drawPolyline(poly)
+
+            elif self.mode == RegionMode.LINE and len(widget_points) >= 2:
+                painter.drawLine(widget_points[0], widget_points[1])

@@ -47,9 +47,13 @@ class MenuBar(QMenuBar):
         self._setup_scale_menu()
         self._setup_color_menu()
         self._setup_region_menu()
+        self._setup_vo_menu()
         self._setup_wcs_menu()
         self._setup_analysis_menu()
         self._setup_help_menu()
+
+        if self.vo_menu is not None:
+            self.vo_menu.setVisible(True)
 
     def _setup_file_menu(self) -> None:
         """Set up the File menu."""
@@ -328,6 +332,22 @@ class MenuBar(QMenuBar):
 
         self.action_region_delete_all: QAction = QAction("&Delete All", self)
         self.region_menu.addAction(self.action_region_delete_all)
+
+    def _setup_vo_menu(self) -> None:
+        """Set up the VO menu."""
+        vo_action = self.addMenu("&VO")
+        self.vo_menu: QMenu = vo_action
+        self.vo_menu.setTitle("&VO")
+        self.vo_menu.menuAction().setVisible(True)
+        self.vo_menu.menuAction().setEnabled(True)
+
+        self.siap_menu: QMenu = self.vo_menu.addMenu("&SIAP")
+        self.action_siap_2mass: QAction = QAction("2MASS &Image...", self)
+        self.siap_menu.addAction(self.action_siap_2mass)
+
+        self.catalog_menu: QMenu = self.vo_menu.addMenu("&Catalog")
+        self.action_catalog_vizier: QAction = QAction("&VizieR...", self)
+        self.catalog_menu.addAction(self.action_catalog_vizier)
 
     def _setup_wcs_menu(self) -> None:
         """Set up the WCS menu."""
