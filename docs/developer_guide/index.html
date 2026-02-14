@@ -43,16 +43,17 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate</code></pre>
     <h2>Project Structure</h2>
     <div class="section">
         <pre><code>ncrads9/
-├── ncrads9/           # Main package
-│   ├── __init__.py
-│   ├── core/          # Core functionality
-│   ├── regions/       # Region handling
-│   ├── analysis/      # Analysis tools
-│   └── ui/            # User interface
-├── tests/             # Test suite
-├── docs/              # Documentation
-├── resources/         # Static resources
-└── pyproject.toml     # Project configuration</code></pre>
+├── ncrads9/               # Main package
+│   ├── core/              # FITS + WCS handlers
+│   ├── rendering/         # Scaling and render helpers
+│   ├── regions/           # Region parsing/writing
+│   ├── communication/     # XPA/SAMP/IIS protocol code
+│   ├── analysis/          # Statistics, histogram, contours, tables
+│   ├── ui/                # Qt main window, menus, dialogs, widgets
+│   └── image_servers/     # VO/image server integrations (partial)
+├── tests/                 # Test suite
+├── docs/                  # HTML + LaTeX documentation
+└── pyproject.toml         # Project metadata and dependencies</code></pre>
     </div>
 
     <h2>Running Tests</h2>
@@ -69,15 +70,13 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate</code></pre>
         <p>NCRADS9 follows PEP 8 style guidelines. Use the following tools:</p>
         <ul>
             <li><strong>Black</strong> for code formatting</li>
-            <li><strong>isort</strong> for import sorting</li>
-            <li><strong>flake8</strong> for linting</li>
+            <li><strong>Ruff</strong> for linting</li>
             <li><strong>mypy</strong> for type checking</li>
         </ul>
 
         <p>Run all checks:</p>
         <pre><code>black ncrads9/
-isort ncrads9/
-flake8 ncrads9/
+ruff check ncrads9/
 mypy ncrads9/</code></pre>
     </div>
 
@@ -105,15 +104,15 @@ make pdf</code></pre>
     <div class="section">
         <h3>Core Components</h3>
         <ul>
-            <li><strong>FITSImage</strong>: Handles FITS file I/O and data management</li>
-            <li><strong>Display</strong>: Manages image rendering and visualization</li>
-            <li><strong>RegionManager</strong>: Handles region creation, editing, and serialization</li>
-            <li><strong>WCSHandler</strong>: Provides coordinate transformations</li>
-            <li><strong>AnalysisTools</strong>: Statistical and analytical functions</li>
+            <li><strong>MainWindow</strong>: Coordinates UI actions, frame state, and tool dialogs</li>
+            <li><strong>FITSHandler</strong>: Handles FITS file I/O and metadata access</li>
+            <li><strong>WCSHandler</strong>: Provides pixel/world coordinate transformations</li>
+            <li><strong>FrameManager</strong>: Tracks frame navigation, tiling, and blink state</li>
+            <li><strong>XPAServer</strong>: Exposes command/control integration over XPA</li>
         </ul>
 
         <h3>UI Framework</h3>
-        <p>NCRADS9 uses PyQt5/PyQt6 for the graphical interface. The UI is organized into:</p>
+        <p>NCRADS9 uses PyQt6 for the graphical interface. The UI is organized into:</p>
         <ul>
             <li><strong>MainWindow</strong>: Primary application window</li>
             <li><strong>ImageCanvas</strong>: Image display widget</li>

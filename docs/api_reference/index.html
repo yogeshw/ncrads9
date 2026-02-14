@@ -30,126 +30,79 @@
     <h1>NCRADS9 API Reference</h1>
     <p>This document provides the complete API reference for NCRADS9.</p>
 
-    <h2>Core Module</h2>
+    <h2>Application Entry Points</h2>
 
     <div class="class-doc">
-        <h3><code>class NCRADS9</code></h3>
-        <p>The main application class for NCRADS9.</p>
-        
-        <div class="method">
-            <code>__init__(self)</code>
-            <p>Initialize the NCRADS9 application.</p>
-        </div>
-
-        <div class="method">
-            <code>load_fits(<span class="param">filename: str</span>, <span class="param">extension: int = 0</span>) -> <span class="returns">FITSImage</span></code>
-            <p>Load a FITS file into the viewer.</p>
-        </div>
-
-        <div class="method">
-            <code>run(self) -> <span class="returns">None</span></code>
-            <p>Start the application main loop.</p>
-        </div>
+        <h3><code>ncrads9.__main__.main()</code></h3>
+        <p>CLI entry point used by the <code>ncrads9</code> console script.</p>
     </div>
 
     <div class="class-doc">
-        <h3><code>class FITSImage</code></h3>
-        <p>Represents a FITS image with associated metadata and WCS.</p>
-
-        <div class="method">
-            <code>__init__(self, <span class="param">filename: str</span>, <span class="param">extension: int = 0</span>)</code>
-            <p>Load a FITS image from file.</p>
-        </div>
-
-        <div class="method">
-            <code>data -> <span class="returns">numpy.ndarray</span></code>
-            <p>Property: The image data array.</p>
-        </div>
-
-        <div class="method">
-            <code>header -> <span class="returns">astropy.io.fits.Header</span></code>
-            <p>Property: The FITS header.</p>
-        </div>
-
-        <div class="method">
-            <code>wcs -> <span class="returns">astropy.wcs.WCS</span></code>
-            <p>Property: World Coordinate System object.</p>
-        </div>
+        <h3><code>ncrads9.app.run_application(argv: List[str]) -&gt; int</code></h3>
+        <p>Creates the Qt application, main window, optional XPA server, opens command-line files, and starts the event loop.</p>
     </div>
 
-    <h2>Regions Module</h2>
+    <h2>Core Data Modules</h2>
 
     <div class="class-doc">
-        <h3><code>class Region</code></h3>
-        <p>Base class for all region types.</p>
-
-        <div class="method">
-            <code>color: <span class="returns">str</span></code>
-            <p>The region color (default: 'green').</p>
-        </div>
-
-        <div class="method">
-            <code>width: <span class="returns">int</span></code>
-            <p>Line width in pixels (default: 1).</p>
-        </div>
-
-        <div class="method">
-            <code>to_ds9(<span class="param">coord_system: str = 'image'</span>) -> <span class="returns">str</span></code>
-            <p>Export region to DS9 format string.</p>
-        </div>
+        <h3><code>ncrads9.core.fits_handler.FITSHandler</code></h3>
+        <p>Main FITS I/O helper used by the UI.</p>
+        <div class="method"><code>load(filepath)</code></div>
+        <div class="method"><code>get_data(ext=0)</code></div>
+        <div class="method"><code>get_header(ext=0)</code></div>
+        <div class="method"><code>list_extensions()</code></div>
     </div>
 
     <div class="class-doc">
-        <h3><code>class CircleRegion(Region)</code></h3>
-        <p>Circular region.</p>
+        <h3><code>ncrads9.core.wcs_handler.WCSHandler</code></h3>
+        <p>WCS coordinate conversion wrapper around Astropy WCS.</p>
+        <div class="method"><code>is_valid</code></div>
+        <div class="method"><code>pixel_to_world(x, y)</code></div>
+        <div class="method"><code>world_to_pixel(ra, dec)</code></div>
+        <div class="method"><code>get_pixel_scale()</code></div>
+    </div>
 
-        <div class="method">
-            <code>__init__(self, <span class="param">x: float</span>, <span class="param">y: float</span>, <span class="param">radius: float</span>)</code>
-            <p>Create a circle region with center (x, y) and given radius.</p>
-        </div>
+    <h2>UI and Frame Modules</h2>
+
+    <div class="class-doc">
+        <h3><code>ncrads9.ui.main_window.MainWindow</code></h3>
+        <p>Main Qt window coordinating menus, display state, and analysis dialogs.</p>
+        <div class="method"><code>open_file(filepath=None)</code></div>
+        <div class="method"><code>_set_scale(...), _set_colormap(...), _set_bin(...)</code></div>
+        <div class="method"><code>_show_statistics(), _show_histogram(), _show_contours()</code></div>
     </div>
 
     <div class="class-doc">
-        <h3><code>class EllipseRegion(Region)</code></h3>
-        <p>Elliptical region.</p>
+        <h3><code>ncrads9.frames.simple_frame_manager.FrameManager</code></h3>
+        <p>Manages frame creation, deletion, selection, and navigation used by blink/tile workflows.</p>
+    </div>
 
-        <div class="method">
-            <code>__init__(self, <span class="param">x: float</span>, <span class="param">y: float</span>, <span class="param">a: float</span>, <span class="param">b: float</span>, <span class="param">angle: float = 0</span>)</code>
-            <p>Create an ellipse with center (x, y), semi-axes a and b, and rotation angle.</p>
-        </div>
+    <h2>Communication Modules</h2>
+
+    <div class="class-doc">
+        <h3><code>ncrads9.communication.xpa.xpa_server.XPAServer</code></h3>
+        <p>DS9-style XPA server implementation.</p>
+        <div class="method"><code>start() -&gt; bool</code></div>
+        <div class="method"><code>stop()</code></div>
+        <div class="method"><code>register_handler(command, handler)</code></div>
     </div>
 
     <div class="class-doc">
-        <h3><code>class BoxRegion(Region)</code></h3>
-        <p>Rectangular region.</p>
-
-        <div class="method">
-            <code>__init__(self, <span class="param">x: float</span>, <span class="param">y: float</span>, <span class="param">width: float</span>, <span class="param">height: float</span>, <span class="param">angle: float = 0</span>)</code>
-            <p>Create a box with center (x, y), dimensions, and rotation angle.</p>
-        </div>
+        <h3><code>ncrads9.communication.samp.SAMPClient</code></h3>
+        <p>SAMP client wrapper used by VO menu actions for hub connect/disconnect and catalog overlays.</p>
     </div>
 
-    <h2>Analysis Module</h2>
+    <h2>Rendering and Analysis Helpers</h2>
 
     <div class="class-doc">
-        <h3><code>compute_statistics()</code></h3>
-        <pre><code>compute_statistics(data: numpy.ndarray, region: Region = None) -> dict</code></pre>
-        <p>Compute statistics for the given data or region.</p>
-        <p><strong>Returns:</strong> Dictionary with keys: sum, mean, median, std, min, max, centroid_x, centroid_y</p>
+        <h3><code>ncrads9.rendering.scale_algorithms</code></h3>
+        <div class="method"><code>apply_scale(...)</code></div>
+        <div class="method"><code>compute_zscale_limits(...)</code></div>
     </div>
 
     <div class="class-doc">
-        <h3><code>compute_histogram()</code></h3>
-        <pre><code>compute_histogram(data: numpy.ndarray, bins: int = 100, range: tuple = None) -> tuple</code></pre>
-        <p>Compute histogram of pixel values.</p>
-        <p><strong>Returns:</strong> Tuple of (histogram_values, bin_edges)</p>
-    </div>
-
-    <div class="class-doc">
-        <h3><code>radial_profile()</code></h3>
-        <pre><code>radial_profile(data: numpy.ndarray, center: tuple) -> tuple</code></pre>
-        <p>Compute radial profile around a center point.</p>
-        <p><strong>Returns:</strong> Tuple of (radii, profile_values)</p>
+        <h3><code>ncrads9.analysis.contour.ContourGenerator</code></h3>
+        <p>Generates contour levels and paths used by the contour dialog/UI overlay.</p>
     </div>
 </body>
 </html>

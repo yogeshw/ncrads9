@@ -46,11 +46,6 @@
             <td>.fits.gz, .fits.fz</td>
             <td>Gzip or fpack compressed FITS</td>
         </tr>
-        <tr>
-            <td>FITS Array</td>
-            <td>.fits</td>
-            <td>FITS files with array extensions</td>
-        </tr>
     </table>
 
     <h2>Loading Images</h2>
@@ -62,22 +57,19 @@
     <h3>From the Command Line</h3>
     <pre><code>ncrads9 /path/to/image.fits</code></pre>
 
-    <h3>Drag and Drop</h3>
-    <p>Simply drag a FITS file onto the NCRADS9 window.</p>
-
     <h2>Multi-Extension FITS</h2>
-    <p>For FITS files with multiple extensions, NCRADS9 will display an extension selector dialog. You can:</p>
+    <p>NCRADS9 currently loads the default extension when opening a FITS file from the UI.</p>
+    <p>For multi-extension workflows, use frame navigation to compare separately opened inputs:</p>
     <ul>
-        <li>Select a specific extension to view</li>
         <li>Navigate between extensions using <strong>Frame → Next</strong> and <strong>Frame → Previous</strong></li>
-        <li>Use the extension dropdown in the toolbar</li>
+        <li>Use <strong>Frame → Tile</strong> and <strong>Frame → Blink</strong> to compare frames</li>
     </ul>
 
     <h2>Opening Multiple Files</h2>
     <p>You can open multiple FITS files simultaneously:</p>
     <pre><code>ncrads9 file1.fits file2.fits file3.fits</code></pre>
 
-    <p>Each file will open in a separate frame, which you can tile or cascade using the <strong>Window</strong> menu.</p>
+    <p>Each file opens in a separate frame; use the <strong>Frame</strong> menu to navigate, tile, and blink frames.</p>
 
     <div class="nav-footer">
         <a href="getting_started.html">← Getting Started</a>

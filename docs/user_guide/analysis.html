@@ -33,7 +33,7 @@
     <h2>Statistics</h2>
     <p>Access via <strong>Analysis → Statistics</strong></p>
 
-    <p>The statistics tool computes for a selected region or the entire image:</p>
+    <p>The statistics dialog computes summary values for the loaded image:</p>
     <table>
         <tr>
             <th>Statistic</th>
@@ -59,35 +59,19 @@
             <td>Min/Max</td>
             <td>Minimum and maximum values</td>
         </tr>
-        <tr>
-            <td>Centroid</td>
-            <td>Intensity-weighted center</td>
-        </tr>
     </table>
 
     <h2>Histogram</h2>
     <p>Access via <strong>Analysis → Histogram</strong></p>
 
-    <p>The histogram tool displays the distribution of pixel values. Features include:</p>
-    <ul>
-        <li>Linear or logarithmic Y-axis</li>
-        <li>Adjustable number of bins</li>
-        <li>Region-based histograms</li>
-        <li>Export data to file</li>
-    </ul>
+    <p>The histogram dialog displays the distribution of valid pixel values (NaN/Inf excluded) using a fixed binning and includes a quick summary of min/max/mean/median.</p>
+    
 
     <h2>Radial Profile</h2>
-    <p>Access via <strong>Analysis → Radial Profile</strong></p>
-
-    <p>Create radial profiles around a center point to analyze:</p>
-    <ul>
-        <li>Point spread function (PSF)</li>
-        <li>Galaxy surface brightness profiles</li>
-        <li>Extended source structure</li>
-    </ul>
+    <p>A radial-profile menu entry exists, but UI integration is still in progress in the current release.</p>
 
     <h2>Coordinate Systems</h2>
-    <p>NCRADS9 supports multiple coordinate systems:</p>
+    <p>NCRADS9 supports WCS coordinate display in these systems:</p>
 
     <table>
         <tr>
@@ -95,12 +79,8 @@
             <th>Description</th>
         </tr>
         <tr>
-            <td>Image</td>
-            <td>Pixel coordinates (1-indexed)</td>
-        </tr>
-        <tr>
-            <td>Physical</td>
-            <td>Physical pixel coordinates</td>
+            <td>ICRS</td>
+            <td>International Celestial Reference System</td>
         </tr>
         <tr>
             <td>FK5</td>
@@ -120,7 +100,7 @@
         </tr>
     </table>
 
-    <p>Switch coordinate systems via <strong>WCS</strong> menu or the coordinate dropdown.</p>
+    <p>Switch coordinate systems via the <strong>WCS</strong> menu.</p>
 
     <h2>Contours</h2>
     <p>Access via <strong>Analysis → Contours</strong></p>
@@ -130,11 +110,8 @@
         <li>Automatic or manual level selection</li>
         <li>Linear, logarithmic, or custom spacing</li>
         <li>Customizable colors and line styles</li>
-        <li>Save contour parameters</li>
+        <li>Export contour levels and paths to JSON</li>
     </ul>
-
-    <h2>Cross-sections</h2>
-    <p>Create 1D cross-sections through your image data by drawing a line region and selecting <strong>Analysis → Cross-section</strong>.</p>
 
     <div class="nav-footer">
         <a href="colormaps.html">← Colormaps</a>

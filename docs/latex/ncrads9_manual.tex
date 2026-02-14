@@ -57,7 +57,7 @@
     \vspace{2cm}
     {\Huge\textbf{NCRADS9 Manual}}\\[1cm]
     {\Large A FITS Image Viewer and Analysis Tool}\\[2cm]
-    {\large Version 1.0}
+    {\large Version 0.1.0}
 }
 \author{
     \textbf{Yogesh Wadadekar}\\[0.5cm]
@@ -118,11 +118,11 @@ NCRADS9 was developed at the National Centre for Radio Astrophysics (NCRA) to pr
 NCRADS9 requires the following:
 
 \begin{itemize}
-    \item Python 3.8 or later
-    \item NumPy
-    \item Astropy
-    \item PyQt5 or PyQt6
-    \item Matplotlib (optional, for additional plotting)
+    \item Python 3.10 or later
+    \item PyQt6
+    \item PyOpenGL
+    \item Astropy and Astroquery
+    \item NumPy, SciPy, Pillow, and requests
 \end{itemize}
 
 \section{Installation via pip}
@@ -148,7 +148,7 @@ pip install -e .
 Verify your installation by running:
 
 \begin{lstlisting}[language=bash]
-ncrads9 --version
+python -c "import ncrads9; print(ncrads9.__version__)"
 \end{lstlisting}
 
 %======================================================================
