@@ -50,6 +50,7 @@ class GLCanvas(QOpenGLWidget):
     zoom_changed = pyqtSignal(float)
     pan_changed = pyqtSignal(float, float)
     cursor_moved = pyqtSignal(float, float, float)  # x, y, value
+    mouse_clicked = pyqtSignal(float, float, int)  # x, y, button value
 
     def __init__(self, parent: Optional[object] = None) -> None:
         """
@@ -93,6 +94,11 @@ class GLCanvas(QOpenGLWidget):
     def pan_offset(self) -> Tuple[float, float]:
         """Get current pan offset (x, y)."""
         return (self._pan_x, self._pan_y)
+
+    @property
+    def image_size(self) -> Tuple[int, int]:
+        """Get current image size (width, height)."""
+        return (self._image_width, self._image_height)
 
     def set_image(self, data: NDArray[np.float32]) -> None:
         """
@@ -184,7 +190,7 @@ class GLCanvas(QOpenGLWidget):
         center_x = self.width() / 2.0
         center_y = self.height() / 2.0
         img_x = (screen_x - center_x) / self._zoom + self._pan_x
-        img_y = (screen_y - center_y) / self._zoom + self._pan_y
+        img_y = (center_y - screen_y) / self._zoom + self._pan_y
         return (img_x, img_y)
 
     def image_to_screen(self, img_x: float, img_y: float) -> Tuple[float, float]:
@@ -201,7 +207,7 @@ class GLCanvas(QOpenGLWidget):
         center_x = self.width() / 2.0
         center_y = self.height() / 2.0
         screen_x = (img_x - self._pan_x) * self._zoom + center_x
-        screen_y = (img_y - self._pan_y) * self._zoom + center_y
+        screen_y = center_y - (img_y - self._pan_y) * self._zoom
         return (screen_x, screen_y)
 
     def initializeGL(self) -> None:
@@ -239,8 +245,8 @@ class GLCanvas(QOpenGLWidget):
         GL.glOrtho(
             viewport_x,
             viewport_x + view_w,
-            viewport_y + view_h,
             viewport_y,
+            viewport_y + view_h,
             -1.0,
             1.0,
         )
@@ -274,6 +280,8 @@ class GLCanvas(QOpenGLWidget):
         Args:
             event: Mouse event.
         """
+        img_x, img_y = self.screen_to_image(event.position().x(), event.position().y())
+        self.mouse_clicked.emit(img_x, img_y, int(event.button().value))
         if event.button() == Qt.MouseButton.LeftButton:
             self._last_mouse_pos = event.position()
 
@@ -292,7 +300,8 @@ class GLCanvas(QOpenGLWidget):
             h, w = self._image_data.shape[:2]
             ix, iy = int(img_x), int(img_y)
             if 0 <= ix < w and 0 <= iy < h:
-                value = float(self._image_data[iy, ix])
+                row = h - 1 - iy
+                value = float(self._image_data[row, ix])
                 self.cursor_moved.emit(img_x, img_y, value)
 
         # Handle panning
@@ -300,7 +309,7 @@ class GLCanvas(QOpenGLWidget):
             dx = (pos.x() - self._last_mouse_pos.x()) / self._zoom
             dy = (pos.y() - self._last_mouse_pos.y()) / self._zoom
             self._pan_x -= dx
-            self._pan_y -= dy
+            self._pan_y += dy
             self._last_mouse_pos = pos
             self.pan_changed.emit(self._pan_x, self._pan_y)
             self.update()

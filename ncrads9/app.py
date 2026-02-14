@@ -23,11 +23,13 @@ Author: Yogesh Wadadekar
 """
 
 from typing import List
+import logging
 
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
 
 from ncrads9 import __version__
+from ncrads9.communication.xpa import XPAServer
 from ncrads9.ui.main_window import MainWindow
 from ncrads9.utils.config import Config
 from ncrads9.utils.logger import setup_logging
@@ -56,6 +58,7 @@ def run_application(argv: List[str]) -> int:
 
     # Setup logging
     setup_logging()
+    logger = logging.getLogger(__name__)
 
     # Load configuration
     config = Config()
@@ -64,9 +67,24 @@ def run_application(argv: List[str]) -> int:
     main_window = MainWindow(config)
     main_window.show()
 
+    xpa_enabled = bool(config.get("communication.xpa.enabled", True))
+    xpa_server = None
+    if xpa_enabled:
+        xpa_server = XPAServer(
+            name=str(config.get("communication.xpa.name", "ncrads9")),
+            host=str(config.get("communication.xpa.host", "localhost")),
+            port=int(config.get("communication.xpa.port", 0)),
+            viewer=main_window,
+        )
+        if not xpa_server.start():
+            logger.warning("Failed to start XPA server on %s", xpa_server.address)
+
     # Process command line arguments for files to open
     files_to_open = [arg for arg in argv[1:] if not arg.startswith("-")]
     for filepath in files_to_open:
         main_window.open_file(filepath)
+
+    if xpa_server is not None:
+        app.aboutToQuit.connect(xpa_server.stop)
 
     return app.exec()

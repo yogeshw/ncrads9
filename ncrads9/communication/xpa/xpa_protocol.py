@@ -23,9 +23,11 @@ with external tools like xpaget, xpaset, and xpainfo.
 Author: Yogesh Wadadekar
 """
 
-import re
+import json
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Union
+import re
+import shlex
+from typing import Any, Dict, List, Optional, Union
 from enum import Enum
 from dataclasses import dataclass
 
@@ -81,7 +83,7 @@ class XPAProtocol:
             Parsed request dictionary with command and parameters.
         """
         try:
-            text = data.decode(self.ENCODING).strip()
+            text = data.decode(self.ENCODING).replace("\r\n", "\n").strip("\x00")
             return self._parse_text_request(text)
         except UnicodeDecodeError as e:
             self._logger.error(f"Failed to decode XPA request: {e}")
@@ -96,57 +98,92 @@ class XPAProtocol:
         Returns:
             Parsed request dictionary.
         """
-        parts = text.split(None, 1)
-        
-        if not parts:
-            return {"command": "", "params": {}}
-            
-        command = parts[0].lower()
-        param_str = parts[1] if len(parts) > 1 else ""
-        
-        params = self._parse_params(param_str)
-        
+        if not text.strip():
+            return {"command": "", "params": {}, "raw": text}
+
+        lines = text.split("\n")
+        header = lines[0].strip()
+        payload = "\n".join(lines[1:]).strip() if len(lines) > 1 else ""
+
+        try:
+            tokens = shlex.split(header)
+        except ValueError:
+            tokens = header.split()
+
+        if not tokens:
+            return {"command": "", "params": {}, "raw": text}
+
+        known_types = {message_type.value: message_type for message_type in XPAMessageType}
+        msg_type = None
+        target = ""
+        first = tokens[0].lower()
+        if first in known_types:
+            msg_type = known_types[first]
+            tokens = tokens[1:]
+            option_values: Dict[str, Any] = {}
+            index = 0
+            options_with_values = {"-e", "-i", "-m", "-t", "-u"}
+            while index < len(tokens) and tokens[index].startswith("-"):
+                option = tokens[index]
+                if option in options_with_values and index + 1 < len(tokens):
+                    option_values[option] = tokens[index + 1]
+                    index += 2
+                else:
+                    option_values[option] = True
+                    index += 1
+            tokens = tokens[index:]
+            if tokens and tokens[0] not in {"?:?", "+"}:
+                target = tokens[0]
+                tokens = tokens[1:]
+            if tokens and tokens[0] in {"?:?", "+"}:
+                option_values["source"] = tokens[0]
+                tokens = tokens[1:]
+        else:
+            msg_type = XPAMessageType.SET if payload else XPAMessageType.GET
+
+        command = tokens[0].lower() if tokens else ""
+        params, positional = self._parse_params(tokens[1:] if len(tokens) > 1 else [])
+        if first in known_types:
+            xpa_id = option_values.get("-i")
+            if xpa_id is not None:
+                params["xpa_id"] = xpa_id
+            if option_values:
+                params["xpa_options"] = option_values
+        if positional:
+            params["args"] = positional
+            if len(positional) == 1:
+                params.setdefault("value", positional[0])
+        if payload:
+            params["data"] = payload
+
         return {
+            "msg_type": msg_type.value,
+            "target": target,
             "command": command,
             "params": params,
             "raw": text,
+            "data": payload,
         }
-        
-    def _parse_params(self, param_str: str) -> Dict[str, Any]:
-        """Parse parameter string into dictionary.
+
+    def _parse_params(self, tokens: List[str]) -> tuple[Dict[str, Any], List[Any]]:
+        """Parse parameter tokens into dictionary and positional list.
         
         Args:
-            param_str: The parameter string to parse.
+            tokens: Parameter tokens.
             
         Returns:
-            Dictionary of parsed parameters.
+            Tuple of parsed parameters and positional arguments.
         """
         params: Dict[str, Any] = {}
-        
-        if not param_str:
-            return params
-            
-        # Handle key=value pairs
-        kv_pattern = re.compile(r'(\w+)=("[^"]*"|[^\s]+)')
-        matches = kv_pattern.findall(param_str)
-        
-        for key, value in matches:
-            # Remove quotes if present
-            if value.startswith('"') and value.endswith('"'):
-                value = value[1:-1]
-            params[key] = self._convert_value(value)
-            
-        # Handle positional arguments
-        remaining = kv_pattern.sub("", param_str).strip()
-        if remaining:
-            positional = remaining.split()
-            if positional:
-                if len(positional) == 1:
-                    params["value"] = self._convert_value(positional[0])
-                else:
-                    params["args"] = [self._convert_value(p) for p in positional]
-                    
-        return params
+        positional: List[Any] = []
+        for token in tokens:
+            if "=" in token and not token.startswith("="):
+                key, value = token.split("=", 1)
+                if key:
+                    params[key] = self._convert_value(value)
+                    continue
+            positional.append(self._convert_value(token))
+        return params, positional
         
     def _convert_value(self, value: str) -> Union[str, int, float, bool]:
         """Convert string value to appropriate type.
@@ -158,9 +195,9 @@ class XPAProtocol:
             Converted value (int, float, bool, or string).
         """
         # Boolean
-        if value.lower() in ("true", "yes", "on", "1"):
+        if value.lower() in ("true", "yes", "on"):
             return True
-        if value.lower() in ("false", "no", "off", "0"):
+        if value.lower() in ("false", "no", "off"):
             return False
             
         # Integer
@@ -190,7 +227,14 @@ class XPAProtocol:
         
         if status == "ok":
             result = response.get("result", "")
-            text = str(result) if result else ""
+            if result is None:
+                text = ""
+            elif isinstance(result, bool):
+                text = "yes" if result else "no"
+            elif isinstance(result, (dict, list, tuple)):
+                text = json.dumps(result)
+            else:
+                text = str(result)
         else:
             message = response.get("message", "Unknown error")
             text = f"ERROR: {message}"

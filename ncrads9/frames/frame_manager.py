@@ -181,7 +181,7 @@ class FrameManager:
             return None
 
         frame_ids = sorted(self._frames.keys())
-        if self._active_frame_id is None:
+        if self._active_frame_id is None or self._active_frame_id not in self._frames:
             self.set_active_frame(frame_ids[0])
         else:
             current_index = frame_ids.index(self._active_frame_id)
@@ -200,7 +200,7 @@ class FrameManager:
             return None
 
         frame_ids = sorted(self._frames.keys())
-        if self._active_frame_id is None:
+        if self._active_frame_id is None or self._active_frame_id not in self._frames:
             self.set_active_frame(frame_ids[-1])
         else:
             current_index = frame_ids.index(self._active_frame_id)

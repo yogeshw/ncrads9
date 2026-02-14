@@ -34,6 +34,7 @@ class ImageViewerWithRegions(QWidget):
     
     # Forward signals from base viewer
     mouse_moved = pyqtSignal(int, int)
+    mouse_clicked = pyqtSignal(int, int, int)
     contrast_changed = pyqtSignal(float, float)
     
     # Region signals
@@ -61,6 +62,7 @@ class ImageViewerWithRegions(QWidget):
         
         # Connect signals
         self.image_viewer.mouse_moved.connect(self.mouse_moved)
+        self.image_viewer.mouse_clicked.connect(self.mouse_clicked)
         self.image_viewer.contrast_changed.connect(self.contrast_changed)
         self.region_overlay.region_created.connect(self.region_created)
         self.region_overlay.region_selected.connect(self.region_selected)
@@ -94,6 +96,15 @@ class ImageViewerWithRegions(QWidget):
     def clear_contours(self) -> None:
         """Clear contours overlay."""
         self.contour_overlay.clear()
+
+    def set_direction_arrows(
+        self,
+        north_vector: Optional[tuple[float, float]],
+        east_vector: Optional[tuple[float, float]],
+        visible: bool,
+    ) -> None:
+        """Set WCS direction arrow vectors/visibility."""
+        self.contour_overlay.set_direction_arrows(north_vector, east_vector, visible)
     
     def add_region(self, region: Region) -> None:
         """Add a region to display."""
@@ -167,9 +178,17 @@ class ImageViewerWithRegions(QWidget):
             
             x_offset = (viewer_rect.width() - pixmap_rect.width()) / 2
             y_offset = (viewer_rect.height() - pixmap_rect.height()) / 2
-            
-            self.region_overlay.set_zoom(self.image_viewer.get_zoom(), (x_offset, y_offset))
-            self.contour_overlay.set_zoom(self.image_viewer.get_zoom(), (x_offset, y_offset))
+            _, image_height = self.image_viewer.get_image_size()
+            self.region_overlay.set_zoom(
+                self.image_viewer.get_zoom(),
+                (x_offset, y_offset),
+                image_height=image_height,
+            )
+            self.contour_overlay.set_zoom(
+                self.image_viewer.get_zoom(),
+                (x_offset, y_offset),
+                image_height=image_height,
+            )
     
     def resizeEvent(self, event) -> None:
         """Handle resize events."""

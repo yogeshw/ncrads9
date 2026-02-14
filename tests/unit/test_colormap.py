@@ -16,14 +16,16 @@
 #
 # Author: Yogesh Wadadekar
 
-"""Tests for colormaps.colormap module."""
+"""Tests for builtin colormaps."""
 
-import pytest
+from ncrads9.colormaps.builtin_maps import get_builtin_colormap
 
 
-class TestColormap:
-    """Test cases for Colormap class."""
-
-    def test_placeholder(self):
-        """Placeholder test for Colormap."""
-        assert True
+def test_common_ds9_colormaps_available():
+    for name in ("viridis", "plasma", "inferno", "magma"):
+        cmap = get_builtin_colormap(name)
+        assert cmap is not None
+        assert cmap.name == name
+        assert cmap.colors.shape == (256, 3)
+        assert cmap.colors.min() >= 0.0
+        assert cmap.colors.max() <= 1.0

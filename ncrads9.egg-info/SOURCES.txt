@@ -164,6 +164,7 @@ ncrads9/ui/dialogs/save_dialog.py
 ncrads9/ui/dialogs/scale_dialog.py
 ncrads9/ui/dialogs/smooth_dialog.py
 ncrads9/ui/dialogs/statistics_dialog.py
+ncrads9/ui/dialogs/vo_query_dialog.py
 ncrads9/ui/panels/__init__.py
 ncrads9/ui/panels/colorbar_panel.py
 ncrads9/ui/panels/cube_panel.py
@@ -179,7 +180,9 @@ ncrads9/ui/themes/native.py
 ncrads9/ui/widgets/__init__.py
 ncrads9/ui/widgets/color_picker.py
 ncrads9/ui/widgets/colorbar_widget.py
+ncrads9/ui/widgets/contour_overlay.py
 ncrads9/ui/widgets/coordinate_entry.py
+ncrads9/ui/widgets/gl_image_viewer_with_regions.py
 ncrads9/ui/widgets/image_viewer_with_regions.py
 ncrads9/ui/widgets/region_list.py
 ncrads9/ui/widgets/region_overlay.py

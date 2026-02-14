@@ -223,6 +223,8 @@ def scale_asinh(
     Returns:
         Asinh-scaled data in [0, 1].
     """
+    if a <= 0:
+        raise ValueError("Parameter 'a' must be positive")
     normalized = scale_linear(data, vmin, vmax)
     result = np.arcsinh(normalized / a) / np.arcsinh(1.0 / a)
     return np.clip(result, 0.0, 1.0).astype(np.float32)
@@ -254,6 +256,8 @@ def scale_histogram_equalization(
     # Compute histogram
     hist, bin_edges = np.histogram(flat[np.isfinite(flat)], bins=num_bins)
     cdf = hist.cumsum()
+    if cdf.size == 0 or cdf[-1] == 0:
+        return np.zeros_like(clipped, dtype=np.float32)
     cdf_normalized = cdf / cdf[-1]
 
     # Map values through CDF

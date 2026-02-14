@@ -34,6 +34,7 @@ class ImageViewer(QLabel):
     
     # Signals
     mouse_moved = pyqtSignal(int, int)  # pixel x, y
+    mouse_clicked = pyqtSignal(int, int, int)  # pixel x, y, button value
     contrast_changed = pyqtSignal(float, float)  # contrast, brightness
     
     def __init__(self, parent=None):
@@ -117,6 +118,12 @@ class ImageViewer(QLabel):
     def get_zoom(self) -> float:
         """Get current zoom level."""
         return self._zoom
+
+    def get_image_size(self) -> tuple[int, int]:
+        """Get original image size (width, height)."""
+        if self._pixmap is None:
+            return (0, 0)
+        return (self._pixmap.width(), self._pixmap.height())
     
     def get_contrast_brightness(self) -> tuple[float, float]:
         """Get current contrast and brightness adjustments."""
@@ -146,6 +153,10 @@ class ImageViewer(QLabel):
     
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Handle mouse button press."""
+        coords = self._event_to_image_coords(event)
+        if coords is not None:
+            self.mouse_clicked.emit(coords[0], coords[1], int(event.button().value))
+
         if event.button() == Qt.MouseButton.MiddleButton:
             self._panning = True
             self._last_pos = event.pos()
@@ -176,22 +187,9 @@ class ImageViewer(QLabel):
             return
         
         # Emit pixel coordinates for status bar
-        if self.pixmap() is not None:
-            # Convert widget coordinates to image coordinates
-            label_rect = self.rect()
-            pixmap_rect = self.pixmap().rect()
-            
-            # Center offset
-            x_offset = (label_rect.width() - pixmap_rect.width()) / 2
-            y_offset = (label_rect.height() - pixmap_rect.height()) / 2
-            
-            # Image coordinates
-            img_x = int((event.pos().x() - x_offset) / self._zoom)
-            img_y = int((event.pos().y() - y_offset) / self._zoom)
-            
-            # Check bounds
-            if 0 <= img_x < self._pixmap.width() and 0 <= img_y < self._pixmap.height():
-                self.mouse_moved.emit(img_x, img_y)
+        coords = self._event_to_image_coords(event)
+        if coords is not None:
+            self.mouse_moved.emit(*coords)
         
         # Handle panning
         if self._panning:
@@ -218,3 +216,19 @@ class ImageViewer(QLabel):
             self.contrast_changed.emit(self._contrast_scale, self._brightness_offset)
         
         event.accept()
+
+    def _event_to_image_coords(self, event: QMouseEvent) -> Optional[tuple[int, int]]:
+        """Convert a mouse event position to image pixel coordinates."""
+        if self._pixmap is None or self.pixmap() is None:
+            return None
+
+        label_rect = self.rect()
+        pixmap_rect = self.pixmap().rect()
+        x_offset = (label_rect.width() - pixmap_rect.width()) / 2
+        y_offset = (label_rect.height() - pixmap_rect.height()) / 2
+        img_x = int((event.pos().x() - x_offset) / self._zoom)
+        top_y = int((event.pos().y() - y_offset) / self._zoom)
+        if 0 <= img_x < self._pixmap.width() and 0 <= top_y < self._pixmap.height():
+            img_y = self._pixmap.height() - 1 - top_y
+            return (img_x, img_y)
+        return None

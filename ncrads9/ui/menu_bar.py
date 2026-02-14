@@ -173,6 +173,7 @@ class MenuBar(QMenuBar):
         self.frame_menu.addSeparator()
 
         self.action_tile_frames: QAction = QAction("&Tile", self)
+        self.action_tile_frames.setCheckable(True)
         self.frame_menu.addAction(self.action_tile_frames)
 
         self.action_blink_frames: QAction = QAction("&Blink", self)
@@ -290,6 +291,18 @@ class MenuBar(QMenuBar):
         self.action_cmap_viridis.setCheckable(True)
         self.colormap_submenu.addAction(self.action_cmap_viridis)
 
+        self.action_cmap_plasma: QAction = QAction("&Plasma", self)
+        self.action_cmap_plasma.setCheckable(True)
+        self.colormap_submenu.addAction(self.action_cmap_plasma)
+
+        self.action_cmap_inferno: QAction = QAction("&Inferno", self)
+        self.action_cmap_inferno.setCheckable(True)
+        self.colormap_submenu.addAction(self.action_cmap_inferno)
+
+        self.action_cmap_magma: QAction = QAction("&Magma", self)
+        self.action_cmap_magma.setCheckable(True)
+        self.colormap_submenu.addAction(self.action_cmap_magma)
+
         self.color_menu.addSeparator()
 
         self.action_invert_colormap: QAction = QAction("&Invert", self)
@@ -303,6 +316,10 @@ class MenuBar(QMenuBar):
     def _setup_region_menu(self) -> None:
         """Set up the Region menu."""
         self.region_menu: QMenu = self.addMenu("&Region")
+
+        self.action_region_none: QAction = QAction("&None", self)
+        self.region_menu.addAction(self.action_region_none)
+        self.region_menu.addSeparator()
 
         self.action_region_circle: QAction = QAction("&Circle", self)
         self.region_menu.addAction(self.action_region_circle)
@@ -349,6 +366,19 @@ class MenuBar(QMenuBar):
         self.action_catalog_vizier: QAction = QAction("&VizieR...", self)
         self.catalog_menu.addAction(self.action_catalog_vizier)
 
+        self.samp_menu: QMenu = self.vo_menu.addMenu("&SAMP")
+        self.action_samp_connect: QAction = QAction("&Connect", self)
+        self.samp_menu.addAction(self.action_samp_connect)
+        self.action_samp_disconnect: QAction = QAction("&Disconnect", self)
+        self.samp_menu.addAction(self.action_samp_disconnect)
+        self.samp_menu.addSeparator()
+        self.action_samp_marker_color: QAction = QAction("Marker &Color...", self)
+        self.samp_menu.addAction(self.action_samp_marker_color)
+        self.action_samp_marker_shape: QAction = QAction("Marker &Shape...", self)
+        self.samp_menu.addAction(self.action_samp_marker_shape)
+        self.action_samp_marker_size: QAction = QAction("Marker Si&ze...", self)
+        self.samp_menu.addAction(self.action_samp_marker_size)
+
     def _setup_wcs_menu(self) -> None:
         """Set up the WCS menu."""
         self.wcs_menu: QMenu = self.addMenu("&WCS")
@@ -392,6 +422,13 @@ class MenuBar(QMenuBar):
         self.action_wcs_degrees: QAction = QAction("&Degrees", self)
         self.action_wcs_degrees.setCheckable(True)
         self.wcs_menu.addAction(self.action_wcs_degrees)
+
+        self.wcs_menu.addSeparator()
+
+        self.action_show_direction_arrows: QAction = QAction("Show &Direction Arrows", self)
+        self.action_show_direction_arrows.setCheckable(True)
+        self.action_show_direction_arrows.setChecked(True)
+        self.wcs_menu.addAction(self.action_show_direction_arrows)
 
     def _setup_analysis_menu(self) -> None:
         """Set up the Analysis menu."""

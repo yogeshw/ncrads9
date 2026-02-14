@@ -215,9 +215,10 @@ class ColorbarWidget(QWidget):
             font = QFont()
             font.setPointSize(8)
             painter.setFont(font)
+            tick_divisor = max(self._num_ticks - 1, 1)
 
             for i in range(self._num_ticks):
-                t = i / (self._num_ticks - 1)
+                t = i / tick_divisor
                 value = self._vmin + t * (self._vmax - self._vmin)
                 label = self._label_format.format(value)
 

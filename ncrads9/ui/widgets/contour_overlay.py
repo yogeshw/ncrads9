@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from typing import List, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
@@ -38,15 +38,26 @@ class ContourOverlay(QWidget):
         self._levels: List[float] = []
         self._zoom: float = 1.0
         self._offset: Tuple[float, float] = (0.0, 0.0)
+        self._image_height: int = 0
         self._color: QColor = QColor(0, 255, 0)
         self._line_width: float = 1.0
         self._line_style: Qt.PenStyle = Qt.PenStyle.SolidLine
         self._show_labels: bool = False
+        self._show_direction_arrows: bool = True
+        self._north_vector: Optional[Tuple[float, float]] = None
+        self._east_vector: Optional[Tuple[float, float]] = None
 
-    def set_zoom(self, zoom: float, offset: Tuple[float, float]) -> None:
+    def set_zoom(
+        self,
+        zoom: float,
+        offset: Tuple[float, float],
+        image_height: Optional[int] = None,
+    ) -> None:
         """Set zoom and offset for coordinate transform."""
         self._zoom = zoom
         self._offset = offset
+        if image_height is not None:
+            self._image_height = max(0, int(image_height))
         self.update()
 
     def set_contours(
@@ -79,8 +90,60 @@ class ContourOverlay(QWidget):
         self._show_labels = show_labels
         self.update()
 
+    def set_direction_arrows(
+        self,
+        north_vector: Optional[Tuple[float, float]],
+        east_vector: Optional[Tuple[float, float]],
+        visible: bool,
+    ) -> None:
+        """Set direction arrow vectors and visibility."""
+        self._north_vector = north_vector
+        self._east_vector = east_vector
+        self._show_direction_arrows = visible
+        self.update()
+
+    def _image_to_widget(self, x: float, y: float) -> QPointF:
+        """Convert image coordinates (origin bottom-left) to widget coordinates."""
+        if self._image_height > 0:
+            top_y = self._image_height - 1 - y
+        else:
+            top_y = y
+        return QPointF(x * self._zoom + self._offset[0], top_y * self._zoom + self._offset[1])
+
+    def _draw_direction_arrow(
+        self,
+        painter: QPainter,
+        anchor: QPointF,
+        vector: Tuple[float, float],
+        label: str,
+    ) -> None:
+        """Draw one direction arrow from a screen-space anchor."""
+        vx, vy = vector
+        svx, svy = vx, -vy  # convert image y-up to widget y-down
+        norm = float(np.hypot(svx, svy))
+        if norm < 1e-9:
+            return
+        ux, uy = svx / norm, svy / norm
+        length = 28.0
+        end = QPointF(anchor.x() + ux * length, anchor.y() + uy * length)
+        painter.drawLine(anchor, end)
+        arrow_size = 6.0
+        px, py = -uy, ux
+        p1 = QPointF(end.x() - ux * arrow_size + px * 3.0, end.y() - uy * arrow_size + py * 3.0)
+        p2 = QPointF(end.x() - ux * arrow_size - px * 3.0, end.y() - uy * arrow_size - py * 3.0)
+        painter.drawLine(end, p1)
+        painter.drawLine(end, p2)
+        painter.drawText(QPointF(end.x() + px * 8.0, end.y() + py * 8.0), label)
+
     def paintEvent(self, event) -> None:
-        if not self._contours:
+        if (
+            not self._contours
+            and (
+                not self._show_direction_arrows
+                or self._north_vector is None
+                or self._east_vector is None
+            )
+        ):
             return
 
         painter = QPainter(self)
@@ -101,13 +164,7 @@ class ContourOverlay(QWidget):
                 if path.ndim != 2 or path.shape[1] != 2:
                     continue
 
-                points = [
-                    QPointF(
-                        path[i, 0] * self._zoom + self._offset[0],
-                        path[i, 1] * self._zoom + self._offset[1],
-                    )
-                    for i in range(path.shape[0])
-                ]
+                points = [self._image_to_widget(path[i, 0], path[i, 1]) for i in range(path.shape[0])]
                 if len(points) < 2:
                     continue
                 painter.drawPolyline(QPolygonF(points))
@@ -117,5 +174,14 @@ class ContourOverlay(QWidget):
                     label_point = points[mid_index]
                     painter.setFont(label_font)
                     painter.drawText(label_point, f"{self._levels[level_index]:.4g}")
+
+        if self._show_direction_arrows and self._north_vector is not None and self._east_vector is not None:
+            arrow_pen = QPen(QColor(255, 220, 0))
+            arrow_pen.setWidth(2)
+            painter.setPen(arrow_pen)
+            painter.setFont(label_font)
+            anchor = QPointF(self.width() - 40.0, self.height() - 30.0)
+            self._draw_direction_arrow(painter, anchor, self._north_vector, "N")
+            self._draw_direction_arrow(painter, anchor, self._east_vector, "E")
 
         painter.end()

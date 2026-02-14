@@ -23,9 +23,13 @@ using the standard DS9 XPA protocol.
 Author: Yogesh Wadadekar
 """
 
+import logging
 import socket
 import threading
-import logging
+import os
+import getpass
+import subprocess
+import time
 from typing import Optional, Callable, Dict, Any, Tuple
 
 from .xpa_protocol import XPAProtocol
@@ -47,13 +51,14 @@ class XPAServer:
     
     DEFAULT_NAME: str = "ncrads9"
     DEFAULT_HOST: str = "localhost"
-    DEFAULT_PORT: int = 14285
+    DEFAULT_PORT: int = 0
     
     def __init__(
         self,
         name: str = DEFAULT_NAME,
         host: str = DEFAULT_HOST,
         port: int = DEFAULT_PORT,
+        viewer: Optional[Any] = None,
     ) -> None:
         """Initialize the XPA server.
         
@@ -70,9 +75,15 @@ class XPAServer:
         self._socket: Optional[socket.socket] = None
         self._thread: Optional[threading.Thread] = None
         self._protocol: XPAProtocol = XPAProtocol()
-        self._commands: XPACommands = XPACommands()
+        self._commands: XPACommands = XPACommands(viewer)
         self._logger: logging.Logger = logging.getLogger(__name__)
         self._handlers: Dict[str, Callable[..., Any]] = {}
+        self._pending_requests: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        self._pending_lock = threading.Lock()
+        self._next_pending_id = 1
+        self._xpans_socket: Optional[socket.socket] = None
+        self._xpans_stream = None
+        self._xpans_process: Optional[subprocess.Popen] = None
         
     def register_handler(self, command: str, handler: Callable[..., Any]) -> None:
         """Register a command handler.
@@ -83,6 +94,10 @@ class XPAServer:
         """
         self._handlers[command.lower()] = handler
         self._logger.debug(f"Registered handler for command: {command}")
+
+    def set_viewer(self, viewer: Any) -> None:
+        """Set the viewer used by command handlers."""
+        self._commands.set_viewer(viewer)
         
     def unregister_handler(self, command: str) -> None:
         """Unregister a command handler.
@@ -111,10 +126,12 @@ class XPAServer:
             self._socket.bind((self.host, self.port))
             self._socket.listen(5)
             self._socket.settimeout(1.0)
+            self.port = self._socket.getsockname()[1]
             
             self.running = True
             self._thread = threading.Thread(target=self._accept_loop, daemon=True)
             self._thread.start()
+            self._register_with_xpans()
             
             self._logger.info(f"XPA server started on {self.host}:{self.port}")
             return True
@@ -131,7 +148,7 @@ class XPAServer:
         if self._thread is not None:
             self._thread.join(timeout=2.0)
             self._thread = None
-            
+        self._disconnect_xpans()
         self._cleanup()
         self._logger.info("XPA server stopped")
         
@@ -178,12 +195,11 @@ class XPAServer:
         """
         try:
             client_socket.settimeout(30.0)
-            data = client_socket.recv(4096)
+            data = self._recv_request(client_socket)
             
             if data:
                 request = self._protocol.parse_request(data)
-                response = self._process_request(request)
-                response_data = self._protocol.format_response(response)
+                response_data = self._process_wire_request(request)
                 client_socket.sendall(response_data)
                 
         except socket.timeout:
@@ -195,6 +211,21 @@ class XPAServer:
                 client_socket.close()
             except OSError:
                 pass
+
+    def _recv_request(self, client_socket: socket.socket) -> bytes:
+        """Receive one request payload."""
+        chunks = []
+        while True:
+            try:
+                chunk = client_socket.recv(4096)
+            except socket.timeout:
+                break
+            if not chunk:
+                break
+            chunks.append(chunk)
+            if b"\n" in chunk:
+                client_socket.settimeout(0.05)
+        return b"".join(chunks)
                 
     def _process_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """Process an XPA request.
@@ -207,7 +238,14 @@ class XPAServer:
         """
         command = request.get("command", "").lower()
         params = request.get("params", {})
-        
+        msg_type = request.get("msg_type")
+
+        if msg_type == "xpaaccess" or command == "xpaaccess":
+            return {"status": "ok", "result": self._protocol.get_access_info(self.name, self.host, self.port)}
+        if msg_type == "xpainfo" or command == "xpainfo":
+            commands = sorted(self._commands.get_available_commands())
+            return {"status": "ok", "result": " ".join(commands)}
+
         if command in self._handlers:
             try:
                 result = self._handlers[command](**params)
@@ -217,6 +255,128 @@ class XPAServer:
                 return {"status": "error", "message": str(e)}
         else:
             return self._commands.handle(command, params)
+
+    def _process_wire_request(self, request: Dict[str, Any]) -> bytes:
+        """Process a parsed request and return wire-level bytes."""
+        command = str(request.get("command", "")).lower()
+        params = request.get("params", {})
+        msg_type = request.get("msg_type")
+        xpa_id = str(params.get("xpa_id", "")).strip()
+
+        if command == "xpadata":
+            return self._handle_xpadata(request)
+
+        if msg_type in {"xpaset", "xpaget", "xpainfo"} and xpa_id:
+            return self._start_xpa_transaction(request)
+
+        response = self._process_request(request)
+        return self._protocol.format_response(response)
+
+    def _start_xpa_transaction(self, request: Dict[str, Any]) -> bytes:
+        """Start a two-step XPA transaction for xpaset/xpaget clients."""
+        params = request.get("params", {})
+        xpa_id = str(params.get("xpa_id", "x0"))
+        with self._pending_lock:
+            pending_key = f"0x{self._next_pending_id:08x}"
+            pending_fd = str(self._next_pending_id)
+            self._next_pending_id += 1
+            self._pending_requests[(pending_key, pending_fd)] = request
+        return (
+            f"{xpa_id} XPA$DATA connect {pending_key} {pending_fd} "
+            f"(NCRADS9:{self.name} {self.host}:{self.port})\n"
+        ).encode("utf-8")
+
+    def _handle_xpadata(self, request: Dict[str, Any]) -> bytes:
+        """Handle second-stage XPA data channel request."""
+        params = request.get("params", {})
+        args = params.get("args", []) if isinstance(params.get("args"), list) else []
+        if len(args) >= 3 and str(args[0]) == "-f":
+            pending_key = str(args[1])
+            pending_fd = str(args[2])
+        else:
+            return b"? XPA$ERROR invalid xpadata request\n"
+
+        with self._pending_lock:
+            pending = self._pending_requests.pop((pending_key, pending_fd), None)
+        if pending is None:
+            return b"? XPA$ERROR no pending request\n"
+
+        xpa_id = str(pending.get("params", {}).get("xpa_id", "x0"))
+        response = self._process_request(pending)
+        if response.get("status") == "ok":
+            result = response.get("result", "")
+            msg_type = str(pending.get("msg_type", "xpaset"))
+            if msg_type == "xpaset":
+                return f"{xpa_id} XPA$OK\n".encode("utf-8")
+            return f"{result}\n".encode("utf-8")
+        message = str(response.get("message", "Unknown error"))
+        return f"{xpa_id} XPA$ERROR {message}\n".encode("utf-8")
+
+    def _register_with_xpans(self) -> None:
+        """Register this access point with xpans if available."""
+        nsinet = os.environ.get("XPA_NSINET", "$host:14285")
+        host_part, port_part = nsinet.split(":", 1) if ":" in nsinet else ("$host", nsinet)
+        ns_host = "127.0.0.1" if host_part in {"$host", "localhost"} else host_part
+        try:
+            ns_port = int(port_part)
+        except ValueError:
+            ns_port = 14285
+
+        if not self._connect_xpans(ns_host, ns_port):
+            self._start_xpans()
+            if not self._connect_xpans(ns_host, ns_port):
+                self._logger.warning("Unable to register XPA access point with xpans")
+                return
+
+        user = getpass.getuser()
+        register_host = "127.0.0.1" if self.host in {"localhost", "127.0.0.1"} else self.host
+        registration = f"add {register_host}:{self.port} NCRADS9:{self.name} gs {user}\n"
+        assert self._xpans_stream is not None
+        self._xpans_stream.write(registration.encode("utf-8"))
+        self._xpans_stream.flush()
+        response = self._xpans_stream.readline().decode("utf-8", errors="ignore").strip()
+        if not response.startswith("XPA$OK") and "XPA$EXISTS" not in response:
+            self._logger.warning("xpans registration failed: %s", response)
+
+    def _connect_xpans(self, host: str, port: int) -> bool:
+        """Connect and handshake with xpans."""
+        try:
+            self._xpans_socket = socket.create_connection((host, port), timeout=1.5)
+            self._xpans_stream = self._xpans_socket.makefile("rwb", buffering=0)
+            self._xpans_stream.write(b"version 2.1.20\n")
+            self._xpans_stream.flush()
+            version_reply = self._xpans_stream.readline().decode("utf-8", errors="ignore")
+            return version_reply.startswith("XPA$VERSION")
+        except Exception:
+            self._disconnect_xpans()
+            return False
+
+    def _start_xpans(self) -> None:
+        """Start xpans name server if available."""
+        try:
+            self._xpans_process = subprocess.Popen(
+                ["xpans", "-e"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            time.sleep(0.3)
+        except Exception:
+            self._xpans_process = None
+
+    def _disconnect_xpans(self) -> None:
+        """Close xpans registration connection."""
+        if self._xpans_stream is not None:
+            try:
+                self._xpans_stream.close()
+            except Exception:
+                pass
+            self._xpans_stream = None
+        if self._xpans_socket is not None:
+            try:
+                self._xpans_socket.close()
+            except Exception:
+                pass
+            self._xpans_socket = None
             
     @property
     def address(self) -> str:

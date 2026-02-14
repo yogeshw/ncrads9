@@ -52,11 +52,25 @@ class PannerLabel(QLabel):
         """Handle mouse press for panning."""
         if event is None:
             return
-        if event.button() == Qt.MouseButton.LeftButton:
-            # Convert widget coordinates to image coordinates
-            x = event.position().x() / self._scale_factor
-            y = event.position().y() / self._scale_factor
-            self.pan_requested.emit(x, y)
+        if event.button() != Qt.MouseButton.LeftButton or self._scale_factor <= 0:
+            return
+
+        pixmap = self.pixmap()
+        if pixmap is None:
+            return
+
+        x_offset = max(0.0, (self.width() - pixmap.width()) / 2.0)
+        y_offset = max(0.0, (self.height() - pixmap.height()) / 2.0)
+        local_x = event.position().x() - x_offset
+        local_y = event.position().y() - y_offset
+        if local_x < 0 or local_y < 0 or local_x >= pixmap.width() or local_y >= pixmap.height():
+            return
+
+        max_x = max(0.0, self._image_size[0] - 1)
+        max_y = max(0.0, self._image_size[1] - 1)
+        x = min(max(local_x / self._scale_factor, 0.0), max_x)
+        y = min(max(local_y / self._scale_factor, 0.0), max_y)
+        self.pan_requested.emit(x, y)
 
 
 class PannerPanel(QDockWidget):
@@ -108,7 +122,7 @@ class PannerPanel(QDockWidget):
         self._current_image = image
         self._update_thumbnail()
 
-    def set_view_rect(self, rect: QRectF) -> None:
+    def set_view_rect(self, rect: Optional[QRectF]) -> None:
         """
         Set the current view rectangle.
 
@@ -124,24 +138,42 @@ class PannerPanel(QDockWidget):
             return
 
         h, w = self._current_image.shape[:2]
-
-        # Normalize to 0-255
-        vmin, vmax = np.nanmin(self._current_image), np.nanmax(self._current_image)
-        if vmax > vmin:
-            normalized = ((self._current_image - vmin) / (vmax - vmin) * 255).astype(
-                np.uint8
+        is_rgb = len(self._current_image.shape) == 3 and self._current_image.shape[2] == 3
+        if is_rgb:
+            if self._current_image.dtype == np.uint8:
+                normalized = self._current_image
+            else:
+                vmin, vmax = np.nanmin(self._current_image), np.nanmax(self._current_image)
+                if vmax > vmin:
+                    normalized = ((self._current_image - vmin) / (vmax - vmin) * 255).astype(np.uint8)
+                else:
+                    normalized = np.zeros((h, w, 3), dtype=np.uint8)
+            if not normalized.flags["C_CONTIGUOUS"]:
+                normalized = np.ascontiguousarray(normalized)
+            qimage = QImage(
+                normalized.data,
+                w,
+                h,
+                3 * w,
+                QImage.Format.Format_RGB888,
             )
         else:
-            normalized = np.zeros((h, w), dtype=np.uint8)
-
-        # Create QImage
-        qimage = QImage(
-            normalized.data,
-            w,
-            h,
-            normalized.strides[0],
-            QImage.Format.Format_Grayscale8,
-        )
+            vmin, vmax = np.nanmin(self._current_image), np.nanmax(self._current_image)
+            if vmax > vmin:
+                normalized = ((self._current_image - vmin) / (vmax - vmin) * 255).astype(
+                    np.uint8
+                )
+            else:
+                normalized = np.zeros((h, w), dtype=np.uint8)
+            if not normalized.flags["C_CONTIGUOUS"]:
+                normalized = np.ascontiguousarray(normalized)
+            qimage = QImage(
+                normalized.data,
+                w,
+                h,
+                normalized.strides[0],
+                QImage.Format.Format_Grayscale8,
+            )
 
         # Scale to thumbnail size
         scale = min(self._thumbnail_size / w, self._thumbnail_size / h)
@@ -159,9 +191,31 @@ class PannerPanel(QDockWidget):
         self._panner_label.set_scale_factor(scale)
 
         # Draw view rectangle
-        if self._view_rect is not None:
+        if self._view_rect is not None and self._view_rect.width() > 0 and self._view_rect.height() > 0:
+            view_cover_x = self._view_rect.width() / max(w, 1)
+            view_cover_y = self._view_rect.height() / max(h, 1)
+            if view_cover_x >= 0.98 and view_cover_y >= 0.98:
+                self._panner_label.setPixmap(pixmap)
+                return
+
+            if is_rgb:
+                gray = (
+                    normalized[..., 0].astype(np.float32) * 0.2126
+                    + normalized[..., 1].astype(np.float32) * 0.7152
+                    + normalized[..., 2].astype(np.float32) * 0.0722
+                )
+            else:
+                gray = normalized.astype(np.float32)
+
+            x0 = max(0, min(w - 1, int(self._view_rect.x())))
+            y0 = max(0, min(h - 1, int(self._view_rect.y())))
+            x1 = max(x0 + 1, min(w, int(self._view_rect.x() + self._view_rect.width())))
+            y1 = max(y0 + 1, min(h, int(self._view_rect.y() + self._view_rect.height())))
+            local_mean = float(np.nanmean(gray[y0:y1, x0:x1]))
+            rect_color = QColor(255, 255, 255) if local_mean < 128.0 else QColor(0, 0, 0)
+
             painter = QPainter(pixmap)
-            painter.setPen(QPen(QColor(0, 255, 0), 2))
+            painter.setPen(QPen(rect_color, 2))
             scaled_rect = QRectF(
                 self._view_rect.x() * scale,
                 self._view_rect.y() * scale,

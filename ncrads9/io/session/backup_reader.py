@@ -116,7 +116,7 @@ class BackupReader:
             "properties": {},
         }
 
-        if "(" in line:
+        if "(" in line and ")" in line:
             type_end = line.index("(")
             region["type"] = line[:type_end].strip()
             coords_str = line[type_end + 1 : line.index(")")]

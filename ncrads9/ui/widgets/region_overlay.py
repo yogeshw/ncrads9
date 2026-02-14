@@ -25,7 +25,7 @@ from enum import Enum
 from PyQt6.QtCore import Qt, QPointF, QRectF, pyqtSignal
 from PyQt6.QtGui import QPainter, QPen, QColor, QBrush, QPolygonF
 from PyQt6.QtWidgets import QWidget
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 
 
@@ -45,7 +45,9 @@ class Region:
     """Simple region representation."""
     mode: RegionMode
     points: List[QPointF]  # Image coordinates
-    color: QColor = QColor(0, 255, 0)  # Green
+    color: QColor = field(default_factory=lambda: QColor(0, 255, 0))  # Green
+    marker_size: float = 4.0
+    source: str = "user"
     selected: bool = False
     
     def contains_point(self, point: QPointF, tolerance: float = 5.0) -> bool:
@@ -101,7 +103,7 @@ class Region:
             if len(self.points) >= 1:
                 center = self.points[0]
                 dist = math.sqrt((point.x() - center.x())**2 + (point.y() - center.y())**2)
-                return dist <= tolerance
+                return dist <= max(tolerance, self.marker_size)
         
         return False
 
@@ -123,6 +125,7 @@ class RegionOverlay(QWidget):
         self.is_drawing: bool = False
         self.zoom: float = 1.0
         self.image_offset: Tuple[float, float] = (0, 0)
+        self.image_height: int = 0
         
         # For moving/editing
         self.selected_region: Optional[Region] = None
@@ -135,10 +138,17 @@ class RegionOverlay(QWidget):
         self.is_drawing = False
         self.update()
     
-    def set_zoom(self, zoom: float, offset: Tuple[float, float]) -> None:
+    def set_zoom(
+        self,
+        zoom: float,
+        offset: Tuple[float, float],
+        image_height: Optional[int] = None,
+    ) -> None:
         """Update zoom and offset for coordinate transformation."""
         self.zoom = zoom
         self.image_offset = offset
+        if image_height is not None:
+            self.image_height = max(0, int(image_height))
         self.update()
     
     def add_region(self, region: Region) -> None:
@@ -155,17 +165,29 @@ class RegionOverlay(QWidget):
     def _widget_to_image_coords(self, widget_point: QPointF) -> QPointF:
         """Convert widget coordinates to image coordinates."""
         img_x = (widget_point.x() - self.image_offset[0]) / self.zoom
-        img_y = (widget_point.y() - self.image_offset[1]) / self.zoom
+        top_y = (widget_point.y() - self.image_offset[1]) / self.zoom
+        if self.image_height > 0:
+            img_y = self.image_height - 1 - top_y
+        else:
+            img_y = top_y
         return QPointF(img_x, img_y)
     
     def _image_to_widget_coords(self, image_point: QPointF) -> QPointF:
         """Convert image coordinates to widget coordinates."""
         widget_x = image_point.x() * self.zoom + self.image_offset[0]
-        widget_y = image_point.y() * self.zoom + self.image_offset[1]
+        if self.image_height > 0:
+            top_y = self.image_height - 1 - image_point.y()
+        else:
+            top_y = image_point.y()
+        widget_y = top_y * self.zoom + self.image_offset[1]
         return QPointF(widget_x, widget_y)
     
     def mousePressEvent(self, event) -> None:
         """Handle mouse press for region drawing."""
+        if event.button() in (Qt.MouseButton.RightButton, Qt.MouseButton.MiddleButton):
+            event.ignore()
+            return
+
         if self.mode == RegionMode.NONE:
             # Selection mode - check if clicking on existing region
             img_point = self._widget_to_image_coords(event.position())
@@ -221,6 +243,10 @@ class RegionOverlay(QWidget):
     
     def mouseMoveEvent(self, event) -> None:
         """Handle mouse move for region preview or editing."""
+        if event.buttons() & (Qt.MouseButton.RightButton | Qt.MouseButton.MiddleButton):
+            event.ignore()
+            return
+
         if not self.is_drawing and self.mode == RegionMode.NONE:
             # Moving selected region
             if self.selected_region and self.drag_start:
@@ -254,6 +280,10 @@ class RegionOverlay(QWidget):
     
     def mouseReleaseEvent(self, event) -> None:
         """Handle mouse release to finalize region."""
+        if event.button() in (Qt.MouseButton.RightButton, Qt.MouseButton.MiddleButton):
+            event.ignore()
+            return
+
         if self.mode == RegionMode.NONE:
             self.drag_start = None
             event.accept()
@@ -360,7 +390,7 @@ class RegionOverlay(QWidget):
 
             elif region.mode == RegionMode.POINT and len(widget_points) >= 1:
                 center = widget_points[0]
-                radius = 4
+                radius = max(1.0, region.marker_size)
                 painter.drawEllipse(center, radius, radius)
         
         # Draw current drawing preview

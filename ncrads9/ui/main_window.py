@@ -20,11 +20,12 @@ Main window for NCRADS9 application.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Dict, List, Tuple
 from pathlib import Path
 import tempfile
+from urllib.parse import urlparse, unquote
 
-from PyQt6.QtCore import Qt, QTimer, QPointF
+from PyQt6.QtCore import Qt, QTimer, QPointF, QRectF, pyqtSignal
 from PyQt6.QtWidgets import QDialog
 from PyQt6.QtGui import QImage, QPixmap, QColor
 from PyQt6.QtWidgets import (
@@ -35,6 +36,8 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QLabel,
     QScrollArea,
+    QInputDialog,
+    QColorDialog,
 )
 import numpy as np
 from numpy.typing import NDArray
@@ -82,11 +85,11 @@ from ..regions.shapes.line import Line
 from ..regions.shapes.point import Point
 from ..regions.shapes.polygon import Polygon
 from ..frames.simple_frame_manager import FrameManager, Frame
-from ..frames.blink_controller import BlinkController
 from ..analysis.contour import ContourGenerator
 from ..utils.preferences import Preferences
 from ..image_servers.sia_client import SIAClient
 from ..catalogs.vizier import VizierCatalog
+from ..communication.samp import SAMPClient
 from .dialogs.vo_query_dialog import VOQueryDialog
 
 if TYPE_CHECKING:
@@ -95,6 +98,7 @@ if TYPE_CHECKING:
 
 class MainWindow(QMainWindow):
     """Main application window for NCRADS9."""
+    samp_table_received = pyqtSignal(str, str, str)
 
     def __init__(self, config: Optional["Config"] = None, parent: Optional[QWidget] = None) -> None:
         """
@@ -126,16 +130,27 @@ class MainWindow(QMainWindow):
         self._contour_settings: Optional[dict] = None
         self._contour_paths: Optional[list] = None
         self._contour_levels: Optional[list] = None
-        self._blink_controller = BlinkController(self.frame_manager)
+        self._show_direction_arrows = True
+        self._tile_mode_enabled = False
+        self._tile_layout: Optional[dict] = None
+        self._samp_client: Optional[SAMPClient] = None
+        self._samp_connected = False
+        self._samp_marker_color = QColor(255, 255, 0)
+        self._samp_marker_shape = "box"
+        self._samp_marker_size = 6.0
+        self._samp_catalog_sources: Dict[int, List[Tuple[float, float]]] = {}
         self._blink_timer = QTimer(self)
-        self._blink_timer.setInterval(100)
+        self._blink_timer.setInterval(500)
         self._blink_timer.timeout.connect(self._update_blink)
+        self.samp_table_received.connect(self._handle_samp_table_message)
 
         self._setup_menu_bar()
         self._setup_toolbar()
         self._setup_central_widget()
         self._setup_dock_widgets()
         self._setup_status_bar()
+        self._init_samp_client()
+        self._update_samp_menu_state()
         self._apply_preferences(self._get_preferences_dict(), persist=False, show_message=False)
     
     @property
@@ -226,10 +241,14 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_cmap_heat.triggered.connect(lambda: self._set_colormap("heat"))
         self.menu_bar.action_cmap_cool.triggered.connect(lambda: self._set_colormap("cool"))
         self.menu_bar.action_cmap_rainbow.triggered.connect(lambda: self._set_colormap("rainbow"))
-        # Note: viridis not in DS9 builtin maps, skip connection
+        self.menu_bar.action_cmap_viridis.triggered.connect(lambda: self._set_colormap("viridis"))
+        self.menu_bar.action_cmap_plasma.triggered.connect(lambda: self._set_colormap("plasma"))
+        self.menu_bar.action_cmap_inferno.triggered.connect(lambda: self._set_colormap("inferno"))
+        self.menu_bar.action_cmap_magma.triggered.connect(lambda: self._set_colormap("magma"))
         self.menu_bar.action_invert_colormap.triggered.connect(self._toggle_invert_colormap)
         
         # Region menu
+        self.menu_bar.action_region_none.triggered.connect(lambda: self._set_region_mode(RegionMode.NONE))
         self.menu_bar.action_region_circle.triggered.connect(lambda: self._set_region_mode(RegionMode.CIRCLE))
         self.menu_bar.action_region_ellipse.triggered.connect(lambda: self._set_region_mode(RegionMode.ELLIPSE))
         self.menu_bar.action_region_box.triggered.connect(lambda: self._set_region_mode(RegionMode.BOX))
@@ -243,6 +262,11 @@ class MainWindow(QMainWindow):
         # VO menu
         self.menu_bar.action_siap_2mass.triggered.connect(self._vo_siap_2mass)
         self.menu_bar.action_catalog_vizier.triggered.connect(self._vo_catalog_vizier)
+        self.menu_bar.action_samp_connect.triggered.connect(self._samp_connect)
+        self.menu_bar.action_samp_disconnect.triggered.connect(self._samp_disconnect)
+        self.menu_bar.action_samp_marker_color.triggered.connect(self._samp_choose_marker_color)
+        self.menu_bar.action_samp_marker_shape.triggered.connect(self._samp_choose_marker_shape)
+        self.menu_bar.action_samp_marker_size.triggered.connect(self._samp_choose_marker_size)
         
         # WCS menu - connect all coordinate system options
         self.menu_bar.action_wcs_fk5.triggered.connect(lambda: self._set_wcs_system("fk5"))
@@ -252,6 +276,7 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_wcs_ecliptic.triggered.connect(lambda: self._set_wcs_system("ecliptic"))
         self.menu_bar.action_wcs_sexagesimal.triggered.connect(lambda: self._set_wcs_format("sexagesimal"))
         self.menu_bar.action_wcs_degrees.triggered.connect(lambda: self._set_wcs_format("degrees"))
+        self.menu_bar.action_show_direction_arrows.triggered.connect(self._toggle_direction_arrows)
         
         # Analysis menu - connect all tools
         self.menu_bar.action_statistics.triggered.connect(self._show_statistics)
@@ -299,6 +324,12 @@ class MainWindow(QMainWindow):
         self.scroll_area = QScrollArea(self)
         self.scroll_area.setWidgetResizable(True)  # Allow widget to use full viewport
         self.scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.scroll_area.horizontalScrollBar().valueChanged.connect(
+            lambda _: self._update_panner_view_rect()
+        )
+        self.scroll_area.verticalScrollBar().valueChanged.connect(
+            lambda _: self._update_panner_view_rect()
+        )
         
         # Create interactive image viewer with regions
         self.image_viewer = self._create_image_viewer(self.use_gpu_rendering)
@@ -321,9 +352,13 @@ class MainWindow(QMainWindow):
 
         viewer.setText("No image loaded")
         viewer.mouse_moved.connect(self._on_mouse_moved)
+        viewer.mouse_clicked.connect(self._on_image_clicked)
         viewer.contrast_changed.connect(self._on_contrast_changed)
         viewer.region_created.connect(self._on_region_created)
         viewer.region_selected.connect(self._on_region_selected)
+        if hasattr(viewer, "gl_canvas"):
+            viewer.gl_canvas.pan_changed.connect(lambda *_: self._update_panner_view_rect())
+            viewer.gl_canvas.zoom_changed.connect(lambda *_: self._update_panner_view_rect())
         return viewer
 
     def _setup_dock_widgets(self) -> None:
@@ -433,6 +468,10 @@ class MainWindow(QMainWindow):
             "heat": "heat",
             "cool": "cool",
             "rainbow": "rainbow",
+            "viridis": "viridis",
+            "plasma": "plasma",
+            "inferno": "inferno",
+            "magma": "magma",
         }
         if default_colormap in cmap_map:
             self._set_colormap(cmap_map[default_colormap])
@@ -566,6 +605,10 @@ class MainWindow(QMainWindow):
     
     def _display_image(self) -> None:
         """Display the current frame's image data."""
+        if self._tile_mode_enabled:
+            self._display_tiled_frames()
+            return
+
         frame = self.frame_manager.current_frame
         if not frame or not frame.has_data:
             return
@@ -605,7 +648,9 @@ class MainWindow(QMainWindow):
         
         if self.using_gpu_rendering:
             def tile_provider(x: int, y: int, w: int, h: int) -> NDArray[np.uint8]:
-                tile = image_data[y : y + h, x : x + w]
+                y0 = image_data.shape[0] - (y + h)
+                y1 = image_data.shape[0] - y
+                tile = image_data[y0:y1, x : x + w]
                 clipped = np.clip(tile, adjusted_z1, adjusted_z2)
                 scaled = apply_scale(clipped, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
                 rgb = cmap.apply(scaled)
@@ -618,16 +663,18 @@ class MainWindow(QMainWindow):
             clipped_full = np.clip(image_data, adjusted_z1, adjusted_z2)
             scaled_full = apply_scale(clipped_full, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
             rgb_full = cmap.apply(scaled_full)
+            display_rgb = np.ascontiguousarray(np.flipud(rgb_full))
         else:
             # Clip and scale the data
             clipped = np.clip(image_data, adjusted_z1, adjusted_z2)
             scaled = apply_scale(clipped, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
             rgb_full = cmap.apply(scaled)
+            display_rgb = np.ascontiguousarray(np.flipud(rgb_full))
 
             # Convert to QImage
-            height, width = rgb_full.shape[:2]
+            height, width = display_rgb.shape[:2]
             bytes_per_line = 3 * width
-            qimage = QImage(rgb_full.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
+            qimage = QImage(display_rgb.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
             
             # Create pixmap and display
             pixmap = QPixmap.fromImage(qimage)
@@ -635,11 +682,12 @@ class MainWindow(QMainWindow):
         
         # Update panner panel with RGB data (DS9 style)
         if hasattr(self, 'panner_panel'):
-            self.panner_panel.set_image(rgb_full)
+            self.panner_panel.set_image(display_rgb)
+            self._update_panner_view_rect()
         
         # Update magnifier panel with RGB data (DS9 style)
         if hasattr(self, 'magnifier_panel'):
-            self.magnifier_panel.set_image(rgb_full)
+            self.magnifier_panel.set_image(display_rgb)
         
         # Update zoom display
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
@@ -648,6 +696,115 @@ class MainWindow(QMainWindow):
         self._sync_frame_view_state()
         if self._contour_settings is not None:
             self._update_contours()
+        self._update_direction_arrows()
+
+    def _render_frame_rgb(self, frame: Frame) -> Optional[NDArray[np.uint8]]:
+        """Render a frame to RGB using its own display settings."""
+        if not frame.has_data:
+            return None
+
+        image_data = frame.image_data
+        if image_data is None:
+            return None
+
+        z1 = frame.z1
+        z2 = frame.z2
+        if z1 is None or z2 is None:
+            z1, z2 = compute_zscale_limits(image_data)
+
+        contrast = max(frame.contrast, 0.1)
+        brightness = max(-1.0, min(frame.brightness, 1.0))
+        range_val = max(float(z2 - z1), 1e-6)
+        center = (z1 + z2) / 2.0
+        new_range = range_val / contrast
+        adjusted_z1 = center - new_range / 2.0 + brightness * range_val
+        adjusted_z2 = center + new_range / 2.0 + brightness * range_val
+
+        cmap = get_colormap(frame.colormap)
+        if frame.invert_colormap:
+            cmap_data = cmap.colors.copy()[::-1]
+            from ..colormaps.colormap import Colormap
+            cmap = Colormap(f"{frame.colormap}_inverted", cmap_data)
+
+        clipped = np.clip(image_data, adjusted_z1, adjusted_z2)
+        scaled = apply_scale(clipped, frame.scale, vmin=adjusted_z1, vmax=adjusted_z2)
+        return cmap.apply(scaled)
+
+    def _display_tiled_frames(self) -> bool:
+        """Render all loaded frames in a tiled grid."""
+        rgb_frames: list[NDArray[np.uint8]] = []
+        frame_indices: list[int] = []
+        for frame_index, frame in enumerate(self.frame_manager.frames):
+            rgb = self._render_frame_rgb(frame)
+            if rgb is not None:
+                rgb_frames.append(rgb)
+                frame_indices.append(frame_index)
+
+        if not rgb_frames:
+            self._tile_layout = None
+            self.statusBar().showMessage("No loaded frames to tile", 2000)
+            return False
+
+        count = len(rgb_frames)
+        cols = max(1, int(np.ceil(np.sqrt(count))))
+        rows = int(np.ceil(count / cols))
+        cell_h = max(rgb.shape[0] for rgb in rgb_frames)
+        cell_w = max(rgb.shape[1] for rgb in rgb_frames)
+        gap = 8
+
+        tiled_h = rows * cell_h + (rows + 1) * gap
+        tiled_w = cols * cell_w + (cols + 1) * gap
+        tiled_rgb = np.zeros((tiled_h, tiled_w, 3), dtype=np.uint8)
+        self._tile_layout = {
+            "cols": cols,
+            "rows": rows,
+            "cell_w": cell_w,
+            "cell_h": cell_h,
+            "gap": gap,
+            "tiled_w": tiled_w,
+            "tiled_h": tiled_h,
+            "frame_indices": frame_indices,
+        }
+
+        for index, rgb in enumerate(rgb_frames):
+            row, col = divmod(index, cols)
+            y0 = gap + row * (cell_h + gap)
+            x0 = gap + col * (cell_w + gap)
+            if rgb.shape[0] != cell_h or rgb.shape[1] != cell_w:
+                y_idx = np.linspace(0, rgb.shape[0] - 1, cell_h).astype(np.int32)
+                x_idx = np.linspace(0, rgb.shape[1] - 1, cell_w).astype(np.int32)
+                rgb = rgb[y_idx][:, x_idx]
+            tiled_rgb[y0 : y0 + cell_h, x0 : x0 + cell_w] = rgb
+        display_rgb = np.flipud(tiled_rgb)
+        display_rgb = np.ascontiguousarray(display_rgb)
+
+        if self.using_gpu_rendering:
+            def tile_provider(x: int, y: int, w: int, h: int) -> NDArray[np.uint8]:
+                y0 = tiled_h - (y + h)
+                y1 = tiled_h - y
+                return tiled_rgb[y0:y1, x : x + w]
+
+            self.image_viewer.set_tile_provider(tiled_w, tiled_h, tile_provider)
+            self.image_viewer.set_value_source(np.mean(tiled_rgb, axis=2).astype(np.float32))
+        else:
+            bytes_per_line = 3 * tiled_w
+            qimage = QImage(display_rgb.data, tiled_w, tiled_h, bytes_per_line, QImage.Format.Format_RGB888)
+            self.image_viewer.set_image(QPixmap.fromImage(qimage))
+
+        if hasattr(self.image_viewer, "clear_regions"):
+            self.image_viewer.clear_regions()
+        if hasattr(self.image_viewer, "clear_contours"):
+            self.image_viewer.clear_contours()
+        if hasattr(self.image_viewer, "set_direction_arrows"):
+            self.image_viewer.set_direction_arrows(None, None, False)
+        if hasattr(self, "panner_panel"):
+            self.panner_panel.set_image(display_rgb)
+            self.panner_panel.set_view_rect(None)
+        if hasattr(self, "magnifier_panel"):
+            self.magnifier_panel.set_image(display_rgb)
+        self.status_bar.update_image_info(tiled_w, tiled_h)
+        self.status_bar.update_zoom(self.image_viewer.get_zoom())
+        return True
     
     def _set_scale(self, scale: ScaleAlgorithm) -> None:
         """
@@ -699,6 +856,10 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_cmap_heat.setChecked(colormap == "heat")
         self.menu_bar.action_cmap_cool.setChecked(colormap == "cool")
         self.menu_bar.action_cmap_rainbow.setChecked(colormap == "rainbow")
+        self.menu_bar.action_cmap_viridis.setChecked(colormap == "viridis")
+        self.menu_bar.action_cmap_plasma.setChecked(colormap == "plasma")
+        self.menu_bar.action_cmap_inferno.setChecked(colormap == "inferno")
+        self.menu_bar.action_cmap_magma.setChecked(colormap == "magma")
         
         # Update button bar
         cmap_name_map = {
@@ -769,6 +930,7 @@ class MainWindow(QMainWindow):
         self.image_viewer.zoom_in()
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
         self._persist_frame_view_state()
+        self._update_panner_view_rect()
         self.statusBar().showMessage("Zoomed in", 1000)
     
     def _zoom_out(self) -> None:
@@ -776,6 +938,7 @@ class MainWindow(QMainWindow):
         self.image_viewer.zoom_out()
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
         self._persist_frame_view_state()
+        self._update_panner_view_rect()
         self.statusBar().showMessage("Zoomed out", 1000)
     
     def _zoom_fit(self) -> None:
@@ -783,6 +946,7 @@ class MainWindow(QMainWindow):
         self.image_viewer.zoom_fit(self.scroll_area.viewport().size())
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
         self._persist_frame_view_state()
+        self._update_panner_view_rect()
         self.statusBar().showMessage("Zoom to fit", 1000)
     
     def _zoom_actual(self) -> None:
@@ -790,6 +954,7 @@ class MainWindow(QMainWindow):
         self.image_viewer.zoom_actual()
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
         self._persist_frame_view_state()
+        self._update_panner_view_rect()
         self.statusBar().showMessage("Zoom 1:1", 1000)
     
     def _on_mouse_moved(self, x: int, y: int) -> None:
@@ -797,14 +962,16 @@ class MainWindow(QMainWindow):
         if self.image_data is None:
             return
 
+        image_height = self.image_data.shape[0]
+        row = image_height - 1 - y
         self._last_mouse_pos = (x, y)
         
         # Update pixel coordinates
         self.status_bar.update_pixel_coords(x, y)
         
         # Update pixel value
-        if 0 <= y < self.image_data.shape[0] and 0 <= x < self.image_data.shape[1]:
-            value = self.image_data[y, x]
+        if 0 <= row < image_height and 0 <= x < self.image_data.shape[1]:
+            value = self.image_data[row, x]
             self.status_bar.update_pixel_value(value)
         
         # Update WCS coordinates if available
@@ -813,7 +980,19 @@ class MainWindow(QMainWindow):
         
         # Update magnifier panel (DS9 style)
         if hasattr(self, 'magnifier_panel'):
-            self.magnifier_panel.update_cursor_position(x, y)
+            self.magnifier_panel.update_cursor_position(x, row)
+
+    def _on_image_clicked(self, x: int, y: int, button: int) -> None:
+        """Handle image clicks (used for tiled frame selection)."""
+        if not self._tile_mode_enabled or button != int(Qt.MouseButton.LeftButton.value):
+            return
+        if self._select_tiled_frame(x, y):
+            self._display_tiled_frames()
+            self._update_frame_title()
+            self.statusBar().showMessage(
+                f"Selected frame {self.frame_manager.current_index + 1}",
+                1500,
+            )
     
     def _on_contrast_changed(self, contrast: float, brightness: float) -> None:
         """Handle contrast/brightness change from mouse drag."""
@@ -825,6 +1004,8 @@ class MainWindow(QMainWindow):
         """Handle pan request from panner panel."""
         if self.image_data is None:
             return
+        image_height = self.image_data.shape[0]
+        y_bottom = image_height - 1 - y
         
         # x, y are image coordinates where user clicked in panner
         # Center the main view on this position
@@ -832,8 +1013,8 @@ class MainWindow(QMainWindow):
         if self.using_gpu_rendering:
             # For GPU mode: set pan to the clicked position
             # The pan coordinates represent the image point at viewport center
-            self.image_viewer.set_pan(x, y)
-            self.statusBar().showMessage(f"Panned to ({x:.0f}, {y:.0f})", 1000)
+            self.image_viewer.set_pan(x, y_bottom)
+            self.statusBar().showMessage(f"Panned to ({x:.0f}, {y_bottom:.0f})", 1000)
         else:
             # For CPU mode: calculate scroll bar positions
             # Get current zoom
@@ -855,10 +1036,46 @@ class MainWindow(QMainWindow):
             
             self.scroll_area.horizontalScrollBar().setValue(scroll_x)
             self.scroll_area.verticalScrollBar().setValue(scroll_y)
-            self.statusBar().showMessage(f"Panned to ({x:.0f}, {y:.0f})", 1000)
+            self.statusBar().showMessage(f"Panned to ({x:.0f}, {y_bottom:.0f})", 1000)
         
         # Persist the new pan state
         self._persist_frame_view_state()
+        self._update_panner_view_rect()
+
+    def _update_panner_view_rect(self) -> None:
+        """Update panner viewport rectangle to match main display viewport."""
+        if not hasattr(self, "panner_panel"):
+            return
+        if self._tile_mode_enabled or self.image_data is None:
+            self.panner_panel.set_view_rect(None)
+            return
+
+        image_h, image_w = self.image_data.shape[:2]
+        if image_w <= 0 or image_h <= 0:
+            self.panner_panel.set_view_rect(None)
+            return
+
+        zoom = max(self.image_viewer.get_zoom(), 1e-6)
+        if self.using_gpu_rendering and hasattr(self.image_viewer, "gl_canvas"):
+            canvas = self.image_viewer.gl_canvas
+            view_w = canvas.width() / zoom
+            view_h = canvas.height() / zoom
+            pan_x, pan_y = canvas.pan_offset
+            x = pan_x - view_w / 2.0
+            y_bottom = pan_y - view_h / 2.0
+            y = image_h - (y_bottom + view_h)
+        else:
+            viewport = self.scroll_area.viewport()
+            view_w = viewport.width() / zoom
+            view_h = viewport.height() / zoom
+            x = self.scroll_area.horizontalScrollBar().value() / zoom
+            y = self.scroll_area.verticalScrollBar().value() / zoom
+
+        rect_w = min(float(image_w), max(1.0, float(view_w)))
+        rect_h = min(float(image_h), max(1.0, float(view_h)))
+        x = max(0.0, min(float(image_w) - rect_w, float(x)))
+        y = max(0.0, min(float(image_h) - rect_h, float(y)))
+        self.panner_panel.set_view_rect(QRectF(x, y, rect_w, rect_h))
     
     def _on_button_bar_zoom(self, level: str) -> None:
         """Handle zoom change from button bar."""
@@ -872,6 +1089,7 @@ class MainWindow(QMainWindow):
                 self.image_viewer.zoom_to(zoom_val)
                 self.status_bar.update_zoom(zoom_val)
                 self._persist_frame_view_state()
+                self._update_panner_view_rect()
                 self.statusBar().showMessage(f"Zoom: {zoom_val}x", 1000)
             except ValueError:
                 # Handle fractions like "1/2"
@@ -881,6 +1099,7 @@ class MainWindow(QMainWindow):
                     self.image_viewer.zoom_to(zoom_val)
                     self.status_bar.update_zoom(zoom_val)
                     self._persist_frame_view_state()
+                    self._update_panner_view_rect()
                     self.statusBar().showMessage(f"Zoom: {level}", 1000)
     
     def _on_button_bar_scale(self, scale_name: str) -> None:
@@ -1048,12 +1267,247 @@ class MainWindow(QMainWindow):
             return
 
         for coord in coords:
-            x, y = self.wcs_handler.world_to_pixel(coord.ra.deg, coord.dec.deg)
+            pixel = self._world_to_overlay_pixel(coord.ra.deg, coord.dec.deg)
+            if pixel is None:
+                continue
+            x, y = pixel
             region = Region(mode=RegionMode.POINT, points=[QPointF(x, y)])
             self._on_region_created(region)
             self.image_viewer.add_region(region)
 
         self.statusBar().showMessage(f"Overlayed {len(coords)} catalog sources", 3000)
+
+    def _init_samp_client(self) -> None:
+        """Initialize SAMP client and callbacks."""
+        self._samp_client = SAMPClient()
+        self._samp_client.register_callback("table.load.votable", self._on_samp_votable)
+        self._samp_client.register_callback("table.load.fits", self._on_samp_fits)
+
+    def _update_samp_menu_state(self) -> None:
+        """Update SAMP menu action enabled states."""
+        self.menu_bar.action_samp_connect.setEnabled(not self._samp_connected)
+        self.menu_bar.action_samp_disconnect.setEnabled(self._samp_connected)
+
+    def _samp_connect(self) -> None:
+        """Connect to a SAMP hub."""
+        if self._samp_client is None:
+            self._init_samp_client()
+        if self._samp_client is None:
+            self.statusBar().showMessage("SAMP client unavailable", 3000)
+            return
+        if self._samp_client.connect():
+            self._samp_connected = True
+            self.statusBar().showMessage("Connected to SAMP hub", 3000)
+        else:
+            self._samp_connected = False
+            self.statusBar().showMessage("Failed to connect to SAMP hub", 3000)
+        self._update_samp_menu_state()
+
+    def _samp_disconnect(self) -> None:
+        """Disconnect from SAMP hub."""
+        if self._samp_client is not None:
+            self._samp_client.disconnect()
+        self._samp_connected = False
+        self._update_samp_menu_state()
+        self.statusBar().showMessage("Disconnected from SAMP hub", 3000)
+
+    def _on_samp_votable(self, sender_id: str, params: dict) -> None:
+        """Queue incoming table.load.votable message on UI thread."""
+        self._queue_samp_table(params, "votable")
+
+    def _on_samp_fits(self, sender_id: str, params: dict) -> None:
+        """Queue incoming table.load.fits message on UI thread."""
+        self._queue_samp_table(params, "fits")
+
+    def _queue_samp_table(self, params: dict, table_format: str) -> None:
+        """Queue incoming SAMP table message for UI-thread handling."""
+        url = str(params.get("url", "")).strip()
+        if not url:
+            return
+        table_id = str(params.get("table-id") or params.get("name") or "samp-catalog")
+        self.samp_table_received.emit(url, table_id, table_format)
+
+    def _handle_samp_table_message(self, url: str, table_id: str, table_format: str) -> None:
+        """Handle incoming SAMP catalog message."""
+        frame = self.frame_manager.current_frame
+        if not frame or frame.image_data is None:
+            self.statusBar().showMessage("No image loaded for SAMP catalog overlay", 3000)
+            return
+        if not self.wcs_handler or not self.wcs_handler.is_valid:
+            self.statusBar().showMessage("Current frame has no WCS for SAMP catalog overlay", 3000)
+            return
+
+        table = self._read_samp_table(url, table_format)
+        if table is None or len(table) == 0:
+            self.statusBar().showMessage(f"Failed to load SAMP catalog: {table_id}", 3000)
+            return
+
+        coords = self._extract_catalog_coordinates(table)
+        if not coords:
+            self.statusBar().showMessage("SAMP catalog has no usable RA/Dec columns", 3000)
+            return
+
+        sources: List[Tuple[float, float]] = []
+        for coord in coords:
+            pixel = self._world_to_overlay_pixel(coord.ra.deg, coord.dec.deg)
+            if pixel is not None:
+                sources.append(pixel)
+
+        if not sources:
+            self.statusBar().showMessage("No plottable sources in SAMP catalog", 3000)
+            return
+
+        self._samp_catalog_sources[frame.frame_id] = sources
+        self._rebuild_samp_regions_for_frame(frame)
+        self._update_regions_for_frame(frame)
+        self.statusBar().showMessage(f"Loaded SAMP catalog {table_id}: {len(sources)} sources", 4000)
+
+    def _read_samp_table(self, url: str, table_format: str) -> Optional[Table]:
+        """Read SAMP table from URL/path."""
+        target = url
+        parsed = urlparse(url)
+        if parsed.scheme == "file":
+            target = unquote(parsed.path)
+
+        try:
+            return Table.read(target, format=table_format)
+        except Exception:
+            try:
+                return Table.read(target)
+            except Exception:
+                return None
+
+    def _extract_catalog_coordinates(self, table: Table) -> Optional[List[SkyCoord]]:
+        """Extract ICRS coordinates from a table."""
+        ra_col: Optional[str] = None
+        dec_col: Optional[str] = None
+        for col in table.colnames:
+            col_lower = col.lower()
+            if col_lower in ("ra", "_ra", "raj2000", "ra_icrs", "ra_j2000"):
+                ra_col = col
+            elif col_lower in ("dec", "_dec", "dej2000", "de", "dec_icrs", "dec_j2000"):
+                dec_col = col
+        if ra_col is None or dec_col is None:
+            return None
+
+        coords: List[SkyCoord] = []
+        for row in table:
+            try:
+                coord = SkyCoord(
+                    ra=float(row[ra_col]),
+                    dec=float(row[dec_col]),
+                    unit=(u.deg, u.deg),
+                    frame="icrs",
+                )
+                coords.append(coord)
+            except Exception:
+                continue
+        return coords if coords else None
+
+    def _build_samp_marker_region(self, x: float, y: float) -> Region:
+        """Create a region for a SAMP catalog source."""
+        size = max(1.0, float(self._samp_marker_size))
+        color = QColor(self._samp_marker_color)
+
+        if self._samp_marker_shape == "circle":
+            return Region(
+                mode=RegionMode.CIRCLE,
+                points=[QPointF(x, y), QPointF(x + size, y)],
+                color=color,
+                marker_size=size,
+                source="samp_catalog",
+            )
+        if self._samp_marker_shape == "box":
+            return Region(
+                mode=RegionMode.BOX,
+                points=[QPointF(x - size, y - size), QPointF(x + size, y + size)],
+                color=color,
+                marker_size=size,
+                source="samp_catalog",
+            )
+        if self._samp_marker_shape == "ellipse":
+            return Region(
+                mode=RegionMode.ELLIPSE,
+                points=[QPointF(x - size, y - size), QPointF(x + size, y + size)],
+                color=color,
+                marker_size=size,
+                source="samp_catalog",
+            )
+        return Region(
+            mode=RegionMode.POINT,
+            points=[QPointF(x, y)],
+            color=color,
+            marker_size=size,
+            source="samp_catalog",
+        )
+
+    def _rebuild_samp_regions_for_frame(self, frame: Frame) -> None:
+        """Rebuild SAMP regions for a frame from stored source positions."""
+        frame.regions = [
+            region
+            for region in frame.regions
+            if getattr(region, "source", "user") != "samp_catalog"
+        ]
+        for x, y in self._samp_catalog_sources.get(frame.frame_id, []):
+            frame.regions.append(self._build_samp_marker_region(x, y))
+
+    def _refresh_samp_regions(self) -> None:
+        """Refresh SAMP catalog marker rendering with current style."""
+        for frame in self.frame_manager.frames:
+            if frame.frame_id in self._samp_catalog_sources:
+                self._rebuild_samp_regions_for_frame(frame)
+        self._update_regions_for_frame(self.frame_manager.current_frame)
+
+    def _samp_choose_marker_color(self) -> None:
+        """Change SAMP catalog marker color."""
+        color = QColorDialog.getColor(self._samp_marker_color, self, "SAMP Marker Color")
+        if not color.isValid():
+            return
+        self._samp_marker_color = color
+        self._refresh_samp_regions()
+        self.statusBar().showMessage("Updated SAMP marker color", 2000)
+
+    def _samp_choose_marker_shape(self) -> None:
+        """Change SAMP catalog marker shape."""
+        shape_map = {
+            "Point": "point",
+            "Circle": "circle",
+            "Box": "box",
+            "Ellipse": "ellipse",
+        }
+        labels = list(shape_map.keys())
+        current_label = next((label for label, value in shape_map.items() if value == self._samp_marker_shape), "Point")
+        current_index = labels.index(current_label)
+        selected, ok = QInputDialog.getItem(
+            self,
+            "SAMP Marker Shape",
+            "Shape:",
+            labels,
+            current_index,
+            False,
+        )
+        if not ok:
+            return
+        self._samp_marker_shape = shape_map[selected]
+        self._refresh_samp_regions()
+        self.statusBar().showMessage(f"SAMP marker shape: {selected}", 2000)
+
+    def _samp_choose_marker_size(self) -> None:
+        """Change SAMP catalog marker size."""
+        size, ok = QInputDialog.getDouble(
+            self,
+            "SAMP Marker Size",
+            "Size (pixels):",
+            float(self._samp_marker_size),
+            1.0,
+            100.0,
+            1,
+        )
+        if not ok:
+            return
+        self._samp_marker_size = float(size)
+        self._refresh_samp_regions()
+        self.statusBar().showMessage(f"SAMP marker size: {self._samp_marker_size:.1f}", 2000)
 
     def _get_query_coordinates(self) -> tuple[float, float]:
         """Get query coordinates from cursor WCS or image center."""
@@ -1074,6 +1528,22 @@ class MainWindow(QMainWindow):
             if col in table.colnames:
                 return str(table[col][0])
         return ""
+
+    def _world_to_overlay_pixel(self, ra_deg: float, dec_deg: float) -> Optional[Tuple[float, float]]:
+        """Convert WCS world coordinates to overlay pixel coordinates."""
+        if (
+            self.wcs_handler is None
+            or not self.wcs_handler.is_valid
+            or self.image_data is None
+        ):
+            return None
+        try:
+            x, y = self.wcs_handler.world_to_pixel(ra_deg, dec_deg)
+            if not np.isfinite(x) or not np.isfinite(y):
+                return None
+            return float(x), float(y)
+        except Exception:
+            return None
     
     def _set_wcs_system(self, system: str) -> None:
         """Set WCS coordinate system."""
@@ -1087,6 +1557,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"WCS system: {system.upper()}", 2000)
         if self._last_mouse_pos is not None and self.wcs_handler and self.wcs_handler.is_valid:
             self._update_wcs_display(*self._last_mouse_pos)
+        self._update_direction_arrows()
     
     def _set_wcs_format(self, format_type: str) -> None:
         """Set WCS format (sexagesimal or degrees)."""
@@ -1096,6 +1567,41 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"WCS format: {format_type}", 2000)
         if self._last_mouse_pos is not None and self.wcs_handler and self.wcs_handler.is_valid:
             self._update_wcs_display(*self._last_mouse_pos)
+
+    def _toggle_direction_arrows(self, checked: bool) -> None:
+        """Toggle WCS direction arrows overlay."""
+        self._show_direction_arrows = checked
+        self._update_direction_arrows()
+
+    def _update_direction_arrows(self) -> None:
+        """Update WCS direction arrows from current frame WCS."""
+        if not hasattr(self.image_viewer, "set_direction_arrows"):
+            return
+        if (
+            self._tile_mode_enabled
+            or not self._show_direction_arrows
+            or self.wcs_handler is None
+            or not self.wcs_handler.is_valid
+            or self.image_data is None
+        ):
+            self.image_viewer.set_direction_arrows(None, None, False)
+            return
+
+        h, w = self.image_data.shape[:2]
+        cx = (w - 1) / 2.0
+        cy = (h - 1) / 2.0
+
+        ra, dec = self.wcs_handler.pixel_to_world(cx, cy)
+        center = SkyCoord(ra=ra * u.deg, dec=dec * u.deg, frame=ICRS())
+        separation = 1.0 * u.arcmin
+        north = center.directional_offset_by(0.0 * u.deg, separation)
+        east = center.directional_offset_by(90.0 * u.deg, separation)
+        nx, ny = self.wcs_handler.world_to_pixel(north.ra.deg, north.dec.deg)
+        ex, ey = self.wcs_handler.world_to_pixel(east.ra.deg, east.dec.deg)
+
+        north_vector = (float(nx - cx), float(ny - cy))
+        east_vector = (float(ex - cx), float(ey - cy))
+        self.image_viewer.set_direction_arrows(north_vector, east_vector, True)
 
     def _update_wcs_display(self, x: int, y: int) -> None:
         """Update the status bar WCS display for the given pixel position."""
@@ -1492,7 +1998,16 @@ class MainWindow(QMainWindow):
     
     def _delete_frame(self) -> None:
         """Delete current frame."""
+        current_frame = self.frame_manager.current_frame
+        current_frame_id = current_frame.frame_id if current_frame else None
         if self.frame_manager.delete_frame():
+            if current_frame_id is not None:
+                self._samp_catalog_sources.pop(current_frame_id, None)
+            if self.frame_manager.num_frames <= 1 and self._blink_timer.isActive():
+                self._blink_timer.stop()
+                self.menu_bar.action_blink_frames.blockSignals(True)
+                self.menu_bar.action_blink_frames.setChecked(False)
+                self.menu_bar.action_blink_frames.blockSignals(False)
             self.z1 = None
             self.z2 = None
             if hasattr(self.image_viewer, "reset_contrast_brightness"):
@@ -1551,6 +2066,16 @@ class MainWindow(QMainWindow):
 
     def _update_frame_display(self) -> None:
         """Update UI to reflect the current frame."""
+        if self._tile_mode_enabled:
+            if not self._display_tiled_frames():
+                self._tile_mode_enabled = False
+                self.menu_bar.action_tile_frames.blockSignals(True)
+                self.menu_bar.action_tile_frames.setChecked(False)
+                self.menu_bar.action_tile_frames.blockSignals(False)
+                return
+            self._update_frame_title()
+            return
+
         frame = self.frame_manager.current_frame
         self._update_regions_for_frame(frame)
         if frame and frame.has_data:
@@ -1563,6 +2088,10 @@ class MainWindow(QMainWindow):
                     self.image_viewer.zoom_to(frame.zoom)
         else:
             self.status_bar.update_image_info(None, None)
+            if hasattr(self.image_viewer, "set_direction_arrows"):
+                self.image_viewer.set_direction_arrows(None, None, False)
+            if hasattr(self, "panner_panel"):
+                self.panner_panel.set_view_rect(None)
         self._update_frame_title()
 
     def _update_regions_for_frame(self, frame: Optional[Frame]) -> None:
@@ -1576,30 +2105,93 @@ class MainWindow(QMainWindow):
 
     def _update_blink(self) -> None:
         """Advance blink animation and refresh display."""
-        if self._blink_controller.update():
-            self._update_frame_display()
+        if self.frame_manager.num_frames <= 1:
+            self._blink_timer.stop()
+            self.menu_bar.action_blink_frames.blockSignals(True)
+            self.menu_bar.action_blink_frames.setChecked(False)
+            self.menu_bar.action_blink_frames.blockSignals(False)
+            return
+        self.frame_manager.next_frame()
+        self._update_frame_display()
 
     def _toggle_blink(self, checked: bool) -> None:
         """Start/stop frame blinking."""
         if checked:
+            if self._tile_mode_enabled:
+                self._tile_mode_enabled = False
+                self.menu_bar.action_tile_frames.blockSignals(True)
+                self.menu_bar.action_tile_frames.setChecked(False)
+                self.menu_bar.action_tile_frames.blockSignals(False)
+                self._update_frame_display()
             if self.frame_manager.num_frames <= 1:
+                self.menu_bar.action_blink_frames.blockSignals(True)
                 self.menu_bar.action_blink_frames.setChecked(False)
+                self.menu_bar.action_blink_frames.blockSignals(False)
                 self.statusBar().showMessage("Need at least two frames to blink", 2000)
                 return
-            if not self._blink_controller.start():
-                self.menu_bar.action_blink_frames.setChecked(False)
-                self.statusBar().showMessage("No frames available for blinking", 2000)
-                return
-            self._blink_timer.start()
+            self._blink_timer.start(self._blink_timer.interval())
             self.statusBar().showMessage("Blinking started", 2000)
         else:
             self._blink_timer.stop()
-            self._blink_controller.stop()
             self.statusBar().showMessage("Blinking stopped", 2000)
 
-    def _tile_frames(self) -> None:
-        """Tile frames (not yet implemented)."""
-        self.statusBar().showMessage("Frame tiling not implemented", 2000)
+    def _tile_frames(self, checked: bool) -> None:
+        """Toggle tiled display of loaded frames."""
+        if checked:
+            if self._blink_timer.isActive():
+                self._blink_timer.stop()
+                self.menu_bar.action_blink_frames.blockSignals(True)
+                self.menu_bar.action_blink_frames.setChecked(False)
+                self.menu_bar.action_blink_frames.blockSignals(False)
+            self._tile_mode_enabled = True
+            if not self._display_tiled_frames():
+                self._tile_mode_enabled = False
+                self.menu_bar.action_tile_frames.blockSignals(True)
+                self.menu_bar.action_tile_frames.setChecked(False)
+                self.menu_bar.action_tile_frames.blockSignals(False)
+                return
+            self.statusBar().showMessage("Frame tiling enabled", 2000)
+        else:
+            self._tile_mode_enabled = False
+            self._tile_layout = None
+            self._update_frame_display()
+            self.statusBar().showMessage("Frame tiling disabled", 2000)
+
+    def _select_tiled_frame(self, x: int, y: int) -> bool:
+        """Select frame corresponding to a click on the tiled composite."""
+        if self._tile_layout is None:
+            return False
+        gap = int(self._tile_layout["gap"])
+        cell_w = int(self._tile_layout["cell_w"])
+        cell_h = int(self._tile_layout["cell_h"])
+        cols = int(self._tile_layout["cols"])
+        tiled_h = int(self._tile_layout["tiled_h"])
+        frame_indices = self._tile_layout["frame_indices"]
+
+        if x < gap or y < 0:
+            return False
+        top_y = tiled_h - 1 - y
+        if top_y < gap:
+            return False
+
+        col = (x - gap) // (cell_w + gap)
+        row = (top_y - gap) // (cell_h + gap)
+        if col < 0 or row < 0 or col >= cols:
+            return False
+        if (x - gap) % (cell_w + gap) >= cell_w:
+            return False
+        if (top_y - gap) % (cell_h + gap) >= cell_h:
+            return False
+
+        tile_index = int(row * cols + col)
+        if tile_index < 0 or tile_index >= len(frame_indices):
+            return False
+        frame_index = int(frame_indices[tile_index])
+        if frame_index == self.frame_manager.current_index:
+            return False
+        self.frame_manager.goto_frame(frame_index)
+        self._apply_frame_view_state(self.frame_manager.current_frame)
+        return True
 
     def _persist_frame_view_state(self) -> None:
         """Persist display settings to the current frame."""
@@ -1627,6 +2219,10 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_cmap_heat.setChecked(self.current_colormap == "heat")
         self.menu_bar.action_cmap_cool.setChecked(self.current_colormap == "cool")
         self.menu_bar.action_cmap_rainbow.setChecked(self.current_colormap == "rainbow")
+        self.menu_bar.action_cmap_viridis.setChecked(self.current_colormap == "viridis")
+        self.menu_bar.action_cmap_plasma.setChecked(self.current_colormap == "plasma")
+        self.menu_bar.action_cmap_inferno.setChecked(self.current_colormap == "inferno")
+        self.menu_bar.action_cmap_magma.setChecked(self.current_colormap == "magma")
         self.menu_bar.action_invert_colormap.setChecked(self.invert_colormap)
         self.menu_bar.action_scale_linear.setChecked(self.current_scale == ScaleAlgorithm.LINEAR)
         self.menu_bar.action_scale_log.setChecked(self.current_scale == ScaleAlgorithm.LOG)
@@ -1745,8 +2341,10 @@ class MainWindow(QMainWindow):
         frame = self.frame_manager.current_frame
         if frame:
             frame.regions.clear()
+            self._samp_catalog_sources.pop(frame.frame_id, None)
         if hasattr(self.image_viewer, "clear_regions"):
             self.image_viewer.clear_regions()
+        self._set_region_mode(RegionMode.NONE)
         self.statusBar().showMessage("Cleared all regions", 2000)
 
     def _save_regions(self) -> None:
@@ -1854,6 +2452,13 @@ class MainWindow(QMainWindow):
                 color=QColor(region.color)
             )
         return None
+
+    def closeEvent(self, event) -> None:
+        """Disconnect SAMP client on close."""
+        if self._samp_client is not None:
+            self._samp_client.disconnect()
+            self._samp_connected = False
+        super().closeEvent(event)
     
     def show_about(self) -> None:
         """Show the About dialog."""

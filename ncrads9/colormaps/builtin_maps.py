@@ -25,6 +25,19 @@ from numpy.typing import NDArray
 from .colormap import Colormap
 
 
+def _generate_from_stops(stops: NDArray[np.floating], n: int = 256) -> NDArray[np.floating]:
+    """Generate a colormap by interpolating RGB control stops."""
+    x = np.linspace(0.0, 1.0, n)
+    stop_x = np.linspace(0.0, 1.0, len(stops))
+    return np.column_stack(
+        [
+            np.interp(x, stop_x, stops[:, 0]),
+            np.interp(x, stop_x, stops[:, 1]),
+            np.interp(x, stop_x, stops[:, 2]),
+        ]
+    )
+
+
 def _generate_grey(n: int = 256) -> NDArray[np.floating]:
     """Generate grey/grayscale colormap."""
     v = np.linspace(0, 1, n)
@@ -251,6 +264,72 @@ def _generate_i8(n: int = 256) -> NDArray[np.floating]:
     return np.clip(colors, 0, 1)
 
 
+def _generate_viridis(n: int = 256) -> NDArray[np.floating]:
+    """Generate viridis colormap (from DS9 cmap set)."""
+    stops = np.array(
+        [
+            [0.267004, 0.004874, 0.329415],
+            [0.253935, 0.265254, 0.529983],
+            [0.163625, 0.471133, 0.558148],
+            [0.134692, 0.658636, 0.517649],
+            [0.477504, 0.821444, 0.318195],
+            [0.993248, 0.906157, 0.143936],
+        ],
+        dtype=np.float64,
+    )
+    return _generate_from_stops(stops, n)
+
+
+def _generate_plasma(n: int = 256) -> NDArray[np.floating]:
+    """Generate plasma colormap (from DS9 cmap set)."""
+    stops = np.array(
+        [
+            [0.050383, 0.029803, 0.527975],
+            [0.417642, 0.000564, 0.658390],
+            [0.692840, 0.165141, 0.564522],
+            [0.881443, 0.392529, 0.383229],
+            [0.988260, 0.652325, 0.211364],
+            [0.940015, 0.975158, 0.131326],
+        ],
+        dtype=np.float64,
+    )
+    return _generate_from_stops(stops, n)
+
+
+def _generate_inferno(n: int = 256) -> NDArray[np.floating]:
+    """Generate inferno colormap (from DS9 cmap set)."""
+    stops = np.array(
+        [
+            [0.001462, 0.000466, 0.013866],
+            [0.141935, 0.040119, 0.324538],
+            [0.364543, 0.071579, 0.431994],
+            [0.609330, 0.178249, 0.450586],
+            [0.851384, 0.346636, 0.280346],
+            [0.987622, 0.645320, 0.039886],
+            [0.988362, 0.998364, 0.644924],
+        ],
+        dtype=np.float64,
+    )
+    return _generate_from_stops(stops, n)
+
+
+def _generate_magma(n: int = 256) -> NDArray[np.floating]:
+    """Generate magma colormap (from DS9 cmap set)."""
+    stops = np.array(
+        [
+            [0.001462, 0.000466, 0.013866],
+            [0.171713, 0.067305, 0.370771],
+            [0.445163, 0.122724, 0.506901],
+            [0.716387, 0.214982, 0.475290],
+            [0.944006, 0.377643, 0.365136],
+            [0.997351, 0.676795, 0.429406],
+            [0.987053, 0.991438, 0.749504],
+        ],
+        dtype=np.float64,
+    )
+    return _generate_from_stops(stops, n)
+
+
 # Dictionary of colormap generator functions
 _COLORMAP_GENERATORS: Dict[str, callable] = {
     "grey": _generate_grey,
@@ -272,6 +351,10 @@ _COLORMAP_GENERATORS: Dict[str, callable] = {
     "green": _generate_green,
     "blue": _generate_blue,
     "i8": _generate_i8,
+    "viridis": _generate_viridis,
+    "plasma": _generate_plasma,
+    "inferno": _generate_inferno,
+    "magma": _generate_magma,
 }
 
 # List of all builtin colormap names
@@ -290,6 +373,7 @@ def get_builtin_colormap(name: str, n_colors: int = 256) -> Optional[Colormap]:
     """
     name_lower = name.lower()
     if name_lower in _COLORMAP_GENERATORS:
+        n_colors = max(2, int(n_colors))
         colors = _COLORMAP_GENERATORS[name_lower](n_colors)
         return Colormap(name_lower, colors)
     return None

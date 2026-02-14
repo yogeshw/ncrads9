@@ -118,6 +118,8 @@ def apply_scaling(
     elif scale == "sqrt":
         return np.sqrt(np.maximum(data, 0))
     elif scale == "asinh":
+        if asinh_a <= 0:
+            raise ValueError("asinh_a must be positive")
         return np.arcsinh(data / asinh_a) / np.arcsinh(1.0 / asinh_a)
     elif scale == "square":
         return data * data

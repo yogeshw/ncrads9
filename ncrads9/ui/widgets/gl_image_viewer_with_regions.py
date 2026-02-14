@@ -35,6 +35,7 @@ class GLImageViewerWithRegions(QWidget):
     """OpenGL-based image viewer with region overlay capabilities."""
 
     mouse_moved = pyqtSignal(int, int)
+    mouse_clicked = pyqtSignal(int, int, int)
     contrast_changed = pyqtSignal(float, float)
     region_created = pyqtSignal(object)
     region_selected = pyqtSignal(object)
@@ -62,6 +63,7 @@ class GLImageViewerWithRegions(QWidget):
         self.contour_overlay = ContourOverlay(self.gl_canvas)
 
         self.gl_canvas.cursor_moved.connect(self._on_cursor_moved)
+        self.gl_canvas.mouse_clicked.connect(self._on_mouse_clicked)
         self.gl_canvas.zoom_changed.connect(lambda _: self._update_overlay_transform())
         self.gl_canvas.pan_changed.connect(lambda *_: self._update_overlay_transform())
         self.region_overlay.region_created.connect(self.region_created)
@@ -71,6 +73,9 @@ class GLImageViewerWithRegions(QWidget):
 
     def _on_cursor_moved(self, x: float, y: float, value: float) -> None:
         self.mouse_moved.emit(int(x), int(y))
+
+    def _on_mouse_clicked(self, x: float, y: float, button: int) -> None:
+        self.mouse_clicked.emit(int(x), int(y), button)
 
     def set_tile_provider(
         self,
@@ -105,6 +110,15 @@ class GLImageViewerWithRegions(QWidget):
     def clear_contours(self) -> None:
         """Clear contours overlay."""
         self.contour_overlay.clear()
+
+    def set_direction_arrows(
+        self,
+        north_vector: Optional[tuple[float, float]],
+        east_vector: Optional[tuple[float, float]],
+        visible: bool,
+    ) -> None:
+        """Set WCS direction arrow vectors/visibility."""
+        self.contour_overlay.set_direction_arrows(north_vector, east_vector, visible)
 
     def add_region(self, region: Region) -> None:
         self.region_overlay.add_region(region)
@@ -242,6 +256,16 @@ class GLImageViewerWithRegions(QWidget):
         self._update_overlay_transform()
 
     def _update_overlay_transform(self) -> None:
-        x_offset, y_offset = self.gl_canvas.image_to_screen(0.0, 0.0)
-        self.region_overlay.set_zoom(self.gl_canvas.zoom, (x_offset, y_offset))
-        self.contour_overlay.set_zoom(self.gl_canvas.zoom, (x_offset, y_offset))
+        _, image_height = self.gl_canvas.image_size
+        top_y = float(max(image_height - 1, 0))
+        x_offset, y_offset = self.gl_canvas.image_to_screen(0.0, top_y)
+        self.region_overlay.set_zoom(
+            self.gl_canvas.zoom,
+            (x_offset, y_offset),
+            image_height=image_height,
+        )
+        self.contour_overlay.set_zoom(
+            self.gl_canvas.zoom,
+            (x_offset, y_offset),
+            image_height=image_height,
+        )
