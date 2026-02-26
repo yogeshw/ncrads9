@@ -39,6 +39,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QPixmap, QImage, QPainter, QLinearGradient, QColor
 
+from ...colormaps.builtin_maps import list_builtin_colormaps
+
 
 class ColormapDialog(QDialog):
     """Dialog for selecting and configuring colormaps."""
@@ -46,37 +48,9 @@ class ColormapDialog(QDialog):
     colormap_changed = pyqtSignal(dict)
 
     # Standard astronomical colormaps
-    COLORMAPS: List[str] = [
-        "gray",
-        "heat",
-        "cool",
-        "rainbow",
-        "viridis",
-        "plasma",
-        "inferno",
-        "magma",
-        "cividis",
-        "jet",
-        "hot",
-        "copper",
-        "bone",
-        "cubehelix",
-        "gist_heat",
-        "gist_stern",
-        "afmhot",
-        "gnuplot",
-        "gnuplot2",
-        "CMRmap",
-        "ocean",
-        "terrain",
-        "gist_earth",
-        "gist_ncar",
-        "spectral",
-        "RdYlBu",
-        "RdBu",
-        "coolwarm",
-        "seismic",
-    ]
+    COLORMAPS: List[str] = list(
+        dict.fromkeys("gray" if cmap == "grey" else cmap for cmap in list_builtin_colormaps())
+    )
 
     def __init__(self, parent: Optional[QDialog] = None) -> None:
         """Initialize the colormap dialog.
@@ -103,6 +77,8 @@ class ColormapDialog(QDialog):
             item = QListWidgetItem(cmap_name)
             self._cmap_list.addItem(item)
         self._cmap_list.currentItemChanged.connect(self._on_colormap_selected)
+        if self.COLORMAPS:
+            self._cmap_list.setCurrentRow(0)
         cmap_layout.addWidget(self._cmap_list)
 
         layout.addWidget(cmap_group)

@@ -105,6 +105,20 @@ class ImageViewerWithRegions(QWidget):
     ) -> None:
         """Set WCS direction arrow vectors/visibility."""
         self.contour_overlay.set_direction_arrows(north_vector, east_vector, visible)
+
+    def set_grid(self, visible: bool, settings: Optional[dict] = None) -> None:
+        """Set coordinate grid overlay visibility/settings."""
+        self.contour_overlay.set_grid(visible, settings)
+
+    def set_crosshair(
+        self,
+        visible: bool,
+        position: Optional[tuple[float, float]] = None,
+        color=None,
+        size: Optional[int] = None,
+    ) -> None:
+        """Set crosshair overlay visibility/style."""
+        self.contour_overlay.set_crosshair(visible, position=position, color=color, size=size)
     
     def add_region(self, region: Region) -> None:
         """Add a region to display."""
@@ -187,6 +201,7 @@ class ImageViewerWithRegions(QWidget):
             self.contour_overlay.set_zoom(
                 self.image_viewer.get_zoom(),
                 (x_offset, y_offset),
+                image_width=self.image_viewer.get_image_size()[0],
                 image_height=image_height,
             )
     

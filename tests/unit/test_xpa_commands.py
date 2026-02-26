@@ -53,6 +53,18 @@ class _DummyDock:
         return self._visible
 
 
+class _DummyColorbarWidget:
+    def __init__(self) -> None:
+        self.tick_count = 7
+        self.bar_size = 40
+
+    def set_tick_count(self, count: int) -> None:
+        self.tick_count = int(count)
+
+    def set_bar_size(self, size: int) -> None:
+        self.bar_size = int(size)
+
+
 class _DummyFrame:
     def __init__(self) -> None:
         self.filepath = None
@@ -92,9 +104,12 @@ class _DummyViewer:
         self.image_viewer = _DummyImageViewer()
         self.status_bar = _DummyStatusBar()
         self.colorbar_dock = _DummyDock()
+        self.colorbar_widget = _DummyColorbarWidget()
         self.current_colormap = "grey"
         self.current_scale = ScaleAlgorithm.LINEAR
         self.current_wcs_system = "fk5"
+        self.colorbar_orientation = "vertical"
+        self.colorbar_numerics = True
         self._last_mouse_pos = (5, 6)
         self._w = 800
         self._h = 600
@@ -145,6 +160,12 @@ class _DummyViewer:
 
     def _set_colormap(self, name: str):
         self.current_colormap = name
+
+    def _set_colorbar_orientation(self, orientation: str):
+        self.colorbar_orientation = orientation
+
+    def _set_colorbar_numerics(self, show: bool):
+        self.colorbar_numerics = bool(show)
 
     def _set_scale(self, scale: ScaleAlgorithm):
         self.current_scale = scale
@@ -218,3 +239,17 @@ def test_file_and_cmap_commands():
     assert viewer.frame_manager.current_frame.filepath == Path("/tmp/test.fits")
     commands.handle("cmap", {"name": "heat"})
     assert viewer.current_colormap == "heat"
+
+
+def test_colorbar_extended_commands():
+    viewer = _DummyViewer()
+    commands = XPACommands(viewer)
+    commands.handle(
+        "colorbar",
+        {"visible": False, "orientation": "horizontal", "numerics": False, "ticks": 5, "size": 24},
+    )
+    assert viewer.colorbar_dock.isVisible() is False
+    assert viewer.colorbar_orientation == "horizontal"
+    assert viewer.colorbar_numerics is False
+    assert viewer.colorbar_widget.tick_count == 5
+    assert viewer.colorbar_widget.bar_size == 24

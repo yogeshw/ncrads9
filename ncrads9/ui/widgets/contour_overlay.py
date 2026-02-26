@@ -38,6 +38,7 @@ class ContourOverlay(QWidget):
         self._levels: List[float] = []
         self._zoom: float = 1.0
         self._offset: Tuple[float, float] = (0.0, 0.0)
+        self._image_width: int = 0
         self._image_height: int = 0
         self._color: QColor = QColor(0, 255, 0)
         self._line_width: float = 1.0
@@ -46,16 +47,30 @@ class ContourOverlay(QWidget):
         self._show_direction_arrows: bool = True
         self._north_vector: Optional[Tuple[float, float]] = None
         self._east_vector: Optional[Tuple[float, float]] = None
+        self._grid_visible: bool = False
+        self._grid_spacing_x: int = 64
+        self._grid_spacing_y: int = 64
+        self._grid_color: QColor = QColor(128, 128, 128)
+        self._grid_line_width: float = 1.0
+        self._grid_show_labels: bool = True
+        self._grid_label_font_size: int = 10
+        self._crosshair_visible: bool = False
+        self._crosshair_color: QColor = QColor(255, 0, 0)
+        self._crosshair_size: int = 24
+        self._crosshair_position: Optional[Tuple[float, float]] = None
 
     def set_zoom(
         self,
         zoom: float,
         offset: Tuple[float, float],
+        image_width: Optional[int] = None,
         image_height: Optional[int] = None,
     ) -> None:
         """Set zoom and offset for coordinate transform."""
         self._zoom = zoom
         self._offset = offset
+        if image_width is not None:
+            self._image_width = max(0, int(image_width))
         if image_height is not None:
             self._image_height = max(0, int(image_height))
         self.update()
@@ -102,6 +117,42 @@ class ContourOverlay(QWidget):
         self._show_direction_arrows = visible
         self.update()
 
+    def set_grid(self, visible: bool, settings: Optional[dict] = None) -> None:
+        """Set pixel grid overlay visibility and style settings."""
+        self._grid_visible = visible
+        if settings is not None:
+            auto_spacing = bool(settings.get("auto_spacing", True))
+            if auto_spacing:
+                width = max(1, self._image_width)
+                height = max(1, self._image_height)
+                self._grid_spacing_x = max(8, width // 8)
+                self._grid_spacing_y = max(8, height // 8)
+            else:
+                self._grid_spacing_x = max(2, int(float(settings.get("ra_spacing", 1.0)) * 20))
+                self._grid_spacing_y = max(2, int(float(settings.get("dec_spacing", 1.0)) * 20))
+            self._grid_color = QColor(str(settings.get("grid_color", "#808080")))
+            self._grid_line_width = float(settings.get("line_width", 1.0))
+            self._grid_show_labels = bool(settings.get("show_labels", True))
+            self._grid_label_font_size = int(settings.get("font_size", 10))
+        self.update()
+
+    def set_crosshair(
+        self,
+        visible: bool,
+        position: Optional[Tuple[float, float]] = None,
+        color: Optional[QColor] = None,
+        size: Optional[int] = None,
+    ) -> None:
+        """Set crosshair overlay visibility/style and optional position."""
+        self._crosshair_visible = visible
+        if position is not None:
+            self._crosshair_position = position
+        if color is not None:
+            self._crosshair_color = QColor(color)
+        if size is not None:
+            self._crosshair_size = max(4, int(size))
+        self.update()
+
     def _image_to_widget(self, x: float, y: float) -> QPointF:
         """Convert image coordinates (origin bottom-left) to widget coordinates."""
         if self._image_height > 0:
@@ -138,6 +189,8 @@ class ContourOverlay(QWidget):
     def paintEvent(self, event) -> None:
         if (
             not self._contours
+            and not self._grid_visible
+            and not self._crosshair_visible
             and (
                 not self._show_direction_arrows
                 or self._north_vector is None
@@ -156,6 +209,35 @@ class ContourOverlay(QWidget):
 
         label_font = QFont()
         label_font.setPointSize(8)
+
+        if self._grid_visible and self._image_width > 0 and self._image_height > 0:
+            grid_pen = QPen(self._grid_color)
+            grid_pen.setWidthF(self._grid_line_width)
+            grid_pen.setStyle(Qt.PenStyle.DotLine)
+            painter.setPen(grid_pen)
+
+            x_step = max(2, self._grid_spacing_x)
+            y_step = max(2, self._grid_spacing_y)
+            for x in range(0, self._image_width, x_step):
+                p1 = self._image_to_widget(float(x), 0.0)
+                p2 = self._image_to_widget(float(x), float(self._image_height - 1))
+                painter.drawLine(p1, p2)
+                if self._grid_show_labels:
+                    label_font.setPointSize(self._grid_label_font_size)
+                    painter.setFont(label_font)
+                    painter.drawText(QPointF(p1.x() + 2.0, p1.y() - 2.0), str(x))
+            for y in range(0, self._image_height, y_step):
+                p1 = self._image_to_widget(0.0, float(y))
+                p2 = self._image_to_widget(float(self._image_width - 1), float(y))
+                painter.drawLine(p1, p2)
+                if self._grid_show_labels:
+                    label_font.setPointSize(self._grid_label_font_size)
+                    painter.setFont(label_font)
+                    painter.drawText(QPointF(p1.x() + 2.0, p1.y() - 2.0), str(y))
+
+            painter.setPen(pen)
+            label_font.setPointSize(8)
+            painter.setFont(label_font)
 
         for level_index, level_paths in enumerate(self._contours):
             for path in level_paths:
@@ -183,5 +265,21 @@ class ContourOverlay(QWidget):
             anchor = QPointF(self.width() - 40.0, self.height() - 30.0)
             self._draw_direction_arrow(painter, anchor, self._north_vector, "N")
             self._draw_direction_arrow(painter, anchor, self._east_vector, "E")
+
+        if self._crosshair_visible and self._crosshair_position is not None:
+            cx, cy = self._crosshair_position
+            center = self._image_to_widget(cx, cy)
+            cross_pen = QPen(self._crosshair_color)
+            cross_pen.setWidth(1)
+            painter.setPen(cross_pen)
+            half_size = max(2, self._crosshair_size // 2)
+            painter.drawLine(
+                QPointF(center.x() - half_size, center.y()),
+                QPointF(center.x() + half_size, center.y()),
+            )
+            painter.drawLine(
+                QPointF(center.x(), center.y() - half_size),
+                QPointF(center.x(), center.y() + half_size),
+            )
 
         painter.end()

@@ -120,6 +120,20 @@ class GLImageViewerWithRegions(QWidget):
         """Set WCS direction arrow vectors/visibility."""
         self.contour_overlay.set_direction_arrows(north_vector, east_vector, visible)
 
+    def set_grid(self, visible: bool, settings: Optional[dict] = None) -> None:
+        """Set coordinate grid overlay visibility/settings."""
+        self.contour_overlay.set_grid(visible, settings)
+
+    def set_crosshair(
+        self,
+        visible: bool,
+        position: Optional[tuple[float, float]] = None,
+        color: Optional[QColor] = None,
+        size: Optional[int] = None,
+    ) -> None:
+        """Set crosshair overlay visibility/style."""
+        self.contour_overlay.set_crosshair(visible, position=position, color=color, size=size)
+
     def add_region(self, region: Region) -> None:
         self.region_overlay.add_region(region)
 
@@ -256,7 +270,7 @@ class GLImageViewerWithRegions(QWidget):
         self._update_overlay_transform()
 
     def _update_overlay_transform(self) -> None:
-        _, image_height = self.gl_canvas.image_size
+        image_width, image_height = self.gl_canvas.image_size
         top_y = float(max(image_height - 1, 0))
         x_offset, y_offset = self.gl_canvas.image_to_screen(0.0, top_y)
         self.region_overlay.set_zoom(
@@ -267,5 +281,6 @@ class GLImageViewerWithRegions(QWidget):
         self.contour_overlay.set_zoom(
             self.gl_canvas.zoom,
             (x_offset, y_offset),
+            image_width=image_width,
             image_height=image_height,
         )

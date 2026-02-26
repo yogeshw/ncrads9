@@ -20,7 +20,7 @@ Menu bar for NCRADS9 application.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
+from typing import Dict, Optional
 
 from PyQt6.QtGui import QAction, QActionGroup, QKeySequence
 from PyQt6.QtWidgets import QMenuBar, QMenu, QWidget
@@ -267,51 +267,159 @@ class MenuBar(QMenuBar):
     def _setup_color_menu(self) -> None:
         """Set up the Color menu."""
         self.color_menu: QMenu = self.addMenu("&Color")
+        self.colormap_action_group = QActionGroup(self)
+        self.colormap_action_group.setExclusive(True)
+        self.colormap_actions: Dict[str, QAction] = {}
 
-        self.colormap_submenu: QMenu = self.color_menu.addMenu("&Colormap")
-
-        self.action_cmap_gray: QAction = QAction("&Gray", self)
-        self.action_cmap_gray.setCheckable(True)
-        self.action_cmap_gray.setChecked(True)
-        self.colormap_submenu.addAction(self.action_cmap_gray)
-
-        self.action_cmap_heat: QAction = QAction("&Heat", self)
-        self.action_cmap_heat.setCheckable(True)
-        self.colormap_submenu.addAction(self.action_cmap_heat)
-
-        self.action_cmap_cool: QAction = QAction("&Cool", self)
-        self.action_cmap_cool.setCheckable(True)
-        self.colormap_submenu.addAction(self.action_cmap_cool)
-
-        self.action_cmap_rainbow: QAction = QAction("&Rainbow", self)
-        self.action_cmap_rainbow.setCheckable(True)
-        self.colormap_submenu.addAction(self.action_cmap_rainbow)
-
-        self.action_cmap_viridis: QAction = QAction("&Viridis", self)
-        self.action_cmap_viridis.setCheckable(True)
-        self.colormap_submenu.addAction(self.action_cmap_viridis)
-
-        self.action_cmap_plasma: QAction = QAction("&Plasma", self)
-        self.action_cmap_plasma.setCheckable(True)
-        self.colormap_submenu.addAction(self.action_cmap_plasma)
-
-        self.action_cmap_inferno: QAction = QAction("&Inferno", self)
-        self.action_cmap_inferno.setCheckable(True)
-        self.colormap_submenu.addAction(self.action_cmap_inferno)
-
-        self.action_cmap_magma: QAction = QAction("&Magma", self)
-        self.action_cmap_magma.setCheckable(True)
-        self.colormap_submenu.addAction(self.action_cmap_magma)
+        default_maps = [
+            ("Gray", "grey"),
+            ("Red", "red"),
+            ("Green", "green"),
+            ("Blue", "blue"),
+            ("A", "a"),
+            ("B", "b"),
+            ("BB", "bb"),
+            ("HE", "he"),
+            ("I8", "i8"),
+            ("AIPS0", "aips0"),
+            ("SLS", "sls"),
+            ("HSV", "hsv"),
+            ("Heat", "heat"),
+            ("Cool", "cool"),
+            ("Rainbow", "rainbow"),
+            ("Standard", "standard"),
+            ("Staircase", "staircase"),
+            ("Color", "color"),
+        ]
+        for label, cmap_name in default_maps:
+            self._add_colormap_action(self.color_menu, label, cmap_name, checked=(cmap_name == "grey"))
 
         self.color_menu.addSeparator()
 
-        self.action_invert_colormap: QAction = QAction("&Invert", self)
+        self.colormap_submenus: Dict[str, QMenu] = {}
+        category_maps = {
+            "Matplotlib Uniform": [("Viridis", "viridis"), ("Plasma", "plasma"), ("Inferno", "inferno"), ("Magma", "magma")],
+        }
+        for category, maps in category_maps.items():
+            submenu = self.color_menu.addMenu(category)
+            self.colormap_submenus[category] = submenu
+            for label, cmap_name in maps:
+                self._add_colormap_action(submenu, label, cmap_name)
+
+        self.user_colormap_menu: QMenu = self.color_menu.addMenu("&User")
+        self.action_load_user_colormap: QAction = QAction("&Load Colormap...", self)
+        self.user_colormap_menu.addAction(self.action_load_user_colormap)
+        self.action_save_user_colormap: QAction = QAction("&Save Current Colormap...", self)
+        self.user_colormap_menu.addAction(self.action_save_user_colormap)
+        self.user_colormap_menu.addSeparator()
+
+        self.color_menu.addSeparator()
+
+        self.action_invert_colormap: QAction = QAction("&Invert Colormap", self)
         self.action_invert_colormap.setCheckable(True)
         self.color_menu.addAction(self.action_invert_colormap)
 
-        self.action_colorbar: QAction = QAction("Color&bar", self)
+        self.action_reset_colormap: QAction = QAction("&Reset Colormap", self)
+        self.color_menu.addAction(self.action_reset_colormap)
+
+        self.color_menu.addSeparator()
+
+        self.action_colorbar: QAction = QAction("Show Color&bar", self)
         self.action_colorbar.setCheckable(True)
+        self.action_colorbar.setChecked(True)
         self.color_menu.addAction(self.action_colorbar)
+
+        self.colorbar_submenu: QMenu = self.color_menu.addMenu("Colorbar &Options")
+
+        self.colorbar_orientation_menu: QMenu = self.colorbar_submenu.addMenu("&Orientation")
+        self.colorbar_orientation_group = QActionGroup(self)
+        self.colorbar_orientation_group.setExclusive(True)
+        self.action_colorbar_horizontal: QAction = QAction("&Horizontal", self)
+        self.action_colorbar_horizontal.setCheckable(True)
+        self.action_colorbar_vertical: QAction = QAction("&Vertical", self)
+        self.action_colorbar_vertical.setCheckable(True)
+        self.action_colorbar_vertical.setChecked(True)
+        self.colorbar_orientation_menu.addAction(self.action_colorbar_horizontal)
+        self.colorbar_orientation_menu.addAction(self.action_colorbar_vertical)
+        self.colorbar_orientation_group.addAction(self.action_colorbar_horizontal)
+        self.colorbar_orientation_group.addAction(self.action_colorbar_vertical)
+
+        self.colorbar_numerics_menu: QMenu = self.colorbar_submenu.addMenu("&Numerics")
+        self.action_colorbar_numerics_show: QAction = QAction("&Show", self)
+        self.action_colorbar_numerics_show.setCheckable(True)
+        self.action_colorbar_numerics_show.setChecked(True)
+        self.colorbar_numerics_menu.addAction(self.action_colorbar_numerics_show)
+        self.colorbar_numerics_menu.addSeparator()
+        self.colorbar_spacing_group = QActionGroup(self)
+        self.colorbar_spacing_group.setExclusive(True)
+        self.action_colorbar_space_value: QAction = QAction("Space Equal &Value", self)
+        self.action_colorbar_space_value.setCheckable(True)
+        self.action_colorbar_space_value.setChecked(True)
+        self.action_colorbar_space_distance: QAction = QAction("Space Equal &Distance", self)
+        self.action_colorbar_space_distance.setCheckable(True)
+        self.colorbar_numerics_menu.addAction(self.action_colorbar_space_value)
+        self.colorbar_numerics_menu.addAction(self.action_colorbar_space_distance)
+        self.colorbar_spacing_group.addAction(self.action_colorbar_space_value)
+        self.colorbar_spacing_group.addAction(self.action_colorbar_space_distance)
+
+        self.colorbar_font_menu: QMenu = self.colorbar_submenu.addMenu("&Font")
+        self.colorbar_font_group = QActionGroup(self)
+        self.colorbar_font_group.setExclusive(True)
+        self.action_colorbar_font_small: QAction = QAction("&Small", self)
+        self.action_colorbar_font_small.setCheckable(True)
+        self.action_colorbar_font_medium: QAction = QAction("&Medium", self)
+        self.action_colorbar_font_medium.setCheckable(True)
+        self.action_colorbar_font_medium.setChecked(True)
+        self.action_colorbar_font_large: QAction = QAction("&Large", self)
+        self.action_colorbar_font_large.setCheckable(True)
+        self.colorbar_font_menu.addAction(self.action_colorbar_font_small)
+        self.colorbar_font_menu.addAction(self.action_colorbar_font_medium)
+        self.colorbar_font_menu.addAction(self.action_colorbar_font_large)
+        self.colorbar_font_group.addAction(self.action_colorbar_font_small)
+        self.colorbar_font_group.addAction(self.action_colorbar_font_medium)
+        self.colorbar_font_group.addAction(self.action_colorbar_font_large)
+
+        self.colorbar_submenu.addSeparator()
+        self.action_colorbar_size: QAction = QAction("&Size...", self)
+        self.colorbar_submenu.addAction(self.action_colorbar_size)
+        self.action_colorbar_ticks: QAction = QAction("&Number of Ticks...", self)
+        self.colorbar_submenu.addAction(self.action_colorbar_ticks)
+
+        self.color_menu.addSeparator()
+        self.action_colormap_params: QAction = QAction("Colormap &Parameters...", self)
+        self.color_menu.addAction(self.action_colormap_params)
+
+        self.action_cmap_gray = self.colormap_actions["grey"]
+        self.action_cmap_heat = self.colormap_actions["heat"]
+        self.action_cmap_cool = self.colormap_actions["cool"]
+        self.action_cmap_rainbow = self.colormap_actions["rainbow"]
+        self.action_cmap_viridis = self.colormap_actions["viridis"]
+        self.action_cmap_plasma = self.colormap_actions["plasma"]
+        self.action_cmap_inferno = self.colormap_actions["inferno"]
+        self.action_cmap_magma = self.colormap_actions["magma"]
+
+    def _add_colormap_action(
+        self,
+        menu: QMenu,
+        label: str,
+        colormap_name: str,
+        checked: bool = False,
+    ) -> QAction:
+        """Create and register a colormap action."""
+        action = QAction(label, self)
+        action.setCheckable(True)
+        action.setChecked(checked)
+        menu.addAction(action)
+        self.colormap_action_group.addAction(action)
+        self.colormap_actions[colormap_name.lower()] = action
+        return action
+
+    def add_user_colormap_action(self, colormap_name: str) -> QAction:
+        """Add or return a runtime-loaded user colormap action."""
+        cmap_key = colormap_name.lower()
+        if cmap_key in self.colormap_actions:
+            return self.colormap_actions[cmap_key]
+        return self._add_colormap_action(self.user_colormap_menu, colormap_name, cmap_key)
 
     def _setup_region_menu(self) -> None:
         """Set up the Region menu."""
@@ -434,6 +542,12 @@ class MenuBar(QMenuBar):
         """Set up the Analysis menu."""
         self.analysis_menu: QMenu = self.addMenu("&Analysis")
 
+        self.action_pixel_table: QAction = QAction("&Pixel Table", self)
+        self.analysis_menu.addAction(self.action_pixel_table)
+
+        self.action_name_resolution: QAction = QAction("&Name Resolution...", self)
+        self.analysis_menu.addAction(self.action_name_resolution)
+
         self.action_statistics: QAction = QAction("&Statistics", self)
         self.analysis_menu.addAction(self.action_statistics)
 
@@ -443,14 +557,117 @@ class MenuBar(QMenuBar):
         self.action_radial_profile: QAction = QAction("&Radial Profile", self)
         self.analysis_menu.addAction(self.action_radial_profile)
 
-        self.action_contours: QAction = QAction("&Contours", self)
-        self.analysis_menu.addAction(self.action_contours)
+        self.analysis_menu.addSeparator()
+
+        self.action_mask_params: QAction = QAction("&Mask Parameters...", self)
+        self.analysis_menu.addAction(self.action_mask_params)
+
+        self.action_crosshair_params: QAction = QAction("C&rosshair Parameters...", self)
+        self.analysis_menu.addAction(self.action_crosshair_params)
+
+        self.action_graph_params: QAction = QAction("&Graph Parameters...", self)
+        self.analysis_menu.addAction(self.action_graph_params)
 
         self.analysis_menu.addSeparator()
 
-        self.action_pixel_table: QAction = QAction("&Pixel Table", self)
-        self.analysis_menu.addAction(self.action_pixel_table)
+        self.action_contours: QAction = QAction("&Contours", self)
+        self.action_contours.setCheckable(True)
+        self.analysis_menu.addAction(self.action_contours)
 
+        self.action_contour_params: QAction = QAction("Contour &Parameters...", self)
+        self.analysis_menu.addAction(self.action_contour_params)
+
+        self.analysis_menu.addSeparator()
+
+        self.action_coordinate_grid: QAction = QAction("Coordinate &Grid", self)
+        self.action_coordinate_grid.setCheckable(True)
+        self.analysis_menu.addAction(self.action_coordinate_grid)
+
+        self.action_coordinate_grid_params: QAction = QAction("Coordinate Grid P&arameters...", self)
+        self.analysis_menu.addAction(self.action_coordinate_grid_params)
+
+        self.analysis_menu.addSeparator()
+
+        self.analysis_block_menu: QMenu = self.analysis_menu.addMenu("&Block")
+        self.action_block_in: QAction = QAction("Block &In", self)
+        self.analysis_block_menu.addAction(self.action_block_in)
+        self.action_block_out: QAction = QAction("Block &Out", self)
+        self.analysis_block_menu.addAction(self.action_block_out)
+        self.action_block_fit: QAction = QAction("Block &Fit", self)
+        self.analysis_block_menu.addAction(self.action_block_fit)
+        self.analysis_block_menu.addSeparator()
+        self.analysis_block_group = QActionGroup(self)
+        self.analysis_block_group.setExclusive(True)
+        self.action_block_1: QAction = QAction("Block &1", self)
+        self.action_block_1.setCheckable(True)
+        self.action_block_1.setChecked(True)
+        self.action_block_2: QAction = QAction("Block &2", self)
+        self.action_block_2.setCheckable(True)
+        self.action_block_4: QAction = QAction("Block &4", self)
+        self.action_block_4.setCheckable(True)
+        self.action_block_8: QAction = QAction("Block &8", self)
+        self.action_block_8.setCheckable(True)
+        self.action_block_16: QAction = QAction("Block 1&6", self)
+        self.action_block_16.setCheckable(True)
+        self.action_block_32: QAction = QAction("Block 3&2", self)
+        self.action_block_32.setCheckable(True)
+        for action in (
+            self.action_block_1,
+            self.action_block_2,
+            self.action_block_4,
+            self.action_block_8,
+            self.action_block_16,
+            self.action_block_32,
+        ):
+            self.analysis_block_menu.addAction(action)
+            self.analysis_block_group.addAction(action)
+
+        self.action_block_params: QAction = QAction("Block Parameters...", self)
+        self.analysis_menu.addAction(self.action_block_params)
+
+        self.analysis_menu.addSeparator()
+
+        self.action_smooth: QAction = QAction("&Smooth", self)
+        self.action_smooth.setCheckable(True)
+        self.analysis_menu.addAction(self.action_smooth)
+        self.action_smooth_params: QAction = QAction("Smooth Parameters...", self)
+        self.analysis_menu.addAction(self.action_smooth_params)
+
+        self.analysis_menu.addSeparator()
+        self.analysis_image_servers_menu: QMenu = self.analysis_menu.addMenu("Image &Servers")
+        self.action_analysis_2mass: QAction = QAction("2MASS &Image...", self)
+        self.analysis_image_servers_menu.addAction(self.action_analysis_2mass)
+        self.analysis_catalogs_menu: QMenu = self.analysis_menu.addMenu("&Catalogs")
+        self.action_analysis_vizier: QAction = QAction("&VizieR...", self)
+        self.analysis_catalogs_menu.addAction(self.action_analysis_vizier)
+
+        self.analysis_menu.addSeparator()
+        self.action_catalog_tool: QAction = QAction("Catalog &Tool", self)
+        self.analysis_menu.addAction(self.action_catalog_tool)
+        self.analysis_plot_tool_menu: QMenu = self.analysis_menu.addMenu("P&lot Tool")
+        self.action_plot_tool_line: QAction = QAction("&Line", self)
+        self.analysis_plot_tool_menu.addAction(self.action_plot_tool_line)
+        self.action_plot_tool_bar: QAction = QAction("&Bar", self)
+        self.analysis_plot_tool_menu.addAction(self.action_plot_tool_bar)
+
+        self.analysis_menu.addSeparator()
+        self.action_virtual_observatory: QAction = QAction("&Virtual Observatory", self)
+        self.analysis_menu.addAction(self.action_virtual_observatory)
+        self.action_web_browser: QAction = QAction("&Web Browser", self)
+        self.analysis_menu.addAction(self.action_web_browser)
+
+        self.analysis_menu.addSeparator()
+        self.action_analysis_command_log: QAction = QAction("Analysis Command &Log", self)
+        self.action_analysis_command_log.setCheckable(True)
+        self.analysis_menu.addAction(self.action_analysis_command_log)
+
+        self.analysis_menu.addSeparator()
+        self.action_load_analysis_commands: QAction = QAction("&Load Analysis Commands...", self)
+        self.analysis_menu.addAction(self.action_load_analysis_commands)
+        self.action_clear_analysis_commands: QAction = QAction("C&lear Analysis Commands", self)
+        self.analysis_menu.addAction(self.action_clear_analysis_commands)
+
+        self.analysis_menu.addSeparator()
         self.action_fits_header: QAction = QAction("FITS &Header", self)
         self.analysis_menu.addAction(self.action_fits_header)
 

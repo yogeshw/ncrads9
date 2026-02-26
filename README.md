@@ -11,11 +11,11 @@ NCRADS9 is a modern reimplementation of SAOImageDS9, built with Python and Qt6. 
 ### Implemented
 - **FITS viewing**: Open FITS files (`.fits`, `.fit`, `.fts`, including gzip variants)
 - **Display controls**: Zoom, pan, binning, zscale/minmax limits, colormap inversion
-- **Colormaps and scales**: Gray/heat/cool/rainbow/viridis/plasma/inferno/magma with linear, log, sqrt, squared(power), asinh, and histogram equalization
+- **Colormaps and scales**: DS9-style extended color menu (default + matplotlib/scientific families), user `.lut/.sao` colormap load/save, invert/reset, and configurable colorbar options with linear, log, sqrt, squared(power), asinh, and histogram equalization
 - **Regions**: Circle/ellipse/box/polygon/line/point creation plus DS9 region load/save (`.reg`)
 - **WCS tools**: FK5/FK4/ICRS/Galactic/Ecliptic display with sexagesimal/degree formatting and direction arrows
 - **Multi-frame workflow**: New/delete/navigate frames, tile view, blink mode, and match image/WCS settings
-- **Analysis dialogs**: Statistics, histogram, contours (with export), pixel table, FITS header viewer
+- **Analysis tools**: DS9-style expanded Analysis menu with name resolution, contour/grid/block/smooth controls, statistics, histogram, radial profile plotting, pixel table, and FITS header viewer
 - **Communication**: Built-in XPA server; SAMP connect/disconnect and catalog overlay support
 
 ### Partial / In Progress

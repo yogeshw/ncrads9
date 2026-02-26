@@ -402,20 +402,15 @@ class XPACommands:
             return viewer_error
 
         name = params.get("name", self._first_arg(params))
-        cmap_map = {
-            "gray": "grey",
-            "grey": "grey",
-            "heat": "heat",
-            "cool": "cool",
-            "rainbow": "rainbow",
-            "viridis": "viridis",
-            "plasma": "plasma",
-            "inferno": "inferno",
-            "magma": "magma",
-        }
         if name is not None:
-            selected = cmap_map.get(str(name).lower())
-            if selected is None:
+            selected = str(name).lower().strip()
+            if selected == "gray":
+                selected = "grey"
+            if hasattr(self.viewer, "get_available_colormaps"):
+                available = set(self.viewer.get_available_colormaps())
+            else:
+                available = {"grey", "heat", "cool", "rainbow", "viridis", "plasma", "inferno", "magma"}
+            if selected not in available:
                 return {"status": "error", "message": f"Unsupported colormap: {name}"}
             self.viewer._set_colormap(selected)
         return {"status": "ok", "result": self.viewer.current_colormap}
@@ -433,12 +428,57 @@ class XPACommands:
         if viewer_error:
             return viewer_error
 
-        visible = params.get("visible", self._first_arg(params))
+        args = self._args(params)
+        visible = params.get("visible")
+        if visible is None and args:
+            candidate = self._as_bool(args[0])
+            if candidate is not None:
+                visible = candidate
         if visible is not None:
             visible_bool = self._as_bool(visible)
-            if visible_bool is not None:
+            if visible_bool is not None and hasattr(self.viewer, "colorbar_dock"):
                 self.viewer.colorbar_dock.setVisible(visible_bool)
-        return {"status": "ok", "result": "yes" if self.viewer.colorbar_dock.isVisible() else "no"}
+
+        orientation = params.get("orientation")
+        if orientation is None and args:
+            first = str(args[0]).lower()
+            if first in {"horizontal", "vertical"}:
+                orientation = first
+        if orientation is not None and hasattr(self.viewer, "_set_colorbar_orientation"):
+            self.viewer._set_colorbar_orientation(str(orientation).lower())
+
+        numerics = params.get("numerics")
+        if numerics is None and len(args) > 1:
+            numerics = args[1]
+        if numerics is not None and hasattr(self.viewer, "_set_colorbar_numerics"):
+            numerics_bool = self._as_bool(numerics)
+            if numerics_bool is not None:
+                self.viewer._set_colorbar_numerics(numerics_bool)
+
+        spacing = params.get("spacing")
+        if spacing is not None and hasattr(self.viewer, "_set_colorbar_spacing_mode"):
+            spacing_mode = str(spacing).lower()
+            if spacing_mode in {"value", "distance"}:
+                self.viewer._set_colorbar_spacing_mode(spacing_mode)
+
+        ticks = params.get("ticks")
+        if ticks is not None and hasattr(self.viewer, "colorbar_widget"):
+            try:
+                self.viewer.colorbar_widget.set_tick_count(int(ticks))
+            except (TypeError, ValueError):
+                pass
+
+        size = params.get("size")
+        if size is not None and hasattr(self.viewer, "colorbar_widget"):
+            try:
+                self.viewer.colorbar_widget.set_bar_size(int(size))
+            except (TypeError, ValueError):
+                pass
+
+        result = "yes"
+        if hasattr(self.viewer, "colorbar_dock"):
+            result = "yes" if self.viewer.colorbar_dock.isVisible() else "no"
+        return {"status": "ok", "result": result}
         
     def _handle_regions(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle region commands.

@@ -25,9 +25,9 @@ from pathlib import Path
 import tempfile
 from urllib.parse import urlparse, unquote
 
-from PyQt6.QtCore import Qt, QTimer, QPointF, QRectF, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QPointF, QRectF, QUrl, pyqtSignal
 from PyQt6.QtWidgets import QDialog
-from PyQt6.QtGui import QImage, QPixmap, QColor
+from PyQt6.QtGui import QAction, QImage, QPixmap, QColor, QDesktopServices
 from PyQt6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -41,6 +41,7 @@ from PyQt6.QtWidgets import (
 )
 import numpy as np
 from numpy.typing import NDArray
+from scipy import ndimage
 from astropy.table import Table
 from astropy.coordinates import (
     SkyCoord,
@@ -63,6 +64,8 @@ from .widgets.gl_image_viewer_with_regions import GLImageViewerWithRegions
 from .widgets.region_overlay import RegionMode, Region
 from .panels.panner import PannerPanel
 from .panels.magnifier import MagnifierPanel
+from .panels.horizontal_graph import HorizontalGraph
+from .panels.vertical_graph import VerticalGraph
 from .dialogs.statistics_dialog import StatisticsDialog
 from .dialogs.scale_dialog import ScaleDialog
 from .dialogs.histogram_dialog import HistogramDialog
@@ -71,11 +74,16 @@ from .dialogs.keyboard_shortcuts_dialog import KeyboardShortcutsDialog
 from .dialogs.help_contents_dialog import HelpContentsDialog
 from .dialogs.export_dialog import ExportDialog
 from .dialogs.contour_dialog import ContourDialog
+from .dialogs.grid_dialog import GridDialog
+from .dialogs.smooth_dialog import SmoothDialog
 from .dialogs.preferences_dialog import PreferencesDialog
 from ..core.fits_handler import FITSHandler
 from ..core.wcs_handler import WCSHandler
 from ..rendering.scale_algorithms import apply_scale, ScaleAlgorithm, compute_zscale_limits
 from ..colormaps.builtin_maps import get_colormap
+from ..colormaps.colormap import Colormap
+from ..colormaps.lut_parser import parse_lut_file, save_lut_file
+from ..colormaps.sao_parser import parse_sao_file
 from ..regions.region_parser import RegionParser
 from ..regions.region_writer import RegionWriter
 from ..regions.shapes.circle import Circle
@@ -86,6 +94,8 @@ from ..regions.shapes.point import Point
 from ..regions.shapes.polygon import Polygon
 from ..frames.simple_frame_manager import FrameManager, Frame
 from ..analysis.contour import ContourGenerator
+from ..analysis.smooth import gaussian_smooth, boxcar_smooth, tophat_smooth
+from ..analysis.radial_profile import RadialProfile
 from ..utils.preferences import Preferences
 from ..image_servers.sia_client import SIAClient
 from ..catalogs.vizier import VizierCatalog
@@ -117,7 +127,10 @@ class MainWindow(QMainWindow):
         self.frame_manager = FrameManager()
         self.current_scale = ScaleAlgorithm.LINEAR
         self.current_colormap = "grey"
+        self._default_colormap = "grey"
         self.invert_colormap = False
+        self.custom_colormaps: Dict[str, Colormap] = {}
+        self._user_colormap_actions: Dict[str, object] = {}
         self.current_bin = 1
         self.current_wcs_system = "fk5"
         self.current_wcs_format = "sexagesimal"
@@ -130,6 +143,26 @@ class MainWindow(QMainWindow):
         self._contour_settings: Optional[dict] = None
         self._contour_paths: Optional[list] = None
         self._contour_levels: Optional[list] = None
+        self._smooth_settings: dict = {
+            "kernel_type": "Gaussian",
+            "sigma": 2.0,
+            "kernel_size": 5,
+            "elliptical": False,
+            "axis_ratio": 1.0,
+            "position_angle": 0.0,
+            "preserve_nan": True,
+            "normalize": True,
+        }
+        self._grid_settings: Optional[dict] = None
+        self._analysis_command_log = False
+        self._analysis_command_entries: List[str] = []
+        self._loaded_analysis_actions: List[QAction] = []
+        self._analysis_mask_mode = "disabled"
+        self._analysis_mask_min: Optional[float] = None
+        self._analysis_mask_max: Optional[float] = None
+        self._crosshair_enabled = False
+        self._crosshair_color = QColor(255, 0, 0)
+        self._crosshair_size = 24
         self._show_direction_arrows = True
         self._tile_mode_enabled = False
         self._tile_layout: Optional[dict] = None
@@ -237,15 +270,38 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_scale_params.triggered.connect(self._show_scale_dialog)
         
         # Color menu
-        self.menu_bar.action_cmap_gray.triggered.connect(lambda: self._set_colormap("grey"))
-        self.menu_bar.action_cmap_heat.triggered.connect(lambda: self._set_colormap("heat"))
-        self.menu_bar.action_cmap_cool.triggered.connect(lambda: self._set_colormap("cool"))
-        self.menu_bar.action_cmap_rainbow.triggered.connect(lambda: self._set_colormap("rainbow"))
-        self.menu_bar.action_cmap_viridis.triggered.connect(lambda: self._set_colormap("viridis"))
-        self.menu_bar.action_cmap_plasma.triggered.connect(lambda: self._set_colormap("plasma"))
-        self.menu_bar.action_cmap_inferno.triggered.connect(lambda: self._set_colormap("inferno"))
-        self.menu_bar.action_cmap_magma.triggered.connect(lambda: self._set_colormap("magma"))
+        for cmap_name, action in self.menu_bar.colormap_actions.items():
+            action.triggered.connect(lambda checked=False, name=cmap_name: self._set_colormap(name))
         self.menu_bar.action_invert_colormap.triggered.connect(self._toggle_invert_colormap)
+        self.menu_bar.action_reset_colormap.triggered.connect(self._reset_colormap)
+        self.menu_bar.action_colorbar.triggered.connect(self._toggle_colorbar_visibility)
+        self.menu_bar.action_colorbar_horizontal.triggered.connect(
+            lambda checked=False: self._set_colorbar_orientation("horizontal")
+        )
+        self.menu_bar.action_colorbar_vertical.triggered.connect(
+            lambda checked=False: self._set_colorbar_orientation("vertical")
+        )
+        self.menu_bar.action_colorbar_numerics_show.triggered.connect(self._set_colorbar_numerics)
+        self.menu_bar.action_colorbar_space_value.triggered.connect(
+            lambda checked=False: self._set_colorbar_spacing_mode("value")
+        )
+        self.menu_bar.action_colorbar_space_distance.triggered.connect(
+            lambda checked=False: self._set_colorbar_spacing_mode("distance")
+        )
+        self.menu_bar.action_colorbar_font_small.triggered.connect(
+            lambda checked=False: self._set_colorbar_font_size(7)
+        )
+        self.menu_bar.action_colorbar_font_medium.triggered.connect(
+            lambda checked=False: self._set_colorbar_font_size(8)
+        )
+        self.menu_bar.action_colorbar_font_large.triggered.connect(
+            lambda checked=False: self._set_colorbar_font_size(10)
+        )
+        self.menu_bar.action_colorbar_size.triggered.connect(self._show_colorbar_size_dialog)
+        self.menu_bar.action_colorbar_ticks.triggered.connect(self._show_colorbar_ticks_dialog)
+        self.menu_bar.action_colormap_params.triggered.connect(self._show_colormap_dialog)
+        self.menu_bar.action_load_user_colormap.triggered.connect(self._load_user_colormap)
+        self.menu_bar.action_save_user_colormap.triggered.connect(self._save_current_colormap)
         
         # Region menu
         self.menu_bar.action_region_none.triggered.connect(lambda: self._set_region_mode(RegionMode.NONE))
@@ -279,9 +335,39 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_show_direction_arrows.triggered.connect(self._toggle_direction_arrows)
         
         # Analysis menu - connect all tools
+        self.menu_bar.action_name_resolution.triggered.connect(self._resolve_object_name)
         self.menu_bar.action_statistics.triggered.connect(self._show_statistics)
         self.menu_bar.action_histogram.triggered.connect(self._show_histogram)
-        self.menu_bar.action_contours.triggered.connect(self._show_contours)
+        self.menu_bar.action_radial_profile.triggered.connect(self._show_radial_profile)
+        self.menu_bar.action_mask_params.triggered.connect(self._show_mask_parameters)
+        self.menu_bar.action_crosshair_params.triggered.connect(self._show_crosshair_parameters)
+        self.menu_bar.action_graph_params.triggered.connect(self._show_graph_parameters)
+        self.menu_bar.action_contours.triggered.connect(self._toggle_contours)
+        self.menu_bar.action_contour_params.triggered.connect(self._show_contours)
+        self.menu_bar.action_coordinate_grid.triggered.connect(self._toggle_coordinate_grid)
+        self.menu_bar.action_coordinate_grid_params.triggered.connect(self._show_grid_dialog)
+        self.menu_bar.action_block_in.triggered.connect(self._block_in)
+        self.menu_bar.action_block_out.triggered.connect(self._block_out)
+        self.menu_bar.action_block_fit.triggered.connect(self._block_fit)
+        self.menu_bar.action_block_1.triggered.connect(lambda: self._set_block_factor(1))
+        self.menu_bar.action_block_2.triggered.connect(lambda: self._set_block_factor(2))
+        self.menu_bar.action_block_4.triggered.connect(lambda: self._set_block_factor(4))
+        self.menu_bar.action_block_8.triggered.connect(lambda: self._set_block_factor(8))
+        self.menu_bar.action_block_16.triggered.connect(lambda: self._set_block_factor(16))
+        self.menu_bar.action_block_32.triggered.connect(lambda: self._set_block_factor(32))
+        self.menu_bar.action_block_params.triggered.connect(self._show_block_parameters)
+        self.menu_bar.action_smooth.triggered.connect(self._toggle_smooth)
+        self.menu_bar.action_smooth_params.triggered.connect(self._show_smooth_dialog)
+        self.menu_bar.action_analysis_2mass.triggered.connect(self._vo_siap_2mass)
+        self.menu_bar.action_analysis_vizier.triggered.connect(self._vo_catalog_vizier)
+        self.menu_bar.action_catalog_tool.triggered.connect(self._vo_catalog_vizier)
+        self.menu_bar.action_plot_tool_line.triggered.connect(lambda: self._set_graph_visibility("Both"))
+        self.menu_bar.action_plot_tool_bar.triggered.connect(lambda: self._set_graph_visibility("Vertical"))
+        self.menu_bar.action_virtual_observatory.triggered.connect(self._vo_catalog_vizier)
+        self.menu_bar.action_web_browser.triggered.connect(self._open_analysis_web_browser)
+        self.menu_bar.action_analysis_command_log.triggered.connect(self._set_analysis_command_log)
+        self.menu_bar.action_load_analysis_commands.triggered.connect(self._load_analysis_commands)
+        self.menu_bar.action_clear_analysis_commands.triggered.connect(self._clear_analysis_commands)
         self.menu_bar.action_pixel_table.triggered.connect(self._show_pixel_table)
         self.menu_bar.action_fits_header.triggered.connect(self._show_fits_header)
         
@@ -381,6 +467,7 @@ class MainWindow(QMainWindow):
         self.colorbar_widget = ColorbarWidget(self)
         self.colorbar_dock.setWidget(self.colorbar_widget)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.colorbar_dock)
+        self.colorbar_dock.visibilityChanged.connect(self.menu_bar.action_colorbar.setChecked)
         
         # Top-right dock for panner (DS9 style)
         self.panner_dock = QDockWidget("Panner", self)
@@ -394,6 +481,14 @@ class MainWindow(QMainWindow):
         self.magnifier_panel = MagnifierPanel(self)
         self.magnifier_dock.setWidget(self.magnifier_panel)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.magnifier_dock)
+
+        self.horizontal_graph_dock = HorizontalGraph(self)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.horizontal_graph_dock)
+        self.horizontal_graph_dock.hide()
+
+        self.vertical_graph_dock = VerticalGraph(self)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.vertical_graph_dock)
+        self.vertical_graph_dock.hide()
 
     def _setup_status_bar(self) -> None:
         """Set up the status bar."""
@@ -461,20 +556,9 @@ class MainWindow(QMainWindow):
         if default_scale in scale_map:
             self._set_scale(scale_map[default_scale])
 
-        default_colormap = prefs.get("default_colormap", "gray")
-        cmap_map = {
-            "gray": "grey",
-            "grey": "grey",
-            "heat": "heat",
-            "cool": "cool",
-            "rainbow": "rainbow",
-            "viridis": "viridis",
-            "plasma": "plasma",
-            "inferno": "inferno",
-            "magma": "magma",
-        }
-        if default_colormap in cmap_map:
-            self._set_colormap(cmap_map[default_colormap])
+        default_colormap = self._normalize_colormap_name(str(prefs.get("default_colormap", "gray")))
+        if default_colormap in self.menu_bar.colormap_actions:
+            self._set_colormap(default_colormap)
 
         if self.image_data is not None:
             self._display_image()
@@ -613,7 +697,7 @@ class MainWindow(QMainWindow):
         if not frame or not frame.has_data:
             return
         
-        image_data = frame.image_data
+        image_data = self._get_display_image_data(frame)
         
         # Compute scale limits using zscale (once, or when reset)
         if self.z1 is None or self.z2 is None:
@@ -630,14 +714,17 @@ class MainWindow(QMainWindow):
         adjusted_z2 = center + new_range / 2 + brightness * range_val
         
         # Apply colormap
-        cmap = get_colormap(self.current_colormap)
+        try:
+            cmap = self._get_colormap_instance(self.current_colormap)
+        except ValueError:
+            self.current_colormap = "grey"
+            cmap = self._get_colormap_instance(self.current_colormap)
 
         # Invert colormap if needed
         if self.invert_colormap:
             # Get colormap data and invert
             cmap_data = cmap.colors.copy()
             cmap_data = cmap_data[::-1]  # Reverse the colormap
-            from ..colormaps.colormap import Colormap
             cmap = Colormap(f"{self.current_colormap}_inverted", cmap_data)
         
         # Update colorbar
@@ -688,6 +775,10 @@ class MainWindow(QMainWindow):
         # Update magnifier panel with RGB data (DS9 style)
         if hasattr(self, 'magnifier_panel'):
             self.magnifier_panel.set_image(display_rgb)
+        if hasattr(self, "horizontal_graph_dock"):
+            self.horizontal_graph_dock.set_image(image_data)
+        if hasattr(self, "vertical_graph_dock"):
+            self.vertical_graph_dock.set_image(image_data)
         
         # Update zoom display
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
@@ -697,13 +788,14 @@ class MainWindow(QMainWindow):
         if self._contour_settings is not None:
             self._update_contours()
         self._update_direction_arrows()
+        self._refresh_analysis_overlays()
 
     def _render_frame_rgb(self, frame: Frame) -> Optional[NDArray[np.uint8]]:
         """Render a frame to RGB using its own display settings."""
         if not frame.has_data:
             return None
 
-        image_data = frame.image_data
+        image_data = self._get_display_image_data(frame)
         if image_data is None:
             return None
 
@@ -720,10 +812,13 @@ class MainWindow(QMainWindow):
         adjusted_z1 = center - new_range / 2.0 + brightness * range_val
         adjusted_z2 = center + new_range / 2.0 + brightness * range_val
 
-        cmap = get_colormap(frame.colormap)
+        try:
+            cmap = self._get_colormap_instance(frame.colormap)
+        except ValueError:
+            frame.colormap = "grey"
+            cmap = self._get_colormap_instance("grey")
         if frame.invert_colormap:
             cmap_data = cmap.colors.copy()[::-1]
-            from ..colormaps.colormap import Colormap
             cmap = Colormap(f"{frame.colormap}_inverted", cmap_data)
 
         clipped = np.clip(image_data, adjusted_z1, adjusted_z2)
@@ -840,6 +935,33 @@ class MainWindow(QMainWindow):
         if self.image_data is not None:
             self._display_image()
             self.statusBar().showMessage(f"Scale: {scale.name}", 2000)
+
+    @staticmethod
+    def _normalize_colormap_name(name: str) -> str:
+        """Normalize colormap aliases to internal names."""
+        lower = name.strip().lower()
+        if lower == "gray":
+            return "grey"
+        return lower
+
+    def _get_colormap_instance(self, name: str) -> Colormap:
+        """Return built-in or runtime-loaded colormap instance."""
+        cmap_name = self._normalize_colormap_name(name)
+        if cmap_name in self.custom_colormaps:
+            return self.custom_colormaps[cmap_name]
+        cmap = get_colormap(cmap_name)
+        if cmap is None:
+            raise ValueError(f"Unknown colormap: {name}")
+        return cmap
+
+    def get_available_colormaps(self) -> List[str]:
+        """Return currently available colormap names."""
+        return sorted(self.menu_bar.colormap_actions.keys())
+
+    def _update_colormap_menu_checks(self) -> None:
+        """Sync menu check marks with current colormap selection."""
+        for cmap_name, action in self.menu_bar.colormap_actions.items():
+            action.setChecked(cmap_name == self.current_colormap)
     
     def _set_colormap(self, colormap: str) -> None:
         """
@@ -848,18 +970,15 @@ class MainWindow(QMainWindow):
         Args:
             colormap: Name of the colormap to use.
         """
-        self.current_colormap = colormap
+        cmap_name = self._normalize_colormap_name(colormap)
+        if cmap_name not in self.menu_bar.colormap_actions:
+            self.statusBar().showMessage(f"Unsupported colormap: {colormap}", 2000)
+            return
+        self.current_colormap = cmap_name
         self._persist_frame_view_state()
         
         # Update menu checkboxes
-        self.menu_bar.action_cmap_gray.setChecked(colormap == "grey")
-        self.menu_bar.action_cmap_heat.setChecked(colormap == "heat")
-        self.menu_bar.action_cmap_cool.setChecked(colormap == "cool")
-        self.menu_bar.action_cmap_rainbow.setChecked(colormap == "rainbow")
-        self.menu_bar.action_cmap_viridis.setChecked(colormap == "viridis")
-        self.menu_bar.action_cmap_plasma.setChecked(colormap == "plasma")
-        self.menu_bar.action_cmap_inferno.setChecked(colormap == "inferno")
-        self.menu_bar.action_cmap_magma.setChecked(colormap == "magma")
+        self._update_colormap_menu_checks()
         
         # Update button bar
         cmap_name_map = {
@@ -868,13 +987,608 @@ class MainWindow(QMainWindow):
             "cool": "Cool",
             "rainbow": "Rainbow",
         }
-        if colormap in cmap_name_map:
-            self.button_bar.set_colormap(cmap_name_map[colormap])
+        if cmap_name in cmap_name_map:
+            self.button_bar.set_colormap(cmap_name_map[cmap_name])
         
         # Redisplay with new colormap
         if self.image_data is not None:
             self._display_image()
-            self.statusBar().showMessage(f"Colormap: {colormap}", 2000)
+            self.statusBar().showMessage(f"Colormap: {cmap_name}", 2000)
+
+    def _reset_colormap(self) -> None:
+        """Reset colormap and inversion to defaults."""
+        self.invert_colormap = False
+        self.menu_bar.action_invert_colormap.setChecked(False)
+        self._set_colormap(self._default_colormap)
+        self.statusBar().showMessage("Colormap reset", 2000)
+
+    def _toggle_colorbar_visibility(self, checked: bool) -> None:
+        """Show or hide colorbar dock."""
+        self.colorbar_dock.setVisible(checked)
+
+    def _set_colorbar_orientation(self, orientation: str) -> None:
+        """Set colorbar orientation."""
+        orientation_l = orientation.lower()
+        self.colorbar_widget.set_orientation(orientation_l)
+        self.menu_bar.action_colorbar_horizontal.setChecked(orientation_l == "horizontal")
+        self.menu_bar.action_colorbar_vertical.setChecked(orientation_l == "vertical")
+        self.statusBar().showMessage(f"Colorbar orientation: {orientation}", 2000)
+
+    def _set_colorbar_numerics(self, checked: bool) -> None:
+        """Set colorbar numerics visibility."""
+        self.colorbar_widget.set_show_numerics(checked)
+        self.menu_bar.action_colorbar_numerics_show.setChecked(checked)
+
+    def _set_colorbar_spacing_mode(self, mode: str) -> None:
+        """Set colorbar tick spacing mode."""
+        mode_l = mode.lower()
+        self.colorbar_widget.set_spacing_mode(mode_l)
+        self.menu_bar.action_colorbar_space_value.setChecked(mode_l == "value")
+        self.menu_bar.action_colorbar_space_distance.setChecked(mode_l == "distance")
+
+    def _set_colorbar_font_size(self, size: int) -> None:
+        """Set colorbar numeric label font size."""
+        self.colorbar_widget.set_label_font_size(size)
+        if size <= 7:
+            self.menu_bar.action_colorbar_font_small.setChecked(True)
+        elif size >= 10:
+            self.menu_bar.action_colorbar_font_large.setChecked(True)
+        else:
+            self.menu_bar.action_colorbar_font_medium.setChecked(True)
+
+    def _show_colorbar_size_dialog(self) -> None:
+        """Prompt for colorbar size and apply it."""
+        size, ok = QInputDialog.getInt(
+            self,
+            "Colorbar Size",
+            "Size:",
+            value=self.colorbar_widget.bar_size,
+            min=12,
+            max=96,
+        )
+        if ok:
+            self.colorbar_widget.set_bar_size(size)
+
+    def _show_colorbar_ticks_dialog(self) -> None:
+        """Prompt for number of colorbar ticks and apply it."""
+        ticks, ok = QInputDialog.getInt(
+            self,
+            "Colorbar Ticks",
+            "Number of ticks:",
+            value=self.colorbar_widget.tick_count,
+            min=2,
+            max=30,
+        )
+        if ok:
+            self.colorbar_widget.set_tick_count(ticks)
+
+    def _show_colormap_dialog(self) -> None:
+        """Open colormap parameter dialog."""
+        from .dialogs.colormap_dialog import ColormapDialog
+
+        dialog = ColormapDialog(self)
+        dialog.colormap_changed.connect(self._apply_colormap_dialog_settings)
+        dialog.exec()
+
+    def _apply_colormap_dialog_settings(self, settings: dict) -> None:
+        """Apply settings emitted by ColormapDialog."""
+        cmap_name = self._normalize_colormap_name(settings.get("colormap", self.current_colormap))
+        if cmap_name in self.menu_bar.colormap_actions:
+            self._set_colormap(cmap_name)
+        invert = bool(settings.get("invert", self.invert_colormap))
+        if invert != self.invert_colormap:
+            self.menu_bar.action_invert_colormap.setChecked(invert)
+            self._toggle_invert_colormap(invert)
+
+    def _register_user_colormap(self, colormap: Colormap) -> None:
+        """Register a user-loaded colormap and attach a menu action."""
+        name = self._normalize_colormap_name(colormap.name)
+        self.custom_colormaps[name] = Colormap(name, colormap.colors)
+        action = self.menu_bar.add_user_colormap_action(name)
+        if name not in self._user_colormap_actions:
+            action.triggered.connect(lambda checked=False, cmap=name: self._set_colormap(cmap))
+            self._user_colormap_actions[name] = action
+
+    def _load_user_colormap(self) -> None:
+        """Load a user colormap from .lut or .sao file."""
+        filepath, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load Colormap",
+            "",
+            "Colormap Files (*.lut *.sao);;LUT Files (*.lut);;SAO Files (*.sao);;All Files (*)",
+        )
+        if not filepath:
+            return
+        try:
+            if filepath.lower().endswith(".sao"):
+                cmap = parse_sao_file(filepath)
+            else:
+                cmap = parse_lut_file(filepath)
+            self._register_user_colormap(cmap)
+            self._set_colormap(cmap.name)
+            self.statusBar().showMessage(f"Loaded colormap: {cmap.name}", 3000)
+        except Exception as exc:
+            self.statusBar().showMessage(f"Error loading colormap: {exc}", 3000)
+
+    def _save_current_colormap(self) -> None:
+        """Save current colormap to a LUT file."""
+        try:
+            cmap = self._get_colormap_instance(self.current_colormap)
+        except ValueError as exc:
+            self.statusBar().showMessage(str(exc), 3000)
+            return
+        filepath, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Colormap",
+            f"{self.current_colormap}.lut",
+            "LUT Files (*.lut);;All Files (*)",
+        )
+        if not filepath:
+            return
+        try:
+            save_lut_file(cmap, filepath)
+            self.statusBar().showMessage(f"Saved colormap: {filepath}", 3000)
+        except Exception as exc:
+            self.statusBar().showMessage(f"Error saving colormap: {exc}", 3000)
+
+    def _update_block_menu_checks(self, factor: int) -> None:
+        """Update Analysis->Block checkmarks based on current factor."""
+        self.menu_bar.action_block_1.setChecked(factor == 1)
+        self.menu_bar.action_block_2.setChecked(factor == 2)
+        self.menu_bar.action_block_4.setChecked(factor == 4)
+        self.menu_bar.action_block_8.setChecked(factor == 8)
+        self.menu_bar.action_block_16.setChecked(factor == 16)
+        self.menu_bar.action_block_32.setChecked(factor == 32)
+
+    def _set_block_factor(self, factor: int) -> None:
+        """Set block/bin factor from Analysis->Block menu."""
+        allowed = [1, 2, 4, 8, 16, 32]
+        nearest = min(allowed, key=lambda item: abs(item - factor))
+        self._set_bin(nearest)
+        self._log_analysis_command(f"block {nearest}")
+
+    def _block_in(self) -> None:
+        """Decrease block factor to next lower preset."""
+        frame = self.frame_manager.current_frame
+        current = getattr(frame, "bin_factor", 1) if frame else 1
+        allowed = [1, 2, 4, 8, 16, 32]
+        idx = max(0, allowed.index(current) - 1) if current in allowed else 0
+        self._set_block_factor(allowed[idx])
+
+    def _block_out(self) -> None:
+        """Increase block factor to next higher preset."""
+        frame = self.frame_manager.current_frame
+        current = getattr(frame, "bin_factor", 1) if frame else 1
+        allowed = [1, 2, 4, 8, 16, 32]
+        idx = min(len(allowed) - 1, allowed.index(current) + 1) if current in allowed else 1
+        self._set_block_factor(allowed[idx])
+
+    def _block_fit(self) -> None:
+        """Choose a block factor that roughly fits image into viewport."""
+        frame = self.frame_manager.current_frame
+        if not frame or frame.original_image_data is None:
+            if frame and frame.image_data is not None:
+                frame.original_image_data = frame.image_data
+            else:
+                self.statusBar().showMessage("No image loaded", 2000)
+                return
+        if frame.original_image_data is None:
+            self.statusBar().showMessage("No image loaded", 2000)
+            return
+
+        height, width = frame.original_image_data.shape[:2]
+        viewport = self.scroll_area.viewport().size()
+        vw = max(1, viewport.width())
+        vh = max(1, viewport.height())
+        needed = max(width / vw, height / vh)
+        allowed = [1, 2, 4, 8, 16, 32]
+        factor = next((value for value in allowed if value >= needed), 32)
+        self._set_block_factor(factor)
+
+    def _show_block_parameters(self) -> None:
+        """Show block-factor parameter dialog."""
+        frame = self.frame_manager.current_frame
+        current = getattr(frame, "bin_factor", 1) if frame else 1
+        value, ok = QInputDialog.getInt(self, "Block Parameters", "Block factor:", int(current), 1, 32, 1)
+        if not ok:
+            return
+        self._set_block_factor(value)
+
+    def _show_smooth_dialog(self) -> None:
+        """Show smoothing parameters dialog."""
+        if self.image_data is None:
+            self.statusBar().showMessage("No image loaded", 2000)
+            return
+        dialog = SmoothDialog(self)
+        dialog.smoothing_changed.connect(self._apply_smooth_settings)
+        dialog.exec()
+
+    def _apply_smooth_settings(self, settings: dict) -> None:
+        """Apply smoothing settings from dialog."""
+        self._smooth_settings = settings
+        self.menu_bar.action_smooth.blockSignals(True)
+        self.menu_bar.action_smooth.setChecked(True)
+        self.menu_bar.action_smooth.blockSignals(False)
+        self._toggle_smooth(True)
+
+    def _toggle_smooth(self, checked: bool) -> None:
+        """Toggle display smoothing."""
+        self.z1 = None
+        self.z2 = None
+        self._display_image()
+        self._log_analysis_command(f"smooth {'on' if checked else 'off'}")
+        self.statusBar().showMessage(f"Smooth {'enabled' if checked else 'disabled'}", 2000)
+
+    def _get_display_image_data(self, frame: Frame) -> NDArray[np.floating]:
+        """Return frame data after display-level analysis transforms."""
+        image_data = frame.image_data
+        if image_data is None:
+            return np.array([], dtype=np.float32)
+        if self.menu_bar.action_smooth.isChecked():
+            return self._apply_smoothing(image_data)
+        return image_data
+
+    def _get_analysis_image_data(self, frame: Frame) -> NDArray[np.floating]:
+        """Return analysis-ready data with current smoothing and mask settings."""
+        display_data = self._get_display_image_data(frame)
+        return self._apply_analysis_mask(display_data)
+
+    def _apply_analysis_mask(self, data: NDArray[np.floating]) -> NDArray[np.floating]:
+        """Apply analysis mask settings to image data."""
+        if self._analysis_mask_mode == "disabled":
+            return data
+        masked = np.array(data, copy=True, dtype=np.float32)
+        finite_mask = np.isfinite(masked)
+        keep_mask = finite_mask
+        if self._analysis_mask_mode == "range":
+            low = self._analysis_mask_min if self._analysis_mask_min is not None else -np.inf
+            high = self._analysis_mask_max if self._analysis_mask_max is not None else np.inf
+            keep_mask = finite_mask & (masked >= low) & (masked <= high)
+        masked[~keep_mask] = np.nan
+        return masked
+
+    def _apply_smoothing(self, data: NDArray[np.floating]) -> NDArray[np.floating]:
+        """Apply configured smoothing to an image array."""
+        settings = self._smooth_settings
+        kernel = str(settings.get("kernel_type", "Gaussian")).lower()
+        preserve_nan = bool(settings.get("preserve_nan", True))
+        nan_mask = np.isnan(data)
+
+        working = data.astype(np.float32, copy=True)
+        if preserve_nan and np.any(nan_mask):
+            fill = float(np.nanmedian(working)) if np.isfinite(np.nanmedian(working)) else 0.0
+            working[nan_mask] = fill
+
+        if kernel == "gaussian":
+            sigma = float(settings.get("sigma", 2.0))
+            if settings.get("elliptical"):
+                axis_ratio = max(float(settings.get("axis_ratio", 1.0)), 0.1)
+                smoothed = gaussian_smooth(working, (sigma * axis_ratio, sigma))
+            else:
+                smoothed = gaussian_smooth(working, sigma)
+        elif kernel == "boxcar":
+            smoothed = boxcar_smooth(working, int(settings.get("kernel_size", 5)))
+        elif kernel == "tophat":
+            radius = max(1.0, float(settings.get("kernel_size", 5)) / 2.0)
+            smoothed = tophat_smooth(working, radius)
+        else:
+            smoothed = ndimage.median_filter(working, size=int(settings.get("kernel_size", 5)))
+
+        if preserve_nan and np.any(nan_mask):
+            smoothed = smoothed.astype(np.float32, copy=True)
+            smoothed[nan_mask] = np.nan
+        return smoothed
+
+    def _toggle_coordinate_grid(self, checked: bool) -> None:
+        """Toggle coordinate grid overlay."""
+        self._refresh_analysis_overlays()
+        self.statusBar().showMessage(
+            "Coordinate grid enabled" if checked else "Coordinate grid disabled",
+            2000,
+        )
+        self._log_analysis_command(f"grid {'on' if checked else 'off'}")
+
+    def _show_grid_dialog(self) -> None:
+        """Show coordinate grid parameters dialog."""
+        dialog = GridDialog(self)
+        if self._grid_settings:
+            dialog._coord_combo.setCurrentText(self._grid_settings.get("coord_system", "WCS"))
+            dialog._format_combo.setCurrentText(self._grid_settings.get("label_format", "Sexagesimal"))
+            dialog._auto_spacing_check.setChecked(self._grid_settings.get("auto_spacing", True))
+            dialog._ra_spacing_spin.setValue(float(self._grid_settings.get("ra_spacing", 1.0)))
+            dialog._dec_spacing_spin.setValue(float(self._grid_settings.get("dec_spacing", 1.0)))
+        dialog.grid_changed.connect(self._apply_grid_settings)
+        dialog.exec()
+
+    def _apply_grid_settings(self, settings: dict) -> None:
+        """Store coordinate grid settings."""
+        self._grid_settings = settings
+        self.menu_bar.action_coordinate_grid.blockSignals(True)
+        self.menu_bar.action_coordinate_grid.setChecked(True)
+        self.menu_bar.action_coordinate_grid.blockSignals(False)
+        self._refresh_analysis_overlays()
+        self._log_analysis_command("grid params")
+        self.statusBar().showMessage("Updated coordinate grid parameters", 2000)
+
+    def _show_mask_parameters(self) -> None:
+        """Show mask parameter controls for analysis tools."""
+        mode_labels = ["Disabled", "Finite Pixels Only", "Value Range"]
+        mode_map = {
+            "Disabled": "disabled",
+            "Finite Pixels Only": "finite",
+            "Value Range": "range",
+        }
+        current_label = next(
+            (label for label, mode in mode_map.items() if mode == self._analysis_mask_mode),
+            "Disabled",
+        )
+        choice, ok = QInputDialog.getItem(
+            self,
+            "Mask Parameters",
+            "Mask mode:",
+            mode_labels,
+            mode_labels.index(current_label),
+            False,
+        )
+        if not ok:
+            return
+        mode = mode_map[choice]
+        self._analysis_mask_mode = mode
+        if mode == "range":
+            min_default = self._analysis_mask_min if self._analysis_mask_min is not None else 0.0
+            max_default = self._analysis_mask_max if self._analysis_mask_max is not None else 1.0
+            min_val, ok_min = QInputDialog.getDouble(
+                self,
+                "Mask Parameters",
+                "Minimum value:",
+                float(min_default),
+                decimals=6,
+            )
+            if not ok_min:
+                return
+            max_val, ok_max = QInputDialog.getDouble(
+                self,
+                "Mask Parameters",
+                "Maximum value:",
+                float(max_default),
+                decimals=6,
+            )
+            if not ok_max:
+                return
+            if max_val < min_val:
+                min_val, max_val = max_val, min_val
+            self._analysis_mask_min = float(min_val)
+            self._analysis_mask_max = float(max_val)
+            self.statusBar().showMessage(
+                f"Mask range set to [{self._analysis_mask_min:.4g}, {self._analysis_mask_max:.4g}]",
+                3000,
+            )
+        else:
+            self._analysis_mask_min = None
+            self._analysis_mask_max = None
+            self.statusBar().showMessage(f"Mask mode: {choice}", 2500)
+        self._log_analysis_command(f"mask {mode}")
+
+    def _show_crosshair_parameters(self) -> None:
+        """Show crosshair parameter controls."""
+        enabled, ok = QInputDialog.getItem(
+            self,
+            "Crosshair Parameters",
+            "Crosshair:",
+            ["Off", "On"],
+            1 if self._crosshair_enabled else 0,
+            False,
+        )
+        if not ok:
+            return
+        self._crosshair_enabled = enabled == "On"
+        if self._crosshair_enabled:
+            color = QColorDialog.getColor(self._crosshair_color, self, "Crosshair Color")
+            if color.isValid():
+                self._crosshair_color = color
+            size, ok_size = QInputDialog.getInt(
+                self,
+                "Crosshair Parameters",
+                "Crosshair size (pixels):",
+                self._crosshair_size,
+                4,
+                256,
+            )
+            if ok_size:
+                self._crosshair_size = int(size)
+        self._refresh_analysis_overlays()
+        self._log_analysis_command(f"crosshair {'on' if self._crosshair_enabled else 'off'}")
+        self.statusBar().showMessage(
+            f"Crosshair {'enabled' if self._crosshair_enabled else 'disabled'}",
+            2000,
+        )
+
+    def _show_graph_parameters(self) -> None:
+        """Show graph panel visibility controls."""
+        current = "None"
+        if self.horizontal_graph_dock.isVisible() and self.vertical_graph_dock.isVisible():
+            current = "Both"
+        elif self.horizontal_graph_dock.isVisible():
+            current = "Horizontal"
+        elif self.vertical_graph_dock.isVisible():
+            current = "Vertical"
+        mode, ok = QInputDialog.getItem(
+            self,
+            "Graph Parameters",
+            "Visible graph panels:",
+            ["None", "Horizontal", "Vertical", "Both"],
+            ["None", "Horizontal", "Vertical", "Both"].index(current),
+            False,
+        )
+        if not ok:
+            return
+        self._set_graph_visibility(mode)
+        self.statusBar().showMessage(f"Graph panels: {mode}", 2000)
+
+    def _set_graph_visibility(self, mode: str) -> None:
+        """Set visibility for horizontal/vertical graph docks."""
+        show_horizontal = mode in ("Horizontal", "Both")
+        show_vertical = mode in ("Vertical", "Both")
+        self.horizontal_graph_dock.setVisible(show_horizontal)
+        self.vertical_graph_dock.setVisible(show_vertical)
+        self._log_analysis_command(f"graph {mode.lower()}")
+        frame = self.frame_manager.current_frame
+        if frame and frame.image_data is not None:
+            analysis_data = self._get_analysis_image_data(frame)
+            self.horizontal_graph_dock.set_image(analysis_data)
+            self.vertical_graph_dock.set_image(analysis_data)
+
+    def _refresh_analysis_overlays(self) -> None:
+        """Apply grid/crosshair overlay states to the active viewer."""
+        if hasattr(self.image_viewer, "set_grid"):
+            self.image_viewer.set_grid(
+                self.menu_bar.action_coordinate_grid.isChecked(),
+                self._grid_settings,
+            )
+        if hasattr(self.image_viewer, "set_crosshair"):
+            position = (
+                (float(self._last_mouse_pos[0]), float(self._last_mouse_pos[1]))
+                if self._last_mouse_pos is not None
+                else None
+            )
+            self.image_viewer.set_crosshair(
+                self._crosshair_enabled,
+                position=position,
+                color=self._crosshair_color,
+                size=self._crosshair_size,
+            )
+
+    def _resolve_object_name(self) -> None:
+        """Resolve an object name and pan to it if WCS is available."""
+        name, ok = QInputDialog.getText(self, "Name Resolution", "Object name:")
+        if not ok or not name.strip():
+            return
+        query = name.strip()
+        try:
+            coord = SkyCoord.from_name(query)
+        except Exception as exc:
+            self.statusBar().showMessage(f"Name resolution failed: {exc}", 3500)
+            return
+
+        if self.wcs_handler and self.wcs_handler.is_valid:
+            try:
+                x, y = self.wcs_handler.world_to_pixel(coord.ra.deg, coord.dec.deg)
+                if self.using_gpu_rendering and hasattr(self.image_viewer, "set_pan"):
+                    self.image_viewer.set_pan(float(x), float(y))
+                    self._persist_frame_view_state()
+                    self._update_panner_view_rect()
+                else:
+                    self._on_panner_pan(float(x), float(y))
+                self.statusBar().showMessage(
+                    f"{query}: RA {coord.ra.deg:.6f} deg, Dec {coord.dec.deg:.6f} deg",
+                    4000,
+                )
+                self._log_analysis_command(f"name {query}")
+                return
+            except Exception:
+                pass
+
+        self.statusBar().showMessage(
+            f"{query}: RA {coord.ra.deg:.6f} deg, Dec {coord.dec.deg:.6f} deg",
+            4000,
+        )
+        self._log_analysis_command(f"name {query}")
+
+    def _set_analysis_command_log(self, checked: bool) -> None:
+        """Toggle analysis command logging preference."""
+        self._analysis_command_log = checked
+        self.statusBar().showMessage(
+            f"Analysis command log {'enabled' if checked else 'disabled'}",
+            2000,
+        )
+
+    def _log_analysis_command(self, command: str) -> None:
+        """Append an analysis command to in-memory log when enabled."""
+        if not self._analysis_command_log:
+            return
+        self._analysis_command_entries.append(command)
+        if len(self._analysis_command_entries) > 200:
+            self._analysis_command_entries = self._analysis_command_entries[-200:]
+
+    def _load_analysis_commands(self) -> None:
+        """Load simple external analysis commands into the Analysis menu."""
+        filepath, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load Analysis Commands",
+            "",
+            "Analysis Command Files (*.ans *.analysis *.txt *.ds9);;All Files (*)",
+        )
+        if not filepath:
+            return
+
+        self._clear_analysis_commands(show_message=False)
+        loaded = 0
+        try:
+            with open(filepath, "r", encoding="utf-8") as handle:
+                lines = handle.readlines()
+        except Exception as exc:
+            self.statusBar().showMessage(f"Failed to load analysis commands: {exc}", 3500)
+            return
+
+        for raw in lines:
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "|" in line:
+                label, command = [part.strip() for part in line.split("|", 1)]
+            else:
+                label, command = line, line
+            if not label or not command:
+                continue
+            action = QAction(label, self)
+            action.triggered.connect(
+                lambda checked=False, cmd=command, title=label: self._execute_loaded_analysis_command(title, cmd)
+            )
+            self.menu_bar.analysis_menu.insertAction(self.menu_bar.action_load_analysis_commands, action)
+            self._loaded_analysis_actions.append(action)
+            loaded += 1
+
+        self._log_analysis_command(f"load_analysis_commands {loaded}")
+        self.statusBar().showMessage(f"Loaded {loaded} analysis commands", 3000)
+
+    def _execute_loaded_analysis_command(self, title: str, command: str) -> None:
+        """Execute a simple loaded analysis command."""
+        cmd = command.strip()
+        self._log_analysis_command(f"run {title}: {cmd}")
+        if cmd.lower().startswith(("http://", "https://", "url:")):
+            target = cmd.split(":", 1)[1].strip() if cmd.lower().startswith("url:") else cmd
+            QDesktopServices.openUrl(QUrl(target))
+            self.statusBar().showMessage(f"Opened {title}", 2000)
+            return
+        if cmd.lower().startswith("open:"):
+            target = cmd.split(":", 1)[1].strip()
+            if target:
+                self.open_file(target)
+                return
+        if cmd.lower().startswith("message:"):
+            self.statusBar().showMessage(cmd.split(":", 1)[1].strip(), 3000)
+            return
+        self.statusBar().showMessage(f"{title}: {cmd}", 3000)
+
+    def _clear_analysis_commands(self, show_message: bool = True) -> None:
+        """Clear previously loaded external analysis commands."""
+        if not self._loaded_analysis_actions:
+            if show_message:
+                self.statusBar().showMessage("No external analysis commands are currently loaded", 2500)
+            return
+        for action in self._loaded_analysis_actions:
+            self.menu_bar.analysis_menu.removeAction(action)
+        cleared = len(self._loaded_analysis_actions)
+        self._loaded_analysis_actions = []
+        self._log_analysis_command(f"clear_analysis_commands {cleared}")
+        if show_message:
+            self.statusBar().showMessage(f"Cleared {cleared} analysis commands", 2500)
+
+    def _open_analysis_web_browser(self) -> None:
+        """Open a browser URL from the Analysis menu."""
+        QDesktopServices.openUrl(QUrl("https://sites.google.com/cfa.harvard.edu/saoimageds9"))
+        self._log_analysis_command("web")
+        self.statusBar().showMessage("Opened web browser", 2000)
 
     def _update_bin_menu_checks(self, factor: int) -> None:
         """Update Bin menu checkmarks based on current factor."""
@@ -882,6 +1596,7 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_bin_2.setChecked(factor == 2)
         self.menu_bar.action_bin_4.setChecked(factor == 4)
         self.menu_bar.action_bin_8.setChecked(factor == 8)
+        self._update_block_menu_checks(factor)
 
     def _rebin_image(self, data: np.ndarray, factor: int) -> np.ndarray:
         """Rebin image by an integer factor using block mean."""
@@ -981,6 +1696,11 @@ class MainWindow(QMainWindow):
         # Update magnifier panel (DS9 style)
         if hasattr(self, 'magnifier_panel'):
             self.magnifier_panel.update_cursor_position(x, row)
+        if hasattr(self, "horizontal_graph_dock") and self.horizontal_graph_dock.isVisible():
+            self.horizontal_graph_dock.update_cursor_position(x, row)
+        if hasattr(self, "vertical_graph_dock") and self.vertical_graph_dock.isVisible():
+            self.vertical_graph_dock.update_cursor_position(x, row)
+        self._refresh_analysis_overlays()
 
     def _on_image_clicked(self, x: int, y: int, button: int) -> None:
         """Handle image clicks (used for tiled frame selection)."""
@@ -1651,21 +2371,66 @@ class MainWindow(QMainWindow):
     
     def _show_statistics(self) -> None:
         """Show statistics dialog."""
-        if self.image_data is None:
+        frame = self.frame_manager.current_frame
+        if frame is None or frame.image_data is None:
             self.statusBar().showMessage("No image loaded", 2000)
             return
-        
-        dialog = StatisticsDialog(self.image_data, self)
+
+        dialog = StatisticsDialog(self._get_analysis_image_data(frame), self)
         dialog.exec()
+        self._log_analysis_command("statistics")
     
     def _show_histogram(self) -> None:
         """Show histogram dialog."""
-        if self.image_data is None:
+        frame = self.frame_manager.current_frame
+        if frame is None or frame.image_data is None:
             self.statusBar().showMessage("No image loaded", 2000)
             return
-        
-        dialog = HistogramDialog(self.image_data, self)
+
+        dialog = HistogramDialog(self._get_analysis_image_data(frame), self)
         dialog.exec()
+        self._log_analysis_command("histogram")
+
+    def _show_radial_profile(self) -> None:
+        """Show radial profile plot from the current frame."""
+        frame = self.frame_manager.current_frame
+        if frame is None or frame.image_data is None:
+            self.statusBar().showMessage("No image loaded", 2000)
+            return
+
+        data = self._get_analysis_image_data(frame)
+        if not np.any(np.isfinite(data)):
+            self.statusBar().showMessage("No valid pixels for radial profile", 2500)
+            return
+        profile = RadialProfile(data)
+        radii, values = profile.extract()
+
+        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+        from matplotlib.figure import Figure
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QPushButton, QHBoxLayout
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Radial Profile")
+        dialog.setMinimumSize(640, 420)
+        layout = QVBoxLayout(dialog)
+        figure = Figure(figsize=(7, 4))
+        canvas = FigureCanvasQTAgg(figure)
+        ax = figure.add_subplot(111)
+        ax.plot(radii, values, color="tab:blue", linewidth=1.5)
+        ax.set_xlabel("Radius (pixels)")
+        ax.set_ylabel("Mean value")
+        ax.set_title("Radial Profile")
+        ax.grid(True, alpha=0.3)
+        figure.tight_layout()
+        layout.addWidget(canvas)
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(dialog.accept)
+        btn_row.addWidget(close_btn)
+        layout.addLayout(btn_row)
+        dialog.exec()
+        self._log_analysis_command("radial_profile")
     
     def _show_scale_dialog(self) -> None:
         """Show scale parameters dialog (DS9 style)."""
@@ -1730,18 +2495,51 @@ class MainWindow(QMainWindow):
     def _apply_contours(self, settings: dict) -> None:
         """Compute and display contours based on settings."""
         self._contour_settings = settings
+        self.menu_bar.action_contours.blockSignals(True)
+        self.menu_bar.action_contours.setChecked(True)
+        self.menu_bar.action_contours.blockSignals(False)
         self._update_contours()
+        self._log_analysis_command("contour params")
+
+    def _toggle_contours(self, checked: bool) -> None:
+        """Toggle contour overlay visibility."""
+        if checked:
+            if self._contour_settings is None:
+                self._contour_settings = {
+                    "method": "Linear",
+                    "num_levels": 10,
+                    "smooth": False,
+                    "smooth_sigma": 1.0,
+                    "line_width": 1.0,
+                    "line_style": "Solid",
+                    "color": "#00ff00",
+                    "show_labels": False,
+                }
+            self._update_contours()
+            self._log_analysis_command("contour on")
+            self.statusBar().showMessage("Contours enabled", 2000)
+        else:
+            if hasattr(self.image_viewer, "clear_contours"):
+                self.image_viewer.clear_contours()
+            self._log_analysis_command("contour off")
+            self.statusBar().showMessage("Contours disabled", 2000)
 
     def _update_contours(self) -> None:
         """Recompute contours for current image."""
-        if self.image_data is None or self._contour_settings is None:
+        if not self.menu_bar.action_contours.isChecked():
+            if hasattr(self.image_viewer, "clear_contours"):
+                self.image_viewer.clear_contours()
+            return
+        frame = self.frame_manager.current_frame
+        if frame is None or frame.image_data is None or self._contour_settings is None:
             if hasattr(self.image_viewer, "clear_contours"):
                 self.image_viewer.clear_contours()
             return
 
+        contour_data = self._get_analysis_image_data(frame)
         settings = self._contour_settings
         smooth_sigma = settings.get("smooth_sigma", 1.0) if settings.get("smooth") else None
-        generator = ContourGenerator(self.image_data, smooth=smooth_sigma)
+        generator = ContourGenerator(contour_data, smooth=smooth_sigma)
 
         levels = self._compute_contour_levels(generator, settings)
 
@@ -1871,16 +2669,19 @@ class MainWindow(QMainWindow):
     
     def _show_pixel_table(self) -> None:
         """Show pixel table dialog."""
-        if self.image_data is None:
+        frame = self.frame_manager.current_frame
+        if frame is None or frame.image_data is None:
             self.statusBar().showMessage("No image loaded", 2000)
             return
         
         # Use image center as default
-        height, width = self.image_data.shape
+        analysis_data = self._get_analysis_image_data(frame)
+        height, width = analysis_data.shape
         x, y = width // 2, height // 2
         
-        dialog = PixelTableDialog(self.image_data, x, y, size=11, parent=self)
+        dialog = PixelTableDialog(analysis_data, x, y, size=11, parent=self)
         dialog.exec()
+        self._log_analysis_command("pixel_table")
     
     def _show_fits_header(self) -> None:
         """Show FITS header dialog."""
@@ -1958,11 +2759,13 @@ class MainWindow(QMainWindow):
         clipped = np.clip(image_data, adjusted_z1, adjusted_z2)
         scaled = apply_scale(clipped, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
 
-        cmap = get_colormap(self.current_colormap)
+        try:
+            cmap = self._get_colormap_instance(self.current_colormap)
+        except ValueError:
+            cmap = self._get_colormap_instance("grey")
         if self.invert_colormap:
             cmap_data = cmap.colors.copy()
             cmap_data = cmap_data[::-1]
-            from ..colormaps.colormap import Colormap
             cmap = Colormap(f"{self.current_colormap}_inverted", cmap_data)
 
         rgb = cmap.apply(scaled)
@@ -2210,19 +3013,12 @@ class MainWindow(QMainWindow):
 
     def _apply_frame_view_state(self, frame: Frame) -> None:
         """Apply stored display settings from the frame."""
-        self.current_colormap = frame.colormap
+        self.current_colormap = self._normalize_colormap_name(frame.colormap)
         self.current_scale = frame.scale
         self.invert_colormap = frame.invert_colormap
         self.z1 = frame.z1
         self.z2 = frame.z2
-        self.menu_bar.action_cmap_gray.setChecked(self.current_colormap == "grey")
-        self.menu_bar.action_cmap_heat.setChecked(self.current_colormap == "heat")
-        self.menu_bar.action_cmap_cool.setChecked(self.current_colormap == "cool")
-        self.menu_bar.action_cmap_rainbow.setChecked(self.current_colormap == "rainbow")
-        self.menu_bar.action_cmap_viridis.setChecked(self.current_colormap == "viridis")
-        self.menu_bar.action_cmap_plasma.setChecked(self.current_colormap == "plasma")
-        self.menu_bar.action_cmap_inferno.setChecked(self.current_colormap == "inferno")
-        self.menu_bar.action_cmap_magma.setChecked(self.current_colormap == "magma")
+        self._update_colormap_menu_checks()
         self.menu_bar.action_invert_colormap.setChecked(self.invert_colormap)
         self.menu_bar.action_scale_linear.setChecked(self.current_scale == ScaleAlgorithm.LINEAR)
         self.menu_bar.action_scale_log.setChecked(self.current_scale == ScaleAlgorithm.LOG)
