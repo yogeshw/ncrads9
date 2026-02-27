@@ -51,6 +51,20 @@ def test_parse_cli_sequence_preserves_order():
     assert items[5].name == "tile" and items[5].args == []
 
 
+def test_parse_cli_sequence_keeps_file_after_scale_flag():
+    items = parse_cli_sequence(["-log", "image.fits"])
+    assert len(items) == 2
+    assert items[0].kind == "option" and items[0].name == "log" and items[0].args == []
+    assert items[1].kind == "file" and items[1].name == "image.fits"
+
+
+def test_parse_cli_sequence_supports_mixed_option_arities():
+    items = parse_cli_sequence(["-scale", "log", "-pan", "10", "20", "image.fits"])
+    assert items[0].name == "scale" and items[0].args == ["log"]
+    assert items[1].name == "pan" and items[1].args == ["10", "20"]
+    assert items[2].kind == "file" and items[2].name == "image.fits"
+
+
 def test_apply_startup_cli_builds_rgb_composite(main_window: MainWindow, monkeypatch):
     fake_data = {
         "r.fits": np.array([[0.0, 10.0], [0.0, 10.0]], dtype=np.float32),
@@ -82,6 +96,26 @@ def test_apply_startup_cli_builds_rgb_composite(main_window: MainWindow, monkeyp
     composite = main_window._compose_rgb_frame_image(frame)
     assert composite is not None
     assert composite.shape == (2, 2, 3)
+
+
+def test_apply_startup_cli_log_then_file_loads_image(main_window: MainWindow, monkeypatch):
+    opened_paths = []
+
+    def _fake_open(self, checked=False, filepath=None):
+        if isinstance(checked, str) and filepath is None:
+            filepath = checked
+        assert filepath is not None
+        opened_paths.append(filepath)
+        frame = self.frame_manager.current_frame
+        frame.filepath = Path(filepath)
+        frame.image_data = np.arange(100, dtype=np.float32).reshape(10, 10)
+        frame.original_image_data = frame.image_data
+
+    monkeypatch.setattr(MainWindow, "open_file", _fake_open)
+    apply_startup_cli(main_window, ["ncrads9", "-log", "image.fits"])
+    assert opened_paths == ["image.fits"]
+    assert main_window.current_scale == ScaleAlgorithm.LOG
+    assert main_window.frame_manager.current_frame.image_data is not None
 
 
 def test_apply_startup_cli_applies_display_options(main_window: MainWindow, monkeypatch):

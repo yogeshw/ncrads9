@@ -138,20 +138,68 @@ def open_cli_help_in_browser() -> Path:
 
 def parse_cli_sequence(args: Sequence[str]) -> List[CLIItem]:
     """Parse DS9-style startup arguments into an ordered sequence."""
+    def _is_option_token(token: str) -> bool:
+        return token.startswith("-") and len(token) > 1
+
+    bool_values = {"0", "1", "on", "off", "yes", "no", "true", "false"}
+    optional_bool_options = {"tile", "blink", "fade"}
+    one_arg_options = {
+        "red",
+        "green",
+        "blue",
+        "wcs",
+        "bin",
+        "cmap",
+        "colormap",
+        "color",
+        "colour",
+        "frame",
+        "zoom",
+        "width",
+        "height",
+        "mode",
+        "match",
+        "lock",
+        "regions",
+        "save",
+        "file",
+        "fits",
+        "scale",
+        "colorbar",
+        "cursor",
+        "crosshair",
+    }
+    two_arg_options = {"pan"}
+
     items: List[CLIItem] = []
     i = 0
     while i < len(args):
         token = str(args[i])
-        if token.startswith("-") and len(token) > 1:
+        if _is_option_token(token):
             option = token.lstrip("-").lower()
             option_args: List[str] = []
             i += 1
-            while i < len(args):
-                current = str(args[i])
-                if current.startswith("-") and len(current) > 1:
-                    break
-                option_args.append(current)
-                i += 1
+            if option in optional_bool_options:
+                if i < len(args):
+                    current = str(args[i])
+                    if not _is_option_token(current) and current.strip().lower() in bool_values:
+                        option_args.append(current)
+                        i += 1
+            elif option in two_arg_options:
+                for _ in range(2):
+                    if i >= len(args):
+                        break
+                    current = str(args[i])
+                    if _is_option_token(current):
+                        break
+                    option_args.append(current)
+                    i += 1
+            elif option in one_arg_options:
+                if i < len(args):
+                    current = str(args[i])
+                    if not _is_option_token(current):
+                        option_args.append(current)
+                        i += 1
             items.append(CLIItem(kind="option", name=option, args=option_args))
             continue
         items.append(CLIItem(kind="file", name=token, args=[]))
