@@ -91,6 +91,7 @@ class PannerPanel(QDockWidget):
         self._current_image: Optional[NDArray[np.float64]] = None
         self._view_rect: Optional[QRectF] = None
         self._thumbnail_size: int = 200
+        self._source_image_size: Optional[tuple[int, int]] = None
 
         self._setup_ui()
 
@@ -112,14 +113,24 @@ class PannerPanel(QDockWidget):
         """Handle pan request from label click."""
         self.pan_to.emit(x, y)
 
-    def set_image(self, image: NDArray[np.float64]) -> None:
+    def set_image(
+        self,
+        image: NDArray[np.float64],
+        source_size: Optional[tuple[int, int]] = None,
+    ) -> None:
         """
         Set the image data for the overview.
 
         Args:
             image: 2D numpy array of image data.
+            source_size: Optional (width, height) of the full-resolution source.
         """
         self._current_image = image
+        if source_size is None:
+            h, w = image.shape[:2]
+            self._source_image_size = (w, h)
+        else:
+            self._source_image_size = source_size
         self._update_thumbnail()
 
     def set_view_rect(self, rect: Optional[QRectF]) -> None:
@@ -137,7 +148,11 @@ class PannerPanel(QDockWidget):
         if self._current_image is None:
             return
 
-        h, w = self._current_image.shape[:2]
+        preview_h, preview_w = self._current_image.shape[:2]
+        if self._source_image_size is None:
+            source_w, source_h = preview_w, preview_h
+        else:
+            source_w, source_h = self._source_image_size
         is_rgb = len(self._current_image.shape) == 3 and self._current_image.shape[2] == 3
         if is_rgb:
             if self._current_image.dtype == np.uint8:
@@ -147,14 +162,14 @@ class PannerPanel(QDockWidget):
                 if vmax > vmin:
                     normalized = ((self._current_image - vmin) / (vmax - vmin) * 255).astype(np.uint8)
                 else:
-                    normalized = np.zeros((h, w, 3), dtype=np.uint8)
+                    normalized = np.zeros((preview_h, preview_w, 3), dtype=np.uint8)
             if not normalized.flags["C_CONTIGUOUS"]:
                 normalized = np.ascontiguousarray(normalized)
             qimage = QImage(
                 normalized.data,
-                w,
-                h,
-                3 * w,
+                preview_w,
+                preview_h,
+                3 * preview_w,
                 QImage.Format.Format_RGB888,
             )
         else:
@@ -164,21 +179,21 @@ class PannerPanel(QDockWidget):
                     np.uint8
                 )
             else:
-                normalized = np.zeros((h, w), dtype=np.uint8)
+                normalized = np.zeros((preview_h, preview_w), dtype=np.uint8)
             if not normalized.flags["C_CONTIGUOUS"]:
                 normalized = np.ascontiguousarray(normalized)
             qimage = QImage(
                 normalized.data,
-                w,
-                h,
+                preview_w,
+                preview_h,
                 normalized.strides[0],
                 QImage.Format.Format_Grayscale8,
             )
 
         # Scale to thumbnail size
-        scale = min(self._thumbnail_size / w, self._thumbnail_size / h)
-        new_w = int(w * scale)
-        new_h = int(h * scale)
+        scale = min(self._thumbnail_size / source_w, self._thumbnail_size / source_h)
+        new_w = int(source_w * scale)
+        new_h = int(source_h * scale)
 
         pixmap = QPixmap.fromImage(qimage).scaled(
             new_w,
@@ -187,13 +202,13 @@ class PannerPanel(QDockWidget):
             Qt.TransformationMode.SmoothTransformation,
         )
 
-        self._panner_label.set_image_size(w, h)
+        self._panner_label.set_image_size(source_w, source_h)
         self._panner_label.set_scale_factor(scale)
 
         # Draw view rectangle
         if self._view_rect is not None and self._view_rect.width() > 0 and self._view_rect.height() > 0:
-            view_cover_x = self._view_rect.width() / max(w, 1)
-            view_cover_y = self._view_rect.height() / max(h, 1)
+            view_cover_x = self._view_rect.width() / max(source_w, 1)
+            view_cover_y = self._view_rect.height() / max(source_h, 1)
             if view_cover_x >= 0.98 and view_cover_y >= 0.98:
                 self._panner_label.setPixmap(pixmap)
                 return
@@ -207,10 +222,18 @@ class PannerPanel(QDockWidget):
             else:
                 gray = normalized.astype(np.float32)
 
-            x0 = max(0, min(w - 1, int(self._view_rect.x())))
-            y0 = max(0, min(h - 1, int(self._view_rect.y())))
-            x1 = max(x0 + 1, min(w, int(self._view_rect.x() + self._view_rect.width())))
-            y1 = max(y0 + 1, min(h, int(self._view_rect.y() + self._view_rect.height())))
+            x_scale = preview_w / max(source_w, 1)
+            y_scale = preview_h / max(source_h, 1)
+            x0 = max(0, min(preview_w - 1, int(self._view_rect.x() * x_scale)))
+            y0 = max(0, min(preview_h - 1, int(self._view_rect.y() * y_scale)))
+            x1 = max(
+                x0 + 1,
+                min(preview_w, int((self._view_rect.x() + self._view_rect.width()) * x_scale)),
+            )
+            y1 = max(
+                y0 + 1,
+                min(preview_h, int((self._view_rect.y() + self._view_rect.height()) * y_scale)),
+            )
             local_mean = float(np.nanmean(gray[y0:y1, x0:x1]))
             rect_color = QColor(255, 255, 255) if local_mean < 128.0 else QColor(0, 0, 0)
 

@@ -52,6 +52,7 @@ class MagnifierPanel(QDockWidget):
         self._zoom_factor: int = 4
         self._region_size: int = 64
         self._current_image: Optional[NDArray[np.float64]] = None
+        self._source_image_size: Optional[tuple[int, int]] = None
         self._cursor_pos: Optional[QPointF] = None
 
         self._setup_ui()
@@ -87,14 +88,24 @@ class MagnifierPanel(QDockWidget):
         self._zoom_factor = value
         self._update_magnifier()
 
-    def set_image(self, image: NDArray[np.float64]) -> None:
+    def set_image(
+        self,
+        image: NDArray[np.float64],
+        source_size: Optional[tuple[int, int]] = None,
+    ) -> None:
         """
         Set the image data for magnification.
 
         Args:
             image: 2D numpy array of image data.
+            source_size: Optional (width, height) for full-resolution source.
         """
         self._current_image = image
+        if source_size is None:
+            h, w = image.shape[:2]
+            self._source_image_size = (w, h)
+        else:
+            self._source_image_size = source_size
         self._update_magnifier()
 
     def update_cursor_position(self, x: float, y: float) -> None:
@@ -113,8 +124,20 @@ class MagnifierPanel(QDockWidget):
         if self._current_image is None or self._cursor_pos is None:
             return
 
-        x = int(self._cursor_pos.x())
-        y = int(self._cursor_pos.y())
+        src_h, src_w = self._current_image.shape[:2]
+        if self._source_image_size is None:
+            source_w, source_h = src_w, src_h
+        else:
+            source_w, source_h = self._source_image_size
+
+        sx = int(self._cursor_pos.x())
+        sy = int(self._cursor_pos.y())
+        if source_w > 1 and source_h > 1:
+            x = int(round(sx * (src_w - 1) / (source_w - 1)))
+            y = int(round(sy * (src_h - 1) / (source_h - 1)))
+        else:
+            x, y = sx, sy
+
         half_size = self._region_size // 2
 
         # Extract region around cursor

@@ -316,17 +316,38 @@ def compute_zscale_limits(
     Returns:
         Tuple of (z1, z2) display limits.
     """
-    # Get finite values only
-    finite_data = data[np.isfinite(data)]
-    if len(finite_data) == 0:
-        return (0.0, 1.0)
+    if contrast <= 0:
+        contrast = 0.25
 
-    # Sample data
-    if len(finite_data) > num_samples:
-        indices = np.linspace(0, len(finite_data) - 1, num_samples, dtype=int)
-        samples = np.sort(finite_data.flatten())[indices]
+    total_pixels = int(np.prod(data.shape, dtype=np.int64))
+    large_image_threshold = max(4_000_000, num_samples * 64)
+
+    if total_pixels > large_image_threshold:
+        flat = np.ravel(data)
+        sample_span = max(num_samples * 8, num_samples)
+        step = max(1, flat.size // sample_span)
+        sampled = flat[::step]
+        finite_sampled = sampled[np.isfinite(sampled)]
+        if finite_sampled.size == 0:
+            return (0.0, 1.0)
+        if finite_sampled.size > num_samples:
+            idx = np.linspace(0, finite_sampled.size - 1, num_samples, dtype=int)
+            samples = np.sort(finite_sampled)[idx]
+        else:
+            samples = np.sort(finite_sampled)
+        data_min = float(np.nanmin(samples))
+        data_max = float(np.nanmax(samples))
     else:
-        samples = np.sort(finite_data.flatten())
+        finite_data = data[np.isfinite(data)]
+        if len(finite_data) == 0:
+            return (0.0, 1.0)
+        if len(finite_data) > num_samples:
+            indices = np.linspace(0, len(finite_data) - 1, num_samples, dtype=int)
+            samples = np.sort(finite_data.flatten())[indices]
+        else:
+            samples = np.sort(finite_data.flatten())
+        data_min = float(np.nanmin(data))
+        data_max = float(np.nanmax(data))
 
     n = len(samples)
     if n < 2:
@@ -334,6 +355,7 @@ def compute_zscale_limits(
 
     # Fit line with iterative sigma clipping
     x = np.arange(n)
+    coeffs = np.polyfit(x, samples, 1)
     for _ in range(num_iterations):
         coeffs = np.polyfit(x, samples, 1)
         fitted = np.polyval(coeffs, x)
@@ -353,8 +375,6 @@ def compute_zscale_limits(
     z2 = median_val + (n / 2.0) * slope / contrast
 
     # Ensure valid range
-    data_min = float(np.nanmin(data))
-    data_max = float(np.nanmax(data))
     z1 = max(z1, data_min)
     z2 = min(z2, data_max)
 

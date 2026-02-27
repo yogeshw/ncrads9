@@ -291,9 +291,15 @@ class TileRenderer:
             if not tile.loaded:
                 self.load_tile(tile)
 
+        # Prefetch near-visible tiles and evict distant ones.
+        for tile in self.get_prefetch_tiles(viewport):
+            if not tile.loaded:
+                self.load_tile(tile)
+
         # Render each tile
         for tile in visible_tiles:
             self._render_tile(tile, viewport)
+        self.cleanup_distant_tiles(viewport, distance=max(3, self._prefetch_margin + 2))
 
     def _render_tile(self, tile: Tile, viewport: Viewport) -> None:
         """

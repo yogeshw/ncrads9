@@ -18,12 +18,40 @@
 
 """Tests for core.fits_handler module."""
 
-import pytest
+from pathlib import Path
+
+from ncrads9.core.fits_handler import FITSHandler
 
 
 class TestFitsHandler:
     """Test cases for FitsHandler class."""
 
-    def test_placeholder(self):
-        """Placeholder test for FitsHandler."""
-        assert True
+    def test_load_uses_memmap_and_lazy_reading_by_default(self, monkeypatch):
+        calls = {}
+
+        def _fake_open(path, **kwargs):
+            calls["path"] = path
+            calls["kwargs"] = kwargs
+            return ["dummy-hdu"]
+
+        monkeypatch.setattr("ncrads9.core.fits_handler.fits.open", _fake_open)
+        handler = FITSHandler()
+        handler.load("/tmp/example.fits")
+
+        assert calls["path"] == Path("/tmp/example.fits")
+        assert calls["kwargs"]["memmap"] is True
+        assert calls["kwargs"]["lazy_load_hdus"] is True
+        assert calls["kwargs"]["mode"] == "readonly"
+
+    def test_load_can_disable_memmap(self, monkeypatch):
+        calls = {}
+
+        def _fake_open(path, **kwargs):
+            calls["kwargs"] = kwargs
+            return ["dummy-hdu"]
+
+        monkeypatch.setattr("ncrads9.core.fits_handler.fits.open", _fake_open)
+        handler = FITSHandler()
+        handler.load("/tmp/example.fits", memmap=False)
+
+        assert calls["kwargs"]["memmap"] is False

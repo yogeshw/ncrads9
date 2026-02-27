@@ -23,7 +23,6 @@ Author: Yogesh Wadadekar
 from pathlib import Path
 from typing import Any, Optional, Union
 
-import numpy as np
 from astropy.io import fits
 from numpy.typing import NDArray
 
@@ -43,7 +42,12 @@ class FITSReader:
 
     def open(self) -> None:
         """Open the FITS file."""
-        self._hdu_list = fits.open(self.filepath)
+        self._hdu_list = fits.open(
+            self.filepath,
+            memmap=True,
+            lazy_load_hdus=True,
+            mode="readonly",
+        )
 
     def close(self) -> None:
         """Close the FITS file."""
@@ -64,7 +68,7 @@ class FITSReader:
         if self._hdu_list is None:
             self.open()
         assert self._hdu_list is not None
-        return np.array(self._hdu_list[extension].data)
+        return self._hdu_list[extension].data
 
     def read_header(self, extension: int = 0) -> fits.Header:
         """

@@ -10,11 +10,12 @@ NCRADS9 is a modern reimplementation of SAOImageDS9, built with Python and Qt6. 
 
 ### Implemented
 - **FITS viewing**: Open FITS files (`.fits`, `.fit`, `.fts`, including gzip variants)
+- **Large-image handling**: Memory-mapped FITS reads with OpenGL tile rendering, viewport-only texture uploads, and downsampled preview panels for responsive navigation on very large images
 - **Display controls**: Zoom, pan, binning, zscale/minmax limits, colormap inversion
 - **Colormaps and scales**: DS9-style extended color menu (default + matplotlib/scientific families), user `.lut/.sao` colormap load/save, invert/reset, and configurable colorbar options with linear, log, sqrt, squared(power), asinh, and histogram equalization
 - **Regions**: Circle/ellipse/box/polygon/line/point creation plus DS9 region load/save (`.reg`)
 - **WCS tools**: FK5/FK4/ICRS/Galactic/Ecliptic display with sexagesimal/degree formatting and direction arrows
-- **Multi-frame workflow**: New/delete/navigate frames, tile view, blink mode, and match image/WCS settings
+- **Multi-frame workflow**: DS9-style expanded Frame menu with frame create/delete/delete-all, clear/reset/refresh, single/tile/blink/fade display modes, goto/show-hide/move controls, extended frame match actions, and RGB channel compositing via Frame→RGB
 - **Analysis tools**: DS9-style expanded Analysis menu with name resolution, contour/grid/block/smooth controls, statistics, histogram, radial profile plotting, pixel table, and FITS header viewer
 - **Communication**: Built-in XPA server; SAMP connect/disconnect and catalog overlay support
 
@@ -43,11 +44,20 @@ pip install -e .
 # Launch the application
 ncrads9
 
+# Open command-line option docs in browser
+ncrads9 --help
+
 # Open a FITS file
 ncrads9 image.fits
 
 # Open multiple files
 ncrads9 image1.fits image2.fits
+
+# DS9-style startup options
+ncrads9 -log -heat -tile image.fits
+
+# RGB composite startup (creates channel source frames + RGB frame)
+ncrads9 -rgb -red r.fits -green g.fits -blue b.fits
 ```
 
 ## Dependencies

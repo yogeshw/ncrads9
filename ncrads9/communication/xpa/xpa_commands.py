@@ -241,15 +241,51 @@ class XPACommands:
         number = params.get("number")
         if number is None and action == "set" and args:
             number = args[0]
-        if action not in {"new", "delete", "first", "last", "next", "prev", "previous", "get", "set"}:
+        if action not in {
+            "new",
+            "rgb",
+            "hsv",
+            "hls",
+            "3d",
+            "delete",
+            "deleteall",
+            "delete_all",
+            "clear",
+            "reset",
+            "refresh",
+            "first",
+            "last",
+            "next",
+            "prev",
+            "previous",
+            "get",
+            "set",
+        }:
             if isinstance(action, (int, float)) or str(action).isdigit():
                 number = action
                 action = "set"
 
         if action == "new":
             self.viewer._new_frame()
+        elif action in {"rgb", "hsv", "hls", "3d"}:
+            if hasattr(self.viewer, "_new_frame_with_type"):
+                self.viewer._new_frame_with_type(action)
+            else:
+                self.viewer._new_frame()
         elif action == "delete":
             self.viewer._delete_frame()
+        elif action in {"deleteall", "delete_all"}:
+            if hasattr(self.viewer, "_delete_all_frames"):
+                self.viewer._delete_all_frames()
+        elif action == "clear":
+            if hasattr(self.viewer, "_clear_frame"):
+                self.viewer._clear_frame()
+        elif action == "reset":
+            if hasattr(self.viewer, "_reset_frame"):
+                self.viewer._reset_frame()
+        elif action == "refresh":
+            if hasattr(self.viewer, "_refresh_frame"):
+                self.viewer._refresh_frame()
         elif action == "first":
             self.viewer._first_frame()
         elif action in {"prev", "previous"}:

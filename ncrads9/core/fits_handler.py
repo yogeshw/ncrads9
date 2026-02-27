@@ -53,11 +53,12 @@ class FITSHandler:
         if self.filepath is not None:
             self.load(self.filepath)
 
-    def load(self, filepath: Union[str, Path]) -> fits.HDUList:
+    def load(self, filepath: Union[str, Path], memmap: bool = True) -> fits.HDUList:
         """Load a FITS file.
 
         Args:
             filepath: Path to the FITS file.
+            memmap: Whether to memory-map FITS data access.
 
         Returns:
             The HDU list from the FITS file.
@@ -67,7 +68,12 @@ class FITSHandler:
             IOError: If the file cannot be read.
         """
         self.filepath = Path(filepath)
-        self.hdu_list = fits.open(self.filepath)
+        self.hdu_list = fits.open(
+            self.filepath,
+            memmap=memmap,
+            lazy_load_hdus=True,
+            mode="readonly",
+        )
         return self.hdu_list
 
     def get_extension(self, ext: Union[int, str] = 0) -> fits.hdu.base.ExtensionHDU:

@@ -28,7 +28,7 @@ from typing import Optional, Tuple, Callable
 import numpy as np
 from numpy.typing import NDArray
 from PyQt6.QtCore import Qt, QPointF, pyqtSignal
-from PyQt6.QtGui import QMouseEvent, QWheelEvent
+from PyQt6.QtGui import QMouseEvent, QWheelEvent, QKeyEvent
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 
 from OpenGL import GL
@@ -107,13 +107,13 @@ class GLCanvas(QOpenGLWidget):
         Args:
             data: 2D numpy array of image data.
         """
-        self._image_data = data.astype(np.float32)
+        self._image_data = np.asarray(data)
         self._image_height, self._image_width = self._image_data.shape[:2]
         self.update()
 
     def set_value_source(self, data: NDArray[np.float32]) -> None:
         """Set image data source for cursor value sampling."""
-        self._image_data = data.astype(np.float32)
+        self._image_data = np.asarray(data)
         self._image_height, self._image_width = self._image_data.shape[:2]
 
     def set_tile_provider(
@@ -323,6 +323,24 @@ class GLCanvas(QOpenGLWidget):
         """
         if event.button() == Qt.MouseButton.LeftButton:
             self._last_mouse_pos = None
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        """Handle arrow-key panning by one image pixel."""
+        key = event.key()
+        if key == Qt.Key.Key_Left:
+            self._pan_x -= 1.0
+        elif key == Qt.Key.Key_Right:
+            self._pan_x += 1.0
+        elif key == Qt.Key.Key_Up:
+            self._pan_y += 1.0
+        elif key == Qt.Key.Key_Down:
+            self._pan_y -= 1.0
+        else:
+            super().keyPressEvent(event)
+            return
+        self.pan_changed.emit(self._pan_x, self._pan_y)
+        self.update()
+        event.accept()
 
     def _upload_texture(self) -> None:
         """Upload image data to GPU texture."""

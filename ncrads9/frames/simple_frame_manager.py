@@ -20,7 +20,7 @@ Simple frame management for multiple images.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, List
+from typing import Optional, List, Dict
 from dataclasses import dataclass
 import numpy as np
 from pathlib import Path
@@ -37,6 +37,7 @@ class Frame:
     image_data: Optional[np.ndarray] = None
     header: Optional[dict] = None
     wcs_handler: Optional[object] = None
+    fits_handler: Optional[object] = None
     regions: List = None
     original_image_data: Optional[np.ndarray] = None
     bin_factor: int = 1
@@ -50,10 +51,40 @@ class Frame:
     pan_y: float = 0.0
     contrast: float = 1.0
     brightness: float = 0.0
+    frame_type: str = "base"
+    rgb_channels: Dict[str, Optional[np.ndarray]] = None
+    rgb_view: Dict[str, bool] = None
+    rgb_source_frame_ids: Dict[str, Optional[int]] = None
+    rgb_current_channel: str = "red"
+    rgb_channel_scale: Dict[str, ScaleAlgorithm] = None
+    rgb_channel_z1: Dict[str, Optional[float]] = None
+    rgb_channel_z2: Dict[str, Optional[float]] = None
+    rgb_channel_contrast: Dict[str, float] = None
+    rgb_channel_brightness: Dict[str, float] = None
     
     def __post_init__(self):
         if self.regions is None:
             self.regions = []
+        if self.rgb_channels is None:
+            self.rgb_channels = {"red": None, "green": None, "blue": None}
+        if self.rgb_view is None:
+            self.rgb_view = {"red": True, "green": True, "blue": True}
+        if self.rgb_source_frame_ids is None:
+            self.rgb_source_frame_ids = {"red": None, "green": None, "blue": None}
+        if self.rgb_channel_scale is None:
+            self.rgb_channel_scale = {
+                "red": ScaleAlgorithm.LINEAR,
+                "green": ScaleAlgorithm.LINEAR,
+                "blue": ScaleAlgorithm.LINEAR,
+            }
+        if self.rgb_channel_z1 is None:
+            self.rgb_channel_z1 = {"red": None, "green": None, "blue": None}
+        if self.rgb_channel_z2 is None:
+            self.rgb_channel_z2 = {"red": None, "green": None, "blue": None}
+        if self.rgb_channel_contrast is None:
+            self.rgb_channel_contrast = {"red": 1.0, "green": 1.0, "blue": 1.0}
+        if self.rgb_channel_brightness is None:
+            self.rgb_channel_brightness = {"red": 0.0, "green": 0.0, "blue": 0.0}
     
     @property
     def has_data(self) -> bool:
@@ -101,9 +132,9 @@ class FrameManager:
         """Get list of frames."""
         return self._frames
     
-    def new_frame(self) -> Frame:
+    def new_frame(self, frame_type: str = "base") -> Frame:
         """Create a new empty frame."""
-        frame = Frame(frame_id=self._next_id)
+        frame = Frame(frame_id=self._next_id, frame_type=frame_type)
         self._frames.append(frame)
         self._current_index = len(self._frames) - 1
         self._next_id += 1
@@ -173,3 +204,25 @@ class FrameManager:
     def get_frame_list(self) -> List[str]:
         """Get list of frame descriptions."""
         return [f"{i+1}: {frame.filename}" for i, frame in enumerate(self._frames)]
+
+    def move_frame(self, index: int, target_index: int) -> bool:
+        """Move a frame to a new position."""
+        if not (0 <= index < len(self._frames)):
+            return False
+        target_index = max(0, min(target_index, len(self._frames) - 1))
+        frame = self._frames.pop(index)
+        self._frames.insert(target_index, frame)
+        if self._current_index == index:
+            self._current_index = target_index
+        elif index < self._current_index <= target_index:
+            self._current_index -= 1
+        elif target_index <= self._current_index < index:
+            self._current_index += 1
+        return True
+
+    def reset_to_single_frame(self) -> Frame:
+        """Delete all frames and create one empty frame."""
+        self._frames = []
+        self._current_index = -1
+        self._next_id = 1
+        return self.new_frame()
