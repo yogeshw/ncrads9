@@ -26,7 +26,7 @@ from typing import Optional, Any
 from astropy.coordinates import SkyCoord
 from astropy.table import Table
 import astropy.units as u
-from astroquery.ned import Ned
+from astroquery.ipac.ned import Ned
 
 from .catalog_base import CatalogBase
 
