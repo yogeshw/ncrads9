@@ -40,6 +40,7 @@ class HelpContentsDialog(QDialog):
     <html>
     <head>
         <style>
+            body { color: #2e3436; line-height: 1.4; }
             h1 { color: #2e3436; font-size: 24px; }
             h2 { color: #204a87; font-size: 18px; margin-top: 20px; }
             h3 { color: #4e9a06; font-size: 14px; margin-top: 15px; }
@@ -48,80 +49,98 @@ class HelpContentsDialog(QDialog):
     </head>
     <body>
         <h1>NCRADS9 Help</h1>
-        
-        <h2>Getting Started</h2>
-        <p>NCRADS9 is a Python/Qt6 clone of SAOImageDS9 for viewing FITS astronomical images.</p>
-        
-        <h3>Opening Files</h3>
+
+        <h2>Overview</h2>
+        <p>
+            NCRADS9 is a Python/Qt6 FITS viewer inspired by SAOImageDS9. It supports
+            single-frame viewing, tiled/multi-frame workflows, RGB composites, region
+            overlays, WCS display, analysis tools, and DS9-style menu-driven navigation.
+        </p>
+
+        <h2>Opening Data</h2>
         <ul>
-            <li><b>File → Open</b> (Ctrl+O): Open a FITS file</li>
-            <li><b>Command line:</b> <code>ncrads9 image.fits</code></li>
+            <li><b>File → Open</b> (<code>Ctrl+O</code>) opens FITS images, including common FITS filename variants.</li>
+            <li><b>Command line:</b> <code>ncrads9 image.fits</code> opens a file directly.</li>
+            <li>You can also start in DS9-style modes such as tiled display or RGB startup from the command line.</li>
         </ul>
-        
-        <h3>Viewing Images</h3>
+
+        <h2>Navigating the Image</h2>
         <ul>
-            <li><b>Mouse wheel:</b> Zoom in/out</li>
-            <li><b>Right-click + drag:</b> Adjust contrast/brightness</li>
-            <li><b>Middle-click + drag:</b> Pan the image</li>
+            <li><b>Mouse wheel</b> zooms in and out.</li>
+            <li><b>Middle-click + drag</b> pans the current view.</li>
+            <li><b>Right-click + drag</b> adjusts contrast and brightness.</li>
+            <li>The panner, magnifier, graphs, and status bar update with the active frame.</li>
         </ul>
-        
-        <h3>Zoom Controls</h3>
+
+        <h2>Zoom Menu</h2>
+        <p>The top-level <b>Zoom</b> menu mirrors the current DS9-style implementation:</p>
         <ul>
-            <li><b>Ctrl++:</b> Zoom in</li>
-            <li><b>Ctrl+-:</b> Zoom out</li>
-            <li><b>Zoom → Fit:</b> Fit image to window</li>
-            <li><b>Zoom → 1:1:</b> View at actual pixel size</li>
+            <li><b>Center Image</b>, <b>Align</b>, <b>Zoom In</b>, <b>Zoom Out</b>, and <b>Zoom Fit</b></li>
+            <li>Preset zoom levels from <b>1/32</b> through <b>32</b></li>
+            <li>Orientation controls: <b>None</b>, <b>Invert X</b>, <b>Invert Y</b>, and <b>Invert XY</b></li>
+            <li>Rotation controls: <b>0</b>, <b>90</b>, <b>180</b>, and <b>270</b> degrees</li>
+            <li><b>Crop Parameters</b> and <b>Pan Zoom Rotate Parameters</b> dialogs</li>
         </ul>
-        
-        <h3>Scale Algorithms</h3>
-        <p>Change the data scaling via <b>Scale</b> menu:</p>
+        <p>
+            Direction arrows, overlays, and frame view state follow the active zoom/orientation settings.
+        </p>
+
+        <h2>Display Controls</h2>
         <ul>
-            <li><b>Linear:</b> Linear scaling (default)</li>
-            <li><b>Log:</b> Logarithmic scaling</li>
-            <li><b>Sqrt:</b> Square root scaling</li>
-            <li><b>Squared:</b> Power-law scaling</li>
-            <li><b>Asinh:</b> Inverse hyperbolic sine</li>
-            <li><b>HistEq:</b> Histogram equalization</li>
+            <li><b>Scale</b> menu: Linear, Log, Sqrt, Squared, Asinh, and Histogram Equalization</li>
+            <li><b>Scale</b> limits: MinMax, ZScale, and parameter dialogs</li>
+            <li><b>Color</b> menu: DS9-style default colormaps, extra scientific colormaps, inversion, reset, and user colormap load/save</li>
+            <li><b>Colorbar</b> options: visibility, orientation, numeric spacing, and font</li>
+            <li><b>Bin</b> menu: 1x1, 2x2, 4x4, and 8x8 display binning</li>
         </ul>
-        
-        <h3>Colormaps</h3>
-        <p>Select colormaps via <b>Color</b> menu (19 DS9 colormaps available):</p>
+
+        <h2>Frames and RGB</h2>
         <ul>
-            <li><b>Grey:</b> Grayscale (default)</li>
-            <li><b>Heat, Cool, Rainbow:</b> Color maps</li>
-            <li><b>Invert Colormap:</b> Reverse any colormap</li>
+            <li><b>Frame</b> menu supports new/delete/clear/reset/refresh operations.</li>
+            <li>Display modes include <b>Single</b>, <b>Tile</b>, <b>Blink</b>, and <b>Fade</b>.</li>
+            <li>Frame matching is available for frame, crosshair, crop, and slice coordinates.</li>
+            <li><b>Frame → RGB</b> lets you build RGB composites from channel source frames.</li>
         </ul>
-        
-        <h3>Analysis Tools</h3>
+
+        <h2>Regions, WCS, and Analysis</h2>
         <ul>
-            <li><b>Analysis → Statistics:</b> Image statistics (min/max/mean/median)</li>
-            <li><b>Analysis → Histogram:</b> Pixel value distribution</li>
-            <li><b>Analysis → Pixel Table:</b> Examine individual pixel values</li>
-            <li><b>Analysis → FITS Header:</b> View FITS header keywords</li>
+            <li><b>Region</b> menu supports circle, ellipse, box, polygon, line, and point regions, plus DS9 region load/save.</li>
+            <li><b>WCS</b> menu supports FK5, FK4, ICRS, Galactic, and Ecliptic systems, sexagesimal/degree formatting, and direction arrows.</li>
+            <li><b>Analysis</b> tools include statistics, histogram, radial profile, FITS header, pixel table, contours, coordinate grid, block, and smooth controls.</li>
+            <li><b>VO</b> and <b>SAMP</b> menus provide 2MASS/VizieR entry points and SAMP connectivity.</li>
         </ul>
-        
-        <h3>Regions</h3>
-        <ul>
-            <li><b>Region → Load Region File:</b> Load DS9 .reg files</li>
-            <li>Region drawing and editing (in development)</li>
-        </ul>
-        
-        <h3>Keyboard Shortcuts</h3>
-        <p>See <b>Help → Keyboard Shortcuts</b> for complete list.</p>
-        
+
+        <h2>Large Images</h2>
+        <p>
+            NCRADS9 is optimized for large FITS images using memory-mapped loading, tiled GPU rendering
+            when enabled, and lightweight preview panels. CPU mode also avoids unnecessary rerendering
+            for repeated zoom/orientation changes.
+        </p>
+
         <h2>Status Bar</h2>
-        <p>The status bar shows (from left to right):</p>
+        <p>The status bar reports the current cursor position and active frame state, including:</p>
         <ol>
-            <li>Pixel coordinates (x, y)</li>
-            <li>WCS coordinates (RA, Dec) if available</li>
-            <li>Pixel value at cursor</li>
+            <li>Pixel coordinates</li>
+            <li>WCS coordinates when available</li>
+            <li>Pixel value under the cursor</li>
             <li>Image dimensions</li>
             <li>Current zoom level</li>
         </ol>
-        
+
+        <h2>Keyboard Shortcuts</h2>
+        <p>See <b>Help → Keyboard Shortcuts</b> for the current shortcut list.</p>
+
+        <h2>Current Notes</h2>
+        <ul>
+            <li>Region files can be saved, but FITS <b>Save</b>/<b>Save As</b> workflows are still limited.</li>
+            <li>Some Virtual Observatory and advanced modules are present but still evolving.</li>
+        </ul>
+
         <h2>More Information</h2>
-        <p>For more information, visit: <a href="https://github.com/yogeshw/ncrads9">
-        https://github.com/yogeshw/ncrads9</a></p>
+        <p>
+            Project page:
+            <a href="https://github.com/ncra/ncrads9">https://github.com/ncra/ncrads9</a>
+        </p>
     </body>
     </html>
     """
