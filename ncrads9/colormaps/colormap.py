@@ -102,6 +102,15 @@ class Colormap:
         # Convert to uint8
         return (rgb * 255).astype(np.uint8)
 
+    def apply_normalized(self, data: NDArray[np.floating]) -> NDArray[np.uint8]:
+        """Apply the colormap to data that is already normalized into [0, 1]."""
+        normalized = np.asarray(data, dtype=np.float32)
+        normalized = np.clip(normalized, 0.0, 1.0)
+        num_colors = len(self.colors)
+        indices = (normalized * (num_colors - 1)).astype(np.int32)
+        rgb = self.colors[np.clip(indices, 0, num_colors - 1)]
+        return (rgb * 255).astype(np.uint8)
+
     def reversed(self) -> "Colormap":
         """Return a reversed version of the colormap.
 

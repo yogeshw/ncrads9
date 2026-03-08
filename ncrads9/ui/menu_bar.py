@@ -525,6 +525,15 @@ class MenuBar(QMenuBar):
         """Set up the Zoom menu."""
         self.zoom_menu: QMenu = self.addMenu("&Zoom")
 
+        self.action_zoom_center: QAction = QAction("&Center Image", self)
+        self.zoom_menu.addAction(self.action_zoom_center)
+
+        self.action_zoom_align: QAction = QAction("&Align", self)
+        self.action_zoom_align.setCheckable(True)
+        self.zoom_menu.addAction(self.action_zoom_align)
+
+        self.zoom_menu.addSeparator()
+
         self.action_zoom_in: QAction = QAction("Zoom &In", self)
         self.action_zoom_in.setShortcut(QKeySequence.StandardKey.ZoomIn)
         self.zoom_menu.addAction(self.action_zoom_in)
@@ -533,16 +542,79 @@ class MenuBar(QMenuBar):
         self.action_zoom_out.setShortcut(QKeySequence.StandardKey.ZoomOut)
         self.zoom_menu.addAction(self.action_zoom_out)
 
-        self.action_zoom_fit: QAction = QAction("Zoom to &Fit", self)
+        self.action_zoom_fit: QAction = QAction("Zoom &Fit", self)
         self.zoom_menu.addAction(self.action_zoom_fit)
 
-        self.action_zoom_1: QAction = QAction("Zoom &1:1", self)
-        self.zoom_menu.addAction(self.action_zoom_1)
+        self.zoom_menu.addSeparator()
+        self.zoom_preset_group = QActionGroup(self)
+        self.zoom_preset_group.setExclusive(True)
+        self.zoom_preset_actions: Dict[float, QAction] = {}
+        zoom_presets = [
+            ("Zoom 1/32", 0.03125),
+            ("Zoom 1/16", 0.0625),
+            ("Zoom 1/8", 0.125),
+            ("Zoom 1/4", 0.25),
+            ("Zoom 1/2", 0.5),
+            ("Zoom 1", 1.0),
+            ("Zoom 2", 2.0),
+            ("Zoom 4", 4.0),
+            ("Zoom 8", 8.0),
+            ("Zoom 16", 16.0),
+            ("Zoom 32", 32.0),
+        ]
+        for label, value in zoom_presets:
+            action = QAction(label, self)
+            action.setCheckable(True)
+            self.zoom_menu.addAction(action)
+            self.zoom_preset_group.addAction(action)
+            self.zoom_preset_actions[value] = action
+
+        self.action_zoom_1 = self.zoom_preset_actions[1.0]
 
         self.zoom_menu.addSeparator()
+        self.zoom_orientation_group = QActionGroup(self)
+        self.zoom_orientation_group.setExclusive(True)
+        self.action_zoom_orient_none = QAction("&None", self)
+        self.action_zoom_orient_x = QAction("Invert &X", self)
+        self.action_zoom_orient_y = QAction("Invert &Y", self)
+        self.action_zoom_orient_xy = QAction("Invert X&Y", self)
+        self.zoom_orientation_actions: Dict[str, QAction] = {
+            "none": self.action_zoom_orient_none,
+            "x": self.action_zoom_orient_x,
+            "y": self.action_zoom_orient_y,
+            "xy": self.action_zoom_orient_xy,
+        }
+        for action in self.zoom_orientation_actions.values():
+            action.setCheckable(True)
+            self.zoom_menu.addAction(action)
+            self.zoom_orientation_group.addAction(action)
+        self.action_zoom_orient_none.setChecked(True)
 
-        self.action_zoom_center: QAction = QAction("&Center", self)
-        self.zoom_menu.addAction(self.action_zoom_center)
+        self.zoom_menu.addSeparator()
+        self.zoom_rotation_group = QActionGroup(self)
+        self.zoom_rotation_group.setExclusive(True)
+        self.zoom_rotation_actions: Dict[int, QAction] = {}
+        for degrees in (0, 90, 180, 270):
+            action = QAction(f"{degrees} Degrees", self)
+            action.setCheckable(True)
+            self.zoom_menu.addAction(action)
+            self.zoom_rotation_group.addAction(action)
+            self.zoom_rotation_actions[degrees] = action
+        self.action_zoom_rotate_0 = self.zoom_rotation_actions[0]
+        self.action_zoom_rotate_90 = self.zoom_rotation_actions[90]
+        self.action_zoom_rotate_180 = self.zoom_rotation_actions[180]
+        self.action_zoom_rotate_270 = self.zoom_rotation_actions[270]
+        self.action_zoom_rotate_0.setChecked(True)
+
+        self.zoom_menu.addSeparator()
+        self.action_crop_parameters: QAction = QAction("Crop &Parameters", self)
+        self.zoom_menu.addAction(self.action_crop_parameters)
+
+        self.zoom_menu.addSeparator()
+        self.action_pan_zoom_rotate_parameters: QAction = QAction(
+            "&Pan Zoom Rotate Parameters", self
+        )
+        self.zoom_menu.addAction(self.action_pan_zoom_rotate_parameters)
 
     def _setup_scale_menu(self) -> None:
         """Set up the Scale menu."""

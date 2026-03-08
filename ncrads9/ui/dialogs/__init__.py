@@ -30,6 +30,8 @@ from .scale_dialog import ScaleDialog
 from .colormap_dialog import ColormapDialog
 from .region_dialog import RegionDialog
 from .preferences_dialog import PreferencesDialog
+from .crop_parameters_dialog import CropParametersDialog
+from .pan_zoom_rotate_dialog import PanZoomRotateDialog
 
 __all__ = [
     "OpenDialog",
@@ -42,4 +44,6 @@ __all__ = [
     "ColormapDialog",
     "RegionDialog",
     "PreferencesDialog",
+    "CropParametersDialog",
+    "PanZoomRotateDialog",
 ]

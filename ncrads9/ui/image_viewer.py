@@ -25,8 +25,10 @@ import numpy as np
 from numpy.typing import NDArray
 
 from PyQt6.QtCore import Qt, QPoint, QSize, pyqtSignal
-from PyQt6.QtGui import QImage, QPixmap, QPainter, QWheelEvent, QMouseEvent
+from PyQt6.QtGui import QImage, QPixmap, QPainter, QTransform, QWheelEvent, QMouseEvent
 from PyQt6.QtWidgets import QLabel
+
+from .view_transform import DisplayTransform, normalize_rotation
 
 
 class ImageViewer(QLabel):
@@ -41,7 +43,7 @@ class ImageViewer(QLabel):
         super().__init__(parent)
         
         self.setMouseTracking(True)
-        self.setScaledContents(False)
+        self.setScaledContents(True)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # Set size policy to expand in both directions
@@ -51,7 +53,12 @@ class ImageViewer(QLabel):
         
         # Image data
         self._pixmap: Optional[QPixmap] = None
+        self._source_pixmap: Optional[QPixmap] = None
+        self._transform_cache_key: Optional[tuple[int, float, bool, bool]] = None
         self._zoom = 1.0
+        self._rotation = 0.0
+        self._flip_x = False
+        self._flip_y = False
         
         # Mouse interaction state
         self._panning = False
@@ -65,25 +72,58 @@ class ImageViewer(QLabel):
         
     def set_image(self, pixmap: QPixmap) -> None:
         """Set the image to display."""
-        self._pixmap = pixmap
+        self._source_pixmap = pixmap
+        self._transform_cache_key = None
         self._update_display()
+
+    def set_view_transform(self, rotation: float, flip_x: bool, flip_y: bool) -> None:
+        """Set display rotation and flip state."""
+        self._rotation = normalize_rotation(rotation)
+        self._flip_x = bool(flip_x)
+        self._flip_y = bool(flip_y)
+        self._update_display()
+
+    def get_view_transform(self) -> DisplayTransform:
+        """Return the current display transform."""
+        width = self._source_pixmap.width() if self._source_pixmap is not None else 0
+        height = self._source_pixmap.height() if self._source_pixmap is not None else 0
+        return DisplayTransform(
+            width=width,
+            height=height,
+            rotation=self._rotation,
+            flip_x=self._flip_x,
+            flip_y=self._flip_y,
+        )
     
     def _update_display(self) -> None:
         """Update the displayed image with current zoom and pan."""
+        if self._source_pixmap is None:
+            return
+
+        cache_key = (
+            int(self._source_pixmap.cacheKey()),
+            self._rotation,
+            self._flip_x,
+            self._flip_y,
+        )
+        if cache_key != self._transform_cache_key:
+            transform = QTransform()
+            transform.scale(-1.0 if self._flip_x else 1.0, -1.0 if self._flip_y else 1.0)
+            if self._rotation:
+                transform.rotate(self._rotation)
+
+            self._pixmap = self._source_pixmap.transformed(
+                transform,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self._transform_cache_key = cache_key
+
         if self._pixmap is None:
             return
-        
-        # Scale pixmap by zoom factor
+
         scaled_size = self._pixmap.size() * self._zoom
-        scaled_pixmap = self._pixmap.scaled(
-            scaled_size,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation if self._zoom < 1 else Qt.TransformationMode.FastTransformation
-        )
-        
-        self.setPixmap(scaled_pixmap)
-        # Don't call resize() here - let parent layout manage size
-        # self.resize(scaled_pixmap.size())
+        self.setPixmap(self._pixmap)
+        self.resize(scaled_size)
     
     def zoom_in(self) -> None:
         """Zoom in by 20%."""
@@ -102,11 +142,14 @@ class ImageViewer(QLabel):
     
     def zoom_fit(self, container_size: QSize) -> None:
         """Zoom to fit container."""
-        if self._pixmap is None:
+        if self._source_pixmap is None:
             return
-        
-        width_ratio = container_size.width() / self._pixmap.width()
-        height_ratio = container_size.height() / self._pixmap.height()
+
+        display_w, display_h = self.get_display_image_size()
+        if display_w <= 0 or display_h <= 0:
+            return
+        width_ratio = container_size.width() / display_w
+        height_ratio = container_size.height() / display_h
         self._zoom = min(width_ratio, height_ratio) * 0.95
         self._update_display()
     
@@ -121,9 +164,16 @@ class ImageViewer(QLabel):
 
     def get_image_size(self) -> tuple[int, int]:
         """Get original image size (width, height)."""
-        if self._pixmap is None:
+        if self._source_pixmap is None:
             return (0, 0)
-        return (self._pixmap.width(), self._pixmap.height())
+        return (self._source_pixmap.width(), self._source_pixmap.height())
+
+    def get_display_image_size(self) -> tuple[int, int]:
+        """Get displayed image size before zoom scaling."""
+        if self._source_pixmap is None:
+            return (0, 0)
+        transform = self.get_view_transform()
+        return (int(round(transform.display_width)), int(round(transform.display_height)))
     
     def get_contrast_brightness(self) -> tuple[float, float]:
         """Get current contrast and brightness adjustments."""
@@ -219,16 +269,30 @@ class ImageViewer(QLabel):
 
     def _event_to_image_coords(self, event: QMouseEvent) -> Optional[tuple[int, int]]:
         """Convert a mouse event position to image pixel coordinates."""
-        if self._pixmap is None or self.pixmap() is None:
+        return self.map_widget_to_image_coords(event.position().x(), event.position().y())
+
+    def map_widget_to_image_coords(self, x: float, y: float) -> Optional[tuple[int, int]]:
+        """Convert widget coordinates to source image coordinates."""
+        if self._source_pixmap is None or self.pixmap() is None:
             return None
 
         label_rect = self.rect()
         pixmap_rect = self.pixmap().rect()
         x_offset = (label_rect.width() - pixmap_rect.width()) / 2
         y_offset = (label_rect.height() - pixmap_rect.height()) / 2
-        img_x = int((event.pos().x() - x_offset) / self._zoom)
-        top_y = int((event.pos().y() - y_offset) / self._zoom)
-        if 0 <= img_x < self._pixmap.width() and 0 <= top_y < self._pixmap.height():
-            img_y = self._pixmap.height() - 1 - top_y
+        display_x = (x - x_offset) / self._zoom
+        display_y = (y - y_offset) / self._zoom
+        transform = self.get_view_transform()
+        source_x, source_y = transform.display_to_source(display_x, display_y)
+        if 0 <= source_x < self._source_pixmap.width() and 0 <= source_y < self._source_pixmap.height():
+            img_x = int(source_x)
+            img_y = int(self._source_pixmap.height() - 1 - source_y)
             return (img_x, img_y)
         return None
+
+    def map_image_to_display_coords(self, x: float, y: float) -> Optional[tuple[float, float]]:
+        """Convert source image coordinates (bottom-left origin) to display coordinates."""
+        if self._source_pixmap is None:
+            return None
+        source_top_y = self._source_pixmap.height() - 1 - float(y)
+        return self.get_view_transform().source_to_display(float(x), source_top_y)

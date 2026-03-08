@@ -72,6 +72,9 @@ class ImageViewerWithRegions(QWidget):
         
         # Track when middle button is pressed for centering
         self._middle_button_for_center = False
+        self._rotation = 0.0
+        self._flip_x = False
+        self._flip_y = False
     
     def set_image(self, pixmap: QPixmap) -> None:
         """Set image pixmap."""
@@ -152,6 +155,18 @@ class ImageViewerWithRegions(QWidget):
         """Zoom to 1:1."""
         self.image_viewer.zoom_actual()
         self._update_overlay_transform()
+
+    def set_view_transform(self, rotation: float, flip_x: bool, flip_y: bool) -> None:
+        """Set display rotation and flip state."""
+        self._rotation = rotation
+        self._flip_x = flip_x
+        self._flip_y = flip_y
+        self.image_viewer.set_view_transform(rotation, flip_x, flip_y)
+        self._update_overlay_transform()
+
+    def get_display_image_size(self) -> tuple[int, int]:
+        """Get display image size after orientation/rotation."""
+        return self.image_viewer.get_display_image_size()
     
     def get_zoom(self) -> float:
         """Get current zoom level."""
@@ -196,13 +211,20 @@ class ImageViewerWithRegions(QWidget):
             self.region_overlay.set_zoom(
                 self.image_viewer.get_zoom(),
                 (x_offset, y_offset),
+                image_width=self.image_viewer.get_image_size()[0],
                 image_height=image_height,
+                rotation=self._rotation,
+                flip_x=self._flip_x,
+                flip_y=self._flip_y,
             )
             self.contour_overlay.set_zoom(
                 self.image_viewer.get_zoom(),
                 (x_offset, y_offset),
                 image_width=self.image_viewer.get_image_size()[0],
                 image_height=image_height,
+                rotation=self._rotation,
+                flip_x=self._flip_x,
+                flip_y=self._flip_y,
             )
     
     def resizeEvent(self, event) -> None:
@@ -271,16 +293,15 @@ class ImageViewerWithRegions(QWidget):
             return
         
         # Convert widget coordinates to image coordinates
-        viewer_rect = self.image_viewer.rect()
-        pixmap_rect = self.image_viewer.pixmap().rect()
-        
-        x_offset = (viewer_rect.width() - pixmap_rect.width()) / 2
-        y_offset = (viewer_rect.height() - pixmap_rect.height()) / 2
-        
-        # Image coordinates of clicked point
-        img_x = (x - x_offset) / self.image_viewer.get_zoom()
-        img_y = (y - y_offset) / self.image_viewer.get_zoom()
-        
+        coords = self.image_viewer.map_widget_to_image_coords(x, y)
+        if coords is None:
+            return
+        img_x, img_y = coords
+        display_coords = self.image_viewer.map_image_to_display_coords(img_x, img_y)
+        if display_coords is None:
+            return
+        display_x, display_y = display_coords
+
         # For scroll area-based viewer, we need to scroll to center this point
         # Get the scroll area from parent hierarchy
         parent = self.parent()
@@ -293,8 +314,8 @@ class ImageViewerWithRegions(QWidget):
             zoom = self.image_viewer.get_zoom()
             
             # Position in zoomed coordinates where clicked point is
-            zoomed_x = img_x * zoom
-            zoomed_y = img_y * zoom
+            zoomed_x = display_x * zoom
+            zoomed_y = display_y * zoom
             
             # Scroll to center this point in viewport
             scroll_x = int(zoomed_x - viewport_size.width() / 2)

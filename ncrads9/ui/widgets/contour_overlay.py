@@ -26,6 +26,8 @@ from PyQt6.QtCore import Qt, QPointF
 from PyQt6.QtGui import QPainter, QPen, QColor, QPolygonF, QFont
 from PyQt6.QtWidgets import QWidget
 
+from ..view_transform import DisplayTransform
+
 
 class ContourOverlay(QWidget):
     """Overlay widget for drawing contour paths."""
@@ -40,6 +42,9 @@ class ContourOverlay(QWidget):
         self._offset: Tuple[float, float] = (0.0, 0.0)
         self._image_width: int = 0
         self._image_height: int = 0
+        self._rotation: float = 0.0
+        self._flip_x: bool = False
+        self._flip_y: bool = False
         self._color: QColor = QColor(0, 255, 0)
         self._line_width: float = 1.0
         self._line_style: Qt.PenStyle = Qt.PenStyle.SolidLine
@@ -65,6 +70,9 @@ class ContourOverlay(QWidget):
         offset: Tuple[float, float],
         image_width: Optional[int] = None,
         image_height: Optional[int] = None,
+        rotation: float = 0.0,
+        flip_x: bool = False,
+        flip_y: bool = False,
     ) -> None:
         """Set zoom and offset for coordinate transform."""
         self._zoom = zoom
@@ -73,7 +81,19 @@ class ContourOverlay(QWidget):
             self._image_width = max(0, int(image_width))
         if image_height is not None:
             self._image_height = max(0, int(image_height))
+        self._rotation = rotation
+        self._flip_x = flip_x
+        self._flip_y = flip_y
         self.update()
+
+    def _display_transform(self) -> DisplayTransform:
+        return DisplayTransform(
+            width=self._image_width,
+            height=self._image_height,
+            rotation=self._rotation,
+            flip_x=self._flip_x,
+            flip_y=self._flip_y,
+        )
 
     def set_contours(
         self,
@@ -156,10 +176,11 @@ class ContourOverlay(QWidget):
     def _image_to_widget(self, x: float, y: float) -> QPointF:
         """Convert image coordinates (origin bottom-left) to widget coordinates."""
         if self._image_height > 0:
-            top_y = self._image_height - 1 - y
+            source_top_y = self._image_height - 1 - y
         else:
-            top_y = y
-        return QPointF(x * self._zoom + self._offset[0], top_y * self._zoom + self._offset[1])
+            source_top_y = y
+        display_x, display_y = self._display_transform().source_to_display(x, source_top_y)
+        return QPointF(display_x * self._zoom + self._offset[0], display_y * self._zoom + self._offset[1])
 
     def _draw_direction_arrow(
         self,

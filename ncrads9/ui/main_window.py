@@ -87,6 +87,8 @@ from .dialogs.contour_dialog import ContourDialog
 from .dialogs.grid_dialog import GridDialog
 from .dialogs.smooth_dialog import SmoothDialog
 from .dialogs.preferences_dialog import PreferencesDialog
+from .dialogs.crop_parameters_dialog import CropParametersDialog
+from .dialogs.pan_zoom_rotate_dialog import PanZoomRotateDialog
 from ..core.fits_handler import FITSHandler
 from ..core.wcs_handler import WCSHandler
 from ..rendering.scale_algorithms import apply_scale, ScaleAlgorithm, compute_zscale_limits
@@ -111,6 +113,13 @@ from ..image_servers.sia_client import SIAClient
 from ..catalogs.vizier import VizierCatalog
 from ..communication.samp import SAMPClient
 from .dialogs.vo_query_dialog import VOQueryDialog
+from .view_transform import (
+    DisplayTransform,
+    flags_to_orientation,
+    normalize_rotation,
+    orientation_to_flags,
+    transform_image_array,
+)
 
 if TYPE_CHECKING:
     from ncrads9.utils.config import Config
@@ -145,6 +154,8 @@ class MainWindow(QMainWindow):
         self.current_wcs_system = "fk5"
         self.current_wcs_format = "sexagesimal"
         self._last_mouse_pos: Optional[tuple[int, int]] = None
+        self._preview_rgb_cache: Optional[NDArray[np.uint8]] = None
+        self._preview_rgb_cache_frame_id: Optional[int] = None
         self.preferences = Preferences(self._preferences_path())
         self.use_gpu_rendering = bool(self.preferences.get("use_gpu", True))
         self.using_gpu_rendering = False
@@ -306,8 +317,7 @@ class MainWindow(QMainWindow):
         new_range = range_val / contrast
         adjusted_z1 = center - new_range / 2.0 + brightness * range_val
         adjusted_z2 = center + new_range / 2.0 + brightness * range_val
-        clipped = np.clip(data, adjusted_z1, adjusted_z2)
-        scaled = apply_scale(clipped, scale, vmin=adjusted_z1, vmax=adjusted_z2)
+        scaled = apply_scale(data, scale, vmin=adjusted_z1, vmax=adjusted_z2)
         return np.clip(scaled.astype(np.float32), 0.0, 1.0)
 
     def _compose_rgb_frame_image(self, frame: Frame) -> Optional[NDArray[np.uint8]]:
@@ -667,11 +677,28 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_fits_header.triggered.connect(self._show_fits_header)
         
         # Zoom menu
+        self.menu_bar.action_zoom_center.triggered.connect(self._center_image)
+        self.menu_bar.action_zoom_align.triggered.connect(self._set_align_wcs)
         self.menu_bar.action_zoom_in.triggered.connect(self._zoom_in)
         self.menu_bar.action_zoom_out.triggered.connect(self._zoom_out)
         self.menu_bar.action_zoom_fit.triggered.connect(self._zoom_fit)
-        self.menu_bar.action_zoom_1.triggered.connect(self._zoom_actual)
-        self.menu_bar.action_zoom_center.triggered.connect(lambda: self.statusBar().showMessage("Center not implemented", 2000))
+        self.menu_bar.action_zoom_1.triggered.connect(lambda: self._set_zoom_level(1.0))
+        for zoom_value, action in self.menu_bar.zoom_preset_actions.items():
+            action.triggered.connect(
+                lambda checked=False, value=zoom_value: self._set_zoom_level(value)
+            )
+        for orientation, action in self.menu_bar.zoom_orientation_actions.items():
+            action.triggered.connect(
+                lambda checked=False, value=orientation: self._set_orientation(value)
+            )
+        for degrees, action in self.menu_bar.zoom_rotation_actions.items():
+            action.triggered.connect(
+                lambda checked=False, value=degrees: self._set_rotation(value)
+            )
+        self.menu_bar.action_crop_parameters.triggered.connect(self._show_crop_parameters_dialog)
+        self.menu_bar.action_pan_zoom_rotate_parameters.triggered.connect(
+            self._show_pan_zoom_rotate_dialog
+        )
         
         # Help menu
         self.menu_bar.action_help_contents.triggered.connect(self._show_help_contents)
@@ -865,10 +892,8 @@ class MainWindow(QMainWindow):
         """Recreate the image viewer based on GPU setting."""
         self.use_gpu_rendering = use_gpu
         new_viewer = self._create_image_viewer(use_gpu)
-        old_viewer = self.image_viewer
         self.image_viewer = new_viewer
         self.scroll_area.setWidget(self.image_viewer)
-        old_viewer.deleteLater()
         if self.image_data is not None:
             self._display_image()
 
@@ -1019,14 +1044,13 @@ class MainWindow(QMainWindow):
     ) -> NDArray[np.uint8]:
         """Render a lightweight RGB preview for panner/magnifier panels."""
         preview_data = self._downsample_for_preview(image_data)
-        clipped_preview = np.clip(preview_data, z1, z2)
         scaled_preview = apply_scale(
-            clipped_preview,
+            preview_data,
             self.current_scale,
             vmin=z1,
             vmax=z2,
         )
-        rgb_preview = cmap.apply(scaled_preview)
+        rgb_preview = cmap.apply_normalized(scaled_preview)
         return np.ascontiguousarray(np.flipud(rgb_preview))
 
     @staticmethod
@@ -1039,6 +1063,73 @@ class MainWindow(QMainWindow):
     ) -> NDArray[np.floating]:
         """Extract tile data for GPU upload."""
         return np.ascontiguousarray(data[y : y + h, x : x + w])
+
+    def _apply_view_transform_to_viewer(self, frame: Frame) -> None:
+        """Apply per-frame orientation/rotation to the active viewer."""
+        if self.using_gpu_rendering and (
+            not np.isclose(frame.rotation, 0.0) or frame.flip_x or frame.flip_y
+        ):
+            self._rebuild_image_viewer(False)
+            self.statusBar().showMessage(
+                "Switched to CPU rendering for rotated/flipped display",
+                2500,
+            )
+        if hasattr(self.image_viewer, "set_view_transform"):
+            self.image_viewer.set_view_transform(frame.rotation, frame.flip_x, frame.flip_y)
+
+    def _get_cpu_pan_center(self) -> tuple[float, float] | None:
+        """Return the current CPU-view center in source image coordinates."""
+        viewer = getattr(self.image_viewer, "image_viewer", None)
+        if viewer is None or self.image_data is None:
+            return None
+        zoom = max(self.image_viewer.get_zoom(), 1e-6)
+        display_x = (
+            self.scroll_area.horizontalScrollBar().value() + self.scroll_area.viewport().width() / 2
+        ) / zoom
+        display_y = (
+            self.scroll_area.verticalScrollBar().value() + self.scroll_area.viewport().height() / 2
+        ) / zoom
+        source_x, source_top_y = viewer.get_view_transform().display_to_source(display_x, display_y)
+        source_y = viewer.get_image_size()[1] - 1 - source_top_y
+        return (float(source_x), float(source_y))
+
+    def _transform_preview_image(
+        self,
+        image: NDArray[np.generic],
+        frame: Frame,
+    ) -> NDArray[np.generic]:
+        """Apply frame orientation/rotation to panner and magnifier previews."""
+        return transform_image_array(image, frame.rotation, frame.flip_x, frame.flip_y)
+
+    def _cache_preview_rgb(self, frame: Frame, image: NDArray[np.uint8]) -> None:
+        """Remember the latest untransformed preview RGB for fast view updates."""
+        self._preview_rgb_cache = np.ascontiguousarray(image)
+        self._preview_rgb_cache_frame_id = frame.frame_id
+
+    def _update_preview_panels(self, frame: Frame) -> None:
+        """Refresh panner/magnifier panels from the cached preview image."""
+        if self._preview_rgb_cache is None or self._preview_rgb_cache_frame_id != frame.frame_id:
+            return
+        transformed_preview = self._transform_preview_image(self._preview_rgb_cache, frame)
+        if hasattr(self, "panner_panel"):
+            self.panner_panel.set_image(
+                transformed_preview,
+                source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
+            )
+        if hasattr(self, "magnifier_panel"):
+            self.magnifier_panel.set_image(
+                transformed_preview,
+                source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
+            )
+
+    def _refresh_transformed_view(self, frame: Frame) -> None:
+        """Apply a pure view transform change without re-rendering image data."""
+        self._apply_view_transform_to_viewer(frame)
+        self._update_preview_panels(frame)
+        self._update_panner_view_rect()
+        self._update_direction_arrows()
+        if self._last_mouse_pos is not None:
+            self._on_mouse_moved(*self._last_mouse_pos)
     
     def _display_image(self) -> None:
         """Display the current frame's image data."""
@@ -1056,6 +1147,7 @@ class MainWindow(QMainWindow):
             return
         
         image_data = self._get_display_image_data(frame)
+        self._apply_view_transform_to_viewer(frame)
         
         # Compute scale limits using zscale (once, or when reset)
         if self.z1 is None or self.z2 is None:
@@ -1094,9 +1186,8 @@ class MainWindow(QMainWindow):
         if self.using_gpu_rendering:
             def tile_provider(x: int, y: int, w: int, h: int) -> NDArray[np.uint8]:
                 tile = self._extract_gpu_tile_data(image_data, x, y, w, h)
-                clipped = np.clip(tile, adjusted_z1, adjusted_z2)
-                scaled = apply_scale(clipped, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
-                rgb = cmap.apply(scaled)
+                scaled = apply_scale(tile, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
+                rgb = cmap.apply_normalized(scaled)
                 return rgb
 
             self.image_viewer.set_tile_provider(image_data.shape[1], image_data.shape[0], tile_provider)
@@ -1108,10 +1199,8 @@ class MainWindow(QMainWindow):
                 cmap,
             )
         else:
-            # Clip and scale the data
-            clipped = np.clip(image_data, adjusted_z1, adjusted_z2)
-            scaled = apply_scale(clipped, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
-            rgb_full = cmap.apply(scaled)
+            scaled = apply_scale(image_data, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
+            rgb_full = cmap.apply_normalized(scaled)
             display_rgb = np.ascontiguousarray(np.flipud(rgb_full))
 
             # Convert to QImage
@@ -1122,20 +1211,29 @@ class MainWindow(QMainWindow):
             # Create pixmap and display
             pixmap = QPixmap.fromImage(qimage)
             self.image_viewer.set_image(pixmap)
+
+        preview_rgb = self._render_preview_rgb(
+            image_data,
+            adjusted_z1,
+            adjusted_z2,
+            cmap,
+        )
+        self._cache_preview_rgb(frame, preview_rgb)
+        transformed_preview = self._transform_preview_image(preview_rgb, frame)
         
         # Update panner panel with RGB data (DS9 style)
         if hasattr(self, 'panner_panel'):
             self.panner_panel.set_image(
-                display_rgb,
-                source_size=(image_data.shape[1], image_data.shape[0]),
+                transformed_preview,
+                source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
             )
             self._update_panner_view_rect()
         
         # Update magnifier panel with RGB data (DS9 style)
         if hasattr(self, 'magnifier_panel'):
             self.magnifier_panel.set_image(
-                display_rgb,
-                source_size=(image_data.shape[1], image_data.shape[0]),
+                transformed_preview,
+                source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
             )
         if hasattr(self, "horizontal_graph_dock"):
             self.horizontal_graph_dock.set_image(image_data)
@@ -1179,6 +1277,7 @@ class MainWindow(QMainWindow):
             False,
         )
         display_rgb = np.ascontiguousarray(np.flipud(composite))
+        self._apply_view_transform_to_viewer(frame)
 
         if self.using_gpu_rendering:
             def tile_provider(x: int, y: int, w: int, h: int) -> NDArray[np.uint8]:
@@ -1192,16 +1291,19 @@ class MainWindow(QMainWindow):
             qimage = QImage(display_rgb.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
             self.image_viewer.set_image(QPixmap.fromImage(qimage))
 
+        self._cache_preview_rgb(frame, display_rgb)
+        transformed_preview = self._transform_preview_image(display_rgb, frame)
+
         if hasattr(self, "panner_panel"):
             self.panner_panel.set_image(
-                display_rgb,
-                source_size=(composite.shape[1], composite.shape[0]),
+                transformed_preview,
+                source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
             )
             self._update_panner_view_rect()
         if hasattr(self, "magnifier_panel"):
             self.magnifier_panel.set_image(
-                display_rgb,
-                source_size=(composite.shape[1], composite.shape[0]),
+                transformed_preview,
+                source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
             )
         if hasattr(self, "horizontal_graph_dock"):
             self.horizontal_graph_dock.set_image(active_data)
@@ -1252,9 +1354,8 @@ class MainWindow(QMainWindow):
             cmap_data = cmap.colors.copy()[::-1]
             cmap = Colormap(f"{frame.colormap}_inverted", cmap_data)
 
-        clipped = np.clip(image_data, adjusted_z1, adjusted_z2)
-        scaled = apply_scale(clipped, frame.scale, vmin=adjusted_z1, vmax=adjusted_z2)
-        return cmap.apply(scaled)
+        scaled = apply_scale(image_data, frame.scale, vmin=adjusted_z1, vmax=adjusted_z2)
+        return cmap.apply_normalized(scaled)
 
     def _display_tiled_frames(self) -> bool:
         """Render all loaded frames in a tiled grid."""
@@ -2077,38 +2178,268 @@ class MainWindow(QMainWindow):
         self._display_image()
         self.status_bar.update_image_info(frame.image_data.shape[1], frame.image_data.shape[0])
         self.statusBar().showMessage(f"Binning: {factor}x{factor}", 2000)
+
+    def _current_frame_orientation(self) -> str:
+        """Return the current frame orientation token."""
+        frame = self.frame_manager.current_frame
+        if frame is None:
+            return "none"
+        return flags_to_orientation(frame.flip_x, frame.flip_y)
+
+    def _update_zoom_menu_state(self) -> None:
+        """Sync Zoom menu check state with the active frame."""
+        frame = self.frame_manager.current_frame
+        if frame is None:
+            return
+
+        preset = min(
+            self.menu_bar.zoom_preset_actions.keys(),
+            key=lambda value: abs(value - frame.zoom),
+        )
+        if np.isclose(frame.zoom, preset, atol=1e-6, rtol=1e-6):
+            self.menu_bar.zoom_preset_actions[preset].setChecked(True)
+        else:
+            self.menu_bar.zoom_preset_group.setExclusive(False)
+            for action in self.menu_bar.zoom_preset_actions.values():
+                action.setChecked(False)
+            self.menu_bar.zoom_preset_group.setExclusive(True)
+
+        self.menu_bar.action_zoom_align.setChecked(bool(frame.align_wcs))
+        self.menu_bar.zoom_orientation_actions[self._current_frame_orientation()].setChecked(True)
+
+        snapped_rotation = int(round(normalize_rotation(frame.rotation) / 90.0) * 90) % 360
+        if np.isclose(normalize_rotation(frame.rotation), snapped_rotation, atol=1e-6):
+            self.menu_bar.zoom_rotation_actions[snapped_rotation].setChecked(True)
+        else:
+            self.menu_bar.zoom_rotation_group.setExclusive(False)
+            for action in self.menu_bar.zoom_rotation_actions.values():
+                action.setChecked(False)
+            self.menu_bar.zoom_rotation_group.setExclusive(True)
+
+    def _set_zoom_level(self, zoom: float) -> None:
+        """Set an explicit zoom level."""
+        self.image_viewer.zoom_to(zoom)
+        self.status_bar.update_zoom(self.image_viewer.get_zoom())
+        self._persist_frame_view_state()
+        self._update_zoom_menu_state()
+        self._apply_locked_frame_view_state()
+        self._update_panner_view_rect()
+        self.statusBar().showMessage(f"Zoom {self.image_viewer.get_zoom():.5g}", 1000)
+
+    def _set_orientation(self, orientation: str) -> None:
+        """Set frame orientation from a DS9 orientation token."""
+        frame = self.frame_manager.current_frame
+        if frame is None:
+            self.statusBar().showMessage("No image loaded", 2000)
+            return
+        frame.flip_x, frame.flip_y = orientation_to_flags(orientation)
+        if self.using_gpu_rendering and (frame.flip_x or frame.flip_y or not np.isclose(frame.rotation, 0.0)):
+            self._display_image()
+        else:
+            self._refresh_transformed_view(frame)
+        self._persist_frame_view_state()
+        self._update_zoom_menu_state()
+        self._apply_locked_frame_view_state()
+        self.statusBar().showMessage(f"Orientation: {orientation}", 1500)
+
+    def _set_rotation(self, degrees: float) -> None:
+        """Set frame rotation."""
+        frame = self.frame_manager.current_frame
+        if frame is None:
+            self.statusBar().showMessage("No image loaded", 2000)
+            return
+        frame.rotation = normalize_rotation(degrees)
+        if self.using_gpu_rendering and (not np.isclose(frame.rotation, 0.0) or frame.flip_x or frame.flip_y):
+            self._display_image()
+        else:
+            self._refresh_transformed_view(frame)
+        self._persist_frame_view_state()
+        self._update_zoom_menu_state()
+        self._apply_locked_frame_view_state()
+        self.statusBar().showMessage(f"Rotation: {frame.rotation:.2f} degrees", 1500)
+
+    def _set_align_wcs(self, enabled: bool) -> None:
+        """Toggle WCS alignment state for the active frame."""
+        frame = self.frame_manager.current_frame
+        if frame is None:
+            self.statusBar().showMessage("No image loaded", 2000)
+            return
+        frame.align_wcs = bool(enabled)
+        self.menu_bar.action_zoom_align.setChecked(frame.align_wcs)
+        self._apply_locked_frame_view_state()
+        self.statusBar().showMessage(
+            f"WCS alignment: {'on' if frame.align_wcs else 'off'}",
+            1500,
+        )
+
+    def _center_image(self) -> None:
+        """Center the current image in the viewport."""
+        frame = self.frame_manager.current_frame
+        if frame is None or not frame.has_data:
+            self.statusBar().showMessage("No image loaded", 2000)
+            return
+
+        if self.using_gpu_rendering and hasattr(self.image_viewer, "set_pan"):
+            width = float(frame.image_data.shape[1]) / 2.0
+            height = float(frame.image_data.shape[0]) / 2.0
+            self.image_viewer.set_pan(width, height)
+        else:
+            self.scroll_area.horizontalScrollBar().setValue(
+                self.scroll_area.horizontalScrollBar().maximum() // 2
+            )
+            self.scroll_area.verticalScrollBar().setValue(
+                self.scroll_area.verticalScrollBar().maximum() // 2
+            )
+        self._persist_frame_view_state()
+        self._apply_locked_frame_view_state()
+        self._update_panner_view_rect()
+        self.statusBar().showMessage("Centered image", 1500)
+
+    def _apply_crop_parameters(self, params: dict) -> None:
+        """Apply crop/view parameters to the current frame."""
+        frame = self.frame_manager.current_frame
+        if frame is None or not frame.has_data:
+            self.statusBar().showMessage("No image loaded", 2000)
+            return
+
+        frame.crop_center_x = float(params["center_x"])
+        frame.crop_center_y = float(params["center_y"])
+        frame.crop_width = max(1.0, float(params["width"]))
+        frame.crop_height = max(1.0, float(params["height"]))
+
+        viewport = self.scroll_area.viewport().size()
+        zoom = min(
+            viewport.width() / frame.crop_width,
+            viewport.height() / frame.crop_height,
+        )
+        self._set_zoom_level(zoom)
+
+        if self.using_gpu_rendering and hasattr(self.image_viewer, "set_pan"):
+            self.image_viewer.set_pan(frame.crop_center_x, frame.crop_center_y)
+        else:
+            display_coords = None
+            if hasattr(self.image_viewer, "image_viewer"):
+                display_coords = self.image_viewer.image_viewer.map_image_to_display_coords(
+                    frame.crop_center_x,
+                    frame.crop_center_y,
+                )
+            if display_coords is not None:
+                zoom_value = self.image_viewer.get_zoom()
+                display_x, display_y = display_coords
+                self.scroll_area.horizontalScrollBar().setValue(
+                    int(display_x * zoom_value - viewport.width() / 2)
+                )
+                self.scroll_area.verticalScrollBar().setValue(
+                    int(display_y * zoom_value - viewport.height() / 2)
+                )
+        self._persist_frame_view_state()
+        self._apply_locked_frame_view_state()
+        self.statusBar().showMessage("Crop parameters applied", 1500)
+
+    def _apply_pan_zoom_rotate_parameters(self, params: dict) -> None:
+        """Apply pan/zoom/rotate dialog parameters."""
+        frame = self.frame_manager.current_frame
+        if frame is None or not frame.has_data:
+            self.statusBar().showMessage("No image loaded", 2000)
+            return
+
+        zoom = max(0.01, float(params["zoom"]))
+        pan_x = float(params["pan_x"])
+        pan_y = float(params["pan_y"])
+        frame.align_wcs = bool(params.get("align", frame.align_wcs))
+        self.menu_bar.action_zoom_align.setChecked(frame.align_wcs)
+        self.image_viewer.zoom_to(zoom)
+        frame.rotation = normalize_rotation(float(params["rotation"]))
+        self._apply_view_transform_to_viewer(frame)
+
+        if self.using_gpu_rendering and hasattr(self.image_viewer, "set_pan"):
+            self.image_viewer.set_pan(pan_x, pan_y)
+        else:
+            display_coords = None
+            if hasattr(self.image_viewer, "image_viewer"):
+                display_coords = self.image_viewer.image_viewer.map_image_to_display_coords(pan_x, pan_y)
+            if display_coords is not None:
+                viewport = self.scroll_area.viewport().size()
+                zoom_value = self.image_viewer.get_zoom()
+                display_x, display_y = display_coords
+                self.scroll_area.horizontalScrollBar().setValue(
+                    int(display_x * zoom_value - viewport.width() / 2)
+                )
+                self.scroll_area.verticalScrollBar().setValue(
+                    int(display_y * zoom_value - viewport.height() / 2)
+                )
+
+        self._display_image()
+        self._persist_frame_view_state()
+        self._update_zoom_menu_state()
+        self._apply_locked_frame_view_state()
+        self._update_panner_view_rect()
+        self.statusBar().showMessage("Pan/zoom/rotate updated", 1500)
+
+    def _show_crop_parameters_dialog(self) -> None:
+        """Show the crop parameter dialog."""
+        frame = self.frame_manager.current_frame
+        if frame is None or not frame.has_data:
+            self.statusBar().showMessage("No image loaded", 2000)
+            return
+        dialog = CropParametersDialog(self)
+        width = float(frame.image_data.shape[1])
+        height = float(frame.image_data.shape[0])
+        dialog.set_values(
+            center_x=frame.crop_center_x if frame.crop_center_x is not None else width / 2.0,
+            center_y=frame.crop_center_y if frame.crop_center_y is not None else height / 2.0,
+            width=frame.crop_width if frame.crop_width is not None else width,
+            height=frame.crop_height if frame.crop_height is not None else height,
+        )
+        dialog.parameters_changed.connect(self._apply_crop_parameters)
+        dialog.exec()
+
+    def _show_pan_zoom_rotate_dialog(self) -> None:
+        """Show the pan/zoom/rotate parameter dialog."""
+        frame = self.frame_manager.current_frame
+        if frame is None or not frame.has_data:
+            self.statusBar().showMessage("No image loaded", 2000)
+            return
+        dialog = PanZoomRotateDialog(self)
+        dialog.set_values(
+            zoom=frame.zoom,
+            pan_x=frame.pan_x,
+            pan_y=frame.pan_y,
+            rotation=frame.rotation,
+            align=frame.align_wcs,
+        )
+        dialog.parameters_changed.connect(self._apply_pan_zoom_rotate_parameters)
+        dialog.exec()
+
+    def _apply_locked_frame_view_state(self) -> None:
+        """Propagate zoom/orientation/rotation according to frame lock scope."""
+        scope = self._frame_lock_scope.get("frame", "none")
+        if scope == "wcs":
+            self._match_frames_wcs()
+        elif scope != "none":
+            self._match_frames_image()
     
     def _zoom_in(self) -> None:
         """Zoom in."""
-        self.image_viewer.zoom_in()
-        self.status_bar.update_zoom(self.image_viewer.get_zoom())
-        self._persist_frame_view_state()
-        self._update_panner_view_rect()
-        self.statusBar().showMessage("Zoomed in", 1000)
+        self._set_zoom_level(self.image_viewer.get_zoom() * 1.2)
     
     def _zoom_out(self) -> None:
         """Zoom out."""
-        self.image_viewer.zoom_out()
-        self.status_bar.update_zoom(self.image_viewer.get_zoom())
-        self._persist_frame_view_state()
-        self._update_panner_view_rect()
-        self.statusBar().showMessage("Zoomed out", 1000)
+        self._set_zoom_level(self.image_viewer.get_zoom() / 1.2)
     
     def _zoom_fit(self) -> None:
         """Zoom to fit window."""
         self.image_viewer.zoom_fit(self.scroll_area.viewport().size())
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
         self._persist_frame_view_state()
+        self._update_zoom_menu_state()
+        self._apply_locked_frame_view_state()
         self._update_panner_view_rect()
         self.statusBar().showMessage("Zoom to fit", 1000)
     
     def _zoom_actual(self) -> None:
         """Zoom to 1:1."""
-        self.image_viewer.zoom_actual()
-        self.status_bar.update_zoom(self.image_viewer.get_zoom())
-        self._persist_frame_view_state()
-        self._update_panner_view_rect()
-        self.statusBar().showMessage("Zoom 1:1", 1000)
+        self._set_zoom_level(1.0)
     
     def _on_mouse_moved(self, x: int, y: int) -> None:
         """Handle mouse movement over image."""
@@ -2133,7 +2464,12 @@ class MainWindow(QMainWindow):
         
         # Update magnifier panel (DS9 style)
         if hasattr(self, 'magnifier_panel'):
-            self.magnifier_panel.update_cursor_position(x, row)
+            frame = self.frame_manager.current_frame
+            viewer = getattr(self.image_viewer, "image_viewer", None)
+            if frame is not None and viewer is not None:
+                display_coords = viewer.map_image_to_display_coords(x, y)
+                if display_coords is not None:
+                    self.magnifier_panel.update_cursor_position(*display_coords)
         if hasattr(self, "horizontal_graph_dock") and self.horizontal_graph_dock.isVisible():
             self.horizontal_graph_dock.update_cursor_position(x, row)
         if hasattr(self, "vertical_graph_dock") and self.vertical_graph_dock.isVisible():
@@ -2162,39 +2498,19 @@ class MainWindow(QMainWindow):
         """Handle pan request from panner panel."""
         if self.image_data is None:
             return
-        image_height = self.image_data.shape[0]
-        y_bottom = image_height - 1 - y
-        
-        # x, y are image coordinates where user clicked in panner
-        # Center the main view on this position
-        
         if self.using_gpu_rendering:
+            image_height = self.image_data.shape[0]
+            y_bottom = image_height - 1 - y
             # For GPU mode: set pan to the clicked position
             # The pan coordinates represent the image point at viewport center
             self.image_viewer.set_pan(x, y_bottom)
             self.statusBar().showMessage(f"Panned to ({x:.0f}, {y_bottom:.0f})", 1000)
         else:
-            # For CPU mode: calculate scroll bar positions
-            # Get current zoom
             zoom = self.image_viewer.get_zoom()
-            
-            # Calculate where this image point should be in widget coordinates
-            # We want it centered in the viewport
             viewport = self.scroll_area.viewport()
-            viewport_center_x = viewport.width() / 2
-            viewport_center_y = viewport.height() / 2
-            
-            # Image point at (x, y) in zoomed coordinates
-            zoomed_x = x * zoom
-            zoomed_y = y * zoom
-            
-            # Scroll position to center this point
-            scroll_x = int(zoomed_x - viewport_center_x)
-            scroll_y = int(zoomed_y - viewport_center_y)
-            
-            self.scroll_area.horizontalScrollBar().setValue(scroll_x)
-            self.scroll_area.verticalScrollBar().setValue(scroll_y)
-            self.statusBar().showMessage(f"Panned to ({x:.0f}, {y_bottom:.0f})", 1000)
+            self.scroll_area.horizontalScrollBar().setValue(int(x * zoom - viewport.width() / 2))
+            self.scroll_area.verticalScrollBar().setValue(int(y * zoom - viewport.height() / 2))
+            self.statusBar().showMessage(f"Panned to ({x:.0f}, {y:.0f})", 1000)
         
         # Persist the new pan state
         self._persist_frame_view_state()
@@ -2227,7 +2543,7 @@ class MainWindow(QMainWindow):
             self.panner_panel.set_view_rect(None)
             return
 
-        image_h, image_w = self.image_data.shape[:2]
+        image_w, image_h = self.image_viewer.get_display_image_size()
         if image_w <= 0 or image_h <= 0:
             self.panner_panel.set_view_rect(None)
             return
@@ -2806,9 +3122,16 @@ class MainWindow(QMainWindow):
         east = center.directional_offset_by(90.0 * u.deg, separation)
         nx, ny = self.wcs_handler.world_to_pixel(north.ra.deg, north.dec.deg)
         ex, ey = self.wcs_handler.world_to_pixel(east.ra.deg, east.dec.deg)
-
-        north_vector = (float(nx - cx), float(ny - cy))
-        east_vector = (float(ex - cx), float(ey - cy))
+        frame = self.frame_manager.current_frame
+        transform = DisplayTransform(
+            width=w,
+            height=h,
+            rotation=frame.rotation if frame is not None else 0.0,
+            flip_x=frame.flip_x if frame is not None else False,
+            flip_y=frame.flip_y if frame is not None else False,
+        )
+        north_vector = transform.source_vector_to_display(float(nx - cx), float(ny - cy))
+        east_vector = transform.source_vector_to_display(float(ex - cx), float(ey - cy))
         self.image_viewer.set_direction_arrows(north_vector, east_vector, True)
 
     def _update_wcs_display(self, x: int, y: int) -> None:
@@ -3244,8 +3567,7 @@ class MainWindow(QMainWindow):
         adjusted_z1 = center - new_range / 2 + brightness * range_val
         adjusted_z2 = center + new_range / 2 + brightness * range_val
 
-        clipped = np.clip(image_data, adjusted_z1, adjusted_z2)
-        scaled = apply_scale(clipped, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
+        scaled = apply_scale(image_data, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
 
         try:
             cmap = self._get_colormap_instance(self.current_colormap)
@@ -3256,7 +3578,7 @@ class MainWindow(QMainWindow):
             cmap_data = cmap_data[::-1]
             cmap = Colormap(f"{self.current_colormap}_inverted", cmap_data)
 
-        rgb = cmap.apply(scaled)
+        rgb = cmap.apply_normalized(scaled)
         height, width = rgb.shape[:2]
         bytes_per_line = 3 * width
         qimage = QImage(rgb.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
@@ -3288,8 +3610,16 @@ class MainWindow(QMainWindow):
         frame.zoom = 1.0
         frame.pan_x = 0.0
         frame.pan_y = 0.0
+        frame.rotation = 0.0
+        frame.flip_x = False
+        frame.flip_y = False
+        frame.align_wcs = False
         frame.contrast = 1.0
         frame.brightness = 0.0
+        frame.crop_center_x = None
+        frame.crop_center_y = None
+        frame.crop_width = None
+        frame.crop_height = None
         frame.rgb_channel_scale = {
             "red": ScaleAlgorithm.LINEAR,
             "green": ScaleAlgorithm.LINEAR,
@@ -3590,6 +3920,7 @@ class MainWindow(QMainWindow):
         if frame and frame.has_data:
             self._apply_frame_view_state(frame)
             self._display_image()
+            self._apply_frame_view_state(frame)
             self.status_bar.update_image_info(frame.image_data.shape[1], frame.image_data.shape[0])
             if self.using_gpu_rendering and hasattr(self.image_viewer, "gl_canvas"):
                 self.image_viewer.gl_canvas.reset_view()
@@ -4023,11 +4354,17 @@ class MainWindow(QMainWindow):
         frame.zoom = self.image_viewer.get_zoom()
         frame.contrast = contrast
         frame.brightness = brightness
+        frame.rotation = normalize_rotation(frame.rotation)
         if self.using_gpu_rendering and hasattr(self.image_viewer, "gl_canvas"):
             frame.pan_x, frame.pan_y = self.image_viewer.gl_canvas.pan_offset
+        else:
+            pan_center = self._get_cpu_pan_center()
+            if pan_center is not None:
+                frame.pan_x, frame.pan_y = pan_center
 
     def _apply_frame_view_state(self, frame: Frame) -> None:
         """Apply stored display settings from the frame."""
+        self._apply_view_transform_to_viewer(frame)
         self.current_colormap = self._normalize_colormap_name(frame.colormap)
         self.invert_colormap = frame.invert_colormap
         if frame.frame_type == "rgb":
@@ -4066,8 +4403,26 @@ class MainWindow(QMainWindow):
             self.button_bar.set_scale(scale_name_map[self.current_scale])
         if frame.frame_type != "rgb":
             self._set_viewer_contrast_brightness(frame.contrast, frame.brightness)
+        if frame.zoom:
+            self.image_viewer.zoom_to(frame.zoom)
         if self.using_gpu_rendering and hasattr(self.image_viewer, "set_pan"):
             self.image_viewer.set_pan(frame.pan_x, frame.pan_y)
+        elif hasattr(self.image_viewer, "image_viewer"):
+            display_coords = self.image_viewer.image_viewer.map_image_to_display_coords(
+                frame.pan_x,
+                frame.pan_y,
+            )
+            if display_coords is not None:
+                viewport = self.scroll_area.viewport().size()
+                zoom = max(self.image_viewer.get_zoom(), 1e-6)
+                display_x, display_y = display_coords
+                self.scroll_area.horizontalScrollBar().setValue(
+                    int(display_x * zoom - viewport.width() / 2)
+                )
+                self.scroll_area.verticalScrollBar().setValue(
+                    int(display_y * zoom - viewport.height() / 2)
+                )
+        self._update_zoom_menu_state()
 
     def _sync_frame_view_state(self) -> None:
         """Persist current view state after rendering."""
@@ -4090,6 +4445,10 @@ class MainWindow(QMainWindow):
             frame.zoom = source.zoom
             frame.pan_x = source.pan_x
             frame.pan_y = source.pan_y
+            frame.rotation = source.rotation
+            frame.flip_x = source.flip_x
+            frame.flip_y = source.flip_y
+            frame.align_wcs = source.align_wcs
             frame.contrast = source.contrast
             frame.brightness = source.brightness
         self.statusBar().showMessage("Matched frames (image)", 2000)
@@ -4114,6 +4473,10 @@ class MainWindow(QMainWindow):
                 frame.pan_x = float(fx)
                 frame.pan_y = float(fy)
                 frame.zoom = source.zoom
+                frame.rotation = source.rotation
+                frame.flip_x = source.flip_x
+                frame.flip_y = source.flip_y
+                frame.align_wcs = True
                 frame.colormap = source.colormap
                 frame.scale = source.scale
                 frame.invert_colormap = source.invert_colormap

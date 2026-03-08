@@ -49,8 +49,16 @@ class Frame:
     zoom: float = 1.0
     pan_x: float = 0.0
     pan_y: float = 0.0
+    rotation: float = 0.0
+    flip_x: bool = False
+    flip_y: bool = False
+    align_wcs: bool = False
     contrast: float = 1.0
     brightness: float = 0.0
+    crop_center_x: Optional[float] = None
+    crop_center_y: Optional[float] = None
+    crop_width: Optional[float] = None
+    crop_height: Optional[float] = None
     frame_type: str = "base"
     rgb_channels: Dict[str, Optional[np.ndarray]] = None
     rgb_view: Dict[str, bool] = None

@@ -28,6 +28,8 @@ from PyQt6.QtWidgets import QWidget
 from dataclasses import dataclass, field
 import math
 
+from ..view_transform import DisplayTransform
+
 
 class RegionMode(Enum):
     """Region drawing modes."""
@@ -125,7 +127,11 @@ class RegionOverlay(QWidget):
         self.is_drawing: bool = False
         self.zoom: float = 1.0
         self.image_offset: Tuple[float, float] = (0, 0)
+        self.image_width: int = 0
         self.image_height: int = 0
+        self.rotation: float = 0.0
+        self.flip_x: bool = False
+        self.flip_y: bool = False
         
         # For moving/editing
         self.selected_region: Optional[Region] = None
@@ -142,14 +148,32 @@ class RegionOverlay(QWidget):
         self,
         zoom: float,
         offset: Tuple[float, float],
+        image_width: Optional[int] = None,
         image_height: Optional[int] = None,
+        rotation: float = 0.0,
+        flip_x: bool = False,
+        flip_y: bool = False,
     ) -> None:
         """Update zoom and offset for coordinate transformation."""
         self.zoom = zoom
         self.image_offset = offset
+        if image_width is not None:
+            self.image_width = max(0, int(image_width))
         if image_height is not None:
             self.image_height = max(0, int(image_height))
+        self.rotation = rotation
+        self.flip_x = flip_x
+        self.flip_y = flip_y
         self.update()
+
+    def _display_transform(self) -> DisplayTransform:
+        return DisplayTransform(
+            width=self.image_width,
+            height=self.image_height,
+            rotation=self.rotation,
+            flip_x=self.flip_x,
+            flip_y=self.flip_y,
+        )
     
     def add_region(self, region: Region) -> None:
         """Add a completed region."""
@@ -164,22 +188,28 @@ class RegionOverlay(QWidget):
     
     def _widget_to_image_coords(self, widget_point: QPointF) -> QPointF:
         """Convert widget coordinates to image coordinates."""
-        img_x = (widget_point.x() - self.image_offset[0]) / self.zoom
-        top_y = (widget_point.y() - self.image_offset[1]) / self.zoom
+        display_x = (widget_point.x() - self.image_offset[0]) / self.zoom
+        display_y = (widget_point.y() - self.image_offset[1]) / self.zoom
+        source_x, source_top_y = self._display_transform().display_to_source(display_x, display_y)
         if self.image_height > 0:
-            img_y = self.image_height - 1 - top_y
+            img_y = self.image_height - 1 - source_top_y
         else:
-            img_y = top_y
+            img_y = source_top_y
+        img_x = source_x
         return QPointF(img_x, img_y)
     
     def _image_to_widget_coords(self, image_point: QPointF) -> QPointF:
         """Convert image coordinates to widget coordinates."""
-        widget_x = image_point.x() * self.zoom + self.image_offset[0]
         if self.image_height > 0:
-            top_y = self.image_height - 1 - image_point.y()
+            source_top_y = self.image_height - 1 - image_point.y()
         else:
-            top_y = image_point.y()
-        widget_y = top_y * self.zoom + self.image_offset[1]
+            source_top_y = image_point.y()
+        display_x, display_y = self._display_transform().source_to_display(
+            image_point.x(),
+            source_top_y,
+        )
+        widget_x = display_x * self.zoom + self.image_offset[0]
+        widget_y = display_y * self.zoom + self.image_offset[1]
         return QPointF(widget_x, widget_y)
     
     def mousePressEvent(self, event) -> None:

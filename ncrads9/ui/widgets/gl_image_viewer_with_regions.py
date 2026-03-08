@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout
 from ...rendering.gl_canvas import GLCanvas
 from .region_overlay import RegionOverlay, RegionMode, Region
 from .contour_overlay import ContourOverlay
+from ..view_transform import DisplayTransform
 
 
 class GLImageViewerWithRegions(QWidget):
@@ -48,6 +49,9 @@ class GLImageViewerWithRegions(QWidget):
         self._brightness_offset = 0.0
         self._adjusting_contrast = False
         self._last_pos = None
+        self._rotation = 0.0
+        self._flip_x = False
+        self._flip_y = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -157,6 +161,25 @@ class GLImageViewerWithRegions(QWidget):
 
     def get_zoom(self) -> float:
         return self.gl_canvas.zoom
+
+    def set_view_transform(self, rotation: float, flip_x: bool, flip_y: bool) -> None:
+        """Store display transform metadata for overlays."""
+        self._rotation = rotation
+        self._flip_x = flip_x
+        self._flip_y = flip_y
+        self._update_overlay_transform()
+
+    def get_display_image_size(self) -> tuple[int, int]:
+        """Get transformed image size."""
+        image_width, image_height = self.gl_canvas.image_size
+        transform = DisplayTransform(
+            width=image_width,
+            height=image_height,
+            rotation=self._rotation,
+            flip_x=self._flip_x,
+            flip_y=self._flip_y,
+        )
+        return (int(round(transform.display_width)), int(round(transform.display_height)))
 
     def get_contrast_brightness(self) -> tuple[float, float]:
         return (self._contrast_scale, self._brightness_offset)
@@ -276,11 +299,18 @@ class GLImageViewerWithRegions(QWidget):
         self.region_overlay.set_zoom(
             self.gl_canvas.zoom,
             (x_offset, y_offset),
+            image_width=image_width,
             image_height=image_height,
+            rotation=self._rotation,
+            flip_x=self._flip_x,
+            flip_y=self._flip_y,
         )
         self.contour_overlay.set_zoom(
             self.gl_canvas.zoom,
             (x_offset, y_offset),
             image_width=image_width,
             image_height=image_height,
+            rotation=self._rotation,
+            flip_x=self._flip_x,
+            flip_y=self._flip_y,
         )
