@@ -23,7 +23,7 @@ metadata, WCS information, and statistics.
 Author: Yogesh Wadadekar
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, Dict, Any, Tuple
 
 import numpy as np

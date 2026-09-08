@@ -33,7 +33,6 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QCheckBox,
-    QLabel,
     QSlider,
 )
 from PyQt6.QtCore import Qt

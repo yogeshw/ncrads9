@@ -23,7 +23,6 @@ Author: Yogesh Wadadekar
 from pathlib import Path
 from typing import Any, Optional, Union
 
-import numpy as np
 from astropy.io import fits
 from numpy.typing import NDArray
 

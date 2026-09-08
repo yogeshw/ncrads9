@@ -122,8 +122,6 @@ class SDSSCatalog(CatalogBase):
             Result table or None if no results.
         """
         try:
-            fields = self.specobj_fields if spectro else self.photoobj_fields
-
             result = SDSS.query_region(
                 coord,
                 radius=radius,

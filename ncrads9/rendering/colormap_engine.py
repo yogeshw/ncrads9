@@ -23,7 +23,7 @@ Provides colormap management and application with support for standard
 astronomical colormaps and custom colormap definitions.
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 from numpy.typing import NDArray

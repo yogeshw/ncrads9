@@ -58,7 +58,6 @@ class CoordSystem(ABC):
         Returns:
             A tuple of (x, y) or (ra, dec) coordinates.
         """
-        pass
     
     @abstractmethod
     def set_coordinates(self, x: float, y: float) -> None:
@@ -69,7 +68,6 @@ class CoordSystem(ABC):
             x: The x or RA coordinate.
             y: The y or Dec coordinate.
         """
-        pass
     
     @abstractmethod
     def to_string(self, precision: Optional[int] = None) -> str:
@@ -82,7 +80,6 @@ class CoordSystem(ABC):
         Returns:
             String representation of the coordinates.
         """
-        pass
     
     def __repr__(self) -> str:
         """Return string representation of the coordinate system."""

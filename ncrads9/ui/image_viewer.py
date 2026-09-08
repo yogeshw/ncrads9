@@ -21,11 +21,9 @@ Author: Yogesh Wadadekar
 """
 
 from typing import Optional
-import numpy as np
-from numpy.typing import NDArray
 
 from PyQt6.QtCore import Qt, QPoint, QSize, pyqtSignal
-from PyQt6.QtGui import QImage, QPixmap, QPainter, QTransform, QWheelEvent, QMouseEvent
+from PyQt6.QtGui import QPixmap, QTransform, QWheelEvent, QMouseEvent
 from PyQt6.QtWidgets import QLabel
 
 from .view_transform import DisplayTransform, normalize_rotation

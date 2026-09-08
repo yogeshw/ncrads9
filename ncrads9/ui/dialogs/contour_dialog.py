@@ -36,7 +36,6 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QCheckBox,
     QColorDialog,
-    QFileDialog,
 )
 from PyQt6.QtGui import QColor
 

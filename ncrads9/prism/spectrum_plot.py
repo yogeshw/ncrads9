@@ -155,7 +155,6 @@ class SpectrumPlot:
             return
 
         # TODO: Implement auto-range calculation
-        pass
 
     def add_marker(
         self,
@@ -179,7 +178,6 @@ class SpectrumPlot:
     def refresh(self) -> None:
         """Refresh the plot display."""
         # TODO: Implement plot rendering
-        pass
 
     def get_wavelength_at_x(self, x: int) -> Optional[float]:
         """Get wavelength at a given x pixel position.

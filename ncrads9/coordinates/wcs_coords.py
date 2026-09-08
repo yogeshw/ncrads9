@@ -20,7 +20,7 @@ World Coordinate System (WCS) coordinate handling.
 Author: Yogesh Wadadekar
 """
 
-from typing import Tuple, Optional, Union
+from typing import Tuple, Optional
 
 from astropy.coordinates import SkyCoord
 import astropy.units as u

@@ -24,7 +24,7 @@ from typing import Optional
 
 import numpy as np
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QImage, QPixmap, QPainter, QFont, QColor, QLinearGradient
+from PyQt6.QtGui import QPixmap, QPainter, QColor, QLinearGradient
 from PyQt6.QtWidgets import (
     QDockWidget,
     QWidget,

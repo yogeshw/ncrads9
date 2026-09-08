@@ -7,9 +7,12 @@ from PyQt6.QtWidgets import QApplication
 
 from ncrads9.app import (
     _cli_help_requested,
+    _html_help_requested,
     apply_startup_cli,
+    format_cli_help,
     open_cli_help_in_browser,
     parse_cli_sequence,
+    run_application,
 )
 from ncrads9.rendering.scale_algorithms import ScaleAlgorithm
 from ncrads9.ui.main_window import MainWindow
@@ -145,7 +148,47 @@ def test_cli_help_detection():
     assert _cli_help_requested(["ncrads9", "--help"])
     assert _cli_help_requested(["ncrads9", "-h"])
     assert _cli_help_requested(["ncrads9", "-help"])
+    assert _cli_help_requested(["ncrads9", "--help-html"])
     assert not _cli_help_requested(["ncrads9", "image.fits"])
+
+
+def test_html_help_is_distinct_from_terminal_help():
+    """-h prints to the terminal; --help-html opens a browser."""
+    assert not _html_help_requested(["ncrads9", "-h"])
+    assert not _html_help_requested(["ncrads9", "--help"])
+    assert _html_help_requested(["ncrads9", "--help-html"])
+    assert _html_help_requested(["ncrads9", "-help-html"])
+
+
+def test_format_cli_help_documents_the_ordered_option_stream():
+    text = format_cli_help("ncrads9")
+    assert text.startswith("usage: ncrads9 [options] [file ...]")
+    assert "applied in the order given" in text
+    for flag in ("-zscale", "-cmap", "-rgb", "-wcs", "-regions", "--help-html"):
+        assert flag in text, flag
+
+
+def test_terminal_help_prints_and_exits_zero(capsys, monkeypatch):
+    """`ncrads9 --help` must not start Qt or open a browser."""
+    def _fail(*_args, **_kwargs):
+        raise AssertionError("browser must not be opened for terminal help")
+
+    monkeypatch.setattr("ncrads9.app.webbrowser.open", _fail)
+
+    assert run_application(["ncrads9", "--help"]) == 0
+    assert "usage: ncrads9" in capsys.readouterr().out
+
+
+def test_html_help_opens_browser_and_exits_zero(monkeypatch, tmp_path):
+    opened = {}
+    monkeypatch.setattr("ncrads9.app.tempfile.gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        "ncrads9.app.webbrowser.open",
+        lambda url, new=0: opened.__setitem__("url", url) or True,
+    )
+
+    assert run_application(["ncrads9", "--help-html"]) == 0
+    assert opened["url"].endswith("ncrads9_cli_help.html")
 
 
 def test_open_cli_help_in_browser_writes_and_opens(monkeypatch, tmp_path):

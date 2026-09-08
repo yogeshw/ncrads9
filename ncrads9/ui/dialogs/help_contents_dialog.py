@@ -27,7 +27,6 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QPushButton,
     QTextBrowser,
-    QLabel,
     QWidget,
 )
 from PyQt6.QtCore import Qt

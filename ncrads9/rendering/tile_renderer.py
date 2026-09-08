@@ -25,7 +25,7 @@ based on the current viewport.
 """
 
 from dataclasses import dataclass
-from typing import Callable, Iterator, List, Optional, Tuple
+from typing import Callable, Iterator, List, Optional
 
 import numpy as np
 from numpy.typing import NDArray

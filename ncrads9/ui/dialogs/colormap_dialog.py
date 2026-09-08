@@ -37,7 +37,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QSlider,
 )
-from PyQt6.QtGui import QPixmap, QImage, QPainter, QLinearGradient, QColor
+from PyQt6.QtGui import QPixmap, QImage, QColor
 
 from ...colormaps.builtin_maps import list_builtin_colormaps
 

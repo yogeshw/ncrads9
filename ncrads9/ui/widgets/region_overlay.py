@@ -23,7 +23,7 @@ Author: Yogesh Wadadekar
 from typing import Optional, List, Tuple
 from enum import Enum
 from PyQt6.QtCore import Qt, QPointF, QRectF, pyqtSignal
-from PyQt6.QtGui import QPainter, QPen, QColor, QBrush, QPolygonF
+from PyQt6.QtGui import QPainter, QPen, QColor, QPolygonF
 from PyQt6.QtWidgets import QWidget
 from dataclasses import dataclass, field
 import math

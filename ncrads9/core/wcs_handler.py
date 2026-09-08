@@ -22,7 +22,7 @@ Provides a wrapper class for astropy.wcs for coordinate transformations.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Union, Tuple, List
+from typing import Optional, Union, Tuple
 
 import numpy as np
 from astropy.io import fits
@@ -142,7 +142,8 @@ class WCSHandler:
         try:
             naxis1 = self._wcs.pixel_shape[0] if self._wcs.pixel_shape else 1
             naxis2 = self._wcs.pixel_shape[1] if self._wcs.pixel_shape else 1
-            return self.pixel_to_world(naxis1 / 2, naxis2 / 2)
+            ra, dec = self.pixel_to_world(naxis1 / 2, naxis2 / 2)
+            return float(ra), float(dec)
         except Exception:
             return None
 

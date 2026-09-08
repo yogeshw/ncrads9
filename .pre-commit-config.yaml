@@ -1,0 +1,42 @@
+# Install with: pre-commit install
+# Run over everything with: pre-commit run --all-files
+#
+# Note: `black` is scoped to tools/ for now. ncrads9/ and tests/ predate black
+# and join in M1 with a one-shot reformat. See docs/parity/lint-backlog.md.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(\.tmp_sao_ds9/|docs/parity/)
+      - id: end-of-file-fixer
+        exclude: ^(\.tmp_sao_ds9/|docs/parity/)
+      - id: check-yaml
+        exclude: ^\.tmp_sao_ds9/
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=2048]
+      - id: debug-statements
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.6
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^(ncrads9|tests|tools)/
+
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+        files: ^tools/
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.14.1
+    hooks:
+      - id: mypy
+        name: mypy (model packages only)
+        files: ^ncrads9/(core|coordinates|regions)/
+        additional_dependencies: [numpy, astropy, types-requests]
+        args: [--config-file=pyproject.toml]

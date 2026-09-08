@@ -29,7 +29,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 try:
     from astropy.samp import SAMPIntegratedClient
-    from astropy.samp.errors import SAMPHubError
+    from astropy.samp.errors import SAMPHubError  # noqa: F401  (availability probe)
     ASTROPY_SAMP_AVAILABLE = True
 except ImportError:
     ASTROPY_SAMP_AVAILABLE = False

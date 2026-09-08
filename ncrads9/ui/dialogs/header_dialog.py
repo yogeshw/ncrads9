@@ -132,7 +132,6 @@ class HeaderDialog(QDialog):
             index: Selected extension index.
         """
         # Placeholder for extension switching
-        pass
 
     def _on_search(self, text: str) -> None:
         """Handle search text change.

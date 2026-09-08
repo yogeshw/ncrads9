@@ -20,7 +20,7 @@ Composite region shape containing multiple regions.
 Author: Yogesh Wadadekar
 """
 
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 from ..base_region import BaseRegion
 
@@ -165,7 +165,7 @@ class Composite(BaseRegion):
         """Return the number of child regions."""
         return len(self._regions)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[BaseRegion]:
         """Iterate over child regions."""
         return iter(self._regions)
 

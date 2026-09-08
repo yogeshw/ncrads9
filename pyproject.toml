@@ -39,3 +39,127 @@ dev = [
 
 [project.scripts]
 ncrads9 = "ncrads9.__main__:main"
+
+# ---------------------------------------------------------------------------
+# Tooling
+#
+# Policy (see PLAN.md M0-3): the CI gate starts narrow and is widened one
+# milestone at a time. `lint.select` below holds the rules that are clean today
+# and must stay clean; `docs/parity/lint-backlog.md` records the rule families
+# that are deferred, with counts, so widening is a deliberate step rather than
+# an accident.
+# ---------------------------------------------------------------------------
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+extend-exclude = [".tmp_sao_ds9", "docs", "ncrads9/sampleimages"]
+
+[tool.ruff.lint]
+# Correctness-focused gate. Modernization families (UP, I, ANN, D) are tracked
+# in docs/parity/lint-backlog.md and enabled per milestone.
+select = [
+    "F",      # pyflakes: undefined names, unused imports/variables
+    "E4",     # import placement
+    "E7",     # statement-level mistakes
+    "E9",     # syntax / IO errors
+    "B",      # flake8-bugbear: likely bugs
+    "PIE",    # flake8-pie: misc correctness
+    "RUF",    # ruff-specific
+    "DTZ",    # naive datetimes
+    "SIM",    # simplifications that change no behaviour
+    "PLR1730", "PLR0402",
+]
+ignore = [
+    # Broad `except Exception` is used deliberately around Qt and network calls;
+    # revisit alongside the error-reporting work in M2.
+    "BLE001",
+    "S110", "S112",
+    # Mutable class defaults are pervasive in the Qt widget classes; M1/M2
+    # rewrite these constructors anyway.
+    "RUF012",
+    # PyQt slots legitimately shadow builtins and take unused args.
+    "B008",
+    # Typographic characters (x, deg, alpha/delta) are intentional in UI labels.
+    "RUF001", "RUF002", "RUF003",
+    # --- Deferred style families. See docs/parity/lint-backlog.md. ---
+    # Rewriting these across a tree that M1/M2 largely restructure would be
+    # churn with no correctness benefit; enabled per milestone instead.
+    "SIM105",  # contextlib.suppress instead of try/except/pass
+    "SIM108",  # ternary instead of if/else
+    "SIM102",  # collapsible if
+    "SIM116",  # dict lookup instead of if/elif chain
+    "RUF046",  # unnecessary int() cast
+    "RUF059",  # unused unpacked variable
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Package facades re-export names for the public API.
+"ncrads9/**/__init__.py" = ["F401", "RUF022"]
+# Tests reach into private members on purpose.
+"tests/**" = ["B011", "RUF059"]
+# `l` is the standard symbol for galactic longitude, and for lightness in
+# HLS colour space. Domain naming wins over the ambiguity heuristic.
+"ncrads9/coordinates/galactic.py" = ["E741"]
+"ncrads9/rendering/rgb_compositor.py" = ["E741"]
+"ncrads9/frames/hls_frame.py" = ["E741"]
+
+[tool.black]
+line-length = 110
+target-version = ["py310"]
+extend-exclude = '''
+/(
+    \.tmp_sao_ds9
+  | docs
+)/
+'''
+
+[tool.mypy]
+python_version = "3.10"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = false
+ignore_missing_imports = true
+exclude = '(^\.tmp_sao_ds9/|^docs/|^tests/)'
+
+# Strictness is introduced module-by-module. These are the packages M1 makes the
+# canonical model layer, so they are checked first and are clean today.
+# `tools/check.sh` gates exactly these; widen the list as each milestone lands.
+[[tool.mypy.overrides]]
+module = [
+    "ncrads9.core.*",
+    "ncrads9.coordinates.*",
+    "ncrads9.regions.*",
+]
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+filterwarnings = ["default"]
+
+[tool.coverage.run]
+source = ["ncrads9"]
+branch = false
+omit = [
+    "ncrads9/sampleimages/*",
+    "ncrads9/samplecatalogs/*",
+]
+
+[tool.coverage.report]
+# Floor set to the measured baseline at the end of M0 (42%), rounded down so it
+# does not flap between environments. PLAN.md C-5 requires raising this at the
+# end of every milestone -- never lowering it.
+fail_under = 40
+precision = 1
+show_missing = true
+# `exclude_lines` rather than `exclude_also` so this works on coverage < 7.2.
+# It replaces the default list, so the default pragma is repeated here.
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "@(abc\\.)?abstractmethod",
+]

@@ -22,6 +22,7 @@ Provides functionality for loading and managing FITS files using astropy.
 Author: Yogesh Wadadekar
 """
 
+from types import TracebackType
 from typing import Optional, Union, List, Tuple
 from pathlib import Path
 
@@ -141,6 +142,11 @@ class FITSHandler:
         """Context manager entry."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Context manager exit."""
         self.close()

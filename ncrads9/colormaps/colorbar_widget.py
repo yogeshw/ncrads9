@@ -21,7 +21,7 @@
 from typing import Optional, Tuple
 import numpy as np
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
+from PyQt6.QtWidgets import QWidget
 from PyQt6.QtGui import QPainter, QImage, QColor, QPen, QFont
 from PyQt6.QtCore import Qt, pyqtSignal, QRect
 

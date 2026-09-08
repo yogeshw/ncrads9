@@ -22,7 +22,7 @@ Author: Yogesh Wadadekar
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple, List, Any
+from typing import Optional, List, Any
 
 from astropy.coordinates import SkyCoord
 from astropy.table import Table
@@ -71,7 +71,6 @@ class CatalogBase(ABC):
         Table or None
             Result table or None if no results.
         """
-        pass
 
     @abstractmethod
     def query_object(
@@ -94,7 +93,6 @@ class CatalogBase(ABC):
         Table or None
             Result table or None if no results.
         """
-        pass
 
     def get_coordinates(self, table: Table) -> Optional[List[SkyCoord]]:
         """

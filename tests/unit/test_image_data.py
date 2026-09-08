@@ -18,7 +18,6 @@
 
 """Tests for core.image_data module."""
 
-import pytest
 
 
 class TestImageData:

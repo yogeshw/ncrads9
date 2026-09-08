@@ -64,7 +64,6 @@ from astropy.coordinates import (
 import astropy.units as u
 
 from .menu_bar import MenuBar
-from .image_viewer import ImageViewer
 from .toolbar import MainToolbar
 from .button_bar import ButtonBar
 from .status_bar import StatusBar
@@ -906,9 +905,10 @@ class MainWindow(QMainWindow):
 
     def _apply_background_color(self, color_hex: str) -> None:
         """Apply background color to the viewer."""
-        if self.using_gpu_rendering and hasattr(self.image_viewer, "set_background_color"):
-            self.image_viewer.set_background_color(color_hex)
-        elif hasattr(self.image_viewer, "set_background_color"):
+        # Both viewer backends expose set_background_color, so this does not
+        # depend on which one is active. (This was previously an if/elif whose
+        # two branches were identical, making the GPU test dead.)
+        if hasattr(self.image_viewer, "set_background_color"):
             self.image_viewer.set_background_color(color_hex)
 
     def _apply_frame_pan(self, frame: Frame) -> None:

@@ -382,7 +382,7 @@ class RegionParser:
                 x, y = float(params[0]), float(params[1])
                 return Text(center=(x, y), label=text, color=color, font=font)
         
-        except (IndexError, ValueError) as e:
+        except (IndexError, ValueError):
             # Return None for malformed regions
             return None
         

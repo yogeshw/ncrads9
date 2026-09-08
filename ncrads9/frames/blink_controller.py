@@ -248,8 +248,7 @@ class BlinkController:
             if next_index >= len(self._frame_order):
                 self._direction = -1
                 next_index = len(self._frame_order) - 2
-                if next_index < 0:
-                    next_index = 0
+                next_index = max(next_index, 0)
             elif next_index < 0:
                 self._direction = 1
                 next_index = 1

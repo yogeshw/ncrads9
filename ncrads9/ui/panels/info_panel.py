@@ -197,7 +197,6 @@ class InfoPanel(QDockWidget):
 
         try:
             # Convert pixel to world coordinates
-            from astropy.coordinates import SkyCoord
             import astropy.units as u
 
             world = self._wcs.pixel_to_world(x, y)

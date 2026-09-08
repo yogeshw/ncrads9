@@ -1,0 +1,363 @@
+# NCRADS9 menu tree -- GENERATED, do not edit by hand.
+# Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
+# entries: 344 (286 excluding separators)
+#
+# Format: <menu path>|<kind>|<label>
+
+# File
+.file|command|Open
+.file|command|Save
+.file|command|Save As
+.file|separator|---
+.file|command|Export
+.file|command|Print
+.file|separator|---
+.file|command|Exit
+# Edit
+.edit|command|Undo
+.edit|command|Redo
+.edit|separator|---
+.edit|command|Cut
+.edit|command|Copy
+.edit|command|Paste
+.edit|separator|---
+.edit|command|Preferences
+# View
+.view|checkbutton|Fullscreen
+.view|separator|---
+.view|checkbutton|Show Toolbar
+.view|checkbutton|Show Status Bar
+# Frame
+.frame|command|New Frame
+.frame|command|New Frame RGB
+.frame|command|New Frame HSV
+.frame|command|New Frame HLS
+.frame|command|New Frame 3D
+.frame|separator|---
+.frame|command|Delete Frame
+.frame|command|Delete All Frames
+.frame|separator|---
+.frame|command|Clear Frame
+.frame|command|Reset Frame
+.frame|command|Refresh Frame
+.frame|separator|---
+.frame|radiobutton|Single Frame
+.frame|radiobutton|Tile Frames
+.frame|radiobutton|Blink Frames
+.frame|radiobutton|Fade Frames
+.frame|separator|---
+.frame|cascade|Match
+.frame.match|cascade|Frame
+.frame.match.frame|command|WCS
+.frame.match.frame|separator|---
+.frame.match.frame|command|Image
+.frame.match.frame|command|Physical
+.frame.match.frame|command|Amplifier
+.frame.match.frame|command|Detector
+.frame.match|cascade|Crosshair
+.frame.match.crosshair|command|WCS
+.frame.match.crosshair|separator|---
+.frame.match.crosshair|command|Image
+.frame.match.crosshair|command|Physical
+.frame.match.crosshair|command|Amplifier
+.frame.match.crosshair|command|Detector
+.frame.match|cascade|Crop
+.frame.match.crop|command|WCS
+.frame.match.crop|separator|---
+.frame.match.crop|command|Image
+.frame.match.crop|command|Physical
+.frame.match.crop|command|Amplifier
+.frame.match.crop|command|Detector
+.frame.match|cascade|Slice
+.frame.match.slice|command|WCS
+.frame.match.slice|separator|---
+.frame.match.slice|command|Image
+.frame.match|command|Bin
+.frame.match|command|Axes Order
+.frame.match|command|Scale
+.frame.match|command|Scale and Limits
+.frame.match|command|Colorbar
+.frame.match|command|Block
+.frame.match|command|Smooth
+.frame.match|command|3D
+.frame|cascade|Lock
+.frame.lock|cascade|Frame
+.frame.lock.frame|radiobutton|None
+.frame.lock.frame|separator|---
+.frame.lock.frame|radiobutton|WCS
+.frame.lock.frame|separator|---
+.frame.lock.frame|radiobutton|Image
+.frame.lock.frame|radiobutton|Physical
+.frame.lock.frame|radiobutton|Amplifier
+.frame.lock.frame|radiobutton|Detector
+.frame.lock|cascade|Crosshair
+.frame.lock.crosshair|radiobutton|None
+.frame.lock.crosshair|separator|---
+.frame.lock.crosshair|radiobutton|WCS
+.frame.lock.crosshair|separator|---
+.frame.lock.crosshair|radiobutton|Image
+.frame.lock.crosshair|radiobutton|Physical
+.frame.lock.crosshair|radiobutton|Amplifier
+.frame.lock.crosshair|radiobutton|Detector
+.frame.lock|cascade|Crop
+.frame.lock.crop|radiobutton|None
+.frame.lock.crop|separator|---
+.frame.lock.crop|radiobutton|WCS
+.frame.lock.crop|separator|---
+.frame.lock.crop|radiobutton|Image
+.frame.lock.crop|radiobutton|Physical
+.frame.lock.crop|radiobutton|Amplifier
+.frame.lock.crop|radiobutton|Detector
+.frame.lock|cascade|Slice
+.frame.lock.slice|radiobutton|None
+.frame.lock.slice|separator|---
+.frame.lock.slice|radiobutton|WCS
+.frame.lock.slice|separator|---
+.frame.lock.slice|radiobutton|Image
+.frame.lock|checkbutton|Bin
+.frame.lock|checkbutton|Axes Order
+.frame.lock|checkbutton|Scale
+.frame.lock|checkbutton|Scale and Limits
+.frame.lock|checkbutton|Colorbar
+.frame.lock|checkbutton|Block
+.frame.lock|checkbutton|Smooth
+.frame.lock|checkbutton|3D
+.frame|separator|---
+.frame|cascade|Goto Frame
+.frame.gotoframe|checkbutton|Frame 1
+.frame|cascade|Show/Hide Frames
+.frame.showhideframes|command|Show All
+.frame.showhideframes|command|Hide All
+.frame.showhideframes|separator|---
+.frame.showhideframes|checkbutton|Frame 1
+.frame|cascade|Move Frame
+.frame.moveframe|command|First
+.frame.moveframe|command|Back
+.frame.moveframe|command|Forward
+.frame.moveframe|command|Last
+.frame|separator|---
+.frame|command|First Frame
+.frame|command|Previous Frame
+.frame|command|Next Frame
+.frame|command|Last Frame
+.frame|separator|---
+.frame|command|Cube
+.frame|command|RGB
+.frame|command|HSV
+.frame|command|HLS
+.frame|command|3D
+.frame|separator|---
+.frame|cascade|Frame Parameters
+.frame.frameparameters|cascade|Tile
+.frame.frameparameters.tile|radiobutton|Grid
+.frame.frameparameters.tile|radiobutton|Columns
+.frame.frameparameters.tile|radiobutton|Rows
+.frame.frameparameters|cascade|Blink Interval
+.frame.frameparameters.blinkinterval|radiobutton|.125 Seconds
+.frame.frameparameters.blinkinterval|radiobutton|.25 Seconds
+.frame.frameparameters.blinkinterval|radiobutton|.5 Seconds
+.frame.frameparameters.blinkinterval|radiobutton|1 Second
+.frame.frameparameters.blinkinterval|radiobutton|2 Seconds
+.frame.frameparameters.blinkinterval|radiobutton|4 Seconds
+.frame.frameparameters.blinkinterval|radiobutton|8 Seconds
+.frame.frameparameters.blinkinterval|radiobutton|16 Seconds
+.frame.frameparameters|cascade|Fade Interval
+.frame.frameparameters.fadeinterval|radiobutton|1 Second
+.frame.frameparameters.fadeinterval|radiobutton|2 Seconds
+.frame.frameparameters.fadeinterval|radiobutton|4 Seconds
+.frame.frameparameters.fadeinterval|radiobutton|8 Seconds
+# Bin
+.bin|checkbutton|1x1
+.bin|checkbutton|2x2
+.bin|checkbutton|4x4
+.bin|checkbutton|8x8
+# Zoom
+.zoom|command|Center Image
+.zoom|checkbutton|Align
+.zoom|separator|---
+.zoom|command|Zoom In
+.zoom|command|Zoom Out
+.zoom|command|Zoom Fit
+.zoom|separator|---
+.zoom|radiobutton|Zoom 1/32
+.zoom|radiobutton|Zoom 1/16
+.zoom|radiobutton|Zoom 1/8
+.zoom|radiobutton|Zoom 1/4
+.zoom|radiobutton|Zoom 1/2
+.zoom|radiobutton|Zoom 1
+.zoom|radiobutton|Zoom 2
+.zoom|radiobutton|Zoom 4
+.zoom|radiobutton|Zoom 8
+.zoom|radiobutton|Zoom 16
+.zoom|radiobutton|Zoom 32
+.zoom|separator|---
+.zoom|radiobutton|None
+.zoom|radiobutton|Invert X
+.zoom|radiobutton|Invert Y
+.zoom|radiobutton|Invert XY
+.zoom|separator|---
+.zoom|radiobutton|0 Degrees
+.zoom|radiobutton|90 Degrees
+.zoom|radiobutton|180 Degrees
+.zoom|radiobutton|270 Degrees
+.zoom|separator|---
+.zoom|command|Crop Parameters
+.zoom|separator|---
+.zoom|command|Pan Zoom Rotate Parameters
+# Scale
+.scale|checkbutton|Linear
+.scale|checkbutton|Log
+.scale|checkbutton|Sqrt
+.scale|checkbutton|Squared
+.scale|checkbutton|Asinh
+.scale|checkbutton|Histogram Equalization
+.scale|separator|---
+.scale|command|MinMax
+.scale|command|ZScale
+.scale|command|Parameters
+# Color
+.color|radiobutton|Gray
+.color|radiobutton|Red
+.color|radiobutton|Green
+.color|radiobutton|Blue
+.color|radiobutton|A
+.color|radiobutton|B
+.color|radiobutton|BB
+.color|radiobutton|HE
+.color|radiobutton|I8
+.color|radiobutton|AIPS0
+.color|radiobutton|SLS
+.color|radiobutton|HSV
+.color|radiobutton|Heat
+.color|radiobutton|Cool
+.color|radiobutton|Rainbow
+.color|radiobutton|Standard
+.color|radiobutton|Staircase
+.color|radiobutton|Color
+.color|separator|---
+.color|cascade|Matplotlib Uniform
+.color.matplotlibuniform|radiobutton|Viridis
+.color.matplotlibuniform|radiobutton|Plasma
+.color.matplotlibuniform|radiobutton|Inferno
+.color.matplotlibuniform|radiobutton|Magma
+.color|cascade|User
+.color.user|command|Load Colormap
+.color.user|command|Save Current Colormap
+.color.user|separator|---
+.color|separator|---
+.color|checkbutton|Invert Colormap
+.color|command|Reset Colormap
+.color|separator|---
+.color|checkbutton|Show Colorbar
+.color|cascade|Colorbar Options
+.color.colorbaroptions|cascade|Orientation
+.color.colorbaroptions.orientation|radiobutton|Horizontal
+.color.colorbaroptions.orientation|radiobutton|Vertical
+.color.colorbaroptions|cascade|Numerics
+.color.colorbaroptions.numerics|checkbutton|Show
+.color.colorbaroptions.numerics|separator|---
+.color.colorbaroptions.numerics|radiobutton|Space Equal Value
+.color.colorbaroptions.numerics|radiobutton|Space Equal Distance
+.color.colorbaroptions|cascade|Font
+.color.colorbaroptions.font|radiobutton|Small
+.color.colorbaroptions.font|radiobutton|Medium
+.color.colorbaroptions.font|radiobutton|Large
+.color.colorbaroptions|separator|---
+.color.colorbaroptions|command|Size
+.color.colorbaroptions|command|Number of Ticks
+.color|separator|---
+.color|command|Colormap Parameters
+# Region
+.region|command|None
+.region|separator|---
+.region|command|Circle
+.region|command|Ellipse
+.region|command|Box
+.region|command|Polygon
+.region|command|Line
+.region|command|Point
+.region|separator|---
+.region|command|Load
+.region|command|Save
+.region|command|Delete All
+# VO
+.vo|cascade|SIAP
+.vo.siap|command|2MASS Image
+.vo|cascade|Catalog
+.vo.catalog|command|VizieR
+.vo|cascade|SAMP
+.vo.samp|command|Connect
+.vo.samp|command|Disconnect
+.vo.samp|separator|---
+.vo.samp|command|Marker Color
+.vo.samp|command|Marker Shape
+.vo.samp|command|Marker Size
+# WCS
+.wcs|radiobutton|FK5
+.wcs|radiobutton|FK4
+.wcs|radiobutton|ICRS
+.wcs|radiobutton|Galactic
+.wcs|radiobutton|Ecliptic
+.wcs|separator|---
+.wcs|checkbutton|Sexagesimal
+.wcs|checkbutton|Degrees
+.wcs|separator|---
+.wcs|checkbutton|Show Direction Arrows
+# Analysis
+.analysis|command|Pixel Table
+.analysis|command|Name Resolution
+.analysis|command|Statistics
+.analysis|command|Histogram
+.analysis|command|Radial Profile
+.analysis|separator|---
+.analysis|command|Mask Parameters
+.analysis|command|Crosshair Parameters
+.analysis|command|Graph Parameters
+.analysis|separator|---
+.analysis|checkbutton|Contours
+.analysis|command|Contour Parameters
+.analysis|separator|---
+.analysis|checkbutton|Coordinate Grid
+.analysis|command|Coordinate Grid Parameters
+.analysis|separator|---
+.analysis|cascade|Block
+.analysis.block|command|Block In
+.analysis.block|command|Block Out
+.analysis.block|command|Block Fit
+.analysis.block|separator|---
+.analysis.block|radiobutton|Block 1
+.analysis.block|radiobutton|Block 2
+.analysis.block|radiobutton|Block 4
+.analysis.block|radiobutton|Block 8
+.analysis.block|radiobutton|Block 16
+.analysis.block|radiobutton|Block 32
+.analysis|command|Block Parameters
+.analysis|separator|---
+.analysis|checkbutton|Smooth
+.analysis|command|Smooth Parameters
+.analysis|separator|---
+.analysis|cascade|Image Servers
+.analysis.imageservers|command|2MASS Image
+.analysis|cascade|Catalogs
+.analysis.catalogs|command|VizieR
+.analysis|separator|---
+.analysis|command|Catalog Tool
+.analysis|cascade|Plot Tool
+.analysis.plottool|command|Line
+.analysis.plottool|command|Bar
+.analysis|separator|---
+.analysis|command|Virtual Observatory
+.analysis|command|Web Browser
+.analysis|separator|---
+.analysis|checkbutton|Analysis Command Log
+.analysis|separator|---
+.analysis|command|Load Analysis Commands
+.analysis|command|Clear Analysis Commands
+.analysis|separator|---
+.analysis|command|FITS Header
+# Help
+.help|command|Contents
+.help|command|Keyboard Shortcuts
+.help|separator|---
+.help|command|About NCRADS9
+.help|command|About Qt

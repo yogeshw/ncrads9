@@ -228,7 +228,6 @@ class RegionDialog(QDialog):
         """
         is_circle = shape == "Circle"
         is_ellipse_or_box = shape in ("Ellipse", "Box")
-        is_point = shape == "Point"
 
         self._radius_spin.setEnabled(is_circle or shape == "Annulus")
         self._width_spin.setEnabled(is_ellipse_or_box)

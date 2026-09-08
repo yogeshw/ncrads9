@@ -1,0 +1,683 @@
+# SAOImageDS9 menu tree -- GENERATED, do not edit by hand.
+# Regenerate with: python tools/ds9_menu_tree.py
+# entries: 656 (526 excluding separators)
+#
+# Format: <menu path>|<kind>|<label>
+#
+# Known limitation: DS9 builds some menus at runtime rather than
+# declaring them literally, so those entries appear as <dynamic> or
+# not at all. The largest case is the WCS menu, assembled by
+# CoordMenu (menu.tcl) from system x sky x format -- roughly 40
+# entries that this static extract cannot see. Treat the .wcs row of
+# tools/menu_diff.py as unreliable; PLAN.md section 5.11 has the real
+# comparison.
+
+# mfile.tcl
+.file|command|Open
+.file|cascade|Open as
+.file|command|Save
+.file|cascade|Save as
+.file|separator|---
+.file|cascade|Import
+.file|cascade|Export
+.file|separator|---
+.file|command|Prism
+.file|separator|---
+.file|cascade|Save Image
+.file|command|Create Movie
+.file|separator|---
+.file|command|Backup
+.file|command|Restore
+.file|separator|---
+.file|command|Header
+.file|command|Notes
+.file|separator|---
+.file|cascade|Preserve During Load
+.file|separator|---
+.file|cascade|XPA
+.file|separator|---
+.file|cascade|SAMP
+.file|cascade|SAMP Hub
+.file|separator|---
+.file|command|Open TCL Console
+.file|command|Source TCL
+.file|separator|---
+.file|command|Page Setup
+.file|command|Print
+.file|separator|---
+.file|command|Exit
+.file.open|command|Slice
+.file.open|separator|---
+.file.open|command|RGB Image
+.file.open|command|RGB Cube
+.file.open|separator|---
+.file.open|command|HSV Image
+.file.open|command|HSV Cube
+.file.open|separator|---
+.file.open|command|HLS Image
+.file.open|command|HLS Cube
+.file.open|separator|---
+.file.open|command|Multiple Extension Cube
+.file.open|command|Multiple Extension Frames
+.file.open|separator|---
+.file.open|command|Mosaic WCS
+.file.open|command|Mosaic WCS Segment
+.file.open|command|Mosaic IRAF
+.file.open|command|Mosaic IRAF Segment
+.file.open|command|Mosaic WFPC2
+.file.open|separator|---
+.file.open|command|URL
+.file.save|command|Slice
+.file.save|separator|---
+.file.save|command|RGB Image
+.file.save|command|RGB Cube
+.file.save|separator|---
+.file.save|command|HSV Image
+.file.save|command|HSV Cube
+.file.save|separator|---
+.file.save|command|HLS Image
+.file.save|command|HLS Cube
+.file.save|separator|---
+.file.save|command|Multiple Extension Cube
+.file.save|separator|---
+.file.save|command|Mosaic WCS
+.file.save|command|Mosaic WCS Segment
+.file.import|cascade|Slice
+.file.import|separator|---
+.file.import|command|Array
+.file.import|command|NRRD
+.file.import|command|ENVI
+.file.import|separator|---
+.file.import|command|RGB Array
+.file.import|command|HSV Array
+.file.import|command|HLS Array
+.file.import|separator|---
+.file.import|command|GIF
+.file.import|command|TIFF
+.file.import|command|JPEG
+.file.import|command|PNG
+.file.import.slice|command|GIF
+.file.import.slice|command|TIFF
+.file.import.slice|command|JPEG
+.file.import.slice|command|PNG
+.file.export|command|Array
+.file.export|command|NRRD
+.file.export|command|ENVI
+.file.export|separator|---
+.file.export|command|RGB Array
+.file.export|command|HSV Array
+.file.export|command|HLS Array
+.file.export|separator|---
+.file.export|command|GIF
+.file.export|command|TIFF
+.file.export|command|JPEG
+.file.export|command|PNG
+.file.saveimage|command|FITS
+.file.saveimage|command|EPS
+.file.saveimage|command|GIF
+.file.saveimage|command|TIFF
+.file.saveimage|command|JPEG
+.file.saveimage|command|PNG
+.file.preserve|checkbutton|Pan
+.file.preserve|checkbutton|Region
+.file.samp|command|Connect
+.file.samp|command|Disconnect
+.file.samp|separator|---
+.file.samp|cascade|Image
+.file.samp|cascade|Table
+.file.samp.image|command|Broadcast
+.file.samp.image|separator|---
+.file.samp.table|command|Broadcast
+.file.samp.table|separator|---
+.file.samphub|command|Information
+.file.samphub|separator|---
+.file.samphub|command|Start
+.file.samphub|command|Stop
+.file.xpa|command|Information
+.file.xpa|separator|---
+.file.xpa|command|Connect
+.file.xpa|command|Disconnect
+# medit.tcl
+.edit|command|Undo
+.edit|separator|---
+.edit|command|Cut
+.edit|command|Copy
+.edit|command|Paste
+.edit|separator|---
+.edit|radiobutton|None
+.edit|radiobutton|Region
+.edit|radiobutton|Crosshair
+.edit|radiobutton|Colorbar
+.edit|radiobutton|Pan
+.edit|radiobutton|Zoom
+.edit|radiobutton|Rotate
+.edit|radiobutton|Crop
+.edit|radiobutton|Catalog
+.edit|radiobutton|Footprint
+.edit|radiobutton|Examine
+.edit|radiobutton|3d
+.edit|radiobutton|Illustrate
+.edit|separator|---
+.edit|command|Preferences
+# mview.tcl
+.view|radiobutton|Horizontal
+.view|radiobutton|Vertical
+.view|radiobutton|Basic
+.view|radiobutton|Advanced
+.view|separator|---
+.view|checkbutton|Information Panel
+.view|checkbutton|Panner
+.view|checkbutton|Magnifier
+.view|checkbutton|Buttons
+.view|checkbutton|Icons
+.view|separator|---
+.view|checkbutton|Colorbar
+.view|checkbutton|Multiple Colorbars
+.view|checkbutton|Horizontal Graph
+.view|checkbutton|Vertical Graph
+.view|separator|---
+.view|checkbutton|Filename
+.view|checkbutton|Object
+.view|checkbutton|Keyword
+.view|checkbutton|Min Max
+.view|checkbutton|Low High
+.view|checkbutton|Units
+.view|checkbutton|WCS
+.view|cascade|Multiple WCS
+.view|checkbutton|Image
+.view|checkbutton|Physical
+.view|checkbutton|Amplifier
+.view|checkbutton|Detector
+.view|checkbutton|Frame Information
+.view.mwcs|checkbutton|WCS $l
+# mframe.tcl
+.frame|command|New Frame
+.frame|command|New Frame RGB
+.frame|command|New Frame HSV
+.frame|command|New Frame HLS
+.frame|command|New Frame 3D
+.frame|separator|---
+.frame|command|Delete Frame
+.frame|command|Delete All Frames
+.frame|separator|---
+.frame|command|Clear Frame
+.frame|command|Reset Frame
+.frame|command|Refresh Frame
+.frame|separator|---
+.frame|radiobutton|Single Frame
+.frame|radiobutton|Tile Frames
+.frame|radiobutton|Blink Frames
+.frame|radiobutton|Fade Frames
+.frame|separator|---
+.frame|cascade|Match
+.frame|cascade|Lock
+.frame|separator|---
+.frame|cascade|Goto Frame
+.frame|cascade|Show/Hide Frames
+.frame|cascade|Move Frame
+.frame|separator|---
+.frame|command|First Frame
+.frame|command|Previous Frame
+.frame|command|Next Frame
+.frame|command|Last Frame
+.frame|separator|---
+.frame|command|Cube
+.frame|command|RGB
+.frame|command|HSV
+.frame|command|HLS
+.frame|command|3d
+.frame|separator|---
+.frame|cascade|Frame Parameters
+.frame.match|cascade|Frame
+.frame.match|cascade|Crosshair
+.frame.match|cascade|Crop
+.frame.match|cascade|Slice
+.frame.match|command|Bin
+.frame.match|command|Axes Order
+.frame.match|command|Scale
+.frame.match|command|Scale and Limits
+.frame.match|command|Colorbar
+.frame.match|command|Block
+.frame.match|command|Smooth
+.frame.match|command|3d
+.frame.match.frame|command|WCS
+.frame.match.frame|separator|---
+.frame.match.frame|command|Image
+.frame.match.frame|command|Physical
+.frame.match.frame|command|Amplifier
+.frame.match.frame|command|Detector
+.frame.match.crosshair|command|WCS
+.frame.match.crosshair|separator|---
+.frame.match.crosshair|command|Image
+.frame.match.crosshair|command|Physical
+.frame.match.crosshair|command|Amplifier
+.frame.match.crosshair|command|Detector
+.frame.match.crop|command|WCS
+.frame.match.crop|separator|---
+.frame.match.crop|command|Image
+.frame.match.crop|command|Physical
+.frame.match.crop|command|Amplifier
+.frame.match.crop|command|Detector
+.frame.match.cube|command|WCS
+.frame.match.cube|separator|---
+.frame.match.cube|command|Image
+.frame.lock|cascade|Frame
+.frame.lock|cascade|Crosshair
+.frame.lock|cascade|Crop
+.frame.lock|cascade|Slice
+.frame.lock|checkbutton|Bin
+.frame.lock|checkbutton|Axes Order
+.frame.lock|checkbutton|Scale
+.frame.lock|checkbutton|Scale and Limits
+.frame.lock|checkbutton|Colorbar
+.frame.lock|checkbutton|Block
+.frame.lock|checkbutton|Smooth
+.frame.lock|checkbutton|3d
+.frame.lock.frame|radiobutton|None
+.frame.lock.frame|separator|---
+.frame.lock.frame|radiobutton|WCS
+.frame.lock.frame|separator|---
+.frame.lock.frame|radiobutton|Image
+.frame.lock.frame|radiobutton|Physical
+.frame.lock.frame|radiobutton|Amplifier
+.frame.lock.frame|radiobutton|Detector
+.frame.lock.crosshair|radiobutton|None
+.frame.lock.crosshair|separator|---
+.frame.lock.crosshair|radiobutton|WCS
+.frame.lock.crosshair|separator|---
+.frame.lock.crosshair|radiobutton|Image
+.frame.lock.crosshair|radiobutton|Physical
+.frame.lock.crosshair|radiobutton|Amplifier
+.frame.lock.crosshair|radiobutton|Detector
+.frame.lock.crop|radiobutton|None
+.frame.lock.crop|separator|---
+.frame.lock.crop|radiobutton|WCS
+.frame.lock.crop|separator|---
+.frame.lock.crop|radiobutton|Image
+.frame.lock.crop|radiobutton|Physical
+.frame.lock.crop|radiobutton|Amplifier
+.frame.lock.crop|radiobutton|Detector
+.frame.lock.cube|radiobutton|None
+.frame.lock.cube|separator|---
+.frame.lock.cube|radiobutton|WCS
+.frame.lock.cube|separator|---
+.frame.lock.cube|radiobutton|Image
+.frame.active|command|Show All
+.frame.active|command|Hide All
+.frame.active|separator|---
+.frame.move|command|First
+.frame.move|command|Back
+.frame.move|command|Forward
+.frame.move|command|Last
+.frame.params|cascade|Tile
+.frame.params|cascade|Blink Interval
+.frame.params|cascade|Fade Interval
+.frame.params|command|Display Size
+.frame.params.tile|radiobutton|Grid
+.frame.params.tile|radiobutton|Columns
+.frame.params.tile|radiobutton|Rows
+.frame.params.tile|separator|---
+.frame.params.tile|command|Tile Parameters
+.frame.params.blink|radiobutton|.125 Seconds
+.frame.params.blink|radiobutton|.25 Seconds
+.frame.params.blink|radiobutton|.5 Seconds
+.frame.params.blink|radiobutton|1 Second
+.frame.params.blink|radiobutton|2 Seconds
+.frame.params.blink|radiobutton|4 Seconds
+.frame.params.blink|radiobutton|8 Seconds
+.frame.params.blink|radiobutton|16 Seconds
+.frame.params.fade|radiobutton|1 Second
+.frame.params.fade|radiobutton|2 Seconds
+.frame.params.fade|radiobutton|4 Seconds
+.frame.params.fade|radiobutton|8 Seconds
+.frame.goto|command|<dynamic>
+.frame.active|checkbutton|Frame [string range $ff 5 end]
+# mbin.tcl
+.bin|radiobutton|Average
+.bin|radiobutton|Sum
+.bin|separator|---
+.bin|command|Bin In
+.bin|command|Bin Out
+.bin|command|Bin Fit
+.bin|separator|---
+.bin|radiobutton|Bin 1
+.bin|radiobutton|Bin 2
+.bin|radiobutton|Bin 4
+.bin|radiobutton|Bin 8
+.bin|radiobutton|Bin 16
+.bin|radiobutton|Bin 32
+.bin|radiobutton|Bin 64
+.bin|radiobutton|Bin 128
+.bin|radiobutton|Bin 256
+.bin|separator|---
+.bin|radiobutton|128x128
+.bin|radiobutton|256x256
+.bin|radiobutton|512x512
+.bin|radiobutton|1024x1024
+.bin|radiobutton|2048x2048
+.bin|radiobutton|4096x4096
+.bin|radiobutton|8192x8192
+.bin|separator|---
+.bin|command|Binning Parameters
+# mzoom.tcl
+.zoom|command|Center Image
+.zoom|checkbutton|Align
+.zoom|separator|---
+.zoom|command|Zoom In
+.zoom|command|Zoom Out
+.zoom|command|Zoom Fit
+.zoom|separator|---
+.zoom|radiobutton|Zoom 1/32
+.zoom|radiobutton|Zoom 1/16
+.zoom|radiobutton|Zoom 1/8
+.zoom|radiobutton|Zoom 1/4
+.zoom|radiobutton|Zoom 1/2
+.zoom|radiobutton|Zoom 1
+.zoom|radiobutton|Zoom 2
+.zoom|radiobutton|Zoom 4
+.zoom|radiobutton|Zoom 8
+.zoom|radiobutton|Zoom 16
+.zoom|radiobutton|Zoom 32
+.zoom|separator|---
+.zoom|radiobutton|None
+.zoom|radiobutton|Invert X
+.zoom|radiobutton|Invert Y
+.zoom|radiobutton|Invert XY
+.zoom|separator|---
+.zoom|radiobutton|0 Degrees
+.zoom|radiobutton|90 Degrees
+.zoom|radiobutton|180 Degrees
+.zoom|radiobutton|270 Degrees
+.zoom|separator|---
+.zoom|command|Crop Parameters
+.zoom|separator|---
+.zoom|command|Pan Zoom Rotate Parameters
+# mscale.tcl
+.scale|radiobutton|Linear
+.scale|radiobutton|Log
+.scale|radiobutton|Power
+.scale|radiobutton|Square Root
+.scale|radiobutton|Squared
+.scale|radiobutton|ASINH
+.scale|radiobutton|SINH
+.scale|radiobutton|Histogram Equalization
+.scale|command|Log Exponent
+.scale|separator|---
+.scale|radiobutton|Min Max
+.scale|radiobutton|99.5%
+.scale|radiobutton|99%
+.scale|radiobutton|98%
+.scale|radiobutton|97%
+.scale|radiobutton|96%
+.scale|radiobutton|95%
+.scale|radiobutton|92.5%
+.scale|radiobutton|90%
+.scale|radiobutton|ZScale
+.scale|radiobutton|ZMax
+.scale|radiobutton|User
+.scale|command|Other
+.scale|separator|---
+.scale|radiobutton|Global
+.scale|radiobutton|Local
+.scale|separator|---
+.scale|cascade|Min Max
+.scale|separator|---
+.scale|checkbutton|Use DATASEC
+.scale|command|ZScale
+.scale|separator|---
+.scale|command|Scale Parameters
+.scale.minmax|radiobutton|Scan
+.scale.minmax|radiobutton|Sample
+.scale.minmax|radiobutton|DATAMIN DATAMAX
+.scale.minmax|radiobutton|IRAF-MIN IRAF-MAX
+.scale.minmax|separator|---
+.scale.minmax|command|Sample Parameters
+# mcolor.tcl
+.color|radiobutton|<dynamic>
+.color|separator|---
+.color|cascade|h5utils
+.color|cascade|Matplotlib Uniform
+.color|cascade|Matplotlib Sequential
+.color|cascade|Matplotlib Diverging
+.color|cascade|Matplotlib Cyclic
+.color|cascade|Cubehelix
+.color|cascade|Gist
+.color|cascade|Topographic
+.color|cascade|Scientific Colour Maps
+.color|cascade|Solar Colormaps
+.color|cascade|User
+.color|separator|---
+.color|checkbutton|Invert Colormap
+.color|command|Reset Colormap
+.color|separator|---
+.color|cascade|Colorbar
+.color|separator|---
+.color|command|Colormap Parameters
+.color.colorbar|cascade|Orientation
+.color.colorbar|cascade|Numerics
+.color.colorbar|cascade|Font
+.color.colorbar|separator|---
+.color.colorbar|command|Size
+.color.colorbar|command|Number of Ticks
+.color.colorbar.orient|radiobutton|Horizontal
+.color.colorbar.orient|radiobutton|Vertical
+.color.colorbar.numerics|checkbutton|Show
+.color.colorbar.numerics|separator|---
+.color.colorbar.numerics|radiobutton|Space Equal Value
+.color.colorbar.numerics|radiobutton|Space Equal Distance
+# mregion.tcl
+.region|command|Get Information
+.region|separator|---
+.region|cascade|Shape
+.region|cascade|Composite Region
+.region|cascade|Instrument FOV
+.region|cascade|Template
+.region|separator|---
+.region|cascade|Color
+.region|cascade|Width
+.region|cascade|Properties
+.region|cascade|Font
+.region|separator|---
+.region|command|Centroid
+.region|separator|---
+.region|command|New Group
+.region|command|Groups
+.region|separator|---
+.region|command|All
+.region|command|None
+.region|command|Invert
+.region|command|Front
+.region|command|Back
+.region|separator|---
+.region|command|Move to Front
+.region|command|Move to Back
+.region|separator|---
+.region|command|Save Selection
+.region|command|List Selection
+.region|command|Delete Selection
+.region|separator|---
+.region|command|Open
+.region|command|Save
+.region|command|List
+.region|separator|---
+.region|command|Delete All
+.region|command|Delete All and Open
+.region|separator|---
+.region|cascade|Region Parameters
+.region.shape|radiobutton|Circle
+.region.shape|radiobutton|Ellipse
+.region.shape|radiobutton|Box
+.region.shape|radiobutton|Polygon
+.region.shape|separator|---
+.region.shape|radiobutton|Line
+.region.shape|radiobutton|Vector
+.region.shape|radiobutton|Projection
+.region.shape|radiobutton|Segment
+.region.shape|separator|---
+.region.shape|radiobutton|Text
+.region.shape|cascade|Point
+.region.shape|separator|---
+.region.shape|radiobutton|Ruler
+.region.shape|radiobutton|Compass
+.region.shape|separator|---
+.region.shape|radiobutton|Annulus
+.region.shape|radiobutton|Elliptical Annulus
+.region.shape|radiobutton|Box Annulus
+.region.shape|separator|---
+.region.shape|radiobutton|Panda
+.region.shape|radiobutton|Elliptical Panda
+.region.shape|radiobutton|Box Panda
+.region.shape.point|radiobutton|Circle
+.region.shape.point|radiobutton|Box
+.region.shape.point|radiobutton|Diamond
+.region.shape.point|radiobutton|Cross
+.region.shape.point|radiobutton|X
+.region.shape.point|radiobutton|Arrow
+.region.shape.point|radiobutton|BoxCircle
+.region.composite|command|Create
+.region.composite|command|Dissolve
+.region.template|command|Open
+.region.template|command|Save
+.region.properties|checkbutton|Fixed in Size
+.region.properties|separator|---
+.region.properties|checkbutton|Can Edit
+.region.properties|checkbutton|Can Move
+.region.properties|checkbutton|Can Rotate
+.region.properties|checkbutton|Can Delete
+.region.properties|separator|---
+.region.properties|radiobutton|Include
+.region.properties|radiobutton|Exclude
+.region.properties|separator|---
+.region.properties|radiobutton|Source
+.region.properties|radiobutton|Background
+.region.params|checkbutton|Show
+.region.params|checkbutton|Show Text
+.region.params|separator|---
+.region.params|checkbutton|Auto Plot 2D
+.region.params|checkbutton|Auto Plot 3D
+.region.params|checkbutton|Auto Plot Statistics
+.region.params|separator|---
+.region.params|checkbutton|Auto Centroid
+.region.params|command|Centroid Parameters
+# millustrate.tcl
+.illustrate|command|Get Information
+.illustrate|separator|---
+.illustrate|cascade|Shape
+.illustrate|separator|---
+.illustrate|cascade|Color
+.illustrate|cascade|Width
+.illustrate|separator|---
+.illustrate|command|All
+.illustrate|command|None
+.illustrate|command|Invert
+.illustrate|command|Front
+.illustrate|command|Back
+.illustrate|separator|---
+.illustrate|command|Move to Front
+.illustrate|command|Move to Back
+.illustrate|separator|---
+.illustrate|command|Save Selection
+.illustrate|command|List Selection
+.illustrate|command|Delete Selection
+.illustrate|separator|---
+.illustrate|command|Open
+.illustrate|command|Save
+.illustrate|command|List
+.illustrate|separator|---
+.illustrate|command|Delete All
+.illustrate|separator|---
+.illustrate|checkbutton|Show
+.illustrate.shape|radiobutton|Circle
+.illustrate.shape|radiobutton|Ellipse
+.illustrate.shape|radiobutton|Box
+.illustrate.shape|radiobutton|Polygon
+.illustrate.shape|radiobutton|Line
+.illustrate.shape|radiobutton|Text
+.illustrate.shape|radiobutton|Image
+# mwcs.tcl
+.wcs|separator|---
+.wcs|command|WCS Parameters
+# manalysis.tcl
+.analysis|command|Pixel Table
+.analysis|command|Name Resolution
+.analysis|separator|---
+.analysis|command|Mask Parameters
+.analysis|command|Crosshair Parameters
+.analysis|command|Graph Parameters
+.analysis|separator|---
+.analysis|checkbutton|Contours
+.analysis|command|Contour Parameters
+.analysis|separator|---
+.analysis|checkbutton|Coordinate Grid
+.analysis|command|Coordinate Grid Parameters
+.analysis|separator|---
+.analysis|cascade|Block
+.analysis|command|Block Parameters
+.analysis|separator|---
+.analysis|checkbutton|Smooth
+.analysis|command|Smooth Parameters
+.analysis|separator|---
+.analysis|cascade|Image Servers
+.analysis|cascade|Archives
+.analysis|cascade|Catalogs
+.analysis|cascade|Footprint Servers
+.analysis|separator|---
+.analysis|command|Catalog Tool
+.analysis|cascade|Plot Tool
+.analysis|separator|---
+.analysis|command|Virtual Observatory
+.analysis|command|Web Browser
+.analysis|separator|---
+.analysis|checkbutton|Analysis Command Log
+.analysis|separator|---
+.analysis|command|Load Analysis Commands
+.analysis|command|Clear Analysis Commands
+.analysis.block|command|Block In
+.analysis.block|command|Block Out
+.analysis.block|command|Block Fit
+.analysis.block|separator|---
+.analysis.block|radiobutton|Block 1
+.analysis.block|radiobutton|Block 2
+.analysis.block|radiobutton|Block 4
+.analysis.block|radiobutton|Block 8
+.analysis.block|radiobutton|Block 16
+.analysis.block|radiobutton|Block 32
+.analysis.image|command|DSS (SAO)
+.analysis.image|command|DSS (ESO)
+.analysis.image|command|DSS (STSCI)
+.analysis.image|separator|---
+.analysis.image|command|2MASS (NASA/IPAC)
+.analysis.image|command|VLA (NRAO)
+.analysis.image|command|NVSS (NRAO)
+.analysis.image|command|VLSS (NRAO)
+.analysis.image|separator|---
+.analysis.image|command|SkyView (NASA/HEASARC)
+.analysis.arch|command|Chandra Public Archive by ObsId
+.analysis.arch|command|Chandra Public Archive by Cone Search
+.analysis.arch|separator|---
+.analysis.arch.simbad|command|SAO
+.analysis.arch.simbad|command|CDS
+.analysis.arch.ads|command|SAO
+.analysis.arch.ads|command|CDS
+.analysis.cat|command|Search for Catalogs
+.analysis.cat|command|Clear All
+.analysis.cat|command|Match
+.analysis.cat|separator|---
+.analysis.footprint|command|Clear All
+.analysis.footprint|separator|---
+.analysis.plot|command|Line
+.analysis.plot|command|Bar
+# mhelp.tcl
+.|cascade|Window
+.|cascade|Help
+.help|command|Reference Manual
+.help|command|User Manual
+.help|separator|---
+.help|command|FAQ
+.help|command|Release Notes
+.help|command|Help Desk
+.help|separator|---
+.help|command|Story of SAOImageDS9
+.help|command|Acknowledgment
+.help|separator|---
+.help|command|About SAOImageDS9

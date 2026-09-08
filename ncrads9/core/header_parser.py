@@ -22,7 +22,7 @@ Provides functions for parsing and extracting information from FITS headers.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Dict, Any, List, Union, Tuple
+from typing import Optional, Dict, Any, List
 
 from astropy.io import fits
 

@@ -18,7 +18,7 @@
 
 """DS9 builtin colormaps for ncrads9."""
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 import numpy as np
 from numpy.typing import NDArray
 
@@ -146,7 +146,6 @@ def _generate_staircase(n: int = 256) -> NDArray[np.floating]:
     colors = np.zeros((n, 3))
     for i in range(n):
         step = int((i / n) * num_steps)
-        t = step / (num_steps - 1)
         # Create distinct color steps
         colors[i] = [
             (step % 4) / 3,

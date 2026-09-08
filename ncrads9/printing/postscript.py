@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from io import StringIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, List, Tuple
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -124,11 +124,11 @@ class PostScriptGenerator:
             height: Height in points.
         """
         # TODO: Implement image drawing
-        self._buffer.write(f"gsave\n")
+        self._buffer.write("gsave\n")
         self._buffer.write(f"{x:.2f} {y:.2f} translate\n")
         self._buffer.write(f"{width:.2f} {height:.2f} scale\n")
         # Image data would go here
-        self._buffer.write(f"grestore\n")
+        self._buffer.write("grestore\n")
 
     def draw_line(
         self,
@@ -148,10 +148,10 @@ class PostScriptGenerator:
             line_width: Line width in points.
         """
         self._buffer.write(f"{line_width:.2f} setlinewidth\n")
-        self._buffer.write(f"newpath\n")
+        self._buffer.write("newpath\n")
         self._buffer.write(f"{x1:.2f} {y1:.2f} moveto\n")
         self._buffer.write(f"{x2:.2f} {y2:.2f} lineto\n")
-        self._buffer.write(f"stroke\n")
+        self._buffer.write("stroke\n")
 
     def draw_text(
         self,

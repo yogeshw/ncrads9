@@ -20,7 +20,7 @@ Contour generation for astronomical images using scipy.
 Author: Yogesh Wadadekar
 """
 
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 import numpy as np
 from numpy.typing import NDArray
 from scipy import ndimage

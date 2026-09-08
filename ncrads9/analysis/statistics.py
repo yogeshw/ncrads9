@@ -23,7 +23,7 @@ with support for region-based analysis.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Tuple, Dict, Any, Union
+from typing import Optional, Tuple, Dict
 import numpy as np
 from numpy.typing import NDArray
 
@@ -257,5 +257,5 @@ def image_stats(
         "std": float(np.std(valid_pixels)),
         "min": float(np.min(valid_pixels)),
         "max": float(np.max(valid_pixels)),
-        "npixels": int(len(valid_pixels)),
+        "npixels": len(valid_pixels),
     }

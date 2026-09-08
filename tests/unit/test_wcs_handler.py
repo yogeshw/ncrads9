@@ -18,7 +18,6 @@
 
 """Tests for core.wcs_handler module."""
 
-import pytest
 
 
 class TestWcsHandler:

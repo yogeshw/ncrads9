@@ -22,7 +22,7 @@ Provides functionality for handling 3D data cubes (e.g., spectral cubes).
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Union, Tuple, List
+from typing import Optional, Tuple
 
 import numpy as np
 from astropy.io import fits
@@ -89,7 +89,8 @@ class CubeHandler:
     def shape(self) -> Optional[Tuple[int, int, int]]:
         """Get the shape of the cube (nz, ny, nx)."""
         if self._data is not None:
-            return self._data.shape
+            nz, ny, nx = self._data.shape
+            return int(nz), int(ny), int(nx)
         return None
 
     @property

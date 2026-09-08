@@ -137,7 +137,6 @@ class EllipseAnnulus(BaseRegion):
         Args:
             context: The drawing context.
         """
-        pass
 
     def contains(self, x: float, y: float) -> bool:
         """

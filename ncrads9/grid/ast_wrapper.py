@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 # Check for optional starlink-pyast availability
 try:
-    import starlink.Ast as Ast
+    from starlink import Ast
 
     HAS_AST = True
 except ImportError:

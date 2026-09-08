@@ -25,7 +25,6 @@ from typing import TYPE_CHECKING, Optional, List, Callable
 from pathlib import Path
 
 if TYPE_CHECKING:
-    import numpy as np
     from numpy.typing import NDArray
 
 
@@ -118,12 +117,10 @@ class PrismWindow:
     def show(self) -> None:
         """Show the window."""
         # TODO: Implement window display
-        pass
 
     def hide(self) -> None:
         """Hide the window."""
         # TODO: Implement window hiding
-        pass
 
     def add_callback(self, callback: Callable[[], None]) -> None:
         """Add a callback for spectrum changes.
@@ -159,9 +156,7 @@ class PrismWindow:
             wavelength_max: Maximum wavelength.
         """
         # TODO: Implement zoom functionality
-        pass
 
     def reset_zoom(self) -> None:
         """Reset zoom to show full spectrum."""
         # TODO: Implement zoom reset
-        pass

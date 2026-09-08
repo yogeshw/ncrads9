@@ -18,7 +18,6 @@
 
 """Tests for coordinates module."""
 
-import pytest
 
 
 class TestCoordinates:

@@ -22,7 +22,7 @@ Author: Yogesh Wadadekar
 
 from typing import Tuple
 
-from astropy.coordinates import SkyCoord, Galactic
+from astropy.coordinates import SkyCoord
 import astropy.units as u
 
 

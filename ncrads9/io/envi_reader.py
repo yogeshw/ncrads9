@@ -60,7 +60,7 @@ class ENVIReader:
             Dictionary of header parameters.
         """
         header_path = self.filepath
-        if not header_path.suffix == ".hdr":
+        if header_path.suffix != ".hdr":
             header_path = header_path.with_suffix(".hdr")
 
         self._header = {}

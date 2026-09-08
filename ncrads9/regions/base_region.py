@@ -122,7 +122,6 @@ class BaseRegion(ABC):
         Args:
             context: The drawing context (e.g., QPainter).
         """
-        pass
 
     @abstractmethod
     def contains(self, x: float, y: float) -> bool:
@@ -136,7 +135,6 @@ class BaseRegion(ABC):
         Returns:
             True if the point is inside the region, False otherwise.
         """
-        pass
 
     @abstractmethod
     def move(self, dx: float, dy: float) -> None:
@@ -147,7 +145,6 @@ class BaseRegion(ABC):
             dx: The offset in the x direction.
             dy: The offset in the y direction.
         """
-        pass
 
     @abstractmethod
     def resize(self, scale_x: float, scale_y: float) -> None:
@@ -158,7 +155,6 @@ class BaseRegion(ABC):
             scale_x: The scale factor in the x direction.
             scale_y: The scale factor in the y direction.
         """
-        pass
 
     @abstractmethod
     def to_ds9_string(self) -> str:
@@ -168,7 +164,6 @@ class BaseRegion(ABC):
         Returns:
             The region as a DS9 format string.
         """
-        pass
 
     def __repr__(self) -> str:
         """Return a string representation of the region."""

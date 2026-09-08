@@ -23,7 +23,7 @@ from typing import Optional, Callable
 import numpy as np
 from numpy.typing import NDArray
 from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QObject, QSize
-from PyQt6.QtGui import QColor, QMouseEvent
+from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 
 from ...rendering.gl_canvas import GLCanvas

@@ -24,7 +24,7 @@ Author: Yogesh Wadadekar
 """
 
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlparse
 
 

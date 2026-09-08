@@ -21,7 +21,7 @@ Catalog table widget for displaying query results.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, List, Any, Callable, Dict
+from typing import Optional, Any, Callable, Dict
 from dataclasses import dataclass
 
 from astropy.table import Table
@@ -225,7 +225,6 @@ class CatalogTable(QWidget if HAS_QT else object):
             self._show_all_rows()
             return
 
-        column = self._filter_column.currentText()
         col_idx = self._filter_column.currentIndex()
 
         for row in range(self._table_widget.rowCount()):

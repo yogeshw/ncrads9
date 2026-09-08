@@ -20,7 +20,6 @@ Save/export dialog for FITS and image files.
 Author: Yogesh Wadadekar
 """
 
-from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtCore import pyqtSignal
@@ -29,7 +28,6 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QFileDialog,
-    QLabel,
     QPushButton,
     QComboBox,
     QGroupBox,

@@ -28,7 +28,7 @@ import socket
 import struct
 import threading
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, Optional
 from enum import IntEnum
 from dataclasses import dataclass
 import numpy as np
@@ -412,7 +412,6 @@ class IISServer:
             header: Command header bytes.
         """
         # Similar to _process_command but uses FIFO I/O
-        pass
         
     def _handle_memory(
         self,

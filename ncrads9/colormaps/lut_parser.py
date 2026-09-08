@@ -19,7 +19,7 @@
 """Parser for .lut colormap files."""
 
 from pathlib import Path
-from typing import Union, List, Tuple
+from typing import List, Optional, Tuple, Union
 import numpy as np
 from numpy.typing import NDArray
 
@@ -28,7 +28,7 @@ from .colormap import Colormap
 
 def parse_lut_file(
     filepath: Union[str, Path],
-    name: str = None,
+    name: Optional[str] = None,
 ) -> Colormap:
     """Parse a .lut colormap file.
 
@@ -62,7 +62,7 @@ def parse_lut_file(
         for line_num, line in enumerate(f, 1):
             # Skip comments and empty lines
             line = line.strip()
-            if not line or line.startswith("#") or line.startswith(";"):
+            if not line or line.startswith(("#", ";")):
                 continue
 
             # Parse values

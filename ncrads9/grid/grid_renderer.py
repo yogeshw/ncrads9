@@ -103,7 +103,6 @@ class GridRenderer:
             scale: Scale factor for rendering.
         """
         # TODO: Implement rendering logic
-        pass
 
     def clear(self) -> None:
         """Clear all computed grid lines."""

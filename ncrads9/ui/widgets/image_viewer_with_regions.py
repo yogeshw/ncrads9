@@ -21,7 +21,7 @@ Author: Yogesh Wadadekar
 """
 
 from typing import Optional
-from PyQt6.QtCore import Qt, QPoint, pyqtSignal, QSize
+from PyQt6.QtCore import Qt, pyqtSignal, QSize
 from PyQt6.QtGui import QPixmap, QWheelEvent, QMouseEvent
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QScrollArea
 from ..image_viewer import ImageViewer

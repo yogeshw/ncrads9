@@ -21,7 +21,7 @@ Author: Yogesh Wadadekar
 """
 
 import re
-from typing import Tuple, Optional
+from typing import Tuple
 
 
 def degrees_to_hms(degrees: float, precision: int = 2) -> str:

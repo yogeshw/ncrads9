@@ -21,7 +21,7 @@
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Literal
+from typing import Literal
 from pathlib import Path
 
 

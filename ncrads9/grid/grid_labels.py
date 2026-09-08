@@ -152,7 +152,6 @@ class GridLabels:
             font_size: Font size for labels.
         """
         # TODO: Implement rendering logic
-        pass
 
     def clear(self) -> None:
         """Clear all computed labels."""

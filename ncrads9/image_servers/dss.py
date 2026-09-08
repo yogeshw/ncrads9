@@ -21,7 +21,7 @@ Digital Sky Survey (DSS) image retrieval.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Tuple
+from typing import Optional
 from pathlib import Path
 
 

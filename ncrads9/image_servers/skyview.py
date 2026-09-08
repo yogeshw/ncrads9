@@ -21,7 +21,6 @@ SkyView Virtual Observatory service for multi-wavelength image retrieval.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
 from pathlib import Path
 
 

@@ -82,7 +82,6 @@ class Text(BaseRegion):
         Args:
             context: The drawing context.
         """
-        pass
 
     def contains(self, x: float, y: float) -> bool:
         """
@@ -121,7 +120,6 @@ class Text(BaseRegion):
             scale_x: The scale factor in the x direction.
             scale_y: The scale factor in the y direction.
         """
-        pass
 
     def to_ds9_string(self) -> str:
         """

@@ -33,7 +33,6 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QFormLayout,
 )
-from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap
 
 

@@ -22,7 +22,6 @@ Author: Yogesh Wadadekar
 """
 
 from typing import Optional, List, Any
-from urllib.parse import urlencode
 import requests
 
 from astropy.coordinates import SkyCoord
