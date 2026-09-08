@@ -22,7 +22,7 @@ Author: Yogesh Wadadekar
 """
 
 from typing import Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from astropy.coordinates import SkyCoord
 from astropy.table import Table
@@ -87,7 +87,7 @@ class SkybotCatalog(CatalogBase):
         """
         try:
             if epoch is None:
-                epoch = Time(datetime.utcnow())
+                epoch = Time(datetime.now(timezone.utc))
 
             result = Skybot.cone_search(
                 coord,

@@ -18,9 +18,30 @@
 
 """Pytest fixtures for NCRADS9 testing."""
 
-import pytest
-import numpy as np
+import os
 from pathlib import Path
+
+import numpy as np
+import pytest
+
+# Qt must be told to render offscreen before it is imported anywhere, so this
+# runs at collection time rather than inside a fixture.
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+
+@pytest.fixture(scope="session")
+def qapp():
+    """A single QApplication for the whole session.
+
+    Qt permits only one QApplication per process, so this is session-scoped and
+    intentionally never torn down; Qt cleans up at interpreter exit.
+    """
+    from PyQt6.QtWidgets import QApplication
+
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication([])
+    return app
 
 
 @pytest.fixture

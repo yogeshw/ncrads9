@@ -27,7 +27,7 @@ from typing import Optional, Tuple, Callable
 
 import numpy as np
 from numpy.typing import NDArray
-from PyQt6.QtCore import Qt, QPointF, pyqtSignal
+from PyQt6.QtCore import Qt, QPointF, QSize, pyqtSignal
 from PyQt6.QtGui import QMouseEvent, QWheelEvent, QKeyEvent
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 
@@ -163,11 +163,25 @@ class GLCanvas(QOpenGLWidget):
         self.pan_changed.emit(self._pan_x, self._pan_y)
         self.update()
 
-    def zoom_to_fit(self) -> None:
-        """Adjust zoom to fit entire image in view."""
+    def zoom_to_fit(self, viewport_size: Optional[QSize] = None) -> None:
+        """Adjust zoom to fit the entire image in view.
+
+        Args:
+            viewport_size: Size to fit into. Falls back to this widget's own
+                size when omitted. Callers should pass an explicit size,
+                because ``self.width()``/``self.height()`` are meaningless
+                until the widget has been laid out -- before the window is
+                shown they report a few tens of pixels, which would produce a
+                near-zero zoom.
+        """
         if self._image_width == 0 or self._image_height == 0:
             return
-        view_w, view_h = self.width(), self.height()
+        if viewport_size is not None:
+            view_w, view_h = viewport_size.width(), viewport_size.height()
+        else:
+            view_w, view_h = self.width(), self.height()
+        if view_w <= 0 or view_h <= 0:
+            return
         self._zoom = min(view_w / self._image_width, view_h / self._image_height)
         # Center the image by panning to image center
         self._pan_x = self._image_width / 2.0

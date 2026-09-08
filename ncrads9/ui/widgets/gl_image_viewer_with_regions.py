@@ -22,7 +22,7 @@ from typing import Optional, Callable
 
 import numpy as np
 from numpy.typing import NDArray
-from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QObject
+from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QObject, QSize
 from PyQt6.QtGui import QColor, QMouseEvent
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 
@@ -153,8 +153,9 @@ class GLImageViewerWithRegions(QWidget):
     def zoom_to(self, zoom: float) -> None:
         self.gl_canvas.zoom = zoom
 
-    def zoom_fit(self, viewport_size) -> None:
-        self.gl_canvas.zoom_to_fit()
+    def zoom_fit(self, viewport_size: Optional[QSize] = None) -> None:
+        """Zoom to fit the given viewport (not this widget's own size)."""
+        self.gl_canvas.zoom_to_fit(viewport_size)
 
     def zoom_actual(self) -> None:
         self.gl_canvas.zoom = 1.0

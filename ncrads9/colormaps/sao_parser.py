@@ -251,13 +251,13 @@ def save_sao_file(
         f.write("COLOR_MODEL RGB\n\n")
 
         f.write("RED:\n")
-        for pos, idx in zip(positions, indices):
+        for pos, idx in zip(positions, indices, strict=True):
             f.write(f"({pos:.4f}, {colormap.colors[idx, 0]:.4f})\n")
 
         f.write("\nGREEN:\n")
-        for pos, idx in zip(positions, indices):
+        for pos, idx in zip(positions, indices, strict=True):
             f.write(f"({pos:.4f}, {colormap.colors[idx, 1]:.4f})\n")
 
         f.write("\nBLUE:\n")
-        for pos, idx in zip(positions, indices):
+        for pos, idx in zip(positions, indices, strict=True):
             f.write(f"({pos:.4f}, {colormap.colors[idx, 2]:.4f})\n")

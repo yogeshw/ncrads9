@@ -3,6 +3,7 @@ import os
 import numpy as np
 import pytest
 from astropy.wcs import WCS
+from PyQt6.QtCore import QSize
 from PyQt6.QtWidgets import QApplication, QWidget
 
 from ncrads9.ui.main_window import MainWindow
@@ -209,3 +210,51 @@ def test_invert_updates_direction_arrows_without_full_rerender(
     assert after_east is not None
     assert after_north != before_north
     assert after_east != before_east
+
+
+def test_effective_viewport_size_ignores_unlaid_out_viewport(main_window: MainWindow):
+    """A viewport that has never been laid out must not drive zoom arithmetic."""
+    size = main_window._effective_viewport_size()
+    assert size.width() >= MainWindow.MIN_USABLE_VIEWPORT
+    assert size.height() >= MainWindow.MIN_USABLE_VIEWPORT
+
+
+def test_effective_viewport_size_falls_back_to_default_canvas(
+    main_window: MainWindow, monkeypatch
+):
+    """With every candidate degenerate, fall back to DS9's default canvas size."""
+    tiny = QSize(4, 4)
+    monkeypatch.setattr(main_window.scroll_area, "size", lambda: tiny)
+    monkeypatch.setattr(main_window.scroll_area.viewport(), "size", lambda: tiny)
+    monkeypatch.setattr(main_window, "size", lambda: tiny)
+
+    size = main_window._effective_viewport_size()
+    assert size.width() == MainWindow.DEFAULT_CANVAS_WIDTH
+    assert size.height() == MainWindow.DEFAULT_CANVAS_HEIGHT
+
+
+def test_effective_viewport_size_prefers_real_viewport(
+    main_window: MainWindow, monkeypatch
+):
+    """A laid-out viewport wins over the fallbacks."""
+    real = QSize(900, 700)
+    monkeypatch.setattr(main_window.scroll_area.viewport(), "size", lambda: real)
+
+    size = main_window._effective_viewport_size()
+    assert size.width() == 900
+    assert size.height() == 700
+
+
+def test_crop_zoom_is_independent_of_unlaid_out_viewport(main_window: MainWindow):
+    """Cropping to a small region must zoom in, however small the raw viewport is."""
+    _load_test_image(main_window, width=400, height=300)
+    frame = main_window.frame_manager.current_frame
+    assert frame is not None
+
+    raw = main_window.scroll_area.viewport().size()
+    assert raw.height() < 20, "precondition: viewport is not laid out in this test"
+
+    main_window._apply_crop_parameters(
+        {"center_x": 120.0, "center_y": 80.0, "width": 40.0, "height": 20.0}
+    )
+    assert frame.zoom > 1.0

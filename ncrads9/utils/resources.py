@@ -23,9 +23,7 @@ Author: Yogesh Wadadekar
 from __future__ import annotations
 
 import importlib.resources
-from functools import lru_cache
 from pathlib import Path
-from typing import Any
 
 
 class ResourceLoader:
@@ -43,6 +41,11 @@ class ResourceLoader:
         else:
             self._base_path = self._get_default_resource_path()
 
+        # Per-instance lookup caches. `functools.lru_cache` on a method would
+        # pin `self` for the lifetime of the process.
+        self._icon_path_cache: dict[str, Path | None] = {}
+        self._colormap_path_cache: dict[str, Path | None] = {}
+
     def _get_default_resource_path(self) -> Path:
         """Get the default resource path from package."""
         try:
@@ -51,7 +54,6 @@ class ResourceLoader:
         except (TypeError, ModuleNotFoundError):
             return Path(__file__).parent.parent / "resources"
 
-    @lru_cache(maxsize=64)
     def get_icon_path(self, name: str) -> Path | None:
         """
         Get path to an icon file.
@@ -62,14 +64,19 @@ class ResourceLoader:
         Returns:
             Path to icon file or None if not found.
         """
+        if name in self._icon_path_cache:
+            return self._icon_path_cache[name]
+
+        found: Path | None = None
         icons_dir = self._base_path / "icons"
         for ext in (".png", ".svg", ".ico"):
             icon_path = icons_dir / f"{name}{ext}"
             if icon_path.exists():
-                return icon_path
-        return None
+                found = icon_path
+                break
+        self._icon_path_cache[name] = found
+        return found
 
-    @lru_cache(maxsize=32)
     def get_colormap_path(self, name: str) -> Path | None:
         """
         Get path to a colormap file.
@@ -80,12 +87,18 @@ class ResourceLoader:
         Returns:
             Path to colormap file or None if not found.
         """
+        if name in self._colormap_path_cache:
+            return self._colormap_path_cache[name]
+
+        found: Path | None = None
         cmap_dir = self._base_path / "colormaps"
         for ext in (".cmap", ".lut", ".json"):
             cmap_path = cmap_dir / f"{name}{ext}"
             if cmap_path.exists():
-                return cmap_path
-        return None
+                found = cmap_path
+                break
+        self._colormap_path_cache[name] = found
+        return found
 
     def list_colormaps(self) -> list[str]:
         """

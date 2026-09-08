@@ -25,7 +25,7 @@ from pathlib import Path
 import tempfile
 from urllib.parse import urlparse, unquote
 
-from PyQt6.QtCore import Qt, QTimer, QPointF, QRectF, QUrl, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QPointF, QRectF, QSize, QUrl, pyqtSignal
 from PyQt6.QtWidgets import QDialog
 from PyQt6.QtGui import QAction, QImage, QPixmap, QColor, QDesktopServices, QKeyEvent
 from PyQt6.QtWidgets import (
@@ -64,10 +64,10 @@ from astropy.coordinates import (
 import astropy.units as u
 
 from .menu_bar import MenuBar
+from .image_viewer import ImageViewer
 from .toolbar import MainToolbar
 from .button_bar import ButtonBar
 from .status_bar import StatusBar
-from .image_viewer import ImageViewer
 from .widgets.colorbar_widget import ColorbarWidget
 from .widgets.image_viewer_with_regions import ImageViewerWithRegions
 from .widgets.gl_image_viewer_with_regions import GLImageViewerWithRegions
@@ -127,6 +127,13 @@ if TYPE_CHECKING:
 
 class MainWindow(QMainWindow):
     """Main application window for NCRADS9."""
+
+    #: Smallest viewport dimension, in pixels, that is treated as laid out.
+    MIN_USABLE_VIEWPORT: int = 64
+    #: DS9's default canvas size, used when no laid-out viewport is available.
+    DEFAULT_CANVAS_WIDTH: int = 738
+    DEFAULT_CANVAS_HEIGHT: int = 528
+
     samp_table_received = pyqtSignal(str, str, str)
 
     def __init__(self, config: Optional["Config"] = None, parent: Optional[QWidget] = None) -> None:
@@ -1716,7 +1723,7 @@ class MainWindow(QMainWindow):
             return
 
         height, width = frame.original_image_data.shape[:2]
-        viewport = self.scroll_area.viewport().size()
+        viewport = self._effective_viewport_size()
         vw = max(1, viewport.width())
         vh = max(1, viewport.height())
         needed = max(width / vw, height / vh)
@@ -2272,6 +2279,25 @@ class MainWindow(QMainWindow):
             1500,
         )
 
+    def _effective_viewport_size(self) -> QSize:
+        """Return a usable viewport size for zoom/block-factor arithmetic.
+
+        ``QScrollArea.viewport().size()`` is only meaningful once the widget has
+        been laid out. Before the window is shown -- at startup, and in headless
+        tests -- it reports a degenerate size (a few tens of pixels), which makes
+        any zoom or block factor derived from it wildly wrong. Fall back to the
+        scroll area, then the window, then DS9's default canvas size.
+        """
+        candidates = (
+            self.scroll_area.viewport().size(),
+            self.scroll_area.size(),
+            self.size(),
+        )
+        for size in candidates:
+            if size.width() >= self.MIN_USABLE_VIEWPORT and size.height() >= self.MIN_USABLE_VIEWPORT:
+                return size
+        return QSize(self.DEFAULT_CANVAS_WIDTH, self.DEFAULT_CANVAS_HEIGHT)
+
     def _center_image(self) -> None:
         """Center the current image in the viewport."""
         frame = self.frame_manager.current_frame
@@ -2307,7 +2333,7 @@ class MainWindow(QMainWindow):
         frame.crop_width = max(1.0, float(params["width"]))
         frame.crop_height = max(1.0, float(params["height"]))
 
-        viewport = self.scroll_area.viewport().size()
+        viewport = self._effective_viewport_size()
         zoom = min(
             viewport.width() / frame.crop_width,
             viewport.height() / frame.crop_height,
@@ -2429,7 +2455,7 @@ class MainWindow(QMainWindow):
     
     def _zoom_fit(self) -> None:
         """Zoom to fit window."""
-        self.image_viewer.zoom_fit(self.scroll_area.viewport().size())
+        self.image_viewer.zoom_fit(self._effective_viewport_size())
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
         self._persist_frame_view_state()
         self._update_zoom_menu_state()

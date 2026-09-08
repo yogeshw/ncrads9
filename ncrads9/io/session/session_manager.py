@@ -21,7 +21,7 @@ Author: Yogesh Wadadekar
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -56,7 +56,7 @@ class SessionManager:
         Returns:
             Session ID.
         """
-        timestamp = datetime.now().isoformat()
+        timestamp = datetime.now(timezone.utc).isoformat()
         session_id = timestamp.replace(":", "-").replace(".", "-")
 
         self._current_session = {
@@ -94,7 +94,7 @@ class SessionManager:
         if state is not None:
             self._current_session["state"] = state
 
-        self._current_session["modified"] = datetime.now().isoformat()
+        self._current_session["modified"] = datetime.now(timezone.utc).isoformat()
 
         session_path = self.session_dir / f"{session_id}.json"
         with open(session_path, "w") as f:
@@ -192,7 +192,7 @@ class SessionManager:
         """
         autosave_data = {
             "version": self.VERSION,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "state": state,
         }
         with open(self.get_autosave_path(), "w") as f:

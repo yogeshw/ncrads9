@@ -70,8 +70,10 @@ class RegionParser:
     """Parser for DS9 region files in multiple formats."""
 
     # Pattern for parsing DS9 region properties
+    # DS9 property values may be brace-delimited ({Hello World}), quoted, or
+    # bare. Braces and quotes are delimiters and are stripped from the value.
     PROPERTY_PATTERN = re.compile(
-        r'(\w+)\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|(\S+))'
+        r'(\w+)\s*=\s*(?:\{([^}]*)\}|"([^"]*)"|\'([^\']*)\'|(\S+))'
     )
 
     # Pattern for parsing region shapes
@@ -217,13 +219,7 @@ class RegionParser:
         if match:
             props_str = match.group(1)
             for prop_match in self.PROPERTY_PATTERN.finditer(props_str):
-                key = prop_match.group(1)
-                value = (
-                    prop_match.group(2)
-                    or prop_match.group(3)
-                    or prop_match.group(4)
-                )
-                self._global_properties[key] = value
+                self._global_properties[prop_match.group(1)] = self._property_value(prop_match)
 
     def _is_coordinate_system(self, line: str) -> bool:
         """Check if a line specifies a coordinate system."""
@@ -301,11 +297,22 @@ class RegionParser:
         comment = comment.lstrip("#").strip()
 
         for match in self.PROPERTY_PATTERN.finditer(comment):
-            key = match.group(1)
-            value = match.group(2) or match.group(3) or match.group(4)
-            properties[key] = value
+            properties[match.group(1)] = self._property_value(match)
 
         return properties
+
+    @staticmethod
+    def _property_value(match: re.Match[str]) -> str:
+        """Return the matched property value from whichever delimiter was used.
+
+        An empty brace or quote pair is a legitimate empty value, so the groups
+        are checked for ``None`` rather than for truthiness.
+        """
+        for group in (2, 3, 4, 5):
+            value = match.group(group)
+            if value is not None:
+                return value
+        return ""
 
     def _create_region(
         self,
@@ -373,7 +380,7 @@ class RegionParser:
             
             elif shape_type in ("text", "# text"):
                 x, y = float(params[0]), float(params[1])
-                return Text(center=(x, y), text=text, color=color, font=font)
+                return Text(center=(x, y), label=text, color=color, font=font)
         
         except (IndexError, ValueError) as e:
             # Return None for malformed regions
