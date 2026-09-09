@@ -40,7 +40,7 @@ def _load_two_frames(window: MainWindow) -> None:
     frame1.original_image_data = frame1.image_data
 
     frame2 = window.frame_manager.new_frame()
-    frame2.image_data = (np.arange(100, dtype=np.float32).reshape(10, 10) + 10.0)
+    frame2.image_data = np.arange(100, dtype=np.float32).reshape(10, 10) + 10.0
     frame2.original_image_data = frame2.image_data
 
     window.frame_manager.goto_frame(0)
@@ -304,7 +304,7 @@ def test_rgb_channel_view_settings_persist_independently(main_window: MainWindow
     frame = main_window.frame_manager.current_frame
     assert frame is not None
     frame.rgb_channels["red"] = np.arange(100, dtype=np.float32).reshape(10, 10)
-    frame.rgb_channels["green"] = (np.arange(100, dtype=np.float32).reshape(10, 10) + 5.0)
+    frame.rgb_channels["green"] = np.arange(100, dtype=np.float32).reshape(10, 10) + 5.0
     frame.rgb_current_channel = "red"
     main_window._sync_rgb_scalar_view(frame)
 

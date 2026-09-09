@@ -195,9 +195,7 @@ class Frame3D:
         else:  # YZ
             return self._cube_data[:, :, index]
 
-    def get_projection(
-        self, method: Optional[RenderMethod] = None
-    ) -> Optional[NDArray[np.floating[Any]]]:
+    def get_projection(self, method: Optional[RenderMethod] = None) -> Optional[NDArray[np.floating[Any]]]:
         """Get a 2D projection of the data cube.
 
         Args:

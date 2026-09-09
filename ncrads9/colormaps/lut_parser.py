@@ -69,9 +69,7 @@ def parse_lut_file(
             try:
                 values = [float(v) for v in line.split()]
             except ValueError as e:
-                raise ValueError(
-                    f"Invalid value on line {line_num}: {line}"
-                ) from e
+                raise ValueError(f"Invalid value on line {line_num}: {line}") from e
 
             if len(values) == 3:
                 r, g, b = values
@@ -82,8 +80,7 @@ def parse_lut_file(
                 r, g, b = values[:3]
             else:
                 raise ValueError(
-                    f"Invalid number of values on line {line_num}: "
-                    f"expected 1, 3, or 4, got {len(values)}"
+                    f"Invalid number of values on line {line_num}: " f"expected 1, 3, or 4, got {len(values)}"
                 )
 
             colors.append((r, g, b))

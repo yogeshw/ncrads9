@@ -23,6 +23,7 @@ import pytest
 
 from ncrads9.rendering.scale_algorithms import compute_zscale_limits, scale_zscale
 
+
 def test_compute_zscale_limits_all_nan_returns_default_range():
     data = np.full((64, 64), np.nan, dtype=np.float32)
     z1, z2 = compute_zscale_limits(data)

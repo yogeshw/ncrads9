@@ -46,9 +46,7 @@ class RegionGroup:
 class GroupManager:
     """Manager for region groups."""
 
-    def __init__(
-        self, region_manager: Optional[RegionManager] = None
-    ) -> None:
+    def __init__(self, region_manager: Optional[RegionManager] = None) -> None:
         """
         Initialize the group manager.
 
@@ -108,9 +106,7 @@ class GroupManager:
         if name in self._groups:
             raise ValueError(f"Group '{name}' already exists")
 
-        group = RegionGroup(
-            name=name, color=color, visible=visible, locked=locked
-        )
+        group = RegionGroup(name=name, color=color, visible=visible, locked=locked)
         self._groups[name] = group
         self._notify_change()
         return group
@@ -217,9 +213,7 @@ class GroupManager:
 
         return True
 
-    def remove_region_from_group(
-        self, group_name: str, region_index: int
-    ) -> bool:
+    def remove_region_from_group(self, group_name: str, region_index: int) -> bool:
         """
         Remove a region from a group.
 
@@ -280,11 +274,7 @@ class GroupManager:
         Returns:
             List of group names containing the region.
         """
-        return [
-            name
-            for name, group in self._groups.items()
-            if region_index in group.region_indices
-        ]
+        return [name for name, group in self._groups.items() if region_index in group.region_indices]
 
     def set_group_visibility(self, group_name: str, visible: bool) -> bool:
         """

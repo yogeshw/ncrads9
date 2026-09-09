@@ -80,17 +80,19 @@ class RegionDialog(QDialog):
         shape_layout = QFormLayout(shape_group)
 
         self._shape_combo = QComboBox()
-        self._shape_combo.addItems([
-            "Circle",
-            "Ellipse",
-            "Box",
-            "Polygon",
-            "Line",
-            "Vector",
-            "Text",
-            "Point",
-            "Annulus",
-        ])
+        self._shape_combo.addItems(
+            [
+                "Circle",
+                "Ellipse",
+                "Box",
+                "Polygon",
+                "Line",
+                "Vector",
+                "Text",
+                "Point",
+                "Annulus",
+            ]
+        )
         self._shape_combo.currentTextChanged.connect(self._on_shape_changed)
         shape_layout.addRow("Type:", self._shape_combo)
 
@@ -243,9 +245,7 @@ class RegionDialog(QDialog):
 
     def _update_color_button(self) -> None:
         """Update the color button appearance."""
-        self._color_btn.setStyleSheet(
-            f"background-color: {self._color.name()}; border: 1px solid black;"
-        )
+        self._color_btn.setStyleSheet(f"background-color: {self._color.name()}; border: 1px solid black;")
 
     def _load_region_data(self) -> None:
         """Load region data into the form."""

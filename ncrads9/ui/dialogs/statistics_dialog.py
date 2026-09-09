@@ -37,9 +37,7 @@ from PyQt6.QtCore import Qt
 class StatisticsDialog(QDialog):
     """Dialog showing image statistics."""
 
-    def __init__(
-        self, image_data: np.ndarray, parent: Optional[QWidget] = None
-    ) -> None:
+    def __init__(self, image_data: np.ndarray, parent: Optional[QWidget] = None) -> None:
         """
         Initialize the statistics dialog.
 
@@ -49,46 +47,46 @@ class StatisticsDialog(QDialog):
         """
         # Pass None as parent to make dialog independent
         super().__init__(None)
-        
+
         # Set window flags for independent draggable window
         self.setWindowFlags(
-            Qt.WindowType.Window |
-            Qt.WindowType.WindowCloseButtonHint |
-            Qt.WindowType.WindowTitleHint |
-            Qt.WindowType.WindowStaysOnTopHint
+            Qt.WindowType.Window
+            | Qt.WindowType.WindowCloseButtonHint
+            | Qt.WindowType.WindowTitleHint
+            | Qt.WindowType.WindowStaysOnTopHint
         )
         self.setWindowModality(Qt.WindowModality.NonModal)
-        
+
         self.image_data = image_data
         self.setWindowTitle("Image Statistics")
         self.setMinimumSize(400, 300)
-        
+
         self._setup_ui()
         self._compute_statistics()
 
     def _setup_ui(self) -> None:
         """Set up the user interface."""
         layout = QVBoxLayout()
-        
+
         # Title
         title = QLabel("Image Statistics")
         title.setStyleSheet("font-weight: bold; font-size: 14px;")
         layout.addWidget(title)
-        
+
         # Statistics display
         self.stats_text = QTextEdit()
         self.stats_text.setReadOnly(True)
         self.stats_text.setMinimumHeight(200)
         layout.addWidget(self.stats_text)
-        
+
         # Buttons
         button_layout = QHBoxLayout()
         button_layout.addStretch()
-        
+
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.accept)
         button_layout.addWidget(close_button)
-        
+
         layout.addLayout(button_layout)
         self.setLayout(layout)
 
@@ -97,14 +95,14 @@ class StatisticsDialog(QDialog):
         if self.image_data is None or self.image_data.size == 0:
             self.stats_text.setText("No image data available")
             return
-        
+
         # Remove NaN and Inf values for statistics
         valid_data = self.image_data[np.isfinite(self.image_data)]
-        
+
         if valid_data.size == 0:
             self.stats_text.setText("No valid pixel values in image")
             return
-        
+
         # Compute statistics
         stats = {
             "Image Dimensions": f"{self.image_data.shape[1]} x {self.image_data.shape[0]}",
@@ -122,7 +120,7 @@ class StatisticsDialog(QDialog):
             "25th Percentile": f"{np.percentile(valid_data, 25):.6g}",
             "75th Percentile": f"{np.percentile(valid_data, 75):.6g}",
         }
-        
+
         # Format as text
         text = ""
         for key, value in stats.items():
@@ -130,5 +128,5 @@ class StatisticsDialog(QDialog):
                 text += f"{key:20s}: {value}\n"
             else:
                 text += "\n"
-        
+
         self.stats_text.setText(text)

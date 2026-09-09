@@ -50,56 +50,56 @@ class ExportDialog(QDialog):
         super().__init__(parent)
         self.pixmap = pixmap
         self.export_path = None
-        
+
         self.setWindowTitle("Export Image")
         self.setMinimumSize(400, 200)
-        
+
         self._setup_ui()
 
     def _setup_ui(self) -> None:
         """Set up the user interface."""
         layout = QVBoxLayout()
-        
+
         # Title
         title = QLabel("Export Current View")
         title.setStyleSheet("font-weight: bold; font-size: 14px;")
         layout.addWidget(title)
-        
+
         # Form layout
         form = QFormLayout()
-        
+
         # Format selection
         self.format_combo = QComboBox()
         self.format_combo.addItems(["PNG", "JPEG", "TIFF", "BMP"])
         form.addRow("Format:", self.format_combo)
-        
+
         # File path
         path_layout = QHBoxLayout()
         self.path_edit = QLineEdit()
         path_layout.addWidget(self.path_edit)
-        
+
         browse_button = QPushButton("Browse...")
         browse_button.clicked.connect(self._browse_file)
         path_layout.addWidget(browse_button)
-        
+
         form.addRow("Save to:", path_layout)
-        
+
         layout.addLayout(form)
         layout.addStretch()
-        
+
         # Buttons
         button_layout = QHBoxLayout()
         button_layout.addStretch()
-        
+
         export_button = QPushButton("Export")
         export_button.clicked.connect(self._export)
         export_button.setDefault(True)
         button_layout.addWidget(export_button)
-        
+
         cancel_button = QPushButton("Cancel")
         cancel_button.clicked.connect(self.reject)
         button_layout.addWidget(cancel_button)
-        
+
         layout.addLayout(button_layout)
         self.setLayout(layout)
 
@@ -112,14 +112,14 @@ class ExportDialog(QDialog):
             "tiff": "TIFF Images (*.tif *.tiff)",
             "bmp": "BMP Images (*.bmp)",
         }
-        
+
         filepath, _ = QFileDialog.getSaveFileName(
             self,
             "Export Image",
             "",
             filters.get(format_ext, "All Files (*)"),
         )
-        
+
         if filepath:
             self.path_edit.setText(filepath)
 
@@ -128,17 +128,18 @@ class ExportDialog(QDialog):
         filepath = self.path_edit.text()
         if not filepath:
             return
-        
+
         format_str = self.format_combo.currentText()
-        
+
         # Save pixmap to file
         success = self.pixmap.save(filepath, format_str)
-        
+
         if success:
             self.export_path = filepath
             self.accept()
         else:
             from PyQt6.QtWidgets import QMessageBox
+
             QMessageBox.warning(
                 self,
                 "Export Failed",

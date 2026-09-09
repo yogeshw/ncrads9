@@ -69,9 +69,7 @@ class RegionList(QWidget):
 
         # Region list
         self._list_widget = QListWidget()
-        self._list_widget.setContextMenuPolicy(
-            Qt.ContextMenuPolicy.CustomContextMenu
-        )
+        self._list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         group_layout.addWidget(self._list_widget)
 
         # Buttons
@@ -94,9 +92,7 @@ class RegionList(QWidget):
     def _connect_signals(self) -> None:
         """Connect internal signals."""
         self._list_widget.currentRowChanged.connect(self._on_selection_changed)
-        self._list_widget.customContextMenuRequested.connect(
-            self._show_context_menu
-        )
+        self._list_widget.customContextMenuRequested.connect(self._show_context_menu)
         self._delete_button.clicked.connect(self._on_delete_clicked)
         self._clear_button.clicked.connect(self._on_clear_clicked)
         self._toggle_button.clicked.connect(self._on_toggle_clicked)

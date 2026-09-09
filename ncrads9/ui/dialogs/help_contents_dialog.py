@@ -153,38 +153,38 @@ class HelpContentsDialog(QDialog):
         """
         # Pass None as parent to make dialog independent
         super().__init__(None)
-        
+
         # Set window flags for independent draggable window
         self.setWindowFlags(
-            Qt.WindowType.Window |
-            Qt.WindowType.WindowCloseButtonHint |
-            Qt.WindowType.WindowTitleHint |
-            Qt.WindowType.WindowStaysOnTopHint
+            Qt.WindowType.Window
+            | Qt.WindowType.WindowCloseButtonHint
+            | Qt.WindowType.WindowTitleHint
+            | Qt.WindowType.WindowStaysOnTopHint
         )
         self.setWindowModality(Qt.WindowModality.NonModal)
-        
+
         self.setWindowTitle("NCRADS9 Help")
         self.setMinimumSize(700, 600)
-        
+
         self._setup_ui()
 
     def _setup_ui(self) -> None:
         """Set up the user interface."""
         layout = QVBoxLayout()
-        
+
         # Help browser
         browser = QTextBrowser()
         browser.setHtml(self.HELP_HTML)
         browser.setOpenExternalLinks(True)
         layout.addWidget(browser)
-        
+
         # Buttons
         button_layout = QHBoxLayout()
         button_layout.addStretch()
-        
+
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.accept)
         button_layout.addWidget(close_button)
-        
+
         layout.addLayout(button_layout)
         self.setLayout(layout)

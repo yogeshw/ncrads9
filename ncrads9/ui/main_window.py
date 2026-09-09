@@ -147,7 +147,7 @@ class MainWindow(QMainWindow):
         self.config = config
         self.setWindowTitle("NCRADS9 - FITS Viewer")
         self.setMinimumSize(800, 600)
-        
+
         # Initialize data storage
         self.frame_manager = FrameManager()
         self.current_scale = ScaleAlgorithm.LINEAR
@@ -235,7 +235,7 @@ class MainWindow(QMainWindow):
         self._update_samp_menu_state()
         self._apply_preferences(self._get_preferences_dict(), persist=False, show_message=False)
         self._refresh_frame_menu_items()
-    
+
     @property
     def image_data(self):
         """Get current frame's image data."""
@@ -245,13 +245,13 @@ class MainWindow(QMainWindow):
         if frame.frame_type == "rgb":
             return self._get_rgb_active_channel_data(frame)
         return frame.image_data
-    
+
     @property
     def wcs_handler(self):
         """Get current frame's WCS handler."""
         frame = self.frame_manager.current_frame
         return frame.wcs_handler if frame else None
-    
+
     @property
     def fits_handler(self):
         """Get a temporary FITS handler for current frame."""
@@ -274,7 +274,9 @@ class MainWindow(QMainWindow):
         if hasattr(self.image_viewer, "set_contrast_brightness"):
             self.image_viewer.set_contrast_brightness(contrast, brightness)
             return
-        if hasattr(self.image_viewer, "image_viewer") and hasattr(self.image_viewer.image_viewer, "set_contrast_brightness"):
+        if hasattr(self.image_viewer, "image_viewer") and hasattr(
+            self.image_viewer.image_viewer, "set_contrast_brightness"
+        ):
             self.image_viewer.image_viewer.set_contrast_brightness(contrast, brightness)
 
     def _get_rgb_active_channel_data(self, frame: Frame) -> Optional[NDArray[np.floating]]:
@@ -396,10 +398,10 @@ class MainWindow(QMainWindow):
             self.menu_bar.setNativeMenuBar(False)
         self.setMenuBar(self.menu_bar)
         self.menu_bar.update()
-        
+
         # Connect menu actions to handlers
         self._connect_menu_actions()
-    
+
     def _connect_menu_actions(self) -> None:
         """Connect menu actions to their handlers."""
         # File menu
@@ -409,17 +411,21 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_export.triggered.connect(self._export_image)
         self.menu_bar.action_print.triggered.connect(self._print_image)
         self.menu_bar.action_exit.triggered.connect(self.close)
-        
+
         # Edit menu
-        self.menu_bar.action_undo.triggered.connect(lambda: self.statusBar().showMessage("Undo not implemented", 2000))
-        self.menu_bar.action_redo.triggered.connect(lambda: self.statusBar().showMessage("Redo not implemented", 2000))
+        self.menu_bar.action_undo.triggered.connect(
+            lambda: self.statusBar().showMessage("Undo not implemented", 2000)
+        )
+        self.menu_bar.action_redo.triggered.connect(
+            lambda: self.statusBar().showMessage("Redo not implemented", 2000)
+        )
         self.menu_bar.action_preferences.triggered.connect(self._show_preferences)
-        
+
         # View menu
         self.menu_bar.action_fullscreen.triggered.connect(self._toggle_fullscreen)
         self.menu_bar.action_show_toolbar.triggered.connect(self._toggle_toolbar)
         self.menu_bar.action_show_statusbar.triggered.connect(self._toggle_statusbar)
-        
+
         # Frame menu
         self.menu_bar.action_new_frame.triggered.connect(self._new_frame)
         self.menu_bar.action_new_frame_rgb.triggered.connect(lambda: self._new_frame_with_type("rgb"))
@@ -470,12 +476,24 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_match_block.triggered.connect(self._match_frames_block)
         self.menu_bar.action_match_smooth.triggered.connect(self._match_frames_smooth)
         self.menu_bar.action_match_3d.triggered.connect(self._match_frames_3d)
-        self.menu_bar.action_lock_frame_none.triggered.connect(lambda: self._set_frame_lock_scope("frame", "none"))
-        self.menu_bar.action_lock_frame_wcs.triggered.connect(lambda: self._set_frame_lock_scope("frame", "wcs"))
-        self.menu_bar.action_lock_frame_image.triggered.connect(lambda: self._set_frame_lock_scope("frame", "image"))
-        self.menu_bar.action_lock_frame_physical.triggered.connect(lambda: self._set_frame_lock_scope("frame", "physical"))
-        self.menu_bar.action_lock_frame_amplifier.triggered.connect(lambda: self._set_frame_lock_scope("frame", "amplifier"))
-        self.menu_bar.action_lock_frame_detector.triggered.connect(lambda: self._set_frame_lock_scope("frame", "detector"))
+        self.menu_bar.action_lock_frame_none.triggered.connect(
+            lambda: self._set_frame_lock_scope("frame", "none")
+        )
+        self.menu_bar.action_lock_frame_wcs.triggered.connect(
+            lambda: self._set_frame_lock_scope("frame", "wcs")
+        )
+        self.menu_bar.action_lock_frame_image.triggered.connect(
+            lambda: self._set_frame_lock_scope("frame", "image")
+        )
+        self.menu_bar.action_lock_frame_physical.triggered.connect(
+            lambda: self._set_frame_lock_scope("frame", "physical")
+        )
+        self.menu_bar.action_lock_frame_amplifier.triggered.connect(
+            lambda: self._set_frame_lock_scope("frame", "amplifier")
+        )
+        self.menu_bar.action_lock_frame_detector.triggered.connect(
+            lambda: self._set_frame_lock_scope("frame", "detector")
+        )
         self.menu_bar.action_lock_crosshair_none.triggered.connect(
             lambda: self._set_frame_lock_scope("crosshair", "none")
         )
@@ -494,9 +512,15 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_lock_crosshair_detector.triggered.connect(
             lambda: self._set_frame_lock_scope("crosshair", "detector")
         )
-        self.menu_bar.action_lock_crop_none.triggered.connect(lambda: self._set_frame_lock_scope("crop", "none"))
-        self.menu_bar.action_lock_crop_wcs.triggered.connect(lambda: self._set_frame_lock_scope("crop", "wcs"))
-        self.menu_bar.action_lock_crop_image.triggered.connect(lambda: self._set_frame_lock_scope("crop", "image"))
+        self.menu_bar.action_lock_crop_none.triggered.connect(
+            lambda: self._set_frame_lock_scope("crop", "none")
+        )
+        self.menu_bar.action_lock_crop_wcs.triggered.connect(
+            lambda: self._set_frame_lock_scope("crop", "wcs")
+        )
+        self.menu_bar.action_lock_crop_image.triggered.connect(
+            lambda: self._set_frame_lock_scope("crop", "image")
+        )
         self.menu_bar.action_lock_crop_physical.triggered.connect(
             lambda: self._set_frame_lock_scope("crop", "physical")
         )
@@ -506,8 +530,12 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_lock_crop_detector.triggered.connect(
             lambda: self._set_frame_lock_scope("crop", "detector")
         )
-        self.menu_bar.action_lock_slice_none.triggered.connect(lambda: self._set_frame_lock_scope("slice", "none"))
-        self.menu_bar.action_lock_slice_wcs.triggered.connect(lambda: self._set_frame_lock_scope("slice", "wcs"))
+        self.menu_bar.action_lock_slice_none.triggered.connect(
+            lambda: self._set_frame_lock_scope("slice", "none")
+        )
+        self.menu_bar.action_lock_slice_wcs.triggered.connect(
+            lambda: self._set_frame_lock_scope("slice", "wcs")
+        )
         self.menu_bar.action_lock_slice_image.triggered.connect(
             lambda: self._set_frame_lock_scope("slice", "image")
         )
@@ -521,7 +549,9 @@ class MainWindow(QMainWindow):
             )
         )
         self.menu_bar.action_lock_scale.triggered.connect(
-            lambda checked=False: self._set_frame_lock_flag("scale", self.menu_bar.action_lock_scale.isChecked())
+            lambda checked=False: self._set_frame_lock_flag(
+                "scale", self.menu_bar.action_lock_scale.isChecked()
+            )
         )
         self.menu_bar.action_lock_scale_limits.triggered.connect(
             lambda checked=False: self._set_frame_lock_flag(
@@ -536,10 +566,14 @@ class MainWindow(QMainWindow):
             )
         )
         self.menu_bar.action_lock_block.triggered.connect(
-            lambda checked=False: self._set_frame_lock_flag("block", self.menu_bar.action_lock_block.isChecked())
+            lambda checked=False: self._set_frame_lock_flag(
+                "block", self.menu_bar.action_lock_block.isChecked()
+            )
         )
         self.menu_bar.action_lock_smooth.triggered.connect(
-            lambda checked=False: self._set_frame_lock_flag("smooth", self.menu_bar.action_lock_smooth.isChecked())
+            lambda checked=False: self._set_frame_lock_flag(
+                "smooth", self.menu_bar.action_lock_smooth.isChecked()
+            )
         )
         self.menu_bar.action_lock_3d.triggered.connect(
             lambda checked=False: self._set_frame_lock_flag("3d", self.menu_bar.action_lock_3d.isChecked())
@@ -550,36 +584,34 @@ class MainWindow(QMainWindow):
         )
         self.menu_bar.action_tile_mode_rows.triggered.connect(lambda: self._set_tile_arrangement_mode("row"))
         for interval, action in self.menu_bar.blink_interval_actions.items():
-            action.triggered.connect(
-                lambda checked=False, ms=interval: self._set_blink_interval(ms)
-            )
+            action.triggered.connect(lambda checked=False, ms=interval: self._set_blink_interval(ms))
         for interval, action in self.menu_bar.fade_interval_actions.items():
-            action.triggered.connect(
-                lambda checked=False, ms=interval: self._set_fade_interval(ms)
-            )
+            action.triggered.connect(lambda checked=False, ms=interval: self._set_fade_interval(ms))
         self.menu_bar.action_frame_cube_dialog.triggered.connect(lambda: self._show_frame_dialog("cube"))
         self.menu_bar.action_frame_rgb_dialog.triggered.connect(lambda: self._show_frame_dialog("rgb"))
         self.menu_bar.action_frame_hsv_dialog.triggered.connect(lambda: self._show_frame_dialog("hsv"))
         self.menu_bar.action_frame_hls_dialog.triggered.connect(lambda: self._show_frame_dialog("hls"))
         self.menu_bar.action_frame_3d_dialog.triggered.connect(lambda: self._show_frame_dialog("3d"))
-        
+
         # Bin menu
         self.menu_bar.action_bin_1.triggered.connect(lambda: self._set_bin(1))
         self.menu_bar.action_bin_2.triggered.connect(lambda: self._set_bin(2))
         self.menu_bar.action_bin_4.triggered.connect(lambda: self._set_bin(4))
         self.menu_bar.action_bin_8.triggered.connect(lambda: self._set_bin(8))
-        
+
         # Scale menu
         self.menu_bar.action_scale_linear.triggered.connect(lambda: self._set_scale(ScaleAlgorithm.LINEAR))
         self.menu_bar.action_scale_log.triggered.connect(lambda: self._set_scale(ScaleAlgorithm.LOG))
         self.menu_bar.action_scale_sqrt.triggered.connect(lambda: self._set_scale(ScaleAlgorithm.SQRT))
         self.menu_bar.action_scale_squared.triggered.connect(lambda: self._set_scale(ScaleAlgorithm.POWER))
         self.menu_bar.action_scale_asinh.triggered.connect(lambda: self._set_scale(ScaleAlgorithm.ASINH))
-        self.menu_bar.action_scale_histeq.triggered.connect(lambda: self._set_scale(ScaleAlgorithm.HISTOGRAM_EQUALIZATION))
+        self.menu_bar.action_scale_histeq.triggered.connect(
+            lambda: self._set_scale(ScaleAlgorithm.HISTOGRAM_EQUALIZATION)
+        )
         self.menu_bar.action_scale_zscale.triggered.connect(self._reset_scale_limits)
         self.menu_bar.action_scale_minmax.triggered.connect(self._scale_minmax)
         self.menu_bar.action_scale_params.triggered.connect(self._show_scale_dialog)
-        
+
         # Color menu
         for cmap_name, action in self.menu_bar.colormap_actions.items():
             action.triggered.connect(lambda checked=False, name=cmap_name: self._set_colormap(name))
@@ -613,13 +645,17 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_colormap_params.triggered.connect(self._show_colormap_dialog)
         self.menu_bar.action_load_user_colormap.triggered.connect(self._load_user_colormap)
         self.menu_bar.action_save_user_colormap.triggered.connect(self._save_current_colormap)
-        
+
         # Region menu
         self.menu_bar.action_region_none.triggered.connect(lambda: self._set_region_mode(RegionMode.NONE))
         self.menu_bar.action_region_circle.triggered.connect(lambda: self._set_region_mode(RegionMode.CIRCLE))
-        self.menu_bar.action_region_ellipse.triggered.connect(lambda: self._set_region_mode(RegionMode.ELLIPSE))
+        self.menu_bar.action_region_ellipse.triggered.connect(
+            lambda: self._set_region_mode(RegionMode.ELLIPSE)
+        )
         self.menu_bar.action_region_box.triggered.connect(lambda: self._set_region_mode(RegionMode.BOX))
-        self.menu_bar.action_region_polygon.triggered.connect(lambda: self._set_region_mode(RegionMode.POLYGON))
+        self.menu_bar.action_region_polygon.triggered.connect(
+            lambda: self._set_region_mode(RegionMode.POLYGON)
+        )
         self.menu_bar.action_region_line.triggered.connect(lambda: self._set_region_mode(RegionMode.LINE))
         self.menu_bar.action_region_point.triggered.connect(lambda: self._set_region_mode(RegionMode.POINT))
         self.menu_bar.action_region_load.triggered.connect(self._load_regions)
@@ -634,7 +670,7 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_samp_marker_color.triggered.connect(self._samp_choose_marker_color)
         self.menu_bar.action_samp_marker_shape.triggered.connect(self._samp_choose_marker_shape)
         self.menu_bar.action_samp_marker_size.triggered.connect(self._samp_choose_marker_size)
-        
+
         # WCS menu - connect all coordinate system options
         self.menu_bar.action_wcs_fk5.triggered.connect(lambda: self._set_wcs_system("fk5"))
         self.menu_bar.action_wcs_fk4.triggered.connect(lambda: self._set_wcs_system("fk4"))
@@ -644,7 +680,7 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_wcs_sexagesimal.triggered.connect(lambda: self._set_wcs_format("sexagesimal"))
         self.menu_bar.action_wcs_degrees.triggered.connect(lambda: self._set_wcs_format("degrees"))
         self.menu_bar.action_show_direction_arrows.triggered.connect(self._toggle_direction_arrows)
-        
+
         # Analysis menu - connect all tools
         self.menu_bar.action_name_resolution.triggered.connect(self._resolve_object_name)
         self.menu_bar.action_statistics.triggered.connect(self._show_statistics)
@@ -681,7 +717,7 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_clear_analysis_commands.triggered.connect(self._clear_analysis_commands)
         self.menu_bar.action_pixel_table.triggered.connect(self._show_pixel_table)
         self.menu_bar.action_fits_header.triggered.connect(self._show_fits_header)
-        
+
         # Zoom menu
         self.menu_bar.action_zoom_center.triggered.connect(self._center_image)
         self.menu_bar.action_zoom_align.triggered.connect(self._set_align_wcs)
@@ -690,22 +726,14 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_zoom_fit.triggered.connect(self._zoom_fit)
         self.menu_bar.action_zoom_1.triggered.connect(lambda: self._set_zoom_level(1.0))
         for zoom_value, action in self.menu_bar.zoom_preset_actions.items():
-            action.triggered.connect(
-                lambda checked=False, value=zoom_value: self._set_zoom_level(value)
-            )
+            action.triggered.connect(lambda checked=False, value=zoom_value: self._set_zoom_level(value))
         for orientation, action in self.menu_bar.zoom_orientation_actions.items():
-            action.triggered.connect(
-                lambda checked=False, value=orientation: self._set_orientation(value)
-            )
+            action.triggered.connect(lambda checked=False, value=orientation: self._set_orientation(value))
         for degrees, action in self.menu_bar.zoom_rotation_actions.items():
-            action.triggered.connect(
-                lambda checked=False, value=degrees: self._set_rotation(value)
-            )
+            action.triggered.connect(lambda checked=False, value=degrees: self._set_rotation(value))
         self.menu_bar.action_crop_parameters.triggered.connect(self._show_crop_parameters_dialog)
-        self.menu_bar.action_pan_zoom_rotate_parameters.triggered.connect(
-            self._show_pan_zoom_rotate_dialog
-        )
-        
+        self.menu_bar.action_pan_zoom_rotate_parameters.triggered.connect(self._show_pan_zoom_rotate_dialog)
+
         # Help menu
         self.menu_bar.action_help_contents.triggered.connect(self._show_help_contents)
         self.menu_bar.action_keyboard_shortcuts.triggered.connect(self._show_keyboard_shortcuts)
@@ -716,7 +744,7 @@ class MainWindow(QMainWindow):
         """Set up the main toolbar."""
         self.main_toolbar = MainToolbar(self)
         self.addToolBar(self.main_toolbar)
-        
+
         # Connect toolbar actions
         self.main_toolbar.action_open.triggered.connect(self.open_file)
         self.main_toolbar.action_save.triggered.connect(self.save_file)
@@ -728,9 +756,13 @@ class MainWindow(QMainWindow):
         self.main_toolbar.action_histogram.triggered.connect(self._show_histogram)
         self.main_toolbar.action_prev_frame.triggered.connect(self._prev_frame)
         self.main_toolbar.action_next_frame.triggered.connect(self._next_frame)
-        self.main_toolbar.action_region_circle.triggered.connect(lambda: self._set_region_mode(RegionMode.CIRCLE))
+        self.main_toolbar.action_region_circle.triggered.connect(
+            lambda: self._set_region_mode(RegionMode.CIRCLE)
+        )
         self.main_toolbar.action_region_box.triggered.connect(lambda: self._set_region_mode(RegionMode.BOX))
-        self.main_toolbar.action_region_polygon.triggered.connect(lambda: self._set_region_mode(RegionMode.POLYGON))
+        self.main_toolbar.action_region_polygon.triggered.connect(
+            lambda: self._set_region_mode(RegionMode.POLYGON)
+        )
 
     def _setup_central_widget(self) -> None:
         """Set up the central widget."""
@@ -738,13 +770,9 @@ class MainWindow(QMainWindow):
         self.scroll_area = QScrollArea(self)
         self.scroll_area.setWidgetResizable(True)  # Allow widget to use full viewport
         self.scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.scroll_area.horizontalScrollBar().valueChanged.connect(
-            lambda _: self._update_panner_view_rect()
-        )
-        self.scroll_area.verticalScrollBar().valueChanged.connect(
-            lambda _: self._update_panner_view_rect()
-        )
-        
+        self.scroll_area.horizontalScrollBar().valueChanged.connect(lambda _: self._update_panner_view_rect())
+        self.scroll_area.verticalScrollBar().valueChanged.connect(lambda _: self._update_panner_view_rect())
+
         # Create interactive image viewer with regions
         self.image_viewer = self._create_image_viewer(self.use_gpu_rendering)
 
@@ -780,13 +808,13 @@ class MainWindow(QMainWindow):
         # Left dock for button bar
         self.button_bar_dock = QDockWidget("Controls", self)
         self.button_bar = ButtonBar(self)
-        
+
         # Connect button bar signals
         self.button_bar.zoom_changed.connect(self._on_button_bar_zoom)
         self.button_bar.scale_changed.connect(self._on_button_bar_scale)
         self.button_bar.colormap_changed.connect(self._on_button_bar_colormap)
         self.button_bar.region_mode_changed.connect(self._on_button_bar_region)
-        
+
         self.button_bar_dock.setWidget(self.button_bar)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.button_bar_dock)
 
@@ -796,14 +824,14 @@ class MainWindow(QMainWindow):
         self.colorbar_dock.setWidget(self.colorbar_widget)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.colorbar_dock)
         self.colorbar_dock.visibilityChanged.connect(self.menu_bar.action_colorbar.setChecked)
-        
+
         # Top-right dock for panner (DS9 style)
         self.panner_dock = QDockWidget("Panner", self)
         self.panner_panel = PannerPanel(self)
         self.panner_panel.pan_to.connect(self._on_panner_pan)
         self.panner_dock.setWidget(self.panner_panel)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.panner_dock)
-        
+
         # Top-right dock for magnifier (DS9 style)
         self.magnifier_dock = QDockWidget("Magnifier", self)
         self.magnifier_panel = MagnifierPanel(self)
@@ -933,7 +961,7 @@ class MainWindow(QMainWindow):
         # Handle case where checked is actually a filepath string
         if isinstance(checked, str):
             filepath = checked
-            
+
         if filepath is None or filepath is False:
             filepath, _ = QFileDialog.getOpenFileName(
                 self,
@@ -949,13 +977,15 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 self.statusBar().showMessage(f"Error loading file: {e}", 5000)
                 from PyQt6.QtWidgets import QMessageBox
-                QMessageBox.critical(self, "Error Loading File", 
-                                   f"Could not load FITS file:\n{filepath}\n\nError: {e}")
-    
+
+                QMessageBox.critical(
+                    self, "Error Loading File", f"Could not load FITS file:\n{filepath}\n\nError: {e}"
+                )
+
     def _load_fits_file(self, filepath: str) -> None:
         """
         Load a FITS file into current frame.
-        
+
         Args:
             filepath: Path to the FITS file.
         """
@@ -971,16 +1001,16 @@ class MainWindow(QMainWindow):
                 old_handler.close()
             except Exception:
                 pass
-        
+
         # Load FITS file
         fits_handler = FITSHandler()
         fits_handler.load(filepath)
         image_data = fits_handler.get_data()
-        
+
         # Load WCS if available
         header = fits_handler.get_header()
         wcs_handler = WCSHandler(header)
-        
+
         # Update frame
         frame.filepath = Path(filepath)
         frame.fits_handler = fits_handler
@@ -1006,23 +1036,23 @@ class MainWindow(QMainWindow):
         self.z2 = None
         if hasattr(self.image_viewer, "reset_contrast_brightness"):
             self.image_viewer.reset_contrast_brightness()
-        
+
         # Update window title
         filename = Path(filepath).name
         frame_info = f"Frame {self.frame_manager.current_index + 1}/{self.frame_manager.num_frames}"
         self.setWindowTitle(f"NCRADS9 - {filename} [{frame_info}]")
-        
+
         # Display the image
         self._display_image()
-        
+
         # Fit image to window on initial load
         self._zoom_fit()
-        
+
         # Update status bar image info
         shape = image_data.shape
         dtype = image_data.dtype
         self.status_bar.update_image_info(shape[1], shape[0])
-        
+
         # Update temporary message
         stats_msg = f"Loaded: {shape[1]}x{shape[0]} pixels, {dtype}"
         if wcs_handler.is_valid:
@@ -1073,9 +1103,7 @@ class MainWindow(QMainWindow):
 
     def _apply_view_transform_to_viewer(self, frame: Frame) -> None:
         """Apply per-frame orientation/rotation to the active viewer."""
-        if self.using_gpu_rendering and (
-            not np.isclose(frame.rotation, 0.0) or frame.flip_x or frame.flip_y
-        ):
+        if self.using_gpu_rendering and (not np.isclose(frame.rotation, 0.0) or frame.flip_x or frame.flip_y):
             self._rebuild_image_viewer(False)
             self.statusBar().showMessage(
                 "Switched to CPU rendering for rotated/flipped display",
@@ -1137,7 +1165,7 @@ class MainWindow(QMainWindow):
         self._update_direction_arrows()
         if self._last_mouse_pos is not None:
             self._on_mouse_moved(*self._last_mouse_pos)
-    
+
     def _display_image(self) -> None:
         """Display the current frame's image data."""
         if self._tile_mode_enabled:
@@ -1152,24 +1180,24 @@ class MainWindow(QMainWindow):
             return
         if not frame.has_data:
             return
-        
+
         image_data = self._get_display_image_data(frame)
         self._apply_view_transform_to_viewer(frame)
-        
+
         # Compute scale limits using zscale (once, or when reset)
         if self.z1 is None or self.z2 is None:
             self.z1, self.z2 = compute_zscale_limits(image_data)
-        
+
         # Get contrast/brightness adjustments from viewer
         contrast, brightness = self.image_viewer.get_contrast_brightness()
-        
+
         # Apply adjustments to scale limits
         range_val = self.z2 - self.z1
         center = (self.z1 + self.z2) / 2
         new_range = range_val / contrast
         adjusted_z1 = center - new_range / 2 + brightness * range_val
         adjusted_z2 = center + new_range / 2 + brightness * range_val
-        
+
         # Apply colormap
         try:
             cmap = self._get_colormap_instance(self.current_colormap)
@@ -1183,14 +1211,14 @@ class MainWindow(QMainWindow):
             cmap_data = cmap.colors.copy()
             cmap_data = cmap_data[::-1]  # Reverse the colormap
             cmap = Colormap(f"{self.current_colormap}_inverted", cmap_data)
-        
+
         # Update colorbar
         self.colorbar_widget.set_colormap(
-            cmap.colors, adjusted_z1, adjusted_z2, 
-            self.current_colormap, self.invert_colormap
+            cmap.colors, adjusted_z1, adjusted_z2, self.current_colormap, self.invert_colormap
         )
-        
+
         if self.using_gpu_rendering:
+
             def tile_provider(x: int, y: int, w: int, h: int) -> NDArray[np.uint8]:
                 tile = self._extract_gpu_tile_data(image_data, x, y, w, h)
                 scaled = apply_scale(tile, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
@@ -1214,7 +1242,7 @@ class MainWindow(QMainWindow):
             height, width = display_rgb.shape[:2]
             bytes_per_line = 3 * width
             qimage = QImage(display_rgb.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
-            
+
             # Create pixmap and display
             pixmap = QPixmap.fromImage(qimage)
             self.image_viewer.set_image(pixmap)
@@ -1227,17 +1255,17 @@ class MainWindow(QMainWindow):
         )
         self._cache_preview_rgb(frame, preview_rgb)
         transformed_preview = self._transform_preview_image(preview_rgb, frame)
-        
+
         # Update panner panel with RGB data (DS9 style)
-        if hasattr(self, 'panner_panel'):
+        if hasattr(self, "panner_panel"):
             self.panner_panel.set_image(
                 transformed_preview,
                 source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
             )
             self._update_panner_view_rect()
-        
+
         # Update magnifier panel with RGB data (DS9 style)
-        if hasattr(self, 'magnifier_panel'):
+        if hasattr(self, "magnifier_panel"):
             self.magnifier_panel.set_image(
                 transformed_preview,
                 source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
@@ -1246,7 +1274,7 @@ class MainWindow(QMainWindow):
             self.horizontal_graph_dock.set_image(image_data)
         if hasattr(self, "vertical_graph_dock"):
             self.vertical_graph_dock.set_image(image_data)
-        
+
         # Update zoom display
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
         self._update_bin_menu_checks(getattr(frame, "bin_factor", 1))
@@ -1259,7 +1287,9 @@ class MainWindow(QMainWindow):
 
     def _display_rgb_frame(self, frame: Frame) -> bool:
         """Display a composite RGB frame."""
-        active_channel = frame.rgb_current_channel if frame.rgb_current_channel in frame.rgb_channels else "red"
+        active_channel = (
+            frame.rgb_current_channel if frame.rgb_current_channel in frame.rgb_channels else "red"
+        )
         contrast, brightness = self.image_viewer.get_contrast_brightness()
         frame.rgb_channel_scale[active_channel] = self.current_scale
         frame.rgb_channel_z1[active_channel] = self.z1
@@ -1287,6 +1317,7 @@ class MainWindow(QMainWindow):
         self._apply_view_transform_to_viewer(frame)
 
         if self.using_gpu_rendering:
+
             def tile_provider(x: int, y: int, w: int, h: int) -> NDArray[np.uint8]:
                 return self._extract_gpu_tile_data(composite, x, y, w, h)
 
@@ -1422,6 +1453,7 @@ class MainWindow(QMainWindow):
         display_rgb = np.ascontiguousarray(display_rgb)
 
         if self.using_gpu_rendering:
+
             def tile_provider(x: int, y: int, w: int, h: int) -> NDArray[np.uint8]:
                 return self._extract_gpu_tile_data(tiled_rgb, x, y, w, h)
 
@@ -1446,17 +1478,17 @@ class MainWindow(QMainWindow):
         self.status_bar.update_image_info(tiled_w, tiled_h)
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
         return True
-    
+
     def _set_scale(self, scale: ScaleAlgorithm) -> None:
         """
         Set the image scaling algorithm.
-        
+
         Args:
             scale: The scaling algorithm to use.
         """
         self.current_scale = scale
         self._persist_frame_view_state()
-        
+
         # Update menu checkboxes
         self.menu_bar.action_scale_linear.setChecked(scale == ScaleAlgorithm.LINEAR)
         self.menu_bar.action_scale_log.setChecked(scale == ScaleAlgorithm.LOG)
@@ -1464,7 +1496,7 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_scale_squared.setChecked(scale == ScaleAlgorithm.POWER)
         self.menu_bar.action_scale_asinh.setChecked(scale == ScaleAlgorithm.ASINH)
         self.menu_bar.action_scale_histeq.setChecked(scale == ScaleAlgorithm.HISTOGRAM_EQUALIZATION)
-        
+
         # Update button bar
         scale_name_map = {
             ScaleAlgorithm.LINEAR: "Linear",
@@ -1476,7 +1508,7 @@ class MainWindow(QMainWindow):
         }
         if scale in scale_name_map:
             self.button_bar.set_scale(scale_name_map[scale])
-        
+
         # Redisplay with new scale
         if self.image_data is not None:
             self._display_image()
@@ -1508,11 +1540,11 @@ class MainWindow(QMainWindow):
         """Sync menu check marks with current colormap selection."""
         for cmap_name, action in self.menu_bar.colormap_actions.items():
             action.setChecked(cmap_name == self.current_colormap)
-    
+
     def _set_colormap(self, colormap: str) -> None:
         """
         Set the colormap.
-        
+
         Args:
             colormap: Name of the colormap to use.
         """
@@ -1522,10 +1554,10 @@ class MainWindow(QMainWindow):
             return
         self.current_colormap = cmap_name
         self._persist_frame_view_state()
-        
+
         # Update menu checkboxes
         self._update_colormap_menu_checks()
-        
+
         # Update button bar
         cmap_name_map = {
             "grey": "Gray",
@@ -1535,7 +1567,7 @@ class MainWindow(QMainWindow):
         }
         if cmap_name in cmap_name_map:
             self.button_bar.set_colormap(cmap_name_map[cmap_name])
-        
+
         # Redisplay with new colormap
         if self.image_data is not None:
             self._display_image()
@@ -1767,7 +1799,9 @@ class MainWindow(QMainWindow):
 
     def _get_display_image_data(self, frame: Frame) -> NDArray[np.floating]:
         """Return frame data after display-level analysis transforms."""
-        image_data = self._get_rgb_active_channel_data(frame) if frame.frame_type == "rgb" else frame.image_data
+        image_data = (
+            self._get_rgb_active_channel_data(frame) if frame.frame_type == "rgb" else frame.image_data
+        )
         if image_data is None:
             return np.array([], dtype=np.float32)
         if self.menu_bar.action_smooth.isChecked():
@@ -2088,7 +2122,9 @@ class MainWindow(QMainWindow):
                 continue
             action = QAction(label, self)
             action.triggered.connect(
-                lambda checked=False, cmd=command, title=label: self._execute_loaded_analysis_command(title, cmd)
+                lambda checked=False, cmd=command, title=label: self._execute_loaded_analysis_command(
+                    title, cmd
+                )
             )
             self.menu_bar.analysis_menu.insertAction(self.menu_bar.action_load_analysis_commands, action)
             self._loaded_analysis_actions.append(action)
@@ -2313,9 +2349,7 @@ class MainWindow(QMainWindow):
             self.scroll_area.horizontalScrollBar().setValue(
                 self.scroll_area.horizontalScrollBar().maximum() // 2
             )
-            self.scroll_area.verticalScrollBar().setValue(
-                self.scroll_area.verticalScrollBar().maximum() // 2
-            )
+            self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().maximum() // 2)
         self._persist_frame_view_state()
         self._apply_locked_frame_view_state()
         self._update_panner_view_rect()
@@ -2444,15 +2478,15 @@ class MainWindow(QMainWindow):
             self._match_frames_wcs()
         elif scope != "none":
             self._match_frames_image()
-    
+
     def _zoom_in(self) -> None:
         """Zoom in."""
         self._set_zoom_level(self.image_viewer.get_zoom() * 1.2)
-    
+
     def _zoom_out(self) -> None:
         """Zoom out."""
         self._set_zoom_level(self.image_viewer.get_zoom() / 1.2)
-    
+
     def _zoom_fit(self) -> None:
         """Zoom to fit window."""
         self.image_viewer.zoom_fit(self._effective_viewport_size())
@@ -2462,11 +2496,11 @@ class MainWindow(QMainWindow):
         self._apply_locked_frame_view_state()
         self._update_panner_view_rect()
         self.statusBar().showMessage("Zoom to fit", 1000)
-    
+
     def _zoom_actual(self) -> None:
         """Zoom to 1:1."""
         self._set_zoom_level(1.0)
-    
+
     def _on_mouse_moved(self, x: int, y: int) -> None:
         """Handle mouse movement over image."""
         if self.image_data is None:
@@ -2475,21 +2509,21 @@ class MainWindow(QMainWindow):
         image_height = self.image_data.shape[0]
         row = image_height - 1 - y
         self._last_mouse_pos = (x, y)
-        
+
         # Update pixel coordinates
         self.status_bar.update_pixel_coords(x, y)
-        
+
         # Update pixel value
         if 0 <= row < image_height and 0 <= x < self.image_data.shape[1]:
             value = self.image_data[row, x]
             self.status_bar.update_pixel_value(value)
-        
+
         # Update WCS coordinates if available
         if self.wcs_handler and self.wcs_handler.is_valid:
             self._update_wcs_display(x, y)
-        
+
         # Update magnifier panel (DS9 style)
-        if hasattr(self, 'magnifier_panel'):
+        if hasattr(self, "magnifier_panel"):
             frame = self.frame_manager.current_frame
             viewer = getattr(self.image_viewer, "image_viewer", None)
             if frame is not None and viewer is not None:
@@ -2513,13 +2547,13 @@ class MainWindow(QMainWindow):
                 f"Selected frame {self.frame_manager.current_index + 1}",
                 1500,
             )
-    
+
     def _on_contrast_changed(self, contrast: float, brightness: float) -> None:
         """Handle contrast/brightness change from mouse drag."""
         self._display_image()
         self._persist_frame_view_state()
         self.statusBar().showMessage(f"Contrast: {contrast:.2f}, Brightness: {brightness:.2f}", 1000)
-    
+
     def _on_panner_pan(self, x: float, y: float) -> None:
         """Handle pan request from panner panel."""
         if self.image_data is None:
@@ -2537,7 +2571,7 @@ class MainWindow(QMainWindow):
             self.scroll_area.horizontalScrollBar().setValue(int(x * zoom - viewport.width() / 2))
             self.scroll_area.verticalScrollBar().setValue(int(y * zoom - viewport.height() / 2))
             self.statusBar().showMessage(f"Panned to ({x:.0f}, {y:.0f})", 1000)
-        
+
         # Persist the new pan state
         self._persist_frame_view_state()
         self._update_panner_view_rect()
@@ -2595,7 +2629,7 @@ class MainWindow(QMainWindow):
         x = max(0.0, min(float(image_w) - rect_w, float(x)))
         y = max(0.0, min(float(image_h) - rect_h, float(y)))
         self.panner_panel.set_view_rect(QRectF(x, y, rect_w, rect_h))
-    
+
     def _on_button_bar_zoom(self, level: str) -> None:
         """Handle zoom change from button bar."""
         if level == "Fit":
@@ -2641,7 +2675,7 @@ class MainWindow(QMainWindow):
             event.accept()
             return
         super().keyPressEvent(event)
-    
+
     def _on_button_bar_scale(self, scale_name: str) -> None:
         """Handle scale change from button bar."""
         scale_map = {
@@ -2654,7 +2688,7 @@ class MainWindow(QMainWindow):
         }
         if scale_name in scale_map:
             self._set_scale(scale_map[scale_name])
-    
+
     def _on_button_bar_colormap(self, cmap_name: str) -> None:
         """Handle colormap change from button bar."""
         cmap_map = {
@@ -2665,7 +2699,7 @@ class MainWindow(QMainWindow):
         }
         if cmap_name in cmap_map:
             self._set_colormap(cmap_map[cmap_name])
-    
+
     def _on_button_bar_region(self, mode: str) -> None:
         """Handle region mode change from button bar."""
         mode_map = {
@@ -2678,22 +2712,22 @@ class MainWindow(QMainWindow):
         }
         region_mode = mode_map.get(mode, RegionMode.NONE)
         self._set_region_mode(region_mode)
-    
+
     def _toggle_fullscreen(self, checked: bool) -> None:
         """Toggle fullscreen mode."""
         if checked:
             self.showFullScreen()
         else:
             self.showNormal()
-    
+
     def _toggle_toolbar(self, checked: bool) -> None:
         """Toggle toolbar visibility."""
         self.main_toolbar.setVisible(checked)
-    
+
     def _toggle_statusbar(self, checked: bool) -> None:
         """Toggle status bar visibility."""
         self.statusBar().setVisible(checked)
-    
+
     def _reset_scale_limits(self) -> None:
         """Reset scale limits to ZScale auto-computed values."""
         if self.image_data is not None:
@@ -2702,7 +2736,11 @@ class MainWindow(QMainWindow):
             frame = self.frame_manager.current_frame
             if frame:
                 if frame.frame_type == "rgb":
-                    channel = frame.rgb_current_channel if frame.rgb_current_channel in frame.rgb_channels else "red"
+                    channel = (
+                        frame.rgb_current_channel
+                        if frame.rgb_current_channel in frame.rgb_channels
+                        else "red"
+                    )
                     frame.rgb_channel_z1[channel] = None
                     frame.rgb_channel_z2[channel] = None
                 else:
@@ -2711,7 +2749,7 @@ class MainWindow(QMainWindow):
             self.image_viewer.reset_contrast_brightness()
             self._display_image()
             self.statusBar().showMessage("Reset to ZScale limits", 2000)
-    
+
     def _scale_minmax(self) -> None:
         """Set scale limits to data min/max."""
         if self.image_data is not None:
@@ -2720,7 +2758,11 @@ class MainWindow(QMainWindow):
             frame = self.frame_manager.current_frame
             if frame:
                 if frame.frame_type == "rgb":
-                    channel = frame.rgb_current_channel if frame.rgb_current_channel in frame.rgb_channels else "red"
+                    channel = (
+                        frame.rgb_current_channel
+                        if frame.rgb_current_channel in frame.rgb_channels
+                        else "red"
+                    )
                     frame.rgb_channel_z1[channel] = self.z1
                     frame.rgb_channel_z2[channel] = self.z2
                 else:
@@ -2729,7 +2771,7 @@ class MainWindow(QMainWindow):
             self.image_viewer.reset_contrast_brightness()
             self._display_image()
             self.statusBar().showMessage(f"MinMax: {self.z1:.4g} to {self.z2:.4g}", 2000)
-    
+
     def _toggle_invert_colormap(self, checked: bool) -> None:
         """Toggle colormap inversion."""
         self.invert_colormap = checked
@@ -2738,7 +2780,7 @@ class MainWindow(QMainWindow):
             self._display_image()
             inv_str = "inverted" if checked else "normal"
             self.statusBar().showMessage(f"Colormap {inv_str}", 2000)
-    
+
     def _load_regions(self) -> None:
         """Load region file."""
         filepath, _ = QFileDialog.getOpenFileName(
@@ -2994,9 +3036,7 @@ class MainWindow(QMainWindow):
     def _rebuild_samp_regions_for_frame(self, frame: Frame) -> None:
         """Rebuild SAMP regions for a frame from stored source positions."""
         frame.regions = [
-            region
-            for region in frame.regions
-            if getattr(region, "source", "user") != "samp_catalog"
+            region for region in frame.regions if getattr(region, "source", "user") != "samp_catalog"
         ]
         for x, y in self._samp_catalog_sources.get(frame.frame_id, []):
             frame.regions.append(self._build_samp_marker_region(x, y))
@@ -3026,7 +3066,9 @@ class MainWindow(QMainWindow):
             "Ellipse": "ellipse",
         }
         labels = list(shape_map.keys())
-        current_label = next((label for label, value in shape_map.items() if value == self._samp_marker_shape), "Point")
+        current_label = next(
+            (label for label, value in shape_map.items() if value == self._samp_marker_shape), "Point"
+        )
         current_index = labels.index(current_label)
         selected, ok = QInputDialog.getItem(
             self,
@@ -3081,11 +3123,7 @@ class MainWindow(QMainWindow):
 
     def _world_to_overlay_pixel(self, ra_deg: float, dec_deg: float) -> Optional[Tuple[float, float]]:
         """Convert WCS world coordinates to overlay pixel coordinates."""
-        if (
-            self.wcs_handler is None
-            or not self.wcs_handler.is_valid
-            or self.image_data is None
-        ):
+        if self.wcs_handler is None or not self.wcs_handler.is_valid or self.image_data is None:
             return None
         try:
             x, y = self.wcs_handler.world_to_pixel(ra_deg, dec_deg)
@@ -3094,7 +3132,7 @@ class MainWindow(QMainWindow):
             return float(x), float(y)
         except Exception:
             return None
-    
+
     def _set_wcs_system(self, system: str) -> None:
         """Set WCS coordinate system."""
         self.current_wcs_system = system
@@ -3108,7 +3146,7 @@ class MainWindow(QMainWindow):
         if self._last_mouse_pos is not None and self.wcs_handler and self.wcs_handler.is_valid:
             self._update_wcs_display(*self._last_mouse_pos)
         self._update_direction_arrows()
-    
+
     def _set_wcs_format(self, format_type: str) -> None:
         """Set WCS format (sexagesimal or degrees)."""
         self.current_wcs_format = format_type
@@ -3205,7 +3243,7 @@ class MainWindow(QMainWindow):
             format_type=self.current_wcs_format,
             labels=labels,
         )
-    
+
     def _show_statistics(self) -> None:
         """Show statistics dialog."""
         frame = self.frame_manager.current_frame
@@ -3216,7 +3254,7 @@ class MainWindow(QMainWindow):
         dialog = StatisticsDialog(self._get_analysis_image_data(frame), self)
         dialog.exec()
         self._log_analysis_command("statistics")
-    
+
     def _show_histogram(self) -> None:
         """Show histogram dialog."""
         frame = self.frame_manager.current_frame
@@ -3268,18 +3306,18 @@ class MainWindow(QMainWindow):
         layout.addLayout(btn_row)
         dialog.exec()
         self._log_analysis_command("radial_profile")
-    
+
     def _show_scale_dialog(self) -> None:
         """Show scale parameters dialog (DS9 style)."""
         if self.image_data is None:
             self.statusBar().showMessage("No image loaded", 2000)
             return
-        
+
         dialog = ScaleDialog(self)
         # Connect the signal BEFORE showing the dialog so Apply button works
         dialog.scale_changed.connect(self._apply_scale_params)
         dialog.exec()
-    
+
     def _apply_scale_params(self, params: dict) -> None:
         """Apply scale parameters from the scale dialog."""
         # Map dialog scale names to ScaleAlgorithm enum
@@ -3293,16 +3331,16 @@ class MainWindow(QMainWindow):
             "Sinh": ScaleAlgorithm.ASINH,  # Map to asinh for now
             "Histogram Equalization": ScaleAlgorithm.HISTOGRAM_EQUALIZATION,
         }
-        
+
         scale_name = params.get("scale_function", "Linear")
         if scale_name in scale_map:
             self.current_scale = scale_map[scale_name]
-        
+
         # Apply min/max limits if not auto
         if not params.get("auto_limits", True):
             self.z1 = params.get("min_value", self.z1)
             self.z2 = params.get("max_value", self.z2)
-        
+
         # Apply contrast/bias adjustments
         # Contrast slider: 0-100 → 0-2.0 (50 = 1.0 neutral)
         contrast = params.get("contrast", 1.0)
@@ -3310,11 +3348,13 @@ class MainWindow(QMainWindow):
         bias_value = params.get("bias", 1.0)  # This is 0-2 range from slider/50
         brightness = bias_value - 1.0  # Convert to -1 to +1 range
         self._set_viewer_contrast_brightness(contrast, brightness)
-        
+
         # Redisplay image with new settings
         self._display_image()
         self._persist_frame_view_state()
-        self.statusBar().showMessage(f"Scale: {scale_name}, Contrast: {contrast:.2f}, Brightness: {brightness:.2f}", 2000)
+        self.statusBar().showMessage(
+            f"Scale: {scale_name}, Contrast: {contrast:.2f}, Brightness: {brightness:.2f}", 2000
+        )
 
     def _show_contours(self) -> None:
         """Show contour dialog and apply contours."""
@@ -3491,10 +3531,7 @@ class MainWindow(QMainWindow):
 
         export_data = {
             "levels": self._contour_levels,
-            "contours": [
-                [path.tolist() for path in level_paths]
-                for level_paths in self._contour_paths
-            ],
+            "contours": [[path.tolist() for path in level_paths] for level_paths in self._contour_paths],
             "settings": settings,
         }
 
@@ -3503,44 +3540,45 @@ class MainWindow(QMainWindow):
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(export_data, f, indent=2)
         self.statusBar().showMessage(f"Exported contours to {filepath}", 3000)
-    
+
     def _show_pixel_table(self) -> None:
         """Show pixel table dialog."""
         frame = self.frame_manager.current_frame
         if frame is None or frame.image_data is None:
             self.statusBar().showMessage("No image loaded", 2000)
             return
-        
+
         # Use image center as default
         analysis_data = self._get_analysis_image_data(frame)
         height, width = analysis_data.shape
         x, y = width // 2, height // 2
-        
+
         dialog = PixelTableDialog(analysis_data, x, y, size=11, parent=self)
         dialog.exec()
         self._log_analysis_command("pixel_table")
-    
+
     def _show_fits_header(self) -> None:
         """Show FITS header dialog."""
         if self.fits_handler is None:
             self.statusBar().showMessage("No FITS file loaded", 2000)
             return
-        
+
         from .dialogs.header_dialog import HeaderDialog
+
         header = self.fits_handler.get_header()
         dialog = HeaderDialog(header, self)
         dialog.exec()
-    
+
     def _show_help_contents(self) -> None:
         """Show help contents dialog."""
         dialog = HelpContentsDialog(self)
         dialog.exec()
-    
+
     def _show_keyboard_shortcuts(self) -> None:
         """Show keyboard shortcuts dialog."""
         dialog = KeyboardShortcutsDialog(self)
         dialog.exec()
-    
+
     def _export_image(self) -> None:
         """Export current image view."""
         pixmap = self._get_current_pixmap()
@@ -3551,20 +3589,20 @@ class MainWindow(QMainWindow):
         dialog = ExportDialog(pixmap, self)
         if dialog.exec():
             self.statusBar().showMessage(f"Exported to {dialog.export_path}", 3000)
-    
+
     def _print_image(self) -> None:
         """Print current image view."""
         pixmap = self._get_current_pixmap()
         if pixmap is None:
             self.statusBar().showMessage("No image to print", 2000)
             return
-        
+
         from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
         from PyQt6.QtGui import QPainter
-        
+
         printer = QPrinter(QPrinter.PrinterMode.HighResolution)
         dialog = QPrintDialog(printer, self)
-        
+
         if dialog.exec() == QDialog.DialogCode.Accepted:
             painter = QPainter(printer)
             rect = painter.viewport()
@@ -3609,11 +3647,11 @@ class MainWindow(QMainWindow):
         bytes_per_line = 3 * width
         qimage = QImage(rgb.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
         return QPixmap.fromImage(qimage)
-    
+
     def save_file(self) -> None:
         """Save the current file."""
         self.statusBar().showMessage("Save not yet implemented", 3000)
-    
+
     def save_file_as(self) -> None:
         """Save the current file with a new name."""
         filepath, _ = QFileDialog.getSaveFileName(
@@ -3624,7 +3662,7 @@ class MainWindow(QMainWindow):
         )
         if filepath:
             self.statusBar().showMessage(f"Save as: {filepath}", 3000)
-    
+
     def _reset_frame_view_defaults(self, frame: Frame) -> None:
         """Reset a frame's display state to defaults."""
         frame.bin_factor = 1
@@ -3696,9 +3734,7 @@ class MainWindow(QMainWindow):
             action = QAction(f"Frame {idx + 1}", self)
             action.setCheckable(True)
             action.setChecked(frame.frame_id in self._active_frame_ids)
-            action.triggered.connect(
-                lambda checked, fid=frame.frame_id: self._set_frame_active(fid, checked)
-            )
+            action.triggered.connect(lambda checked, fid=frame.frame_id: self._set_frame_active(fid, checked))
             self.menu_bar.show_hide_frames_menu.addAction(action)
 
     def _goto_frame_index(self, index: int) -> None:
@@ -3720,7 +3756,9 @@ class MainWindow(QMainWindow):
         if hasattr(self.image_viewer, "reset_contrast_brightness"):
             self.image_viewer.reset_contrast_brightness()
         self._update_frame_display()
-        self.statusBar().showMessage(f"Created Frame {self.frame_manager.current_index + 1} ({frame_type})", 2000)
+        self.statusBar().showMessage(
+            f"Created Frame {self.frame_manager.current_index + 1} ({frame_type})", 2000
+        )
 
     def _new_frame(self) -> None:
         """Create a new empty frame."""
@@ -3918,7 +3956,7 @@ class MainWindow(QMainWindow):
         active_indices = self._get_active_frame_indices()
         if active_indices:
             self._goto_frame_index(active_indices[-1])
-    
+
     def _update_frame_title(self) -> None:
         """Update window title with current frame info."""
         frame = self.frame_manager.current_frame
@@ -4442,12 +4480,8 @@ class MainWindow(QMainWindow):
                 viewport = self.scroll_area.viewport().size()
                 zoom = max(self.image_viewer.get_zoom(), 1e-6)
                 display_x, display_y = display_coords
-                self.scroll_area.horizontalScrollBar().setValue(
-                    int(display_x * zoom - viewport.width() / 2)
-                )
-                self.scroll_area.verticalScrollBar().setValue(
-                    int(display_y * zoom - viewport.height() / 2)
-                )
+                self.scroll_area.horizontalScrollBar().setValue(int(display_x * zoom - viewport.width() / 2))
+                self.scroll_area.verticalScrollBar().setValue(int(display_y * zoom - viewport.height() / 2))
         self._update_zoom_menu_state()
 
     def _sync_frame_view_state(self) -> None:
@@ -4574,14 +4608,14 @@ class MainWindow(QMainWindow):
     def _match_frames_3d(self) -> None:
         """Match 3D parameters across frames."""
         self.statusBar().showMessage("3D matching is not yet implemented", 2000)
-    
+
     def _on_region_created(self, region) -> None:
         """Handle region creation."""
         frame = self.frame_manager.current_frame
         if frame:
             frame.regions.append(region)
         self.statusBar().showMessage(f"Created {region.mode.value} region", 2000)
-    
+
     def _on_region_selected(self, region) -> None:
         """Handle region selection."""
         self.statusBar().showMessage(f"Selected {region.mode.value} region", 2000)
@@ -4675,7 +4709,7 @@ class MainWindow(QMainWindow):
             return Region(
                 mode=RegionMode.CIRCLE,
                 points=[QPointF(cx, cy), QPointF(cx + r, cy)],
-                color=QColor(region.color)
+                color=QColor(region.color),
             )
         if isinstance(region, Ellipse):
             cx, cy = region.center
@@ -4684,7 +4718,7 @@ class MainWindow(QMainWindow):
             return Region(
                 mode=RegionMode.ELLIPSE,
                 points=[QPointF(cx - a, cy - b), QPointF(cx + a, cy + b)],
-                color=QColor(region.color)
+                color=QColor(region.color),
             )
         if isinstance(region, Box):
             cx, cy = region.center
@@ -4693,30 +4727,20 @@ class MainWindow(QMainWindow):
             return Region(
                 mode=RegionMode.BOX,
                 points=[QPointF(cx - half_w, cy - half_h), QPointF(cx + half_w, cy + half_h)],
-                color=QColor(region.color)
+                color=QColor(region.color),
             )
         if isinstance(region, Line):
             x1, y1 = region.start
             x2, y2 = region.end
             return Region(
-                mode=RegionMode.LINE,
-                points=[QPointF(x1, y1), QPointF(x2, y2)],
-                color=QColor(region.color)
+                mode=RegionMode.LINE, points=[QPointF(x1, y1), QPointF(x2, y2)], color=QColor(region.color)
             )
         if isinstance(region, Point):
             cx, cy = region.center
-            return Region(
-                mode=RegionMode.POINT,
-                points=[QPointF(cx, cy)],
-                color=QColor(region.color)
-            )
+            return Region(mode=RegionMode.POINT, points=[QPointF(cx, cy)], color=QColor(region.color))
         if isinstance(region, Polygon):
             points = [QPointF(x, y) for x, y in region.vertices]
-            return Region(
-                mode=RegionMode.POLYGON,
-                points=points,
-                color=QColor(region.color)
-            )
+            return Region(mode=RegionMode.POLYGON, points=points, color=QColor(region.color))
         return None
 
     def closeEvent(self, event) -> None:
@@ -4725,10 +4749,11 @@ class MainWindow(QMainWindow):
             self._samp_client.disconnect()
             self._samp_connected = False
         super().closeEvent(event)
-    
+
     def show_about(self) -> None:
         """Show the About dialog."""
         from PyQt6.QtWidgets import QMessageBox
+
         QMessageBox.about(
             self,
             "About NCRADS9",
@@ -4736,10 +4761,11 @@ class MainWindow(QMainWindow):
             "<p>A Python/Qt6 clone of SAOImageDS9</p>"
             "<p>Version 0.1.0</p>"
             "<p>Copyright © 2026 Yogesh Wadadekar</p>"
-            "<p>Licensed under GPL v3</p>"
+            "<p>Licensed under GPL v3</p>",
         )
-    
+
     def show_about_qt(self) -> None:
         """Show the About Qt dialog."""
         from PyQt6.QtWidgets import QMessageBox
+
         QMessageBox.aboutQt(self, "About Qt")

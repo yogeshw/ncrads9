@@ -56,9 +56,7 @@ def gaussian_smooth(
     NDArray
         Smoothed image.
     """
-    return ndimage.gaussian_filter(
-        data, sigma=sigma, mode=mode, cval=cval, truncate=truncate
-    )
+    return ndimage.gaussian_filter(data, sigma=sigma, mode=mode, cval=cval, truncate=truncate)
 
 
 def boxcar_smooth(

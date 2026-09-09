@@ -4,8 +4,7 @@
 #   tools/check.sh          # lint, types, tests
 #   tools/check.sh --fix    # apply ruff and black fixes first
 #
-# The black step covers tools/ only: ncrads9/ and tests/ predate black and join
-# in M1 with a one-shot reformat. See docs/parity/lint-backlog.md.
+# black covers the whole tree as of M1-0a.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -24,15 +23,15 @@ step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 if (( fix )); then
     step "ruff --fix"
     ruff check --fix ncrads9 tests tools
-    step "black tools"
-    black tools
+    step "black"
+    black ncrads9 tests tools
 fi
 
 step "ruff"
 ruff check ncrads9 tests tools
 
-step "black (tools/ only; see docs/parity/lint-backlog.md)"
-black --check --diff tools
+step "black"
+black --check --diff ncrads9 tests tools
 
 step "mypy (${MYPY_PATHS[*]})"
 mypy "${MYPY_PATHS[@]}"

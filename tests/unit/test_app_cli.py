@@ -170,6 +170,7 @@ def test_format_cli_help_documents_the_ordered_option_stream():
 
 def test_terminal_help_prints_and_exits_zero(capsys, monkeypatch):
     """`ncrads9 --help` must not start Qt or open a browser."""
+
     def _fail(*_args, **_kwargs):
         raise AssertionError("browser must not be opened for terminal help")
 
@@ -194,7 +195,9 @@ def test_html_help_opens_browser_and_exits_zero(monkeypatch, tmp_path):
 def test_open_cli_help_in_browser_writes_and_opens(monkeypatch, tmp_path):
     opened = {"url": None}
     monkeypatch.setattr("ncrads9.app.tempfile.gettempdir", lambda: str(tmp_path))
-    monkeypatch.setattr("ncrads9.app.webbrowser.open", lambda url, new=0: opened.__setitem__("url", url) or True)
+    monkeypatch.setattr(
+        "ncrads9.app.webbrowser.open", lambda url, new=0: opened.__setitem__("url", url) or True
+    )
 
     help_path = open_cli_help_in_browser()
     assert help_path.exists()

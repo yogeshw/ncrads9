@@ -123,9 +123,7 @@ def test_crop_and_pan_zoom_rotate_parameters_apply_to_frame(main_window: MainWin
     frame = main_window.frame_manager.current_frame
     assert frame is not None
 
-    main_window._apply_crop_parameters(
-        {"center_x": 120.0, "center_y": 80.0, "width": 40.0, "height": 20.0}
-    )
+    main_window._apply_crop_parameters({"center_x": 120.0, "center_y": 80.0, "width": 40.0, "height": 20.0})
     assert frame.crop_center_x == pytest.approx(120.0)
     assert frame.crop_center_y == pytest.approx(80.0)
     assert frame.crop_width == pytest.approx(40.0)
@@ -161,9 +159,7 @@ def test_frame_lock_matches_zoom_orientation_and_rotation(main_window: MainWindo
     assert other.rotation == pytest.approx(270.0)
 
 
-def test_rebuild_image_viewer_does_not_manually_delete_replaced_widget(
-    main_window: MainWindow, monkeypatch
-):
+def test_rebuild_image_viewer_does_not_manually_delete_replaced_widget(main_window: MainWindow, monkeypatch):
     replacement = QWidget()
 
     class OldViewer(QWidget):
@@ -182,9 +178,7 @@ def test_rebuild_image_viewer_does_not_manually_delete_replaced_widget(
     assert main_window.scroll_area.widget() is replacement
 
 
-def test_invert_updates_direction_arrows_without_full_rerender(
-    main_window: MainWindow, monkeypatch
-):
+def test_invert_updates_direction_arrows_without_full_rerender(main_window: MainWindow, monkeypatch):
     _load_test_image(main_window, width=64, height=64)
     frame = main_window.frame_manager.current_frame
     assert frame is not None
@@ -219,9 +213,7 @@ def test_effective_viewport_size_ignores_unlaid_out_viewport(main_window: MainWi
     assert size.height() >= MainWindow.MIN_USABLE_VIEWPORT
 
 
-def test_effective_viewport_size_falls_back_to_default_canvas(
-    main_window: MainWindow, monkeypatch
-):
+def test_effective_viewport_size_falls_back_to_default_canvas(main_window: MainWindow, monkeypatch):
     """With every candidate degenerate, fall back to DS9's default canvas size."""
     tiny = QSize(4, 4)
     monkeypatch.setattr(main_window.scroll_area, "size", lambda: tiny)
@@ -233,9 +225,7 @@ def test_effective_viewport_size_falls_back_to_default_canvas(
     assert size.height() == MainWindow.DEFAULT_CANVAS_HEIGHT
 
 
-def test_effective_viewport_size_prefers_real_viewport(
-    main_window: MainWindow, monkeypatch
-):
+def test_effective_viewport_size_prefers_real_viewport(main_window: MainWindow, monkeypatch):
     """A laid-out viewport wins over the fallbacks."""
     real = QSize(900, 700)
     monkeypatch.setattr(main_window.scroll_area.viewport(), "size", lambda: real)
@@ -254,7 +244,5 @@ def test_crop_zoom_is_independent_of_unlaid_out_viewport(main_window: MainWindow
     raw = main_window.scroll_area.viewport().size()
     assert raw.height() < 20, "precondition: viewport is not laid out in this test"
 
-    main_window._apply_crop_parameters(
-        {"center_x": 120.0, "center_y": 80.0, "width": 40.0, "height": 20.0}
-    )
+    main_window._apply_crop_parameters({"center_x": 120.0, "center_y": 80.0, "width": 40.0, "height": 20.0})
     assert frame.zoom > 1.0

@@ -209,21 +209,21 @@ class CatalogDisplay:
         size = style.size
 
         if shape == "circle":
-            region = f"circle({ra},{dec},{size}\")"
+            region = f'circle({ra},{dec},{size}")'
         elif shape == "box":
-            region = f"box({ra},{dec},{size}\",{size}\",0)"
+            region = f'box({ra},{dec},{size}",{size}",0)'
         elif shape == "diamond":
             region = f"polygon({ra},{dec-size/3600},{ra+size/3600},{dec},{ra},{dec+size/3600},{ra-size/3600},{dec})"
         elif shape == "cross":
-            region = f"cross({ra},{dec},{size}\")"
+            region = f'cross({ra},{dec},{size}")'
         elif shape == "x":
-            region = f"x({ra},{dec},{size}\")"
+            region = f'x({ra},{dec},{size}")'
         elif shape == "ellipse":
-            region = f"ellipse({ra},{dec},{size}\",{size/2}\",0)"
+            region = f'ellipse({ra},{dec},{size}",{size/2}",0)'
         elif shape == "point":
             region = f"point({ra},{dec})"
         else:
-            region = f"circle({ra},{dec},{size}\")"
+            region = f'circle({ra},{dec},{size}")'
 
         props = f" # color={color} width={style.width}"
 

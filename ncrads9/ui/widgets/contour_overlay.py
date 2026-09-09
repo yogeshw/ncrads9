@@ -212,11 +212,7 @@ class ContourOverlay(QWidget):
             not self._contours
             and not self._grid_visible
             and not self._crosshair_visible
-            and (
-                not self._show_direction_arrows
-                or self._north_vector is None
-                or self._east_vector is None
-            )
+            and (not self._show_direction_arrows or self._north_vector is None or self._east_vector is None)
         ):
             return
 

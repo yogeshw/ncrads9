@@ -256,6 +256,7 @@ class ColorbarWidget(QWidget):
     def sizeHint(self):
         """Return the recommended size for the widget."""
         from PyQt6.QtCore import QSize
+
         if self._orientation == "horizontal":
             return QSize(300, 50)
         else:

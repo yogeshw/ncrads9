@@ -12,9 +12,7 @@ def test_parse_xpaget_request():
 
 def test_parse_xpaset_with_payload():
     protocol = XPAProtocol()
-    request = protocol.parse_request(
-        b"xpaset -p ncrads9 regions\ncircle(10,20,5)\n"
-    )
+    request = protocol.parse_request(b"xpaset -p ncrads9 regions\ncircle(10,20,5)\n")
     assert request["msg_type"] == "xpaset"
     assert request["target"] == "ncrads9"
     assert request["command"] == "regions"

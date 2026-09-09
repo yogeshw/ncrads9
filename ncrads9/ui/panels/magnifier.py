@@ -154,7 +154,7 @@ class MagnifierPanel(QDockWidget):
 
         # Check if RGB or grayscale
         is_rgb = len(region.shape) == 3 and region.shape[2] == 3
-        
+
         if is_rgb:
             # Already RGB, just use it directly
             if region.dtype != np.uint8:
@@ -166,15 +166,15 @@ class MagnifierPanel(QDockWidget):
                     normalized = np.zeros_like(region, dtype=np.uint8)
             else:
                 normalized = region
-            
+
             # Create RGB QImage
             # Need to ensure data is contiguous for QImage
-            if not normalized.flags['C_CONTIGUOUS']:
+            if not normalized.flags["C_CONTIGUOUS"]:
                 normalized = np.ascontiguousarray(normalized)
-            
+
             height, width = normalized.shape[:2]
             bytes_per_line = width * 3
-            
+
             qimage = QImage(
                 normalized.tobytes(),  # Convert to bytes instead of using .data
                 width,
@@ -190,9 +190,9 @@ class MagnifierPanel(QDockWidget):
                     normalized = ((region - vmin) / (vmax - vmin) * 255).astype(np.uint8)
                 else:
                     normalized = np.zeros_like(region, dtype=np.uint8)
-                
+
                 # Ensure contiguous for QImage
-                if not normalized.flags['C_CONTIGUOUS']:
+                if not normalized.flags["C_CONTIGUOUS"]:
                     normalized = np.ascontiguousarray(normalized)
 
                 # Create grayscale QImage

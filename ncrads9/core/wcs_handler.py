@@ -161,9 +161,7 @@ class WCSHandler:
         except Exception:
             return None
 
-    def separation(
-        self, ra1: float, dec1: float, ra2: float, dec2: float
-    ) -> float:
+    def separation(self, ra1: float, dec1: float, ra2: float, dec2: float) -> float:
         """Calculate angular separation between two points.
 
         Args:

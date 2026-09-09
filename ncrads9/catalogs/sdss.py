@@ -88,12 +88,8 @@ class SDSSCatalog(CatalogBase):
             description="Sloan Digital Sky Survey",
         )
         self.data_release: int = data_release
-        self.photoobj_fields: List[str] = (
-            photoobj_fields or self.DEFAULT_PHOTO_FIELDS
-        )
-        self.specobj_fields: List[str] = (
-            specobj_fields or self.DEFAULT_SPEC_FIELDS
-        )
+        self.photoobj_fields: List[str] = photoobj_fields or self.DEFAULT_PHOTO_FIELDS
+        self.specobj_fields: List[str] = specobj_fields or self.DEFAULT_SPEC_FIELDS
 
     def query_region(
         self,

@@ -72,14 +72,10 @@ class RegionParser:
     # Pattern for parsing DS9 region properties
     # DS9 property values may be brace-delimited ({Hello World}), quoted, or
     # bare. Braces and quotes are delimiters and are stripped from the value.
-    PROPERTY_PATTERN = re.compile(
-        r'(\w+)\s*=\s*(?:\{([^}]*)\}|"([^"]*)"|\'([^\']*)\'|(\S+))'
-    )
+    PROPERTY_PATTERN = re.compile(r'(\w+)\s*=\s*(?:\{([^}]*)\}|"([^"]*)"|\'([^\']*)\'|(\S+))')
 
     # Pattern for parsing region shapes
-    SHAPE_PATTERN = re.compile(
-        r"^([+-]?)(\w+)\s*\((.*?)\)\s*(#.*)?$", re.IGNORECASE
-    )
+    SHAPE_PATTERN = re.compile(r"^([+-]?)(\w+)\s*\((.*?)\)\s*(#.*)?$", re.IGNORECASE)
 
     # Pattern for global properties
     GLOBAL_PATTERN = re.compile(r"^global\s+(.*)$", re.IGNORECASE)
@@ -192,10 +188,7 @@ class RegionParser:
     def _is_format_header(self, line: str) -> bool:
         """Check if a line is a format header."""
         lower_line = line.lower()
-        return any(
-            fmt in lower_line
-            for fmt in ["ds9", "ciao", "saotng", "funtools", "# region"]
-        )
+        return any(fmt in lower_line for fmt in ["ds9", "ciao", "saotng", "funtools", "# region"])
 
     def _parse_format_header(self, line: str) -> None:
         """Parse the format header line."""
@@ -285,9 +278,7 @@ class RegionParser:
 
         return params
 
-    def _parse_comment_properties(
-        self, comment: Optional[str]
-    ) -> dict[str, str]:
+    def _parse_comment_properties(self, comment: Optional[str]) -> dict[str, str]:
         """Parse properties from a comment string."""
         properties: dict[str, str] = {}
         if not comment:
@@ -337,55 +328,78 @@ class RegionParser:
         width = int(properties.get("width", self._global_properties.get("width", "1")))
         text = properties.get("text", "")
         font = properties.get("font", self._global_properties.get("font", "helvetica 10 normal roman"))
-        
+
         try:
             if shape_type == "circle":
                 x, y, r = float(params[0]), float(params[1]), float(params[2])
                 return Circle(center=(x, y), radius=r, color=color, width=width, text=text, font=font)
-            
+
             elif shape_type == "ellipse":
                 x, y = float(params[0]), float(params[1])
                 a, b = float(params[2]), float(params[3])
                 angle = float(params[4]) if len(params) > 4 else 0.0
-                return Ellipse(center=(x, y), semi_major=a, semi_minor=b, angle=angle,
-                              color=color, width=width, text=text, font=font)
-            
+                return Ellipse(
+                    center=(x, y),
+                    semi_major=a,
+                    semi_minor=b,
+                    angle=angle,
+                    color=color,
+                    width=width,
+                    text=text,
+                    font=font,
+                )
+
             elif shape_type == "box":
                 x, y = float(params[0]), float(params[1])
                 w, h = float(params[2]), float(params[3])
                 angle = float(params[4]) if len(params) > 4 else 0.0
-                return Box(center=(x, y), width_box=w, height_box=h, angle=angle,
-                          color=color, width=width, text=text, font=font)
-            
+                return Box(
+                    center=(x, y),
+                    width_box=w,
+                    height_box=h,
+                    angle=angle,
+                    color=color,
+                    width=width,
+                    text=text,
+                    font=font,
+                )
+
             elif shape_type == "point":
                 x, y = float(params[0]), float(params[1])
                 return Point(center=(x, y), color=color, width=width, text=text, font=font)
-            
+
             elif shape_type == "line":
                 x1, y1 = float(params[0]), float(params[1])
                 x2, y2 = float(params[2]), float(params[3])
                 return Line(start=(x1, y1), end=(x2, y2), color=color, width=width, text=text, font=font)
-            
+
             elif shape_type == "polygon":
                 coords = [float(p) for p in params]
-                vertices = [(coords[i], coords[i+1]) for i in range(0, len(coords), 2)]
+                vertices = [(coords[i], coords[i + 1]) for i in range(0, len(coords), 2)]
                 return Polygon(vertices=vertices, color=color, width=width, text=text, font=font)
-            
+
             elif shape_type == "annulus":
                 x, y = float(params[0]), float(params[1])
                 inner_r = float(params[2])
                 outer_r = float(params[3])
-                return Annulus(center=(x, y), inner_radius=inner_r, outer_radius=outer_r,
-                              color=color, width=width, text=text, font=font)
-            
+                return Annulus(
+                    center=(x, y),
+                    inner_radius=inner_r,
+                    outer_radius=outer_r,
+                    color=color,
+                    width=width,
+                    text=text,
+                    font=font,
+                )
+
             elif shape_type in ("text", "# text"):
                 x, y = float(params[0]), float(params[1])
                 return Text(center=(x, y), label=text, color=color, font=font)
-        
+
         except (IndexError, ValueError):
             # Return None for malformed regions
             return None
-        
+
         return None
 
     def _is_xy_format(self, content: str) -> bool:

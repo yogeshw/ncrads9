@@ -38,21 +38,21 @@ from .xpa_commands import XPACommands
 
 class XPAServer:
     """XPA server for DS9-compatible external tool communication.
-    
+
     This class implements an XPA server that listens for incoming connections
     and handles XPA get/set commands for controlling the image viewer.
-    
+
     Attributes:
         name: The XPA access point name (default: "ncrads9").
         host: The host address to bind to.
         port: The port number to listen on.
         running: Whether the server is currently running.
     """
-    
+
     DEFAULT_NAME: str = "ncrads9"
     DEFAULT_HOST: str = "localhost"
     DEFAULT_PORT: int = 0
-    
+
     def __init__(
         self,
         name: str = DEFAULT_NAME,
@@ -61,7 +61,7 @@ class XPAServer:
         viewer: Optional[Any] = None,
     ) -> None:
         """Initialize the XPA server.
-        
+
         Args:
             name: The XPA access point name.
             host: The host address to bind to.
@@ -71,7 +71,7 @@ class XPAServer:
         self.host: str = host
         self.port: int = port
         self.running: bool = False
-        
+
         self._socket: Optional[socket.socket] = None
         self._thread: Optional[threading.Thread] = None
         self._protocol: XPAProtocol = XPAProtocol()
@@ -84,10 +84,10 @@ class XPAServer:
         self._xpans_socket: Optional[socket.socket] = None
         self._xpans_stream = None
         self._xpans_process: Optional[subprocess.Popen] = None
-        
+
     def register_handler(self, command: str, handler: Callable[..., Any]) -> None:
         """Register a command handler.
-        
+
         Args:
             command: The XPA command name.
             handler: The handler function to call for this command.
@@ -98,10 +98,10 @@ class XPAServer:
     def set_viewer(self, viewer: Any) -> None:
         """Set the viewer used by command handlers."""
         self._commands.set_viewer(viewer)
-        
+
     def unregister_handler(self, command: str) -> None:
         """Unregister a command handler.
-        
+
         Args:
             command: The XPA command name to unregister.
         """
@@ -109,17 +109,17 @@ class XPAServer:
         if command_lower in self._handlers:
             del self._handlers[command_lower]
             self._logger.debug(f"Unregistered handler for command: {command}")
-            
+
     def start(self) -> bool:
         """Start the XPA server.
-        
+
         Returns:
             True if the server started successfully, False otherwise.
         """
         if self.running:
             self._logger.warning("XPA server is already running")
             return False
-            
+
         try:
             self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -127,31 +127,31 @@ class XPAServer:
             self._socket.listen(5)
             self._socket.settimeout(1.0)
             self.port = self._socket.getsockname()[1]
-            
+
             self.running = True
             self._thread = threading.Thread(target=self._accept_loop, daemon=True)
             self._thread.start()
             self._register_with_xpans()
-            
+
             self._logger.info(f"XPA server started on {self.host}:{self.port}")
             return True
-            
+
         except OSError as e:
             self._logger.error(f"Failed to start XPA server: {e}")
             self._cleanup()
             return False
-            
+
     def stop(self) -> None:
         """Stop the XPA server."""
         self.running = False
-        
+
         if self._thread is not None:
             self._thread.join(timeout=2.0)
             self._thread = None
         self._disconnect_xpans()
         self._cleanup()
         self._logger.info("XPA server stopped")
-        
+
     def _cleanup(self) -> None:
         """Clean up server resources."""
         if self._socket is not None:
@@ -160,35 +160,35 @@ class XPAServer:
             except OSError:
                 pass
             self._socket = None
-            
+
     def _accept_loop(self) -> None:
         """Main loop for accepting client connections."""
         while self.running and self._socket is not None:
             try:
                 client_socket, address = self._socket.accept()
                 self._logger.debug(f"Accepted connection from {address}")
-                
+
                 client_thread = threading.Thread(
                     target=self._handle_client,
                     args=(client_socket, address),
                     daemon=True,
                 )
                 client_thread.start()
-                
+
             except socket.timeout:
                 continue
             except OSError:
                 if self.running:
                     self._logger.error("Error accepting connection")
                 break
-                
+
     def _handle_client(
         self,
         client_socket: socket.socket,
         address: Tuple[str, int],
     ) -> None:
         """Handle a client connection.
-        
+
         Args:
             client_socket: The client socket.
             address: The client address tuple (host, port).
@@ -196,12 +196,12 @@ class XPAServer:
         try:
             client_socket.settimeout(30.0)
             data = self._recv_request(client_socket)
-            
+
             if data:
                 request = self._protocol.parse_request(data)
                 response_data = self._process_wire_request(request)
                 client_socket.sendall(response_data)
-                
+
         except socket.timeout:
             self._logger.warning(f"Client {address} timed out")
         except OSError as e:
@@ -226,13 +226,13 @@ class XPAServer:
             if b"\n" in chunk:
                 client_socket.settimeout(0.05)
         return b"".join(chunks)
-                
+
     def _process_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """Process an XPA request.
-        
+
         Args:
             request: The parsed XPA request dictionary.
-            
+
         Returns:
             The response dictionary.
         """
@@ -377,19 +377,19 @@ class XPAServer:
             except Exception:
                 pass
             self._xpans_socket = None
-            
+
     @property
     def address(self) -> str:
         """Get the server address string.
-        
+
         Returns:
             The server address in "host:port" format.
         """
         return f"{self.host}:{self.port}"
-        
+
     def is_running(self) -> bool:
         """Check if the server is running.
-        
+
         Returns:
             True if the server is running, False otherwise.
         """

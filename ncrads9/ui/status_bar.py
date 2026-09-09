@@ -94,9 +94,7 @@ class StatusBar(QStatusBar):
             label_x, label_y = labels
 
             if format_type == "degrees":
-                self.wcs_coord_label.setText(
-                    f"{label_x}: {ra:.5f} deg {label_y}: {dec:.5f} deg"
-                )
+                self.wcs_coord_label.setText(f"{label_x}: {ra:.5f} deg {label_y}: {dec:.5f} deg")
                 return
 
             use_hours = label_x.lower() == "ra"

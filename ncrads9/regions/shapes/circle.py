@@ -121,7 +121,4 @@ class Circle(BaseRegion):
 
     def __repr__(self) -> str:
         """Return a string representation of the circle."""
-        return (
-            f"Circle(center={self.center}, radius={self._radius}, "
-            f"color={self.color!r})"
-        )
+        return f"Circle(center={self.center}, radius={self._radius}, " f"color={self.color!r})"

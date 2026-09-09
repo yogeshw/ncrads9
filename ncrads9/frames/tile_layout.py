@@ -276,10 +276,7 @@ class TileLayout:
             for c in range(self._cols):
                 pos = self.get_tile_position(r, c)
                 if pos is not None:
-                    if (
-                        pos.x <= x < pos.x + pos.width
-                        and pos.y <= y < pos.y + pos.height
-                    ):
+                    if pos.x <= x < pos.x + pos.width and pos.y <= y < pos.y + pos.height:
                         return (r, c)
         return None
 

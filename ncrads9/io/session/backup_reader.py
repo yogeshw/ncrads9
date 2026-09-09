@@ -134,10 +134,12 @@ class BackupReader:
         """Parse scale settings."""
         parts = line.split()
         if len(parts) >= 2:
-            self._parsed["scales"].append({
-                "type": parts[1],
-                "params": parts[2:] if len(parts) > 2 else [],
-            })
+            self._parsed["scales"].append(
+                {
+                    "type": parts[1],
+                    "params": parts[2:] if len(parts) > 2 else [],
+                }
+            )
 
     def get_frames(self) -> list[dict[str, Any]]:
         """

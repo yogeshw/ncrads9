@@ -66,35 +66,35 @@ class KeyboardShortcutsDialog(QDialog):
         """
         # Pass None as parent to make dialog independent
         super().__init__(None)
-        
+
         # Set window flags for independent draggable window
         self.setWindowFlags(
-            Qt.WindowType.Window |
-            Qt.WindowType.WindowCloseButtonHint |
-            Qt.WindowType.WindowTitleHint |
-            Qt.WindowType.WindowStaysOnTopHint
+            Qt.WindowType.Window
+            | Qt.WindowType.WindowCloseButtonHint
+            | Qt.WindowType.WindowTitleHint
+            | Qt.WindowType.WindowStaysOnTopHint
         )
         self.setWindowModality(Qt.WindowModality.NonModal)
-        
+
         self.setWindowTitle("Keyboard Shortcuts")
         self.setMinimumSize(500, 400)
-        
+
         self._setup_ui()
 
     def _setup_ui(self) -> None:
         """Set up the user interface."""
         layout = QVBoxLayout()
-        
+
         # Title
         title = QLabel("NCRADS9 Keyboard Shortcuts")
         title.setStyleSheet("font-weight: bold; font-size: 16px;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
-        
+
         # Shortcuts display
         text = QTextEdit()
         text.setReadOnly(True)
-        
+
         # Build shortcuts text
         shortcuts_text = ""
         for category, shortcuts in self.SHORTCUTS.items():
@@ -103,17 +103,17 @@ class KeyboardShortcutsDialog(QDialog):
             for key, description in shortcuts:
                 shortcuts_text += f"  <b>{key:25s}</b>  {description}\n"
             shortcuts_text += "\n"
-        
+
         text.setHtml(f"<pre>{shortcuts_text}</pre>")
         layout.addWidget(text)
-        
+
         # Buttons
         button_layout = QHBoxLayout()
         button_layout.addStretch()
-        
+
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.accept)
         button_layout.addWidget(close_button)
-        
+
         layout.addLayout(button_layout)
         self.setLayout(layout)

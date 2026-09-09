@@ -174,15 +174,9 @@ class RGBCompositor:
                 raise ValueError("All frames must have the same dimensions")
 
         # Scale each channel
-        red = self._scale_channel(
-            self._red_frame, self._red_scale, self._red_limits, shape
-        )
-        green = self._scale_channel(
-            self._green_frame, self._green_scale, self._green_limits, shape
-        )
-        blue = self._scale_channel(
-            self._blue_frame, self._blue_scale, self._blue_limits, shape
-        )
+        red = self._scale_channel(self._red_frame, self._red_scale, self._red_limits, shape)
+        green = self._scale_channel(self._green_frame, self._green_scale, self._green_limits, shape)
+        blue = self._scale_channel(self._blue_frame, self._blue_scale, self._blue_limits, shape)
 
         # Compose based on color space
         if self._color_space == ColorSpace.RGB:

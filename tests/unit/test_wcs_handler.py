@@ -19,7 +19,6 @@
 """Tests for core.wcs_handler module."""
 
 
-
 class TestWcsHandler:
     """Test cases for WcsHandler class."""
 

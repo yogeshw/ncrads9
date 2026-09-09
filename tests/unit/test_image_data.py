@@ -19,7 +19,6 @@
 """Tests for core.image_data module."""
 
 
-
 class TestImageData:
     """Test cases for ImageData class."""
 

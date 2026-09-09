@@ -53,9 +53,7 @@ class Polygon(BaseRegion):
         self._vertices = vertices
 
     @staticmethod
-    def _compute_centroid(
-        vertices: list[tuple[float, float]]
-    ) -> tuple[float, float]:
+    def _compute_centroid(vertices: list[tuple[float, float]]) -> tuple[float, float]:
         """Compute the centroid of the polygon vertices."""
         if not vertices:
             return (0.0, 0.0)
@@ -100,9 +98,7 @@ class Polygon(BaseRegion):
         for i in range(n):
             xi, yi = self._vertices[i]
             xj, yj = self._vertices[j]
-            if ((yi > y) != (yj > y)) and (
-                x < (xj - xi) * (y - yi) / (yj - yi) + xi
-            ):
+            if ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / (yj - yi) + xi):
                 inside = not inside
             j = i
         return inside
@@ -128,10 +124,7 @@ class Polygon(BaseRegion):
             scale_y: The scale factor in the y direction.
         """
         cx, cy = self.center
-        self._vertices = [
-            (cx + (vx - cx) * scale_x, cy + (vy - cy) * scale_y)
-            for vx, vy in self._vertices
-        ]
+        self._vertices = [(cx + (vx - cx) * scale_x, cy + (vy - cy) * scale_y) for vx, vy in self._vertices]
 
     def to_ds9_string(self) -> str:
         """

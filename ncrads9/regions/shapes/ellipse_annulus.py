@@ -116,9 +116,7 @@ class EllipseAnnulus(BaseRegion):
         """Set the rotation angle in degrees."""
         self._angle = value
 
-    def _ellipse_contains(
-        self, x: float, y: float, semi_major: float, semi_minor: float
-    ) -> bool:
+    def _ellipse_contains(self, x: float, y: float, semi_major: float, semi_minor: float) -> bool:
         """Check if point is inside an ellipse with given axes."""
         cx, cy = self.center
         dx = x - cx
@@ -149,12 +147,8 @@ class EllipseAnnulus(BaseRegion):
         Returns:
             True if the point is between inner and outer ellipses.
         """
-        in_outer = self._ellipse_contains(
-            x, y, self._outer_semi_major, self._outer_semi_minor
-        )
-        in_inner = self._ellipse_contains(
-            x, y, self._inner_semi_major, self._inner_semi_minor
-        )
+        in_outer = self._ellipse_contains(x, y, self._outer_semi_major, self._outer_semi_minor)
+        in_inner = self._ellipse_contains(x, y, self._inner_semi_major, self._inner_semi_minor)
         return in_outer and not in_inner
 
     def move(self, dx: float, dy: float) -> None:

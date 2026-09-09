@@ -76,9 +76,7 @@ class PageSetup:
             width, _ = PAPER_DIMENSIONS[self.paper_size]
 
         if self.orientation == Orientation.LANDSCAPE:
-            _, height = PAPER_DIMENSIONS.get(
-                self.paper_size, (self.custom_width, self.custom_height)
-            )
+            _, height = PAPER_DIMENSIONS.get(self.paper_size, (self.custom_width, self.custom_height))
             return height
 
         return width
@@ -92,9 +90,7 @@ class PageSetup:
             _, height = PAPER_DIMENSIONS[self.paper_size]
 
         if self.orientation == Orientation.LANDSCAPE:
-            width, _ = PAPER_DIMENSIONS.get(
-                self.paper_size, (self.custom_width, self.custom_height)
-            )
+            width, _ = PAPER_DIMENSIONS.get(self.paper_size, (self.custom_width, self.custom_height))
             return width
 
         return height

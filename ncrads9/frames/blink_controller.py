@@ -128,9 +128,7 @@ class BlinkController:
         """
         self._settings.loop = loop
 
-    def set_frame_range(
-        self, start: Optional[int] = None, end: Optional[int] = None
-    ) -> None:
+    def set_frame_range(self, start: Optional[int] = None, end: Optional[int] = None) -> None:
         """Set the frame range for blinking.
 
         Args:
@@ -151,11 +149,7 @@ class BlinkController:
             return
 
         start = min(self._settings.start_frame, len(frame_ids) - 1)
-        end = (
-            self._settings.end_frame
-            if self._settings.end_frame is not None
-            else len(frame_ids) - 1
-        )
+        end = self._settings.end_frame if self._settings.end_frame is not None else len(frame_ids) - 1
         end = min(end, len(frame_ids) - 1)
 
         self._frame_order = frame_ids[start : end + 1]

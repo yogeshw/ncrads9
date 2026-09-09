@@ -38,9 +38,7 @@ from matplotlib.figure import Figure
 class HistogramDialog(QDialog):
     """Dialog showing image histogram."""
 
-    def __init__(
-        self, image_data: np.ndarray, parent: Optional[QWidget] = None
-    ) -> None:
+    def __init__(self, image_data: np.ndarray, parent: Optional[QWidget] = None) -> None:
         """
         Initialize the histogram dialog.
 
@@ -50,45 +48,45 @@ class HistogramDialog(QDialog):
         """
         # Pass None as parent to make dialog independent
         super().__init__(None)
-        
+
         # Set window flags for independent draggable window
         self.setWindowFlags(
-            Qt.WindowType.Window |
-            Qt.WindowType.WindowCloseButtonHint |
-            Qt.WindowType.WindowTitleHint |
-            Qt.WindowType.WindowStaysOnTopHint
+            Qt.WindowType.Window
+            | Qt.WindowType.WindowCloseButtonHint
+            | Qt.WindowType.WindowTitleHint
+            | Qt.WindowType.WindowStaysOnTopHint
         )
         self.setWindowModality(Qt.WindowModality.NonModal)
-        
+
         self.image_data = image_data
         self.setWindowTitle("Image Histogram")
         self.setMinimumSize(600, 400)
-        
+
         self._setup_ui()
         self._plot_histogram()
 
     def _setup_ui(self) -> None:
         """Set up the user interface."""
         layout = QVBoxLayout()
-        
+
         # Title
         title = QLabel("Image Histogram")
         title.setStyleSheet("font-weight: bold; font-size: 14px;")
         layout.addWidget(title)
-        
+
         # Matplotlib canvas for histogram
         self.figure = Figure(figsize=(8, 5))
         self.canvas = FigureCanvasQTAgg(self.figure)
         layout.addWidget(self.canvas)
-        
+
         # Buttons
         button_layout = QHBoxLayout()
         button_layout.addStretch()
-        
+
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.accept)
         button_layout.addWidget(close_button)
-        
+
         layout.addLayout(button_layout)
         self.setLayout(layout)
 
@@ -96,40 +94,43 @@ class HistogramDialog(QDialog):
         """Plot the histogram."""
         if self.image_data is None or self.image_data.size == 0:
             return
-        
+
         # Remove NaN and Inf values
         valid_data = self.image_data[np.isfinite(self.image_data)].flatten()
-        
+
         if valid_data.size == 0:
             return
-        
+
         # Create histogram
         ax = self.figure.add_subplot(111)
         ax.clear()
-        
+
         # Compute histogram with 256 bins
-        counts, bins, patches = ax.hist(valid_data, bins=256, color='steelblue', 
-                                         edgecolor='none', alpha=0.7)
-        
+        counts, bins, patches = ax.hist(valid_data, bins=256, color="steelblue", edgecolor="none", alpha=0.7)
+
         # Set labels
-        ax.set_xlabel('Pixel Value')
-        ax.set_ylabel('Frequency')
-        ax.set_title(f'Histogram ({valid_data.size} pixels)')
+        ax.set_xlabel("Pixel Value")
+        ax.set_ylabel("Frequency")
+        ax.set_title(f"Histogram ({valid_data.size} pixels)")
         ax.grid(True, alpha=0.3)
-        
+
         # Add statistics text
         stats_text = (
-            f'Min: {np.min(valid_data):.3g}\n'
-            f'Max: {np.max(valid_data):.3g}\n'
-            f'Mean: {np.mean(valid_data):.3g}\n'
-            f'Median: {np.median(valid_data):.3g}'
+            f"Min: {np.min(valid_data):.3g}\n"
+            f"Max: {np.max(valid_data):.3g}\n"
+            f"Mean: {np.mean(valid_data):.3g}\n"
+            f"Median: {np.median(valid_data):.3g}"
         )
-        ax.text(0.98, 0.97, stats_text,
-                transform=ax.transAxes,
-                verticalalignment='top',
-                horizontalalignment='right',
-                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
-                fontsize=9)
-        
+        ax.text(
+            0.98,
+            0.97,
+            stats_text,
+            transform=ax.transAxes,
+            verticalalignment="top",
+            horizontalalignment="right",
+            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+            fontsize=9,
+        )
+
         self.figure.tight_layout()
         self.canvas.draw()

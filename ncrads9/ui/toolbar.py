@@ -63,24 +63,18 @@ class MainToolbar(QToolBar):
         self.action_zoom_out.setToolTip("Zoom out")
         self.addAction(self.action_zoom_out)
 
-        self.action_zoom_fit: QAction = QAction(
-            QIcon.fromTheme("zoom-fit-best"), "Zoom Fit", self
-        )
+        self.action_zoom_fit: QAction = QAction(QIcon.fromTheme("zoom-fit-best"), "Zoom Fit", self)
         self.action_zoom_fit.setToolTip("Zoom to fit window")
         self.addAction(self.action_zoom_fit)
 
-        self.action_zoom_1: QAction = QAction(
-            QIcon.fromTheme("zoom-original"), "Zoom 1:1", self
-        )
+        self.action_zoom_1: QAction = QAction(QIcon.fromTheme("zoom-original"), "Zoom 1:1", self)
         self.action_zoom_1.setToolTip("Zoom to 1:1")
         self.addAction(self.action_zoom_1)
 
         self.addSeparator()
 
         # Frame actions
-        self.action_prev_frame: QAction = QAction(
-            QIcon.fromTheme("go-previous"), "Previous", self
-        )
+        self.action_prev_frame: QAction = QAction(QIcon.fromTheme("go-previous"), "Previous", self)
         self.action_prev_frame.setToolTip("Previous frame")
         self.addAction(self.action_prev_frame)
 

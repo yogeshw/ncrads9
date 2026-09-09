@@ -50,16 +50,16 @@ class HeaderDialog(QDialog):
         """
         # Pass None as parent to make dialog independent
         super().__init__(None)
-        
+
         # Set window flags for independent draggable window
         self.setWindowFlags(
-            Qt.WindowType.Window |
-            Qt.WindowType.WindowCloseButtonHint |
-            Qt.WindowType.WindowTitleHint |
-            Qt.WindowType.WindowStaysOnTopHint
+            Qt.WindowType.Window
+            | Qt.WindowType.WindowCloseButtonHint
+            | Qt.WindowType.WindowTitleHint
+            | Qt.WindowType.WindowStaysOnTopHint
         )
         self.setWindowModality(Qt.WindowModality.NonModal)
-        
+
         self.setWindowTitle("FITS Header")
         self.setMinimumSize(700, 500)
         self._header_data = header_data or {}

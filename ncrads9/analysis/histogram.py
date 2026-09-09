@@ -82,9 +82,7 @@ class Histogram:
         if self._ignore_nan:
             pixels = pixels[~np.isnan(pixels)]
 
-        self.counts, self.bin_edges = np.histogram(
-            pixels, bins=self._bins, range=self._range
-        )
+        self.counts, self.bin_edges = np.histogram(pixels, bins=self._bins, range=self._range)
         self.bin_centers = (self.bin_edges[:-1] + self.bin_edges[1:]) / 2
 
     def get_percentile(self, percentile: float) -> float:

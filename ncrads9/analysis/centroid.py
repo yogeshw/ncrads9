@@ -132,9 +132,7 @@ def calculate_centroid_iterative(
         rms = np.nanstd(subdata)
         threshold = background + threshold_sigma * rms
 
-        new_x, new_y = calculate_centroid(
-            data, region=region, threshold=threshold
-        )
+        new_x, new_y = calculate_centroid(data, region=region, threshold=threshold)
 
         if abs(new_x - x_cen) < tolerance and abs(new_y - y_cen) < tolerance:
             return (new_x, new_y)

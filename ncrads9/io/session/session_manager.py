@@ -142,12 +142,14 @@ class SessionManager:
             try:
                 with open(session_file, "r") as f:
                     data = json.load(f)
-                    sessions.append({
-                        "id": data.get("id"),
-                        "name": data.get("name"),
-                        "created": data.get("created"),
-                        "modified": data.get("modified"),
-                    })
+                    sessions.append(
+                        {
+                            "id": data.get("id"),
+                            "name": data.get("name"),
+                            "created": data.get("created"),
+                            "modified": data.get("modified"),
+                        }
+                    )
             except (json.JSONDecodeError, KeyError):
                 continue
 

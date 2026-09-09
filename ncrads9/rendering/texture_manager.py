@@ -250,10 +250,7 @@ class TextureManager:
 
     def _ensure_cache_space(self, required_bytes: int) -> None:
         """Evict textures if necessary to make room."""
-        while (
-            self._current_cache_size + required_bytes > self._max_cache_size
-            and self._lru_order
-        ):
+        while self._current_cache_size + required_bytes > self._max_cache_size and self._lru_order:
             oldest_key = self._lru_order[0]
             self.delete_texture(oldest_key)
 

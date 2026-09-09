@@ -204,17 +204,13 @@ class PixelTable:
         x_min = max(0, x_center - half)
 
         lines = []
-        header = "     " + " ".join(
-            f"{x_min + i:>{precision + 6}}" for i in range(region.shape[1])
-        )
+        header = "     " + " ".join(f"{x_min + i:>{precision + 6}}" for i in range(region.shape[1]))
         lines.append(header)
         lines.append("-" * len(header))
 
         for j in range(region.shape[0]):
             y_coord = y_min + j
-            row_values = " ".join(
-                f"{val:>{precision + 6}.{precision}g}" for val in region[j]
-            )
+            row_values = " ".join(f"{val:>{precision + 6}.{precision}g}" for val in region[j])
             lines.append(f"{y_coord:4d} {row_values}")
 
         return "\n".join(lines)
@@ -251,11 +247,13 @@ class PixelTable:
         result = []
         for j in range(region.shape[0]):
             for i in range(region.shape[1]):
-                result.append({
-                    "x": x_min + i,
-                    "y": y_min + j,
-                    "value": float(region[j, i]),
-                })
+                result.append(
+                    {
+                        "x": x_min + i,
+                        "y": y_min + j,
+                        "value": float(region[j, i]),
+                    }
+                )
         return result
 
     def find_extrema(
@@ -362,6 +360,7 @@ class PixelTable:
         distances = np.sqrt((x_coords - x1) ** 2 + (y_coords - y1) ** 2)
 
         from scipy import ndimage
+
         values = ndimage.map_coordinates(
             self.data, [y_coords, x_coords], order=1, mode="constant", cval=np.nan
         )

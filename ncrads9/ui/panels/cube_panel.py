@@ -232,9 +232,7 @@ class CubePanel(QDockWidget):
 
     def _update_slice_display(self) -> None:
         """Update the slice display labels."""
-        self._current_slice_label.setText(
-            f"Current Slice: {self._current_slice + 1} / {self._n_slices}"
-        )
+        self._current_slice_label.setText(f"Current Slice: {self._current_slice + 1} / {self._n_slices}")
         self._update_spectral_info()
 
     def _update_spectral_info(self) -> None:

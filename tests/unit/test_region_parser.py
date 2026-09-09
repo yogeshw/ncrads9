@@ -32,9 +32,7 @@ class TestRegionParser:
     def test_parses_header_globals_and_coordinate_system(self):
         parser = RegionParser()
         parser.parse_string(
-            "# Region file format: DS9 version 4.1\n"
-            "global color=green width=2\n"
-            "image\n"
+            "# Region file format: DS9 version 4.1\n" "global color=green width=2\n" "image\n"
         )
         assert parser.format is RegionFormat.DS9
         assert parser.coordinate_system is CoordinateSystem.IMAGE
@@ -43,21 +41,14 @@ class TestRegionParser:
 
     def test_parses_basic_shapes(self):
         parser = RegionParser()
-        regions = parser.parse_string(
-            "image\n"
-            "circle(100,100,20)\n"
-            "box(10,20,30,40,15)\n"
-        )
+        regions = parser.parse_string("image\n" "circle(100,100,20)\n" "box(10,20,30,40,15)\n")
         assert [type(r) for r in regions] == [Circle, Box]
 
     def test_text_region_does_not_abort_the_file(self):
         """A `text` region used to raise TypeError and abort the whole load."""
         parser = RegionParser()
         regions = parser.parse_string(
-            "image\n"
-            "circle(100,100,20)\n"
-            "text(150,150) # text={Hello}\n"
-            "box(10,20,30,40,0)\n"
+            "image\n" "circle(100,100,20)\n" "text(150,150) # text={Hello}\n" "box(10,20,30,40,0)\n"
         )
         assert [type(r) for r in regions] == [Circle, Text, Box]
 
@@ -98,9 +89,5 @@ class TestRegionParser:
 
     def test_malformed_region_is_skipped_not_fatal(self):
         parser = RegionParser()
-        regions = parser.parse_string(
-            "image\n"
-            "circle(nonsense)\n"
-            "circle(100,100,20)\n"
-        )
+        regions = parser.parse_string("image\n" "circle(nonsense)\n" "circle(100,100,20)\n")
         assert [type(r) for r in regions] == [Circle]

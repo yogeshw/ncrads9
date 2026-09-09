@@ -115,14 +115,32 @@ def get_wcs_keywords(header: fits.Header) -> Dict[str, Any]:
         Dictionary of WCS keyword values.
     """
     wcs_keys = [
-        "CTYPE1", "CTYPE2", "CTYPE3",
-        "CRVAL1", "CRVAL2", "CRVAL3",
-        "CRPIX1", "CRPIX2", "CRPIX3",
-        "CDELT1", "CDELT2", "CDELT3",
-        "CD1_1", "CD1_2", "CD2_1", "CD2_2",
-        "PC1_1", "PC1_2", "PC2_1", "PC2_2",
-        "CROTA1", "CROTA2",
-        "EQUINOX", "RADESYS", "LONPOLE", "LATPOLE",
+        "CTYPE1",
+        "CTYPE2",
+        "CTYPE3",
+        "CRVAL1",
+        "CRVAL2",
+        "CRVAL3",
+        "CRPIX1",
+        "CRPIX2",
+        "CRPIX3",
+        "CDELT1",
+        "CDELT2",
+        "CDELT3",
+        "CD1_1",
+        "CD1_2",
+        "CD2_1",
+        "CD2_2",
+        "PC1_1",
+        "PC1_2",
+        "PC2_1",
+        "PC2_2",
+        "CROTA1",
+        "CROTA2",
+        "EQUINOX",
+        "RADESYS",
+        "LONPOLE",
+        "LATPOLE",
     ]
     return extract_keywords(header, wcs_keys)
 
@@ -137,11 +155,20 @@ def get_observation_info(header: fits.Header) -> Dict[str, Any]:
         Dictionary of observation information.
     """
     obs_keys = [
-        "OBJECT", "TELESCOP", "INSTRUME", "OBSERVER",
-        "DATE-OBS", "TIME-OBS", "MJD-OBS",
-        "EXPTIME", "AIRMASS",
-        "RA", "DEC", "EPOCH",
-        "FILTER", "BAND",
+        "OBJECT",
+        "TELESCOP",
+        "INSTRUME",
+        "OBSERVER",
+        "DATE-OBS",
+        "TIME-OBS",
+        "MJD-OBS",
+        "EXPTIME",
+        "AIRMASS",
+        "RA",
+        "DEC",
+        "EPOCH",
+        "FILTER",
+        "BAND",
     ]
     return extract_keywords(header, obs_keys)
 

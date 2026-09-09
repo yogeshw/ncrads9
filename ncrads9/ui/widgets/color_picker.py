@@ -83,17 +83,13 @@ class ColorPicker(QWidget):
 
     def _on_button_clicked(self) -> None:
         """Handle color button click."""
-        color = QColorDialog.getColor(
-            self._color, self, "Select Color"
-        )
+        color = QColorDialog.getColor(self._color, self, "Select Color")
         if color.isValid():
             self.setColor(color)
 
     def _update_button_color(self) -> None:
         """Update the button background color."""
-        self._color_button.setStyleSheet(
-            f"background-color: {self._color.name()}; border: 1px solid gray;"
-        )
+        self._color_button.setStyleSheet(f"background-color: {self._color.name()}; border: 1px solid gray;")
 
     def color(self) -> QColor:
         """Get the current color."""

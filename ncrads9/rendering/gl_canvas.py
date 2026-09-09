@@ -126,11 +126,11 @@ class GLCanvas(QOpenGLWidget):
         self._image_width = width
         self._image_height = height
         self._tile_provider = data_provider
-        
+
         # Center the image when loading
         self._pan_x = width / 2.0
         self._pan_y = height / 2.0
-        
+
         self._tile_renderer.set_image(width, height, data_provider)
         self.update()
 

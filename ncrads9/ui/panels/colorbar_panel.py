@@ -202,9 +202,7 @@ class ColorbarPanel(QDockWidget):
             frac = idx - idx_low
 
             for c in range(3):
-                lut[i, c] = int(
-                    colors[idx_low][c] * (1 - frac) + colors[idx_high][c] * frac
-                )
+                lut[i, c] = int(colors[idx_low][c] * (1 - frac) + colors[idx_high][c] * frac)
 
         # Apply LUT
         indices = (np.clip(data, 0, 1) * 255).astype(np.uint8)

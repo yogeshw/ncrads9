@@ -53,18 +53,18 @@ class ScaleDialog(QDialog):
         super().__init__(None)
         self.setWindowTitle("Scale Parameters")
         self.setMinimumWidth(400)
-        
+
         # Set window flags to make dialog independent and always on top
         self.setWindowFlags(
-            Qt.WindowType.Window |  # Make it a top-level window
-            Qt.WindowType.WindowCloseButtonHint |
-            Qt.WindowType.WindowTitleHint |
-            Qt.WindowType.WindowStaysOnTopHint  # Keep on top
+            Qt.WindowType.Window  # Make it a top-level window
+            | Qt.WindowType.WindowCloseButtonHint
+            | Qt.WindowType.WindowTitleHint
+            | Qt.WindowType.WindowStaysOnTopHint  # Keep on top
         )
-        
+
         # Set modality to allow interaction with main window
         self.setWindowModality(Qt.WindowModality.NonModal)
-        
+
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -76,16 +76,18 @@ class ScaleDialog(QDialog):
         scale_layout = QFormLayout(scale_group)
 
         self._scale_combo = QComboBox()
-        self._scale_combo.addItems([
-            "Linear",
-            "Log",
-            "Power",
-            "Sqrt",
-            "Squared",
-            "Asinh",
-            "Sinh",
-            "Histogram Equalization",
-        ])
+        self._scale_combo.addItems(
+            [
+                "Linear",
+                "Log",
+                "Power",
+                "Sqrt",
+                "Squared",
+                "Asinh",
+                "Sinh",
+                "Histogram Equalization",
+            ]
+        )
         self._scale_combo.currentTextChanged.connect(self._on_scale_changed)
         scale_layout.addRow("Function:", self._scale_combo)
 
@@ -133,12 +135,14 @@ class ScaleDialog(QDialog):
         auto_layout = QFormLayout(auto_group)
 
         self._clip_combo = QComboBox()
-        self._clip_combo.addItems([
-            "MinMax",
-            "ZScale",
-            "Percentile",
-            "Sigma Clip",
-        ])
+        self._clip_combo.addItems(
+            [
+                "MinMax",
+                "ZScale",
+                "Percentile",
+                "Sigma Clip",
+            ]
+        )
         self._clip_combo.currentTextChanged.connect(self._on_clip_changed)
         auto_layout.addRow("Algorithm:", self._clip_combo)
 

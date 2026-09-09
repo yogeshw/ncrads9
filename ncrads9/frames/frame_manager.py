@@ -294,9 +294,7 @@ class FrameManager:
             # WCS matching would require coordinate transformation
             pass
 
-    def add_frame_change_callback(
-        self, callback: Callable[[Optional[Frame]], None]
-    ) -> None:
+    def add_frame_change_callback(self, callback: Callable[[Optional[Frame]], None]) -> None:
         """Add a callback for frame change events.
 
         Args:
@@ -304,9 +302,7 @@ class FrameManager:
         """
         self._frame_change_callbacks.append(callback)
 
-    def remove_frame_change_callback(
-        self, callback: Callable[[Optional[Frame]], None]
-    ) -> None:
+    def remove_frame_change_callback(self, callback: Callable[[Optional[Frame]], None]) -> None:
         """Remove a frame change callback.
 
         Args:

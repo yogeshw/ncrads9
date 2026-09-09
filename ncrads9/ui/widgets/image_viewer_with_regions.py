@@ -31,35 +31,35 @@ from .contour_overlay import ContourOverlay
 
 class ImageViewerWithRegions(QWidget):
     """Image viewer with region overlay capabilities."""
-    
+
     # Forward signals from base viewer
     mouse_moved = pyqtSignal(int, int)
     mouse_clicked = pyqtSignal(int, int, int)
     contrast_changed = pyqtSignal(float, float)
-    
+
     # Region signals
     region_created = pyqtSignal(object)
     region_selected = pyqtSignal(object)
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMouseTracking(True)
-        
+
         # Create layout
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        
+
         # Create base image viewer
         self.image_viewer = ImageViewer(self)
         layout.addWidget(self.image_viewer)
-        
+
         # Create region overlay on top
         self.region_overlay = RegionOverlay(self.image_viewer)
 
         # Create contour overlay on top
         self.contour_overlay = ContourOverlay(self.image_viewer)
-        
+
         # Connect signals
         self.image_viewer.mouse_moved.connect(self.mouse_moved)
         self.image_viewer.mouse_clicked.connect(self.mouse_clicked)
@@ -69,22 +69,22 @@ class ImageViewerWithRegions(QWidget):
 
         # Start in non-interactive mode so mouse events reach the image viewer
         self.set_region_mode(RegionMode.NONE)
-        
+
         # Track when middle button is pressed for centering
         self._middle_button_for_center = False
         self._rotation = 0.0
         self._flip_x = False
         self._flip_y = False
-    
+
     def set_image(self, pixmap: QPixmap) -> None:
         """Set image pixmap."""
         self.image_viewer.set_image(pixmap)
         self._update_overlay_geometry()
-    
+
     def set_region_mode(self, mode: RegionMode) -> None:
         """Set region drawing mode."""
         self.region_overlay.set_mode(mode)
-        
+
         # Enable/disable mouse events based on mode
         if mode == RegionMode.NONE:
             self.region_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
@@ -122,35 +122,35 @@ class ImageViewerWithRegions(QWidget):
     ) -> None:
         """Set crosshair overlay visibility/style."""
         self.contour_overlay.set_crosshair(visible, position=position, color=color, size=size)
-    
+
     def add_region(self, region: Region) -> None:
         """Add a region to display."""
         self.region_overlay.add_region(region)
-    
+
     def clear_regions(self) -> None:
         """Clear all regions."""
         self.region_overlay.clear_regions()
-    
+
     def zoom_in(self) -> None:
         """Zoom in."""
         self.image_viewer.zoom_in()
         self._update_overlay_transform()
-    
+
     def zoom_out(self) -> None:
         """Zoom out."""
         self.image_viewer.zoom_out()
         self._update_overlay_transform()
-    
+
     def zoom_to(self, zoom: float) -> None:
         """Set specific zoom level."""
         self.image_viewer.zoom_to(zoom)
         self._update_overlay_transform()
-    
+
     def zoom_fit(self, viewport_size: QSize) -> None:
         """Zoom to fit viewport."""
         self.image_viewer.zoom_fit(viewport_size)
         self._update_overlay_transform()
-    
+
     def zoom_actual(self) -> None:
         """Zoom to 1:1."""
         self.image_viewer.zoom_actual()
@@ -167,23 +167,23 @@ class ImageViewerWithRegions(QWidget):
     def get_display_image_size(self) -> tuple[int, int]:
         """Get display image size after orientation/rotation."""
         return self.image_viewer.get_display_image_size()
-    
+
     def get_zoom(self) -> float:
         """Get current zoom level."""
         return self.image_viewer.get_zoom()
-    
+
     def get_contrast_brightness(self) -> tuple:
         """Get contrast/brightness values."""
         return self.image_viewer.get_contrast_brightness()
-    
+
     def reset_contrast_brightness(self) -> None:
         """Reset contrast/brightness."""
         self.image_viewer.reset_contrast_brightness()
-    
+
     def pixmap(self) -> Optional[QPixmap]:
         """Get current pixmap."""
         return self.image_viewer.pixmap()
-    
+
     def setText(self, text: str) -> None:
         """Set text (for empty state)."""
         self.image_viewer.setText(text)
@@ -191,20 +191,20 @@ class ImageViewerWithRegions(QWidget):
     def set_background_color(self, color_hex: str) -> None:
         """Set viewer background color."""
         self.image_viewer.setStyleSheet(f"background-color: {color_hex};")
-    
+
     def _update_overlay_geometry(self) -> None:
         """Update region overlay geometry to match image viewer."""
         self.region_overlay.setGeometry(self.image_viewer.geometry())
         self.contour_overlay.setGeometry(self.image_viewer.geometry())
         self._update_overlay_transform()
-    
+
     def _update_overlay_transform(self) -> None:
         """Update region overlay transform (zoom/offset)."""
         # Calculate image offset within viewer
         if self.image_viewer.pixmap():
             viewer_rect = self.image_viewer.rect()
             pixmap_rect = self.image_viewer.pixmap().rect()
-            
+
             x_offset = (viewer_rect.width() - pixmap_rect.width()) / 2
             y_offset = (viewer_rect.height() - pixmap_rect.height()) / 2
             _, image_height = self.image_viewer.get_image_size()
@@ -226,50 +226,50 @@ class ImageViewerWithRegions(QWidget):
                 flip_x=self._flip_x,
                 flip_y=self._flip_y,
             )
-    
+
     def resizeEvent(self, event) -> None:
         """Handle resize events."""
         super().resizeEvent(event)
         self._update_overlay_geometry()
-    
+
     def wheelEvent(self, event: QWheelEvent) -> None:
         """Forward wheel events to image viewer."""
         self.image_viewer.wheelEvent(event)
         self._update_overlay_transform()
-    
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Handle mouse press - check for middle button center."""
         # Right button is ALWAYS for contrast/brightness - forward to image viewer
         if event.button() == Qt.MouseButton.RightButton:
             self.image_viewer.mousePressEvent(event)
             return
-        
+
         if event.button() == Qt.MouseButton.MiddleButton:
             # Middle-click centers image at cursor (DS9 style)
             self._middle_button_for_center = True
             self._center_on_point(event.position().x(), event.position().y())
             event.accept()
             return
-        
+
         # Left button - forward to region overlay or image viewer
         if self.region_overlay.mode != RegionMode.NONE:
             self.region_overlay.mousePressEvent(event)
         else:
             self.image_viewer.mousePressEvent(event)
-    
+
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         """Forward mouse move events."""
         # If adjusting contrast (right button) or panning (middle button), forward to image viewer
         if self.image_viewer._adjusting_contrast or self.image_viewer._panning:
             self.image_viewer.mouseMoveEvent(event)
             return
-        
+
         # Otherwise handle regions
         if self.region_overlay.mode != RegionMode.NONE or self.region_overlay.selected_region:
             self.region_overlay.mouseMoveEvent(event)
         else:
             self.image_viewer.mouseMoveEvent(event)
-    
+
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         """Forward mouse release events."""
         # Right button or middle button - forward to image viewer
@@ -280,18 +280,18 @@ class ImageViewerWithRegions(QWidget):
                 return
             self.image_viewer.mouseReleaseEvent(event)
             return
-        
+
         # Left button - handle regions
         if self.region_overlay.mode != RegionMode.NONE:
             self.region_overlay.mouseReleaseEvent(event)
         else:
             self.image_viewer.mouseReleaseEvent(event)
-    
+
     def _center_on_point(self, x: float, y: float) -> None:
         """Center image on the given point (Middle click, DS9 style)."""
         if self.image_viewer.pixmap() is None:
             return
-        
+
         # Convert widget coordinates to image coordinates
         coords = self.image_viewer.map_widget_to_image_coords(x, y)
         if coords is None:
@@ -307,19 +307,19 @@ class ImageViewerWithRegions(QWidget):
         parent = self.parent()
         while parent and not isinstance(parent, QScrollArea):
             parent = parent.parent()
-        
+
         if parent and isinstance(parent, QScrollArea):
             # Calculate the scroll position to center this image point
             viewport_size = parent.viewport().size()
             zoom = self.image_viewer.get_zoom()
-            
+
             # Position in zoomed coordinates where clicked point is
             zoomed_x = display_x * zoom
             zoomed_y = display_y * zoom
-            
+
             # Scroll to center this point in viewport
             scroll_x = int(zoomed_x - viewport_size.width() / 2)
             scroll_y = int(zoomed_y - viewport_size.height() / 2)
-            
+
             parent.horizontalScrollBar().setValue(scroll_x)
             parent.verticalScrollBar().setValue(scroll_y)

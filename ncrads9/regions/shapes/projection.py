@@ -176,7 +176,4 @@ class Projection(BaseRegion):
 
     def __repr__(self) -> str:
         """Return a string representation of the projection."""
-        return (
-            f"Projection(start={self._start}, end={self._end}, "
-            f"width={self._projection_width})"
-        )
+        return f"Projection(start={self._start}, end={self._end}, " f"width={self._projection_width})"

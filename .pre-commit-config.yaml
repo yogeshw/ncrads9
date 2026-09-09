@@ -1,8 +1,7 @@
 # Install with: pre-commit install
 # Run over everything with: pre-commit run --all-files
 #
-# Note: `black` is scoped to tools/ for now. ncrads9/ and tests/ predate black
-# and join in M1 with a one-shot reformat. See docs/parity/lint-backlog.md.
+# `black` covers the whole tree as of M1-0a.
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -30,7 +29,7 @@ repos:
     rev: 25.1.0
     hooks:
       - id: black
-        files: ^tools/
+        files: ^(ncrads9|tests|tools)/
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.14.1

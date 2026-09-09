@@ -27,7 +27,7 @@ from typing import Tuple, Optional
 
 class CoordSystemType(Enum):
     """Enumeration of coordinate system types."""
-    
+
     IMAGE = auto()
     PHYSICAL = auto()
     WCS = auto()
@@ -35,52 +35,52 @@ class CoordSystemType(Enum):
 
 class CoordSystem(ABC):
     """Abstract base class for coordinate systems."""
-    
+
     def __init__(self, coord_type: CoordSystemType) -> None:
         """
         Initialize the coordinate system.
-        
+
         Args:
             coord_type: The type of coordinate system.
         """
         self._coord_type = coord_type
-    
+
     @property
     def coord_type(self) -> CoordSystemType:
         """Return the coordinate system type."""
         return self._coord_type
-    
+
     @abstractmethod
     def get_coordinates(self) -> Tuple[float, float]:
         """
         Get the coordinates as a tuple.
-        
+
         Returns:
             A tuple of (x, y) or (ra, dec) coordinates.
         """
-    
+
     @abstractmethod
     def set_coordinates(self, x: float, y: float) -> None:
         """
         Set the coordinates.
-        
+
         Args:
             x: The x or RA coordinate.
             y: The y or Dec coordinate.
         """
-    
+
     @abstractmethod
     def to_string(self, precision: Optional[int] = None) -> str:
         """
         Convert coordinates to a string representation.
-        
+
         Args:
             precision: Optional decimal precision for formatting.
-            
+
         Returns:
             String representation of the coordinates.
         """
-    
+
     def __repr__(self) -> str:
         """Return string representation of the coordinate system."""
         return f"{self.__class__.__name__}({self.to_string()})"

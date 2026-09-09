@@ -19,7 +19,6 @@
 """Tests for coordinates module."""
 
 
-
 class TestCoordinates:
     """Test cases for coordinates module."""
 

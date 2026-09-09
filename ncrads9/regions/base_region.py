@@ -168,6 +168,5 @@ class BaseRegion(ABC):
     def __repr__(self) -> str:
         """Return a string representation of the region."""
         return (
-            f"{self.__class__.__name__}(center={self.center}, "
-            f"color={self.color!r}, width={self.width})"
+            f"{self.__class__.__name__}(center={self.center}, " f"color={self.color!r}, width={self.width})"
         )

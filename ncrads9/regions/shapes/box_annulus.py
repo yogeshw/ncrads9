@@ -116,9 +116,7 @@ class BoxAnnulus(BaseRegion):
         """Set the rotation angle in degrees."""
         self._angle = value
 
-    def _box_contains(
-        self, x: float, y: float, box_width: float, box_height: float
-    ) -> bool:
+    def _box_contains(self, x: float, y: float, box_width: float, box_height: float) -> bool:
         """Check if point is inside a box with given dimensions."""
         cx, cy = self.center
         dx = x - cx

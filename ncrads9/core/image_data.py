@@ -150,9 +150,7 @@ class ImageData:
             median=float(np.median(valid_data)),
         )
 
-    def get_cutout(
-        self, center: Tuple[int, int], size: Tuple[int, int]
-    ) -> Optional[NDArray[np.floating]]:
+    def get_cutout(self, center: Tuple[int, int], size: Tuple[int, int]) -> Optional[NDArray[np.floating]]:
         """Extract a cutout from the image.
 
         Args:

@@ -175,9 +175,7 @@ class PannerPanel(QDockWidget):
         else:
             vmin, vmax = np.nanmin(self._current_image), np.nanmax(self._current_image)
             if vmax > vmin:
-                normalized = ((self._current_image - vmin) / (vmax - vmin) * 255).astype(
-                    np.uint8
-                )
+                normalized = ((self._current_image - vmin) / (vmax - vmin) * 255).astype(np.uint8)
             else:
                 normalized = np.zeros((preview_h, preview_w), dtype=np.uint8)
             if not normalized.flags["C_CONTIGUOUS"]:

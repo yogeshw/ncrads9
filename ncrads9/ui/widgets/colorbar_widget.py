@@ -49,23 +49,23 @@ class ColorbarWidget(QWidget):
         self.tick_count = 7
         self.bar_size = 40
         self.label_font_size = 8
-        
+
         self.setMinimumSize(140, 200)
-        
+
         layout = QVBoxLayout()
         layout.setContentsMargins(5, 5, 5, 5)
-        
+
         # Colormap name label
         self.name_label = QLabel(self.colormap_name)
         self.name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.name_label)
-        
+
         # Colorbar display
         self.colorbar_label = QLabel()
         self.colorbar_label.setMinimumHeight(150)
         self.colorbar_label.setMinimumWidth(120)
         layout.addWidget(self.colorbar_label, 1)
-        
+
         self.setLayout(layout)
 
     def set_colormap(
@@ -86,11 +86,11 @@ class ColorbarWidget(QWidget):
         self.vmax = vmax
         self.colormap_name = name
         self.inverted = inverted
-        
+
         # Update name label
         name_display = f"{name} (inv)" if inverted else name
         self.name_label.setText(name_display)
-        
+
         # Create colorbar image with ticks
         self._update_colorbar()
 
@@ -98,7 +98,7 @@ class ColorbarWidget(QWidget):
         """Update the colorbar display with ticks and labels."""
         if self.colormap_data is None:
             return
-        
+
         # Ensure colormap data is uint8 (0-255 range)
         if self.colormap_data.dtype == np.float64 or self.colormap_data.dtype == np.float32:
             # Convert from 0-1 to 0-255
@@ -232,7 +232,7 @@ class ColorbarWidget(QWidget):
         """Set numeric label font size."""
         self.label_font_size = max(6, int(size))
         self._update_colorbar()
-    
+
     def resizeEvent(self, event) -> None:
         """Handle resize events."""
         super().resizeEvent(event)

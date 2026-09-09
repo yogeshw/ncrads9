@@ -82,9 +82,7 @@ class RegionManager:
             region = self._regions.pop(index)
             self._selected_indices.discard(index)
             # Update selected indices for removed item
-            self._selected_indices = {
-                i - 1 if i > index else i for i in self._selected_indices
-            }
+            self._selected_indices = {i - 1 if i > index else i for i in self._selected_indices}
             self._notify_change()
             return region
         return None
@@ -210,9 +208,7 @@ class RegionManager:
         Returns:
             List of region indices with the tag.
         """
-        return [
-            i for i, region in enumerate(self._regions) if tag in region.tags
-        ]
+        return [i for i, region in enumerate(self._regions) if tag in region.tags]
 
     def find_regions_by_color(self, color: str) -> list[int]:
         """
@@ -224,11 +220,7 @@ class RegionManager:
         Returns:
             List of region indices with the color.
         """
-        return [
-            i
-            for i, region in enumerate(self._regions)
-            if region.color == color
-        ]
+        return [i for i, region in enumerate(self._regions) if region.color == color]
 
     def load_file(self, filepath: str | Path) -> int:
         """

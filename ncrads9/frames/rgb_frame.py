@@ -123,9 +123,7 @@ class RGBFrame:
         """Return the blue channel settings."""
         return self._blue_settings
 
-    def set_channel(
-        self, channel: str, frame: Optional[Frame]
-    ) -> None:
+    def set_channel(self, channel: str, frame: Optional[Frame]) -> None:
         """Set a channel frame.
 
         Args:

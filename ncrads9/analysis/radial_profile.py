@@ -75,9 +75,7 @@ class RadialProfile:
     def _compute_distance_map(self) -> None:
         """Compute the distance of each pixel from the center."""
         y, x = np.ogrid[: self._data.shape[0], : self._data.shape[1]]
-        self._distance_map = np.sqrt(
-            (x - self._center[0]) ** 2 + (y - self._center[1]) ** 2
-        )
+        self._distance_map = np.sqrt((x - self._center[0]) ** 2 + (y - self._center[1]) ** 2)
 
     def extract(
         self,
@@ -172,9 +170,7 @@ class RadialProfile:
         angles = np.arctan2(y - self._center[1], x - self._center[0])
         angles = np.degrees(angles)
 
-        in_annulus = (self._distance_map >= radius - width / 2) & (
-            self._distance_map < radius + width / 2
-        )
+        in_annulus = (self._distance_map >= radius - width / 2) & (self._distance_map < radius + width / 2)
 
         sector_angles = np.linspace(-180, 180, n_sectors + 1)
         sector_centers = (sector_angles[:-1] + sector_angles[1:]) / 2

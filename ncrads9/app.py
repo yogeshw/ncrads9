@@ -213,6 +213,7 @@ def open_cli_help_in_browser() -> Path:
 
 def parse_cli_sequence(args: Sequence[str]) -> List[CLIItem]:
     """Parse DS9-style startup arguments into an ordered sequence."""
+
     def _is_option_token(token: str) -> bool:
         return token.startswith("-") and len(token) > 1
 
@@ -290,7 +291,12 @@ def _load_rgb_channels_from_cli(main_window: MainWindow, channel_paths: dict[str
         if not filepath:
             continue
         current = main_window.frame_manager.current_frame
-        if not source_indices and current is not None and current.image_data is None and current.frame_type == "base":
+        if (
+            not source_indices
+            and current is not None
+            and current.image_data is None
+            and current.frame_type == "base"
+        ):
             pass
         else:
             main_window._new_frame_with_type("base")
@@ -358,7 +364,18 @@ def apply_startup_cli(main_window: MainWindow, argv: Sequence[str]) -> None:
             enabled = True if not args else str(args[0]).lower() not in {"0", "off", "no", "false"}
             main_window._toggle_fade(enabled)
             continue
-        if option in {"linear", "log", "sqrt", "squared", "power", "asinh", "histeq", "histogram", "zscale", "minmax"}:
+        if option in {
+            "linear",
+            "log",
+            "sqrt",
+            "squared",
+            "power",
+            "asinh",
+            "histeq",
+            "histogram",
+            "zscale",
+            "minmax",
+        }:
             xpa_commands.handle("scale", {"args": [option]})
             continue
         if option in {"fk5", "fk4", "icrs", "galactic", "ecliptic"}:
@@ -416,9 +433,7 @@ def run_application(argv: List[str]) -> int:
         return 0
 
     # Enable high DPI scaling
-    QApplication.setHighDpiScaleFactorRoundingPolicy(
-        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
-    )
+    QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 
     # Create application
     app = QApplication(argv)

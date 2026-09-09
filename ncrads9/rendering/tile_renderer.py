@@ -222,15 +222,11 @@ class TileRenderer:
         y_start = max(0, int(viewport.y // self._tile_size) - self._prefetch_margin)
         x_end = min(
             self.num_tiles_x,
-            int((viewport.x + viewport.width) // self._tile_size)
-            + 1
-            + self._prefetch_margin,
+            int((viewport.x + viewport.width) // self._tile_size) + 1 + self._prefetch_margin,
         )
         y_end = min(
             self.num_tiles_y,
-            int((viewport.y + viewport.height) // self._tile_size)
-            + 1
-            + self._prefetch_margin,
+            int((viewport.y + viewport.height) // self._tile_size) + 1 + self._prefetch_margin,
         )
 
         prefetch = []

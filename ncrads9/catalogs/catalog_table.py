@@ -136,24 +136,14 @@ class CatalogTable(QWidget if HAS_QT else object):
         # Table widget
         self._table_widget = QTableWidget()
         self._table_widget.setAlternatingRowColors(True)
-        self._table_widget.setSelectionBehavior(
-            QAbstractItemView.SelectRows
-        )
-        self._table_widget.setSelectionMode(
-            QAbstractItemView.SingleSelection
-        )
+        self._table_widget.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self._table_widget.setSelectionMode(QAbstractItemView.SingleSelection)
         self._table_widget.setSortingEnabled(True)
         self._table_widget.setContextMenuPolicy(Qt.CustomContextMenu)
 
-        self._table_widget.itemSelectionChanged.connect(
-            self._on_selection_changed
-        )
-        self._table_widget.itemDoubleClicked.connect(
-            self._on_double_click
-        )
-        self._table_widget.customContextMenuRequested.connect(
-            self._show_context_menu
-        )
+        self._table_widget.itemSelectionChanged.connect(self._on_selection_changed)
+        self._table_widget.itemDoubleClicked.connect(self._on_double_click)
+        self._table_widget.customContextMenuRequested.connect(self._show_context_menu)
 
         layout.addWidget(self._table_widget)
 
@@ -196,9 +186,7 @@ class CatalogTable(QWidget if HAS_QT else object):
                 self._table_widget.setItem(row_idx, col_idx, item)
 
         self._table_widget.setSortingEnabled(True)
-        self._table_widget.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeToContents
-        )
+        self._table_widget.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
 
     def _format_value(self, column: str, value: Any) -> str:
         """Format a cell value for display."""
@@ -250,11 +238,7 @@ class CatalogTable(QWidget if HAS_QT else object):
     def _update_row_count(self) -> None:
         """Update the row count label."""
         total = self._table_widget.rowCount()
-        visible = sum(
-            1
-            for row in range(total)
-            if not self._table_widget.isRowHidden(row)
-        )
+        visible = sum(1 for row in range(total) if not self._table_widget.isRowHidden(row))
         if visible == total:
             self._row_count_label.setText(f"{total} rows")
         else:
@@ -360,10 +344,7 @@ class CatalogTable(QWidget if HAS_QT else object):
         if self._table is None or self._selected_row < 0:
             return None
 
-        return {
-            col: self._table[self._selected_row][col]
-            for col in self._table.colnames
-        }
+        return {col: self._table[self._selected_row][col] for col in self._table.colnames}
 
     def set_column_config(self, column: str, config: ColumnConfig) -> None:
         """Set configuration for a column."""

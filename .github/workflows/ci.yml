@@ -35,14 +35,7 @@ jobs:
         run: ruff check ncrads9 tests
 
       - name: black
-        # ncrads9/ and tests/ predate black: 80 and 10 files respectively would
-        # be reformatted. Doing that wholesale would bury real changes in an
-        # unreviewable diff and lose `git blame` continuity across most of the
-        # codebase, and M1/M2 restructure much of it anyway -- so they join this
-        # gate in M1, together with the one-shot reformat. Until then only
-        # tools/ (written from scratch in M0) is gated.
-        # See docs/parity/lint-backlog.md.
-        run: black --check --diff tools
+        run: black --check --diff ncrads9 tests tools
 
       - name: mypy
         run: mypy ncrads9/core ncrads9/coordinates ncrads9/regions

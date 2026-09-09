@@ -611,9 +611,7 @@ class MenuBar(QMenuBar):
         self.zoom_menu.addAction(self.action_crop_parameters)
 
         self.zoom_menu.addSeparator()
-        self.action_pan_zoom_rotate_parameters: QAction = QAction(
-            "&Pan Zoom Rotate Parameters", self
-        )
+        self.action_pan_zoom_rotate_parameters: QAction = QAction("&Pan Zoom Rotate Parameters", self)
         self.zoom_menu.addAction(self.action_pan_zoom_rotate_parameters)
 
     def _setup_scale_menu(self) -> None:
@@ -690,7 +688,12 @@ class MenuBar(QMenuBar):
 
         self.colormap_submenus: Dict[str, QMenu] = {}
         category_maps = {
-            "Matplotlib Uniform": [("Viridis", "viridis"), ("Plasma", "plasma"), ("Inferno", "inferno"), ("Magma", "magma")],
+            "Matplotlib Uniform": [
+                ("Viridis", "viridis"),
+                ("Plasma", "plasma"),
+                ("Inferno", "inferno"),
+                ("Magma", "magma"),
+            ],
         }
         for category, maps in category_maps.items():
             submenu = self.color_menu.addMenu(category)

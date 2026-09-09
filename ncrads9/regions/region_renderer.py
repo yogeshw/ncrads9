@@ -235,9 +235,7 @@ class RegionRenderer:
         # Default to green
         return self.COLOR_MAP["green"]
 
-    def _transform_point(
-        self, point: tuple[float, float]
-    ) -> tuple[float, float]:
+    def _transform_point(self, point: tuple[float, float]) -> tuple[float, float]:
         """
         Transform a point from image to screen coordinates.
 
@@ -251,9 +249,7 @@ class RegionRenderer:
         y = (point[1] + self._offset[1]) * self._scale
         return (x, y)
 
-    def _inverse_transform_point(
-        self, point: tuple[float, float]
-    ) -> tuple[float, float]:
+    def _inverse_transform_point(self, point: tuple[float, float]) -> tuple[float, float]:
         """
         Transform a point from screen to image coordinates.
 
@@ -267,9 +263,7 @@ class RegionRenderer:
         y = point[1] / self._scale - self._offset[1]
         return (x, y)
 
-    def _draw_selection_handles(
-        self, painter: QPainter, region: BaseRegion
-    ) -> None:
+    def _draw_selection_handles(self, painter: QPainter, region: BaseRegion) -> None:
         """
         Draw selection handles around a region.
 
@@ -345,9 +339,7 @@ class RegionRenderer:
 
         return font
 
-    def screen_to_image(
-        self, screen_x: float, screen_y: float
-    ) -> tuple[float, float]:
+    def screen_to_image(self, screen_x: float, screen_y: float) -> tuple[float, float]:
         """
         Convert screen coordinates to image coordinates.
 
@@ -360,9 +352,7 @@ class RegionRenderer:
         """
         return self._inverse_transform_point((screen_x, screen_y))
 
-    def image_to_screen(
-        self, image_x: float, image_y: float
-    ) -> tuple[float, float]:
+    def image_to_screen(self, image_x: float, image_y: float) -> tuple[float, float]:
         """
         Convert image coordinates to screen coordinates.
 

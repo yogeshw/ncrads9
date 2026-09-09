@@ -28,83 +28,75 @@ from astropy.time import Time
 
 
 def equatorial_to_ecliptic(
-    ra: float,
-    dec: float,
-    frame: str = "icrs",
-    equinox: Optional[float] = None,
-    barycentric: bool = False
+    ra: float, dec: float, frame: str = "icrs", equinox: Optional[float] = None, barycentric: bool = False
 ) -> Tuple[float, float]:
     """
     Convert equatorial coordinates to ecliptic coordinates.
-    
+
     Args:
         ra: Right ascension in degrees.
         dec: Declination in degrees.
         frame: Input equatorial frame (default: 'icrs').
         equinox: Equinox as Julian year (default: J2000.0).
         barycentric: If True, use barycentric ecliptic frame.
-        
+
     Returns:
         Tuple of (lon, lat) ecliptic coordinates in degrees.
     """
     if equinox is None:
         equinox = 2000.0
-    
+
     coord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg, frame=frame)
-    
+
     if barycentric:
         ecliptic_frame = BarycentricMeanEcliptic(equinox=Time(equinox, format="jyear"))
     else:
         ecliptic_frame = GeocentricMeanEcliptic(equinox=Time(equinox, format="jyear"))
-    
+
     ecliptic = coord.transform_to(ecliptic_frame)
-    
+
     return (ecliptic.lon.deg, ecliptic.lat.deg)
 
 
 def ecliptic_to_equatorial(
-    lon: float,
-    lat: float,
-    frame: str = "icrs",
-    equinox: Optional[float] = None,
-    barycentric: bool = False
+    lon: float, lat: float, frame: str = "icrs", equinox: Optional[float] = None, barycentric: bool = False
 ) -> Tuple[float, float]:
     """
     Convert ecliptic coordinates to equatorial coordinates.
-    
+
     Args:
         lon: Ecliptic longitude in degrees.
         lat: Ecliptic latitude in degrees.
         frame: Output equatorial frame (default: 'icrs').
         equinox: Equinox as Julian year (default: J2000.0).
         barycentric: If True, input is in barycentric ecliptic frame.
-        
+
     Returns:
         Tuple of (ra, dec) equatorial coordinates in degrees.
     """
     if equinox is None:
         equinox = 2000.0
-    
+
     if barycentric:
         ecliptic_frame = BarycentricMeanEcliptic(equinox=Time(equinox, format="jyear"))
     else:
         ecliptic_frame = GeocentricMeanEcliptic(equinox=Time(equinox, format="jyear"))
-    
+
     coord = SkyCoord(lon=lon * u.deg, lat=lat * u.deg, frame=ecliptic_frame)
     equatorial = coord.transform_to(frame)
-    
+
     return (equatorial.ra.deg, equatorial.dec.deg)
 
 
 def ecliptic_to_string(lon: float, lat: float, precision: int = 4) -> str:
     """
     Format ecliptic coordinates as a string.
-    
+
     Args:
         lon: Ecliptic longitude in degrees.
         lat: Ecliptic latitude in degrees.
         precision: Decimal precision.
-        
+
     Returns:
         Formatted string "λ=XXX.XXXX°, β=+YY.YYYY°".
     """

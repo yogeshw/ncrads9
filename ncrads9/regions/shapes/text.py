@@ -97,9 +97,7 @@ class Text(BaseRegion):
         cx, cy = self.center
         text_width = len(self._label) * 8
         text_height = 12
-        return (
-            abs(x - cx) <= text_width / 2 and abs(y - cy) <= text_height / 2
-        )
+        return abs(x - cx) <= text_width / 2 and abs(y - cy) <= text_height / 2
 
     def move(self, dx: float, dy: float) -> None:
         """
@@ -129,7 +127,7 @@ class Text(BaseRegion):
             The text as a DS9 format string.
         """
         cx, cy = self.center
-        return f'text({cx},{cy}) # text={{{self._label}}}'
+        return f"text({cx},{cy}) # text={{{self._label}}}"
 
     def __repr__(self) -> str:
         """Return a string representation of the text."""
