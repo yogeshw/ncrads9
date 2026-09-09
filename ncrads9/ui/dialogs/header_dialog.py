@@ -22,6 +22,7 @@ Author: Yogesh Wadadekar
 
 from typing import Any
 
+from astropy.io import fits
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
@@ -35,15 +36,23 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ...core.header_parser import header_to_lines, summarize_header
+
 
 class HeaderDialog(QDialog):
     """Dialog for viewing and searching FITS headers."""
 
-    def __init__(self, header_data: dict[str, Any] | None = None, parent: QDialog | None = None) -> None:
+    def __init__(
+        self,
+        header_data: "fits.Header | dict[str, Any] | None" = None,
+        parent: QDialog | None = None,
+    ) -> None:
         """Initialize the header dialog.
 
         Args:
-            header_data: FITS header data as dictionary.
+            header_data: A FITS header, or any mapping of keyword to value.
+                A real `fits.Header` also gets a summary block and keeps its
+                card comments.
             parent: Parent widget.
         """
         # Pass None as parent to make dialog independent
@@ -113,14 +122,22 @@ class HeaderDialog(QDialog):
         layout.addLayout(button_layout)
 
     def _populate_header(self) -> None:
-        """Populate the header text display."""
-        lines = []
-        for key, value in self._header_data.items():
-            if isinstance(value, tuple):
-                val, comment = value
-                lines.append(f"{key:8s} = {val!r:>20s} / {comment}")
-            else:
-                lines.append(f"{key:8s} = {value!r}")
+        """Populate the header text display.
+
+        Rendering is delegated to `core.header_parser`, which reads
+        `header.cards` and so keeps comments, COMMENT and HISTORY. This method
+        used to iterate the header as a plain mapping, which silently dropped
+        every comment -- the `isinstance(value, tuple)` branch it tested for
+        never fires, because `fits.Header.items()` yields bare values.
+        """
+        if not self._header_data:
+            self._header_text.setText("")
+            return
+
+        summary = summarize_header(self._header_data) if hasattr(self._header_data, "cards") else []
+        lines = header_to_lines(self._header_data)
+        if summary:
+            lines = [*summary, "", "-" * 60, "", *lines]
         self._header_text.setText("\n".join(lines))
 
     def _on_extension_changed(self, index: int) -> None:
@@ -141,16 +158,12 @@ class HeaderDialog(QDialog):
             self._populate_header()
             return
 
+        # Filter the rendered card lines, so a search matches keyword, value
+        # or comment -- the comment was previously unsearchable because it was
+        # never rendered.
         text_lower = text.lower()
-        lines = []
-        for key, value in self._header_data.items():
-            if text_lower in key.lower() or text_lower in str(value).lower():
-                if isinstance(value, tuple):
-                    val, comment = value
-                    lines.append(f"{key:8s} = {val!r:>20s} / {comment}")
-                else:
-                    lines.append(f"{key:8s} = {value!r}")
-        self._header_text.setText("\n".join(lines))
+        matches = [line for line in header_to_lines(self._header_data) if text_lower in line.lower()]
+        self._header_text.setText("\n".join(matches))
 
     def _copy_to_clipboard(self) -> None:
         """Copy header text to clipboard."""

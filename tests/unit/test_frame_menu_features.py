@@ -2,10 +2,12 @@ import os
 
 import numpy as np
 import pytest
+from astropy.io import fits
 from astropy.wcs import WCS
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication
 
+from ncrads9.core.image_data import ImageData
 from ncrads9.core.wcs_handler import WCSHandler
 from ncrads9.rendering.scale_algorithms import ScaleAlgorithm
 from ncrads9.ui.main_window import MainWindow
@@ -279,15 +281,11 @@ def test_load_fits_in_rgb_frame_updates_active_channel(main_window: MainWindow, 
         self.hdu_list = ["dummy"]
         return self.hdu_list
 
-    def _fake_get_data(self, ext=0):
-        return np.arange(16, dtype=np.float32).reshape(4, 4)
-
-    def _fake_get_header(self, ext=0):
-        return {}
+    def _fake_load_image_data(self, ext=0):
+        return ImageData(data=np.arange(16, dtype=np.float32).reshape(4, 4), header=fits.Header())
 
     monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.load", _fake_load)
-    monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.get_data", _fake_get_data)
-    monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.get_header", _fake_get_header)
+    monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.load_image_data", _fake_load_image_data)
 
     main_window._new_frame_with_type("rgb")
     frame = main_window.frame_manager.current_frame
@@ -346,19 +344,15 @@ def test_load_fits_keeps_handler_alive_and_clear_closes_it(main_window: MainWind
         self.hdu_list = ["dummy"]
         return self.hdu_list
 
-    def _fake_get_data(self, ext=0):
-        return np.arange(100, dtype=np.float32).reshape(10, 10)
-
-    def _fake_get_header(self, ext=0):
-        return {}
+    def _fake_load_image_data(self, ext=0):
+        return ImageData(data=np.arange(100, dtype=np.float32).reshape(10, 10), header=fits.Header())
 
     def _fake_close(self):
         close_calls["count"] += 1
         self.hdu_list = None
 
     monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.load", _fake_load)
-    monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.get_data", _fake_get_data)
-    monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.get_header", _fake_get_header)
+    monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.load_image_data", _fake_load_image_data)
     monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.close", _fake_close)
 
     main_window._load_fits_file("/tmp/test-large.fits")

@@ -29,6 +29,8 @@ import numpy as np
 from astropy.io import fits
 from numpy.typing import NDArray
 
+from .image_data import ImageData
+
 
 class FITSHandler:
     """Handler class for FITS file operations.
@@ -130,6 +132,26 @@ class FITSHandler:
         for i, hdu in enumerate(self.hdu_list):
             extensions.append((i, hdu.name, type(hdu).__name__))
         return extensions
+
+    def load_image_data(self, ext: int | str = 0) -> "ImageData":
+        """Return one extension wrapped in an ImageData container.
+
+        Gathers the array, the header, the WCS and the derived metadata
+        (BITPIX, cached min/max) in one step, so the caller does not assemble
+        them itself.
+
+        Args:
+            ext: Extension index or EXTNAME.
+
+        Returns:
+            The extension's ImageData.
+
+        Raises:
+            ValueError: If no file is open.
+        """
+        if self.hdu_list is None:
+            raise ValueError("No FITS file loaded")
+        return ImageData.from_hdu(self.hdu_list[ext])
 
     def close(self) -> None:
         """Close the FITS file."""

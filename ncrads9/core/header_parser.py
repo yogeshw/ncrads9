@@ -211,3 +211,60 @@ def get_history(header: fits.Header) -> list[str]:
         List of history strings.
     """
     return list(header.get("HISTORY", []))
+
+
+def header_to_lines(header: fits.Header | dict[str, Any]) -> list[str]:
+    """Render a header as aligned ``KEYWORD = value / comment`` lines.
+
+    Works from ``header.cards`` when given a real ``fits.Header``, so comments,
+    COMMENT and HISTORY cards all survive; a plain mapping is rendered without
+    comments, since it has none to give.
+
+    Args:
+        header: An ``astropy.io.fits.Header``, or any mapping of keyword to
+            value.
+
+    Returns:
+        One line per card, in header order.
+    """
+    cards = getattr(header, "cards", None)
+    if cards is None:
+        return [f"{key!s:<8} = {value!r}" for key, value in dict(header).items()]
+
+    lines: list[str] = []
+    for card in cards:
+        keyword = card.keyword or ""
+        if keyword in ("COMMENT", "HISTORY"):
+            lines.append(f"{keyword:<8}   {card.value}")
+            continue
+        if not keyword:
+            # A blank card is a deliberate spacer in the header.
+            lines.append("")
+            continue
+        rendered = f"{keyword:<8} = {card.value!r}"
+        if card.comment:
+            rendered = f"{rendered} / {card.comment}"
+        lines.append(rendered)
+    return lines
+
+
+def summarize_header(header: fits.Header) -> list[str]:
+    """Return a short human-readable summary of what the header describes.
+
+    Shown above the raw cards so the interesting facts -- object, instrument,
+    dimensions, whether there is a WCS -- do not have to be hunted for.
+    """
+    info = parse_header(header)
+    dimensions = info.get("dimensions")
+
+    rows = [
+        ("Object", info.get("object")),
+        ("Telescope", info.get("telescope")),
+        ("Instrument", info.get("instrument")),
+        ("Date-Obs", info.get("date_obs")),
+        ("Exposure", info.get("exptime")),
+        ("Dimensions", " x ".join(str(d) for d in dimensions) if dimensions else None),
+        ("BITPIX", info.get("data_type")),
+        ("WCS", "yes" if info.get("has_wcs") else "no"),
+    ]
+    return [f"{label:<11} {value}" for label, value in rows if value not in (None, "")]

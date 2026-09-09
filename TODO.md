@@ -89,73 +89,112 @@ Test count: **69 (1 failing) → 107 (all passing)**. Coverage: **42.1%**.
 
 ## M1 — Consolidate the model
 
+**Status: complete.** 116 orphan modules -> 71, all remaining ones listed against the milestone
+that adopts them in `tests/unit/test_no_orphan_modules.py` and inventoried in
+`docs/parity/skeletons.md`. Tests 107 -> 447; coverage 42.0% -> 47.6%.
+
+Deviations from the plan as written, and why:
+
+- **M1-14** (frame owns an `ImageData`) is done at the load site only. `frame.image` now carries
+  the as-loaded array, header, WCS, BITPIX and cached min/max, and `FITSHandler.load_image_data()`
+  is the single place they are derived. Folding `frame.image_data`, `frame.header` and
+  `frame.wcs_handler` into that container touches 149 call sites and belongs with **M4**, which
+  rewrites the loader for extensions, cubes and mosaics anyway. Doing it twice would be waste.
+- **M1-17** said to delete `rendering/rgb_compositor.py`. It was adopted instead: it is where M5's
+  HSV/HLS rendering has to live, so deleting working colour-space maths to rewrite it later made no
+  sense. It was rewritten vectorized -- the original converted one pixel at a time in a Python
+  double loop. `rendering/colormap_engine.py` was deleted as planned.
+- **M1-18** took the "otherwise" branch: painting moved into `RegionRenderer` and the overlay
+  delegates, rather than the renderer being deleted. `RegionRenderer` was a stub that called
+  `BaseRegion.draw()`, which every shape left empty, so nothing was drawing regions through it.
+- **M1-16**: `core/data_cache.py` was deleted rather than adopted. It was complete but redundant --
+  the loader already opens with `memmap=True`, frames hold the arrays they display, and
+  `TextureManager` already caches GPU textures against a size budget.
+- **M1-19** also deleted the five `image_servers` skeletons outright (signatures plus
+  `raise NotImplementedError`, no subclasses, no callers). `docs/parity/skeletons.md` records what
+  M8 must build.
+
+Bugs found and fixed along the way:
+
+- `catalog_table.py` imported `QAction` from `PyQt6.QtWidgets`, where it does not exist, so the
+  module had silently degraded to `HAS_QT = False` since it was written; sorting the imports moved
+  the bad name early enough to break the import outright. Six more PyQt5-era enum spellings
+  surfaced once it loaded for the first time.
+- Right-click never closed a polygon: `mouseReleaseEvent` returned early for every right button,
+  making the `elif RightButton and POLYGON` branch below it unreachable.
+- `RegionWriter` emitted a second `#` on shapes whose `to_ds9_string()` already carries a comment,
+  making their properties unparseable.
+- `RegionParser` ignored the `-` exclude prefix and every DS9 property flag.
+- `header_dialog` treated a `fits.Header` as a plain mapping, silently dropping every card comment
+  and making comments unsearchable.
+
 Depends on M0.
 
 ### One region model
-- [ ] **M1-1** (M) Audit the three `Region` types (`regions/base_region.py:BaseRegion`,
+- [x] **M1-1** (M) Audit the three `Region` types (`regions/base_region.py:BaseRegion`,
       `frames/frame.py:Region`, `ui/widgets/region_overlay.py:Region`). Write the union of fields
       each needs onto `BaseRegion`: geometry, `color`, `width`, `font`, `text`, `tags`, plus the
       property flags needed by M6 (`include`, `source`, `fixed`, `edit`, `move`, `rotate`,
       `delete`, `dash`, `fill`).
-- [ ] **M1-2** (M) Make `ui/widgets/region_overlay.py` operate on `BaseRegion` subclasses
+- [x] **M1-2** (M) Make `ui/widgets/region_overlay.py` operate on `BaseRegion` subclasses
       directly. Delete `main_window.py:_overlay_regions_to_base()` and `_base_region_to_overlay()`
       (lines 4612–4695) and the local `Region` class.
-- [ ] **M1-3** (S) Delete `frames/frame.py:Region`.
-- [ ] **M1-4** (S) Add round-trip tests: create each of the 6 currently-creatable shapes in the
+- [x] **M1-3** (S) Delete `frames/frame.py:Region`.
+- [x] **M1-4** (S) Add round-trip tests: create each of the 6 currently-creatable shapes in the
       overlay, save via `RegionWriter`, reparse via `RegionParser`, assert geometry equality.
 
 ### One frame model
-- [ ] **M1-5** (M) Decide the surviving `Frame`. Recommendation: keep
+- [x] **M1-5** (M) Decide the surviving `Frame`. Recommendation: keep
       `frames/simple_frame_manager.py` (it is the one in use and carries real per-frame view
       state), rename to `frames/frame.py` / `frames/frame_manager.py`, and delete the orphaned
       `frames/frame.py` + `frames/frame_manager.py`.
-- [ ] **M1-6** (M) Fold the ad-hoc `MainWindow._tile_layout` dict into `frames/tile_layout.py`
+- [x] **M1-6** (M) Fold the ad-hoc `MainWindow._tile_layout` dict into `frames/tile_layout.py`
       and use it from `_display_tiled_frames()` / `_select_tiled_frame()`.
-- [ ] **M1-7** (M) Fold blink/fade timer logic out of `main_window.py` into
+- [x] **M1-7** (M) Fold blink/fade timer logic out of `main_window.py` into
       `frames/blink_controller.py`.
-- [ ] **M1-8** (S) Delete or adopt `frames/{rgb,hsv,hls}_frame.py`. RGB composition currently
+- [x] **M1-8** (S) Delete or adopt `frames/{rgb,hsv,hls}_frame.py`. RGB composition currently
       lives in `main_window.py:_compose_rgb_frame_image()`; move it into `frames/rgb_frame.py`
       as `RGBFrame`, and make `HSVFrame`/`HLSFrame` real subclasses (rendering lands in M5).
-- [ ] **M1-9** (S) Delete `frames/frame_3d.py` for now; 3D lands as a fresh implementation in M9.
+- [x] **M1-9** (S) Delete `frames/frame_3d.py` for now; 3D lands as a fresh implementation in M9.
 
 ### One coordinate module
-- [ ] **M1-10** (M) Define `coordinates/coord_system.py:CoordinateContext` holding
+- [x] **M1-10** (M) Define `coordinates/coord_system.py:CoordinateContext` holding
       `system` (`image|physical|amplifier|detector|wcs|wcsa…wcsz`), `sky`
       (`fk4|fk5|icrs|galactic|ecliptic`), `format` (`degrees|sexagesimal`), and `precision`.
-- [ ] **M1-11** (M) Move all coordinate formatting out of `main_window.py`
+- [x] **M1-11** (M) Move all coordinate formatting out of `main_window.py`
       (`_update_wcs_display`, `_on_mouse_moved`, `_world_to_overlay_pixel`) into
       `coordinates/`. Every coordinate string in the app must come from one function.
-- [ ] **M1-12** (S) Implement `coordinates/physical_coords.py` against `LTV*`/`LTM*` header
+- [x] **M1-12** (S) Implement `coordinates/physical_coords.py` against `LTV*`/`LTM*` header
       keywords so physical coordinates are real, not a stub.
-- [ ] **M1-13** (S) Unit-test each coordinate module against known values (use
+- [x] **M1-13** (S) Unit-test each coordinate module against known values (use
       `ncrads9/sampleimages/SDSS9_M51_g.fits`).
 
 ### One FITS access layer
-- [ ] **M1-14** (M) Make `core/image_data.py` the frame's data container (data, header, WCS,
+- [x] **M1-14** (M) Make `core/image_data.py` the frame's data container (data, header, WCS,
       bitpix, shape, min/max cache) and use it from `_load_fits_file`.
-- [ ] **M1-15** (S) Adopt `core/header_parser.py` in `ui/dialogs/header_dialog.py`.
-- [ ] **M1-16** (S) Adopt `core/data_cache.py` behind the tile renderer, or delete it.
+- [x] **M1-15** (S) Adopt `core/header_parser.py` in `ui/dialogs/header_dialog.py`.
+- [x] **M1-16** (S) Adopt `core/data_cache.py` behind the tile renderer, or delete it.
 
 ### Formatting and modernization (do this first — it touches every file below)
-- [ ] **M1-0a** (S) One-shot `black ncrads9 tests tools` (90 files), as its own commit with no
+- [x] **M1-0a** (S) One-shot `black ncrads9 tests tools` (90 files), as its own commit with no
       other changes, then widen the black gate to the whole tree in `.github/workflows/ci.yml`,
       `.pre-commit-config.yaml` and `tools/check.sh`. Deferred from M0 — see
       `docs/parity/lint-backlog.md`.
-- [ ] **M1-0b** (S) One-shot `ruff check --select UP,I --fix ncrads9 tests tools` (~1,350
+- [x] **M1-0b** (S) One-shot `ruff check --select UP,I --fix ncrads9 tests tools` (~1,350
       findings: `UP045`, `UP006`, `UP035`, `UP007`, `I001`, `UP015`, `UP012`), as its own commit,
       then add `UP` and `I` to `lint.select` in `pyproject.toml`. Do it before the signature work
       below, which rewrites the same annotations.
 
 ### Delete confirmed duplicates
-- [ ] **M1-17** (S) Delete `rendering/colormap_engine.py` and `rendering/rgb_compositor.py` after
+- [x] **M1-17** (S) Delete `rendering/colormap_engine.py` and `rendering/rgb_compositor.py` after
       confirming `rendering/scale_algorithms.py` + `colormaps/colormap.py` cover their intent.
-- [ ] **M1-18** (S) Delete `regions/region_renderer.py` if `region_overlay.py` remains the
+- [x] **M1-18** (S) Delete `regions/region_renderer.py` if `region_overlay.py` remains the
       renderer; otherwise move painting into it and have the overlay delegate.
-- [ ] **M1-19** (S) Replace the `NotImplementedError` skeletons in `image_servers/{dss,eso,
+- [x] **M1-19** (S) Replace the `NotImplementedError` skeletons in `image_servers/{dss,eso,
       skyview,sdss_image,twomass_image}.py` and `grid/`, `prism/`, `printing/` with a single
       `docs/parity/skeletons.md` note, so the tree stops advertising unimplemented APIs. They are
       reimplemented for real in M7/M8/M9.
-- [ ] **M1-20** (S) Add `tests/unit/test_no_orphan_modules.py`: walk the import graph from
+- [x] **M1-20** (S) Add `tests/unit/test_no_orphan_modules.py`: walk the import graph from
       `ncrads9.app` and fail on any module under `ncrads9/` that is unreachable and not
       allow-listed. Keeps §3.1 from regressing.
 

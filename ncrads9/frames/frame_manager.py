@@ -25,6 +25,7 @@ Author: Yogesh Wadadekar
 """
 
 from .frame import Frame
+from .rgb_frame import HLSFrame, HSVFrame, RGBFrame
 
 
 class FrameManager:
@@ -60,9 +61,25 @@ class FrameManager:
         """Get list of frames."""
         return self._frames
 
+    #: frame_type token -> the class that implements it. RGB, HSV and HLS
+    #: differ only in how their three channels combine, so each is a Frame
+    #: subclass overriding `compose`.
+    FRAME_TYPES: dict[str, type[Frame]] = {
+        "base": Frame,
+        "rgb": RGBFrame,
+        "hsv": HSVFrame,
+        "hls": HLSFrame,
+    }
+
     def new_frame(self, frame_type: str = "base") -> Frame:
-        """Create a new empty frame."""
-        frame = Frame(frame_id=self._next_id, frame_type=frame_type)
+        """Create a new empty frame of the requested type.
+
+        Unknown types fall back to a plain Frame rather than raising, so a
+        stale preference or an XPA client asking for a type this build does
+        not have (3d, until M9) still gets a usable frame.
+        """
+        cls = self.FRAME_TYPES.get(frame_type, Frame)
+        frame = cls(frame_id=self._next_id, frame_type=frame_type)
         self._frames.append(frame)
         self._current_index = len(self._frames) - 1
         self._next_id += 1

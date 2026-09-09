@@ -28,11 +28,7 @@ from urllib.parse import unquote, urlparse
 import astropy.units as u
 import numpy as np
 from astropy.coordinates import (
-    FK4,
-    FK5,
     ICRS,
-    BarycentricTrueEcliptic,
-    Galactic,
     SkyCoord,
 )
 from astropy.table import Table
@@ -72,6 +68,7 @@ from ..colormaps.colormap import Colormap
 from ..colormaps.lut_parser import parse_lut_file, save_lut_file
 from ..colormaps.sao_parser import parse_sao_file
 from ..communication.samp import SAMPClient
+from ..coordinates.coord_system import CoordinateContext
 from ..core.fits_handler import FITSHandler
 from ..core.wcs_handler import WCSHandler
 from ..frames.blink_controller import (
@@ -90,6 +87,7 @@ from ..regions.shapes.box import Box
 from ..regions.shapes.circle import Circle
 from ..regions.shapes.ellipse import Ellipse
 from ..regions.shapes.point import Point
+from ..rendering.rgb_compositor import compose_rgb
 from ..rendering.scale_algorithms import ScaleAlgorithm, apply_scale, compute_zscale_limits
 from ..utils.preferences import Preferences
 from .button_bar import ButtonBar
@@ -163,8 +161,9 @@ class MainWindow(QMainWindow):
         self.custom_colormaps: dict[str, Colormap] = {}
         self._user_colormap_actions: dict[str, object] = {}
         self.current_bin = 1
-        self.current_wcs_system = "fk5"
-        self.current_wcs_format = "sexagesimal"
+        # Single source of truth for how coordinates are transformed and
+        # written. Every coordinate string in the UI goes through it.
+        self.coord_context = CoordinateContext()
         self._last_mouse_pos: tuple[int, int] | None = None
         self._preview_rgb_cache: NDArray[np.uint8] | None = None
         self._preview_rgb_cache_frame_id: int | None = None
@@ -347,25 +346,26 @@ class MainWindow(QMainWindow):
             return None
 
         base_shape = next(iter(channels.values())).shape
-        rgb = np.zeros((base_shape[0], base_shape[1], 3), dtype=np.float32)
-        visible_assigned = False
-        for name in self._rgb_channel_names():
-            if not frame.rgb_view.get(name, True):
-                continue
-            data = frame.rgb_channels.get(name)
-            if data is None or data.shape != base_shape:
-                continue
-            normalized = self._compute_rgb_channel_scaled(frame, name, data)
-            if name == "red":
-                rgb[:, :, 0] = normalized
-            elif name == "green":
-                rgb[:, :, 1] = normalized
-            else:
-                rgb[:, :, 2] = normalized
-            visible_assigned = True
-        if not visible_assigned:
+
+        # Scale each channel with its own algorithm and limits, then let the
+        # frame combine them: RGBFrame stacks, HSVFrame and HLSFrame convert
+        # from their colour space. Frames created before the typed subclasses
+        # existed, and plain Frames carrying frame_type="rgb", fall back to a
+        # plain stack.
+        normalized = {
+            name: self._compute_rgb_channel_scaled(frame, name, data)
+            for name, data in ((name, frame.rgb_channels.get(name)) for name in self._rgb_channel_names())
+            if data is not None and data.shape == base_shape
+        }
+        compose = getattr(frame, "compose", None)
+        composed = (
+            compose(normalized, frame.rgb_view)
+            if compose is not None
+            else compose_rgb(normalized, frame.rgb_view)
+        )
+        if composed is None:
             return np.zeros((base_shape[0], base_shape[1], 3), dtype=np.uint8)
-        return (np.clip(rgb, 0.0, 1.0) * 255.0).astype(np.uint8)
+        return composed
 
     def _apply_rgb_frame_channels_from_sources(
         self,
@@ -1010,18 +1010,20 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        # Load FITS file
+        # Load FITS file. ImageData gathers the array, header, WCS and derived
+        # metadata (BITPIX, cached min/max) in one place; M4 extends this to
+        # extensions, cubes and mosaics.
         fits_handler = FITSHandler()
         fits_handler.load(filepath)
-        image_data = fits_handler.get_data()
-
-        # Load WCS if available
-        header = fits_handler.get_header()
+        image = fits_handler.load_image_data()
+        image_data = image.data
+        header = image.header
         wcs_handler = WCSHandler(header)
 
         # Update frame
         frame.filepath = Path(filepath)
         frame.fits_handler = fits_handler
+        frame.image = image
         if frame.frame_type == "rgb":
             channel = frame.rgb_current_channel if frame.rgb_current_channel in frame.rgb_channels else "red"
             frame.rgb_channels[channel] = np.array(image_data, copy=True)
@@ -3103,7 +3105,7 @@ class MainWindow(QMainWindow):
 
     def _set_wcs_system(self, system: str) -> None:
         """Set WCS coordinate system."""
-        self.current_wcs_system = system
+        self.coord_context = self.coord_context.with_sky(system)
         # Update menu checkmarks
         self.menu_bar.action_wcs_fk5.setChecked(system == "fk5")
         self.menu_bar.action_wcs_fk4.setChecked(system == "fk4")
@@ -3117,7 +3119,7 @@ class MainWindow(QMainWindow):
 
     def _set_wcs_format(self, format_type: str) -> None:
         """Set WCS format (sexagesimal or degrees)."""
-        self.current_wcs_format = format_type
+        self.coord_context = self.coord_context.with_format(format_type)
         self.menu_bar.action_wcs_sexagesimal.setChecked(format_type == "sexagesimal")
         self.menu_bar.action_wcs_degrees.setChecked(format_type == "degrees")
         self.statusBar().showMessage(f"WCS format: {format_type}", 2000)
@@ -3172,45 +3174,7 @@ class MainWindow(QMainWindow):
             return
 
         ra, dec = self.wcs_handler.pixel_to_world(x, y)
-        base_coord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg, frame=ICRS())
-
-        system = self.current_wcs_system
-        if system == "fk5":
-            coord = base_coord.transform_to(FK5())
-            lon = coord.ra.deg
-            lat = coord.dec.deg
-            labels = ("RA", "Dec")
-        elif system == "fk4":
-            coord = base_coord.transform_to(FK4())
-            lon = coord.ra.deg
-            lat = coord.dec.deg
-            labels = ("RA", "Dec")
-        elif system == "icrs":
-            coord = base_coord.transform_to(ICRS())
-            lon = coord.ra.deg
-            lat = coord.dec.deg
-            labels = ("RA", "Dec")
-        elif system == "galactic":
-            coord = base_coord.transform_to(Galactic())
-            lon = coord.l.deg
-            lat = coord.b.deg
-            labels = ("l", "b")
-        elif system == "ecliptic":
-            coord = base_coord.transform_to(BarycentricTrueEcliptic())
-            lon = coord.lon.deg
-            lat = coord.lat.deg
-            labels = ("Lon", "Lat")
-        else:
-            lon = ra
-            lat = dec
-            labels = ("RA", "Dec")
-
-        self.status_bar.update_wcs_coords(
-            lon,
-            lat,
-            format_type=self.current_wcs_format,
-            labels=labels,
-        )
+        self.status_bar.update_wcs_coords(self.coord_context.describe_sky(ra, dec))
 
     def _show_statistics(self) -> None:
         """Show statistics dialog."""

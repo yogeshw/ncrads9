@@ -88,6 +88,37 @@ class ImageData:
             except Exception:
                 self._wcs = None
 
+    @classmethod
+    def from_hdu(cls, hdu: Any) -> "ImageData":
+        """Build an ImageData from an open FITS HDU.
+
+        This is the one place data, header, WCS and derived metadata are
+        gathered, so callers do not each re-derive them. Before M1 the loader
+        pulled `get_data()`, `get_header()` and a `WCSHandler` separately and
+        recomputed min/max on every redraw.
+        """
+        return cls(data=hdu.data, header=hdu.header)
+
+    @property
+    def bitpix(self) -> int | None:
+        """The FITS BITPIX value, or None when there is no header."""
+        if self._header is None:
+            return None
+        value = self._header.get("BITPIX")
+        return int(value) if value is not None else None
+
+    @property
+    def data_min(self) -> float | None:
+        """Minimum finite pixel value, computed once and cached."""
+        stats = self.statistics
+        return None if stats is None else stats.min
+
+    @property
+    def data_max(self) -> float | None:
+        """Maximum finite pixel value, computed once and cached."""
+        stats = self.statistics
+        return None if stats is None else stats.max
+
     @property
     def data(self) -> NDArray[np.floating] | None:
         """Get the image data array."""

@@ -24,7 +24,6 @@ Author: Yogesh Wadadekar
 """
 
 from .cube_handler import CubeHandler
-from .data_cache import DataCache
 from .fits_handler import FITSHandler
 from .header_parser import extract_keywords, parse_header
 from .image_data import ImageData
@@ -35,7 +34,6 @@ __all__ = [
     "ImageData",
     "WCSHandler",
     "CubeHandler",
-    "DataCache",
     "parse_header",
     "extract_keywords",
 ]

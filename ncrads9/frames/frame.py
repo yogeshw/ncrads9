@@ -35,6 +35,7 @@ from pathlib import Path
 
 import numpy as np
 
+from ..core.image_data import ImageData
 from ..rendering.scale_algorithms import ScaleAlgorithm
 
 
@@ -48,6 +49,12 @@ class Frame:
     header: dict | None = None
     wcs_handler: object | None = None
     fits_handler: object | None = None
+    #: The as-loaded extension: array, header, WCS, BITPIX and cached min/max.
+    #: `image_data` below is the *working* array, which block, bin and smooth
+    #: replace; `image.data` stays as it came off disk. M4 folds `header` and
+    #: `wcs_handler` into this container when it rewrites the loader for
+    #: extensions and cubes.
+    image: ImageData | None = None
     regions: list = None
     original_image_data: np.ndarray | None = None
     bin_factor: int = 1

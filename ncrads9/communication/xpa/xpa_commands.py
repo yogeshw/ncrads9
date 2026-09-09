@@ -557,7 +557,7 @@ class XPACommands:
             system = str(params.get("system", self._first_arg(params, "fk5"))).lower()
             self.viewer._set_wcs_system(system)
             return {"status": "ok", "result": system}
-        return {"status": "ok", "result": self.viewer.current_wcs_system}
+        return {"status": "ok", "result": self.viewer.coord_context.sky.value}
 
     def _handle_crosshair(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle crosshair commands.

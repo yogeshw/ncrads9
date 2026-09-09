@@ -21,19 +21,19 @@ python tools/menu_diff.py --summary                 # DS9 menu parity
 | Gate | Scope | State |
 |---|---|---|
 | `ruff check` | `ncrads9`, `tests`, `tools` — rule set in `pyproject.toml`, incl. `UP` and `I` since M1-0b | **clean** |
-| `mypy` | `ncrads9/core`, `ncrads9/coordinates`, `ncrads9/regions` | **clean** (40 files) |
+| `mypy` | `ncrads9/core`, `ncrads9/coordinates`, `ncrads9/regions` | **clean** (39 files) |
 | `black --check` | `ncrads9`, `tests`, `tools` — whole tree since M1-0a | **clean** |
-| `pytest` | whole suite | **clean**, 107 tests |
-| coverage | whole tree | **42.1%**, floor 40% |
+| `pytest` | whole suite | **clean**, 447 tests |
+| coverage | whole tree | **47.6%**, floor 40% |
 
 ---
 
-## Deferred: black formatting of `ncrads9/` and `tests/`
+## Done in M1-0a: black formatting of the whole tree
 
-`black --check ncrads9 tests` would reformat **90 files** (80 under `ncrads9/`,
-10 under `tests/`).
+`black` now covers `ncrads9/`, `tests/` and `tools/`. The one-shot reformat in
+M1-0a touched 89 files.
 
-Not done in M0, because:
+It was deferred out of M0 because:
 
 - It would produce a diff spanning most of the codebase, burying M0's eight bug
   fixes in unreviewable noise.
@@ -66,43 +66,35 @@ black --check ncrads9 tests tools
 
 ---
 
-## Deferred: ruff rule families
+## Done in M1-0b: ruff `UP` and `I`
 
-Counts are from the full default rule set with no exemptions, measured at the
-end of M0. All are style or modernization, none are correctness.
+`UP` (pyupgrade) and `I` (isort) are in `lint.select` as of M1-0b, which fixed
+1,559 findings in one pass: `Optional[X]`/`Union[A, B]` to `X | None`/`A | B`,
+`typing.List`/`Dict`/`Tuple` to the builtins, deprecated `typing` imports
+removed, and import blocks sorted.
+
+That pass also exposed a latent bug -- see "Fixed during M1" below.
+
+## Deferred: remaining ruff rule families
+
+Measured with the full default rule set, no exemptions. All are style, none are
+correctness.
 
 | Rule | Count | What it wants | Enable at |
 |---|---:|---|---|
-| `UP045` | 634 | `Optional[X]` → `X \| None` | M1 (touches every model signature) |
-| `UP006` | 416 | `List`/`Dict` → `list`/`dict` | M1 |
-| `I001` | 129 | import sorting | M1 |
-| `UP035` | 127 | deprecated `typing` imports | M1 |
-| `UP007` | 43 | `Union[A, B]` → `A \| B` | M1 |
-| `SIM105` | 21 | `contextlib.suppress` | M2 |
-| `RUF012` | 14 | mutable class default | M1/M2 (Qt constructors) |
-| `SIM108` | 10 | ternary instead of if/else | M2 |
-| `UP015` | 10 | redundant `open()` mode | M1 |
-| `RUF046` | 8 | unnecessary `int()` cast | M2 |
-| `RUF059` | 6 | unused unpacked variable | M2 |
-| `UP041` | 5 | `socket.timeout` → `TimeoutError` | M9 |
-| `SIM102` | 4 | collapsible `if` | M2 |
-| `UP012` | 4 | unnecessary `.encode("utf-8")` | M1 |
-| `SIM116` | 2 | dict lookup instead of `if`/`elif` chain | M2 |
+| `SIM105` | ~21 | `contextlib.suppress` | M2 |
+| `RUF012` | ~14 | mutable class default | M2 (Qt constructors) |
+| `SIM108` | ~10 | ternary instead of if/else | M2 |
+| `RUF046` | ~8 | unnecessary `int()` cast | M2 |
+| `RUF059` | ~6 | unused unpacked variable | M2 |
+| `SIM102` | ~4 | collapsible `if` | M2 |
+| `SIM116` | ~2 | dict lookup instead of `if`/`elif` chain | M2 |
 
-The whole-tree `--select ALL` run reports considerably more (922 `W293`
-whitespace-only lines, 900 `D413` docstring-section, 724 `D212` docstring-summary,
-329 `S101` asserts in tests, 185 `COM812` trailing commas, 182 `PLR2004` magic
-values, 181 `SLF001` private access in tests, 117 `ANN201` missing return types).
-Those families are documentation and annotation conventions rather than defects,
-and are not planned for adoption; `W293` will disappear as a side effect of the
-black rollout.
-
-The `UP*` and `I001` families are best applied in one pass at the start of M1,
-together with the model consolidation that rewrites those signatures anyway:
-
-```bash
-ruff check --select UP,I --fix ncrads9 tests tools
-```
+The whole-tree `--select ALL` run reports considerably more (docstring-section
+and docstring-summary conventions, `S101` asserts in tests, trailing commas,
+magic values, private access in tests, missing return annotations). Those are
+documentation and annotation conventions rather than defects, and are not
+planned for adoption.
 
 ### Permanently exempted, with reasons
 
@@ -185,3 +177,17 @@ Real defects the new gates surfaced immediately, all with regression tests:
 | Naive `datetime.now()`/`utcnow()` in serialized timestamps | `ruff` DTZ003/DTZ005 | `catalogs/skybot.py`, `io/session/*` |
 | Zoom and block factors computed from an unlaid-out viewport | the failing M0-2 test | `ui/main_window.py` |
 | Zoom-to-fit near-zero on the default GPU path: `zoom_fit()` took a viewport size and discarded it | verifying the M0-2 fix against a real image | `ui/widgets/gl_image_viewer_with_regions.py`, `rendering/gl_canvas.py` |
+
+---
+
+## Fixed during M1
+
+| Defect | Found by | Where |
+|---|---|---|
+| `catalog_table.py` imported `QAction` from `PyQt6.QtWidgets`, where it does not exist. The module had been silently degraded to `HAS_QT = False` since it was written; it kept *importing* only because CPython binds `from X import (a, b, c)` names one at a time and the bad name sat sixth, so the one name the class body needed was already bound. Sorting the imports moved it second and the module stopped importing at all, taking `ncrads9.catalogs` and `main_window` with it. | `ruff` `I001` | `catalogs/catalog_table.py` |
+| Six PyQt5-era scoped-enum spellings (`Qt.AscendingOrder`, `Qt.CustomContextMenu`, `Qt.ItemIsEditable`, `QAbstractItemView.SelectRows`/`SingleSelection`, `QHeaderView.ResizeToContents`), exposed once `HAS_QT` became True for the first time | the fix above | `catalogs/catalog_table.py` |
+| Right-click never closed a polygon: `mouseReleaseEvent` returned early for every right button, making the `elif RightButton and POLYGON` branch below unreachable | new gesture tests | `ui/widgets/region_overlay.py` |
+| `RegionWriter` emitted a second `#` on shapes whose `to_ds9_string()` already carries a comment (point, text, ruler), making their properties unparseable | new round-trip tests | `regions/region_writer.py` |
+| `RegionParser` ignored the `-` exclude prefix and every DS9 property flag, so anything the writer emitted came back with defaults | new round-trip tests | `regions/region_parser.py` |
+| `header_dialog` iterated a `fits.Header` as a plain mapping, dropping every card comment; its search could not match comments either | adopting `core/header_parser.py` | `ui/dialogs/header_dialog.py` |
+| `rgb_compositor` converted HSV and HLS one pixel at a time in a Python double loop (~16M iterations for a 4k x 4k cube) | reading it before adoption | `rendering/rgb_compositor.py` |

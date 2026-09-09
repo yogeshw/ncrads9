@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from ncrads9.communication.xpa.xpa_commands import XPACommands
+from ncrads9.coordinates.coord_system import CoordinateContext
 from ncrads9.rendering.scale_algorithms import ScaleAlgorithm
 
 
@@ -107,7 +108,7 @@ class _DummyViewer:
         self.colorbar_widget = _DummyColorbarWidget()
         self.current_colormap = "grey"
         self.current_scale = ScaleAlgorithm.LINEAR
-        self.current_wcs_system = "fk5"
+        self.coord_context = CoordinateContext()
         self.colorbar_orientation = "vertical"
         self.colorbar_numerics = True
         self._last_mouse_pos = (5, 6)
@@ -188,7 +189,7 @@ class _DummyViewer:
         self.frame_manager.current_frame.regions.clear()
 
     def _set_wcs_system(self, system: str):
-        self.current_wcs_system = system
+        self.coord_context = self.coord_context.with_sky(system)
 
     def _match_frames_image(self):
         return

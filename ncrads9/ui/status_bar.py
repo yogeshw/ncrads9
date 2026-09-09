@@ -75,64 +75,19 @@ class StatusBar(QStatusBar):
         """
         self.pixel_coord_label.setText(f"X: {x:d} Y: {y:d}")
 
-    def update_wcs_coords(
-        self,
-        ra: float | None = None,
-        dec: float | None = None,
-        format_type: str = "sexagesimal",
-        labels: tuple[str, str] = ("RA", "Dec"),
-    ) -> None:
-        """
-        Update WCS coordinates display.
+    def update_wcs_coords(self, text: str | None = None) -> None:
+        """Show a pre-formatted coordinate string.
+
+        Formatting belongs to `coordinates.CoordinateContext`, not here: this
+        method used to do its own frame-dependent sexagesimal conversion while
+        `MainWindow._update_wcs_display` did the frame transform, so the two
+        halves of one calculation lived in different layers and neither could
+        be reused by the info panel or by XPA.
 
         Args:
-            ra: Right ascension in degrees, or None if unavailable.
-            dec: Declination in degrees, or None if unavailable.
+            text: Formatted coordinates, or None to blank the field.
         """
-        if ra is not None and dec is not None:
-            label_x, label_y = labels
-
-            if format_type == "degrees":
-                self.wcs_coord_label.setText(f"{label_x}: {ra:.5f} deg {label_y}: {dec:.5f} deg")
-                return
-
-            use_hours = label_x.lower() == "ra"
-            if use_hours:
-                ra_h = ra / 15.0
-                ra_hours = int(ra_h)
-                ra_min = int((ra_h - ra_hours) * 60)
-                ra_sec = ((ra_h - ra_hours) * 60 - ra_min) * 60
-
-                dec_sign = "+" if dec >= 0 else "-"
-                dec_abs = abs(dec)
-                dec_deg = int(dec_abs)
-                dec_min = int((dec_abs - dec_deg) * 60)
-                dec_sec = ((dec_abs - dec_deg) * 60 - dec_min) * 60
-
-                self.wcs_coord_label.setText(
-                    f"{label_x}: {ra_hours:02d}:{ra_min:02d}:{ra_sec:05.2f} "
-                    f"{label_y}: {dec_sign}{dec_deg:02d}:{dec_min:02d}:{dec_sec:04.1f}"
-                )
-                return
-
-            ra_sign = "+" if ra >= 0 else "-"
-            ra_abs = abs(ra)
-            ra_deg = int(ra_abs)
-            ra_min = int((ra_abs - ra_deg) * 60)
-            ra_sec = ((ra_abs - ra_deg) * 60 - ra_min) * 60
-
-            dec_sign = "+" if dec >= 0 else "-"
-            dec_abs = abs(dec)
-            dec_deg = int(dec_abs)
-            dec_min = int((dec_abs - dec_deg) * 60)
-            dec_sec = ((dec_abs - dec_deg) * 60 - dec_min) * 60
-
-            self.wcs_coord_label.setText(
-                f"{label_x}: {ra_sign}{ra_deg:02d}:{ra_min:02d}:{ra_sec:05.2f} "
-                f"{label_y}: {dec_sign}{dec_deg:02d}:{dec_min:02d}:{dec_sec:04.1f}"
-            )
-        else:
-            self.wcs_coord_label.setText("RA: --- Dec: ---")
+        self.wcs_coord_label.setText(text if text else "RA: --- Dec: ---")
 
     def update_pixel_value(self, value: float | None = None) -> None:
         """
@@ -199,22 +154,20 @@ class StatusBar(QStatusBar):
     def update_all(
         self,
         pixel_coords: tuple[int, int] | None = None,
-        wcs_coords: tuple[float, float] | None = None,
+        wcs_text: str | None = None,
         value: float | None = None,
-        wcs_format: str = "sexagesimal",
-        wcs_labels: tuple[str, str] = ("RA", "Dec"),
     ) -> None:
         """
         Update all coordinate displays at once.
 
         Args:
             pixel_coords: Tuple of (x, y) pixel coordinates.
-            wcs_coords: Tuple of (ra, dec) in degrees.
+            wcs_text: Coordinates already formatted by a CoordinateContext.
             value: Pixel value.
         """
         if pixel_coords is not None:
             self.update_pixel_coords(*pixel_coords)
-        if wcs_coords is not None:
-            self.update_wcs_coords(*wcs_coords, format_type=wcs_format, labels=wcs_labels)
+        if wcs_text is not None:
+            self.update_wcs_coords(wcs_text)
         if value is not None:
             self.update_pixel_value(value)

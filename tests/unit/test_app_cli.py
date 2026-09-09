@@ -140,8 +140,8 @@ def test_apply_startup_cli_applies_display_options(main_window: MainWindow, monk
     assert main_window.frame_manager.current_frame.bin_factor == 2
     assert main_window._tile_mode_enabled
     assert main_window.invert_colormap
-    assert main_window.current_wcs_system == "fk4"
-    assert main_window.current_wcs_format == "degrees"
+    assert main_window.coord_context.sky.value == "fk4"
+    assert main_window.coord_context.sky_format.value == "degrees"
 
 
 def test_cli_help_detection():

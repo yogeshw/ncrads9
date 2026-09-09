@@ -13,7 +13,7 @@ was verified against actual source, not inferred from documentation.
 
 | Metric | SAOImageDS9 | NCRADS9 |
 |---|---|---|
-| Application logic | 98,088 lines Tcl (`ds9/library/*.tcl`, 232 files) | 42,028 lines Python (191 files) |
+| Application logic | 98,088 lines Tcl (`ds9/library/*.tcl`, 232 files) | 40,000 lines Python (180 files) |
 | Rendering/marker engine | 144,879 lines C++ (`tksao/`) | Qt/NumPy/OpenGL in `rendering/`, `ui/widgets/` |
 | Menu entries (excl. separators) | 526 | 286 |
 | XPA access points | 143 | 23 |
@@ -21,7 +21,7 @@ was verified against actual source, not inferred from documentation.
 | Region/marker shapes | 20 shapes + 7 point glyphs | 16 classes, 8 parseable, **6 interactively creatable** |
 | Region file formats | ds9, ciao, saotng, funtools, xy, pros, XML | ds9, ciao, saotng, funtools, xy (parse only) |
 | UI locales | 8 (`cs da de es fr ja pt zh`) | 0 |
-| Tests | — | 107 tests, all passing, 42% coverage (69 with 1 failure before M0) |
+| Tests | — | 447 tests, all passing, 47.6% coverage (69 with 1 failure before M0) |
 
 DS9's top-level menus: `File Edit View Frame Bin Zoom Scale Color Region Illustrate WCS Analysis Help`.
 NCRADS9's: `File Edit View Frame Bin Zoom Scale Color Region VO WCS Analysis Help`.
@@ -72,8 +72,13 @@ harder to add. **Fix these before adding features.**
 
 ### 3.1 Two-thirds of the package is unreachable code
 
+> **M1 reduced this from 116 orphans to 71**, and
+> `tests/unit/test_no_orphan_modules.py` now fails on any new one that is not
+> listed against the milestone that adopts it. The remaining 71 are inventoried in
+> `docs/parity/skeletons.md`. The table below records the original finding.
+
 An import-reachability analysis from `ncrads9.app` / `ncrads9.__main__` /
-`ncrads9.ui.main_window` finds **116 of 191 modules are never imported by the running
+`ncrads9.ui.main_window` found **116 of 191 modules were never imported by the running
 application**. Verified examples:
 
 | Orphaned | The app instead… |
@@ -98,21 +103,26 @@ They give a false impression of coverage.
 **Decision required per orphan: adopt, or delete.** The plan below adopts the ones that map onto
 DS9 features and deletes the pure duplicates.
 
-### 3.2 `main_window.py` is a 4,719-line / 238-method god object
+### 3.2 `main_window.py` is a god object
+
+*(4,719 lines / 238 methods when surveyed; M1 trimmed it to ~4,600 by moving tiling, blink
+sequencing, coordinate formatting and region translation out. M2 is what actually fixes this.)*
 
 It holds file I/O, rendering, colormaps, scaling, blocking, smoothing, contours, grid, mask,
 crosshair, WCS formatting, frames, tiling, RGB composition, regions, SAMP, VO queries, printing,
 preferences and analysis-command execution. Nothing else can be unit-tested in isolation, and this
 is where nearly all real logic lives.
 
-### 3.3 Three incompatible `Region` types
+### 3.3 Three incompatible `Region` types — fixed in M1
 
-- `regions/base_region.py:BaseRegion` — has tags, colour, width, font
-- `frames/frame.py:Region` — a separate dataclass
-- `ui/widgets/region_overlay.py:Region` — the one actually drawn and edited
+Originally three: `regions/base_region.py:BaseRegion`, `frames/frame.py:Region`, and
+`ui/widgets/region_overlay.py:Region` (the one actually drawn), with
+`main_window.py:_overlay_regions_to_base()` / `_base_region_to_overlay()` translating between two
+of them and dropping colour, width, text, tags and every DS9 property in the process.
 
-`main_window.py:_overlay_regions_to_base()` / `_base_region_to_overlay()` (lines 4612–4695) exist
-purely to translate between two of them, and lossily.
+`BaseRegion` is now the only region type. It carries DS9's full property set, the overlay creates
+and edits it directly, and `RegionRenderer` paints it. Round-tripping is covered by
+`tests/unit/test_region_roundtrip.py`.
 
 ### 3.4 `Bin` and `Block` are the same code, and both are wrong
 
