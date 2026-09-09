@@ -97,7 +97,7 @@ def test_apply_startup_cli_builds_rgb_composite(main_window: MainWindow, monkeyp
     assert frame.rgb_channels["red"] is not None
     assert frame.rgb_channels["green"] is not None
     assert frame.rgb_channels["blue"] is not None
-    composite = main_window._compose_rgb_frame_image(frame)
+    composite = main_window.display.compose_rgb(frame)
     assert composite is not None
     assert composite.shape == (2, 2, 3)
 

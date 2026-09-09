@@ -190,7 +190,7 @@ class ZoomController(Controller):
         ):
             self.refresh()
         else:
-            self.window._refresh_transformed_view(frame)
+            self.window.display.refresh_transformed_view(frame)
 
     def set_orientation(self, orientation: str) -> None:
         """Flip the frame: none, x, y or xy."""
@@ -415,7 +415,7 @@ class ZoomController(Controller):
         self.menu.action_zoom_align.setChecked(frame.align_wcs)
         self.viewer.zoom_to(zoom)
         frame.rotation = normalize_rotation(float(params["rotation"]))
-        self.window._apply_view_transform_to_viewer(frame)
+        self.window.display.apply_view_transform(frame)
 
         if self.window.using_gpu_rendering and hasattr(self.viewer, "set_pan"):
             self.viewer.set_pan(pan_x, pan_y)

@@ -172,7 +172,7 @@ def test_rebuild_image_viewer_does_not_manually_delete_replaced_widget(main_wind
     main_window.scroll_area.setWidget(old_viewer)
     main_window.image_viewer = old_viewer
     monkeypatch.setattr(main_window, "_create_image_viewer", lambda use_gpu: replacement)
-    monkeypatch.setattr(main_window, "_display_image", lambda: None)
+    monkeypatch.setattr(main_window.display, "display", lambda: None)
 
     main_window._rebuild_image_viewer(False)
 
@@ -194,8 +194,8 @@ def test_invert_updates_direction_arrows_without_full_rerender(main_window: Main
     assert before_east is not None
 
     monkeypatch.setattr(
-        main_window,
-        "_display_image",
+        main_window.display,
+        "display",
         lambda: (_ for _ in ()).throw(AssertionError("unexpected rerender")),
     )
     main_window.zoom.set_orientation("x")

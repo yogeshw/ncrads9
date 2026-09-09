@@ -313,9 +313,9 @@ def _load_rgb_channels_from_cli(main_window: MainWindow, channel_paths: dict[str
     if rgb_frame is None:
         return
     rgb_frame.rgb_current_channel = "red" if "red" in source_indices else next(iter(source_indices))
-    main_window._apply_rgb_frame_channels_from_sources(rgb_frame, source_indices)
+    main_window.display.apply_rgb_channels_from_sources(rgb_frame, source_indices)
     main_window.frame_controller.apply_view_state(rgb_frame)
-    main_window._display_image()
+    main_window.display.display()
 
 
 def apply_startup_cli(main_window: MainWindow, argv: Sequence[str]) -> None:

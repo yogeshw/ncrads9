@@ -479,7 +479,7 @@ class FrameController(Controller):
         self.ensure_active_valid()
         self.window._tile_mode_enabled = self.window._frame_display_mode == "tile"
         if self.window._tile_mode_enabled:
-            if not self.window._display_tiled_frames():
+            if not self.window.display.display_tiled():
                 self.set_display_mode("single")
                 return
             self.refresh_menu_items()
@@ -490,7 +490,7 @@ class FrameController(Controller):
         self.window.region.show_frame_regions(frame)
         if frame and frame.has_data:
             self.apply_view_state(frame)
-            self.window._display_image()
+            self.window.display.display()
             self.apply_view_state(frame)
             self.status_bar.update_image_info(frame.image_data.shape[1], frame.image_data.shape[0])
             if self.window.using_gpu_rendering and hasattr(self.viewer, "gl_canvas"):
@@ -632,7 +632,7 @@ class FrameController(Controller):
         channel_layout = QHBoxLayout(channel_group)
         button_group = QButtonGroup(channel_group)
         radio_buttons: dict[str, QRadioButton] = {}
-        for channel in self.window._rgb_channel_names():
+        for channel in self.window.display.channel_names():
             radio = QRadioButton(channel.capitalize(), channel_group)
             radio.setChecked(frame.rgb_current_channel == channel)
             button_group.addButton(radio)
@@ -643,7 +643,7 @@ class FrameController(Controller):
         view_group = QGroupBox("View", dialog)
         view_layout = QHBoxLayout(view_group)
         view_checks: dict[str, QCheckBox] = {}
-        for channel in self.window._rgb_channel_names():
+        for channel in self.window.display.channel_names():
             checkbox = QCheckBox(channel.capitalize(), view_group)
             checkbox.setChecked(frame.rgb_view.get(channel, True))
             view_layout.addWidget(checkbox)
@@ -669,7 +669,7 @@ class FrameController(Controller):
             ("HistEq", ScaleAlgorithm.HISTOGRAM_EQUALIZATION),
         ]
         channel_settings: dict[str, dict[str, object]] = {}
-        for row, channel in enumerate(self.window._rgb_channel_names(), start=1):
+        for row, channel in enumerate(self.window.display.channel_names(), start=1):
             settings_layout.addWidget(QLabel(channel.capitalize()), row, 0)
 
             scale_combo = QComboBox(settings_group)
@@ -743,7 +743,7 @@ class FrameController(Controller):
             and candidate.image_data is not None
             and candidate.image_data.ndim == 2
         ]
-        for channel in self.window._rgb_channel_names():
+        for channel in self.window.display.channel_names():
             combo = QComboBox(source_group)
             combo.addItem("Keep current data", "KEEP")
             combo.addItem("None (clear)", "CLEAR")
@@ -811,13 +811,13 @@ class FrameController(Controller):
                 elif isinstance(value, int):
                     updates[channel] = value
             if updates:
-                self.window._apply_rgb_frame_channels_from_sources(frame, updates)
+                self.window.display.apply_rgb_channels_from_sources(frame, updates)
             else:
-                self.window._sync_rgb_scalar_view(frame)
+                self.window.display.sync_rgb_scalar_view(frame)
 
-            self.window._sync_view_state_from_rgb_channel(frame)
+            self.window.display.sync_view_state_from_channel(frame)
             self.apply_view_state(frame)
-            self.window._display_image()
+            self.window.display.display()
             active = frame.rgb_current_channel.capitalize()
             self.status(f"RGB updated (active channel: {active})", 2000)
 
@@ -895,17 +895,17 @@ class FrameController(Controller):
         if self.window.using_gpu_rendering and hasattr(self.viewer, "gl_canvas"):
             frame.pan_x, frame.pan_y = self.viewer.gl_canvas.pan_offset
         else:
-            pan_center = self.window._get_cpu_pan_center()
+            pan_center = self.window.display.cpu_pan_center()
             if pan_center is not None:
                 frame.pan_x, frame.pan_y = pan_center
 
     def apply_view_state(self, frame: Frame) -> None:
         """Apply stored display settings from the frame."""
-        self.window._apply_view_transform_to_viewer(frame)
+        self.window.display.apply_view_transform(frame)
         self.window.current_colormap = self.window.color.normalize_name(frame.colormap)
         self.window.invert_colormap = frame.invert_colormap
         if frame.frame_type == "rgb":
-            self.window._sync_view_state_from_rgb_channel(frame)
+            self.window.display.sync_view_state_from_channel(frame)
         else:
             self.window.current_scale = frame.scale
             self.window.z1 = frame.z1

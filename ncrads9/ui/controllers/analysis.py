@@ -207,13 +207,13 @@ class AnalysisController(Controller):
         """Toggle display smoothing."""
         self.window.z1 = None
         self.window.z2 = None
-        self.window._display_image()
+        self.window.display.display()
         self.log_command(f"smooth {'on' if checked else 'off'}")
         self.status(f"Smooth {'enabled' if checked else 'disabled'}", 2000)
 
     def analysis_image_data(self, frame: Frame) -> NDArray[np.floating]:
         """Return analysis-ready data with current smoothing and mask settings."""
-        display_data = self.window._get_display_image_data(frame)
+        display_data = self.window.display.display_image_data(frame)
         return self.apply_mask(display_data)
 
     def apply_mask(self, data: NDArray[np.floating]) -> NDArray[np.floating]:
@@ -623,7 +623,7 @@ class AnalysisController(Controller):
         frame.z2 = None
 
         self.sync_bin_menu(factor)
-        self.window._display_image()
+        self.window.display.display()
         self.status_bar.update_image_info(frame.image_data.shape[1], frame.image_data.shape[0])
         self.status(f"Binning: {factor}x{factor}", 2000)
 

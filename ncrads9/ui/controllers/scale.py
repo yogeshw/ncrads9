@@ -104,6 +104,13 @@ class ScaleController(Controller):
             self.refresh()
             self.status(f"Scale: {scale.name}")
 
+    def on_button_bar_scale(self, label: str) -> None:
+        """Select an algorithm from a button-bar label."""
+        for algorithm, text in BUTTON_LABELS.items():
+            if text == label:
+                self.set_scale(algorithm)
+                return
+
     # -- clip limits ---------------------------------------------------------
 
     def _store_limits(self, z1: float | None, z2: float | None) -> None:

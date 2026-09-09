@@ -61,7 +61,7 @@ def test_smoothing_pipeline_updates_display_data(main_window: MainWindow):
     _load_test_image(main_window)
     frame = main_window.frame_manager.current_frame
     assert frame is not None
-    original = main_window._get_display_image_data(frame).copy()
+    original = main_window.display.display_image_data(frame).copy()
     settings = {
         "kernel_type": "Gaussian",
         "sigma": 1.5,
@@ -73,7 +73,7 @@ def test_smoothing_pipeline_updates_display_data(main_window: MainWindow):
         "normalize": True,
     }
     main_window.analysis.apply_smooth_settings(settings)
-    smoothed = main_window._get_display_image_data(frame)
+    smoothed = main_window.display.display_image_data(frame)
     assert main_window.menu_bar.action_smooth.isChecked()
     assert smoothed.shape == original.shape
     assert not np.allclose(smoothed, original)

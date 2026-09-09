@@ -202,34 +202,69 @@ Depends on M0.
 
 ## M2 — Extract controllers
 
+**Status: complete.** `main_window.py` **4,600 -> 546 lines**, 238 methods -> 28. Tests 502 -> 533.
+Unconnected menu actions: **3 -> 0**.
+
+Twelve controllers plus a display pipeline, one per menu:
+
+| Module | Lines | Owns |
+|---|---:|---|
+| `controllers/base.py` | 137 | shared accessors, `require_frame`, `connect`/`sync` |
+| `controllers/analysis.py` | 893 | Analysis and Bin |
+| `controllers/frame.py` | 1,095 | Frame |
+| `controllers/zoom.py` | 447 | Zoom |
+| `controllers/color.py` | 301 | Color |
+| `controllers/vo.py` | 373 | VO and SAMP |
+| `controllers/file.py` | 192 | File |
+| `controllers/region.py` | 188 | Region |
+| `controllers/scale.py` | 183 | Scale |
+| `controllers/wcs.py` | 171 | WCS |
+| `controllers/edit.py` | 136 | Edit |
+| `controllers/help.py` | 62 | Help |
+| `controllers/view.py` | 56 | View |
+| `ui/display.py` | 707 | the render pipeline |
+
+Two additions to the plan as written, both needed to reach M2-16's target:
+
+- **`ui/display.py`** holds the render pipeline. Not a menu controller -- nothing in DS9's menu bar
+  corresponds to it -- but 600 lines of rendering could not stay in MainWindow and still meet the
+  size ceiling. Its docstring documents the pipeline order and why the CPU and GPU paths diverge.
+- **`controllers/help.py`** was not in the task list, but ncrads9 has a Help menu and its four
+  entries belonged with it rather than on the window.
+
+Controllers reach shared state through `self.window`. That is deliberate and temporary --
+`controllers/base.py` says so at length. Narrowing each controller to the collaborators it actually
+needs is follow-on work now that the surfaces are visible; doing it at the same time as the
+relocation would have made 3,800 lines of movement unreviewable.
+
 Depends on M1.
 
-- [ ] **M2-1** (M) Create `ui/controllers/base.py` with a `Controller` that receives the shared
+- [x] **M2-1** (M) Create `ui/controllers/base.py` with a `Controller` that receives the shared
       app state (frame manager, coordinate context, preferences, status reporting) and exposes
       `connect(menu_bar)`.
-- [ ] **M2-2** (M) `FileController` — open/save/import/export/print/header/backup.
-- [ ] **M2-3** (S) `EditController` — pointer modes, undo/redo, cut/copy/paste, preferences.
-- [ ] **M2-4** (M) `ViewController` — every visibility toggle and the layout switch.
-- [ ] **M2-5** (L) `FrameController` — create/delete/navigate/display-mode/match/lock/tile.
-- [ ] **M2-6** (M) `ScaleController` — algorithm, limits, scope, min/max method.
-- [ ] **M2-7** (M) `ColorController` — colormap, invert, colorbar, colour tags.
-- [ ] **M2-8** (M) `ZoomController` — zoom/pan/orient/rotate/crop/align.
-- [ ] **M2-9** (M) `RegionController` — mode, shape, properties, selection, groups, file ops.
-- [ ] **M2-10** (M) `AnalysisController` — contours, grid, block, smooth, mask, crosshair, graphs,
+- [x] **M2-2** (M) `FileController` — open/save/import/export/print/header/backup.
+- [x] **M2-3** (S) `EditController` — pointer modes, undo/redo, cut/copy/paste, preferences.
+- [x] **M2-4** (M) `ViewController` — every visibility toggle and the layout switch.
+- [x] **M2-5** (L) `FrameController` — create/delete/navigate/display-mode/match/lock/tile.
+- [x] **M2-6** (M) `ScaleController` — algorithm, limits, scope, min/max method.
+- [x] **M2-7** (M) `ColorController` — colormap, invert, colorbar, colour tags.
+- [x] **M2-8** (M) `ZoomController` — zoom/pan/orient/rotate/crop/align.
+- [x] **M2-9** (M) `RegionController` — mode, shape, properties, selection, groups, file ops.
+- [x] **M2-10** (M) `AnalysisController` — contours, grid, block, smooth, mask, crosshair, graphs,
       pixel table, external tasks.
-- [ ] **M2-11** (S) `WCSController` — system/sky/format/parameters.
-- [ ] **M2-12** (M) Rewire `communication/xpa/xpa_commands.py` to call controller methods instead
+- [x] **M2-11** (S) `WCSController` — system/sky/format/parameters.
+- [x] **M2-12** (M) Rewire `communication/xpa/xpa_commands.py` to call controller methods instead
       of poking `viewer.*` attributes. *Done when* no XPA handler touches a private
       `MainWindow._…` member.
-- [ ] **M2-13** (M) Rewire `app.py:apply_startup_cli` to call the same controller methods.
-- [ ] **M2-14** (S) Connect the three genuinely dead actions — `action_cut`, `action_copy`,
+- [x] **M2-13** (M) Rewire `app.py:apply_startup_cli` to call the same controller methods.
+- [x] **M2-14** (S) Connect the three genuinely dead actions — `action_cut`, `action_copy`,
       `action_paste` — and give `action_undo`/`action_redo` real behaviour instead of the
       "not implemented" status message at `main_window.py:408-409`. Confirm the list first with
       `python tools/dump_menus.py --connected`; an earlier static grep put it at 20, but most of
       those are connected by iterating a group or dict rather than by name (see PLAN.md §3.8).
-- [ ] **M2-15** (S) Assert in a test that every `QAction` declared in `MenuBar` has at least one
+- [x] **M2-15** (S) Assert in a test that every `QAction` declared in `MenuBar` has at least one
       connected receiver. Prevents §3.8 from recurring.
-- [ ] **M2-16** (S) `main_window.py` under 600 lines; add a CI check on that.
+- [x] **M2-16** (S) `main_window.py` under 600 lines; add a CI check on that.
 
 ---
 

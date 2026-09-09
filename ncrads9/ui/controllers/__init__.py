@@ -29,9 +29,11 @@ from .color import ColorController
 from .edit import EditController
 from .file import FileController
 from .frame import FrameController
+from .help import HelpController
 from .region import RegionController
 from .scale import ScaleController
 from .view import ViewController
+from .vo import VOController
 from .wcs import WCSController
 from .zoom import ZoomController
 
@@ -42,8 +44,10 @@ __all__ = [
     "EditController",
     "FileController",
     "FrameController",
+    "HelpController",
     "RegionController",
     "ScaleController",
+    "VOController",
     "ViewController",
     "WCSController",
     "ZoomController",

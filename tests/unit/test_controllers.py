@@ -482,6 +482,91 @@ class TestOneMethodPerAction:
         main_window._sync_controllers()
 
 
+class TestMainWindowIsThin:
+    """M2-16: MainWindow is composition and shared state, nothing more."""
+
+    MAX_LINES = 600
+
+    def test_main_window_stays_small(self):
+        """A ratchet on PLAN.md §3.2.
+
+        4,719 lines and 238 methods before M2. Raise this ceiling only for a
+        deliberate reason, never to make a failing run pass -- new behaviour
+        belongs in a controller.
+        """
+        import pathlib
+
+        path = pathlib.Path(__file__).resolve().parents[2] / "ncrads9/ui/main_window.py"
+        lines = len(path.read_text().splitlines())
+        assert lines <= self.MAX_LINES, (
+            f"main_window.py is {lines} lines, over the {self.MAX_LINES} ceiling. "
+            "Put new behaviour in a controller."
+        )
+
+    def test_every_menu_has_a_controller(self, main_window):
+        """Each top-level menu must be owned by something."""
+        expected = {
+            "analysis",
+            "color",
+            "edit",
+            "file",
+            "frame_controller",
+            "help",
+            "region",
+            "scale",
+            "view",
+            "vo",
+            "wcs",
+            "zoom",
+        }
+        for name in expected:
+            assert hasattr(main_window, name), name
+
+    def test_controllers_tuple_is_complete(self, main_window):
+        """`sync()` is broadcast over this tuple, so a gap is a silent bug."""
+        registered = set(main_window.controllers)
+        for name in (
+            "analysis",
+            "color",
+            "edit",
+            "file",
+            "frame_controller",
+            "help",
+            "region",
+            "scale",
+            "view",
+            "vo",
+            "wcs",
+            "zoom",
+        ):
+            assert getattr(main_window, name) in registered, name
+
+    def test_the_display_pipeline_is_separate(self, main_window):
+        from ncrads9.ui.display import DisplayPipeline
+
+        assert isinstance(main_window.display, DisplayPipeline)
+
+    def test_no_controller_method_remains_on_the_window(self, main_window):
+        """Delegating shims would let the call paths drift apart again."""
+        moved = [
+            "_set_scale",
+            "_set_colormap",
+            "_zoom_in",
+            "_set_region_mode",
+            "_update_frame_display",
+            "_display_image",
+            "_load_fits_file",
+            "_show_preferences",
+            "_export_image",
+            "_vo_siap_2mass",
+            "_set_bin",
+            "_toggle_contours",
+            "show_about",
+        ]
+        present = [name for name in moved if hasattr(main_window, name)]
+        assert present == [], present
+
+
 class TestCoordinateContextIsShared:
     """One context, not a copy per consumer."""
 

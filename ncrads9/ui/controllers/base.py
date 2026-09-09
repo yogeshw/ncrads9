@@ -121,7 +121,7 @@ class Controller:
 
     def refresh(self) -> None:
         """Redraw the current frame."""
-        self.window._display_image()
+        self.window.display.display()
 
     def connect(self) -> None:
         """Wire this controller's menu actions to its methods.

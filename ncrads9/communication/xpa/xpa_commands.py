@@ -418,11 +418,11 @@ class XPACommands:
         elif limits is not None and isinstance(limits, (list, tuple)) and len(limits) == 2:
             self.viewer.z1 = float(limits[0])
             self.viewer.z2 = float(limits[1])
-            self.viewer._display_image()
+            self.viewer.display.display()
         elif len(args) >= 2 and all(isinstance(v, (int, float)) for v in args[:2]):
             self.viewer.z1 = float(args[0])
             self.viewer.z2 = float(args[1])
-            self.viewer._display_image()
+            self.viewer.display.display()
 
         return {"status": "ok", "result": self.viewer.current_scale.name.lower()}
 

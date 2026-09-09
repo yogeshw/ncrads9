@@ -100,7 +100,7 @@ class VOController(Controller):
                 tmp.write(data)
                 tmp_path = tmp.name
             self.window.frame_controller.new_frame()
-            self.window._load_fits_file(tmp_path)
+            self.window.display.load_fits(tmp_path)
             self.status("Loaded SIAP image into new frame", 3000)
         except Exception as e:
             self.status(f"SIAP load error: {e}", 3000)

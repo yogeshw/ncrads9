@@ -264,11 +264,11 @@ def test_rgb_frame_composes_channels_from_source_frames(main_window: MainWindow)
     assert rgb_frame is not None
     assert rgb_frame.frame_type == "rgb"
 
-    main_window._apply_rgb_frame_channels_from_sources(
+    main_window.display.apply_rgb_channels_from_sources(
         rgb_frame,
         {"red": 0, "green": 1, "blue": 2},
     )
-    composed = main_window._compose_rgb_frame_image(rgb_frame)
+    composed = main_window.display.compose_rgb(rgb_frame)
     assert composed is not None
     assert composed.shape == (2, 2, 3)
     assert composed[0, 1, 0] > 200  # red-dominant pixel
@@ -292,7 +292,7 @@ def test_load_fits_in_rgb_frame_updates_active_channel(main_window: MainWindow, 
     assert frame is not None
     frame.rgb_current_channel = "green"
 
-    main_window._load_fits_file("/tmp/rgb-green.fits")
+    main_window.display.load_fits("/tmp/rgb-green.fits")
     assert frame.rgb_channels["green"] is not None
     assert frame.image_data is frame.rgb_channels["green"]
 
@@ -304,7 +304,7 @@ def test_rgb_channel_view_settings_persist_independently(main_window: MainWindow
     frame.rgb_channels["red"] = np.arange(100, dtype=np.float32).reshape(10, 10)
     frame.rgb_channels["green"] = np.arange(100, dtype=np.float32).reshape(10, 10) + 5.0
     frame.rgb_current_channel = "red"
-    main_window._sync_rgb_scalar_view(frame)
+    main_window.display.sync_rgb_scalar_view(frame)
 
     main_window.current_scale = ScaleAlgorithm.LOG
     main_window.z1 = 1.0
@@ -355,7 +355,7 @@ def test_load_fits_keeps_handler_alive_and_clear_closes_it(main_window: MainWind
     monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.load_image_data", _fake_load_image_data)
     monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.close", _fake_close)
 
-    main_window._load_fits_file("/tmp/test-large.fits")
+    main_window.display.load_fits("/tmp/test-large.fits")
     frame = main_window.frame_manager.current_frame
     assert frame is not None
     assert frame.fits_handler is not None

@@ -81,7 +81,7 @@ class FileController(Controller):
             return
 
         try:
-            self.window._load_fits_file(filepath)
+            self.window.display.load_fits(filepath)
             self.status(f"Opened: {filepath}", 3000)
         except Exception as exc:
             self.status(f"Error loading file: {exc}", 5000)

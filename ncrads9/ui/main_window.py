@@ -20,13 +20,12 @@ Main window for NCRADS9 application.
 Author: Yogesh Wadadekar
 """
 
-from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 from numpy.typing import NDArray
 from PyQt6.QtCore import QSize, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QAction, QColor, QImage, QKeyEvent, QPixmap
+from PyQt6.QtGui import QAction, QColor, QKeyEvent
 from PyQt6.QtWidgets import (
     QDockWidget,
     QMainWindow,
@@ -38,17 +37,14 @@ from ..colormaps.colormap import Colormap
 from ..communication.samp import SAMPClient
 from ..coordinates.coord_system import CoordinateContext
 from ..core.fits_handler import FITSHandler
-from ..core.wcs_handler import WCSHandler
 from ..frames.blink_controller import (
     DEFAULT_BLINK_INTERVAL_MS,
     DEFAULT_FADE_INTERVAL_MS,
     BlinkController,
 )
-from ..frames.frame import Frame
 from ..frames.frame_manager import FrameManager
 from ..frames.tile_layout import TileLayout
-from ..rendering.rgb_compositor import compose_rgb
-from ..rendering.scale_algorithms import ScaleAlgorithm, apply_scale, compute_zscale_limits
+from ..rendering.scale_algorithms import ScaleAlgorithm
 from ..utils.preferences import Preferences
 from .button_bar import ButtonBar
 from .controllers.analysis import AnalysisController
@@ -57,14 +53,14 @@ from .controllers.color import ColorController
 from .controllers.edit import EditController
 from .controllers.file import FileController
 from .controllers.frame import FrameController
+from .controllers.help import HelpController
 from .controllers.region import RegionController
 from .controllers.scale import ScaleController
 from .controllers.view import ViewController
 from .controllers.vo import VOController
 from .controllers.wcs import WCSController
 from .controllers.zoom import ZoomController
-from .dialogs.help_contents_dialog import HelpContentsDialog
-from .dialogs.keyboard_shortcuts_dialog import KeyboardShortcutsDialog
+from .display import DisplayPipeline
 from .menu_bar import MenuBar
 from .panels.horizontal_graph import HorizontalGraph
 from .panels.magnifier import MagnifierPanel
@@ -72,9 +68,6 @@ from .panels.panner import PannerPanel
 from .panels.vertical_graph import VerticalGraph
 from .status_bar import StatusBar
 from .toolbar import MainToolbar
-from .view_transform import (
-    transform_image_array,
-)
 from .widgets.colorbar_widget import ColorbarWidget
 from .widgets.gl_image_viewer_with_regions import GLImageViewerWithRegions
 from .widgets.image_viewer_with_regions import ImageViewerWithRegions
@@ -212,7 +205,7 @@ class MainWindow(QMainWindow):
         if not frame:
             return None
         if frame.frame_type == "rgb":
-            return self._get_rgb_active_channel_data(frame)
+            return self.display.active_channel_data(frame)
         return frame.image_data
 
     @property
@@ -234,123 +227,6 @@ class MainWindow(QMainWindow):
             return handler
         return None
 
-    @staticmethod
-    def _rgb_channel_names() -> tuple[str, str, str]:
-        return ("red", "green", "blue")
-
-    def _get_rgb_active_channel_data(self, frame: Frame) -> NDArray[np.floating] | None:
-        """Return currently selected RGB channel data, or first available channel."""
-        channel = frame.rgb_current_channel if frame.rgb_current_channel in frame.rgb_channels else "red"
-        data = frame.rgb_channels.get(channel)
-        if data is not None:
-            return data
-        for name in self._rgb_channel_names():
-            channel_data = frame.rgb_channels.get(name)
-            if channel_data is not None:
-                return channel_data
-        return None
-
-    def _sync_rgb_scalar_view(self, frame: Frame) -> None:
-        """Keep scalar frame data in sync with selected RGB channel for analysis/status."""
-        active = self._get_rgb_active_channel_data(frame)
-        frame.image_data = active
-        frame.original_image_data = active
-
-    def _rgb_channel_view_settings(
-        self,
-        frame: Frame,
-        channel: str,
-    ) -> tuple[ScaleAlgorithm, float | None, float | None, float, float]:
-        """Return per-channel RGB display settings."""
-        scale = frame.rgb_channel_scale.get(channel, ScaleAlgorithm.LINEAR)
-        z1 = frame.rgb_channel_z1.get(channel)
-        z2 = frame.rgb_channel_z2.get(channel)
-        contrast = max(float(frame.rgb_channel_contrast.get(channel, 1.0)), 0.1)
-        brightness = max(-1.0, min(float(frame.rgb_channel_brightness.get(channel, 0.0)), 1.0))
-        return scale, z1, z2, contrast, brightness
-
-    def _compute_rgb_channel_scaled(
-        self,
-        frame: Frame,
-        channel: str,
-        data: NDArray[np.floating],
-    ) -> NDArray[np.float32]:
-        """Apply per-channel limits/contrast/brightness/scale and return [0,1] channel."""
-        scale, z1, z2, contrast, brightness = self._rgb_channel_view_settings(frame, channel)
-        if z1 is None or z2 is None:
-            z1, z2 = compute_zscale_limits(data)
-        range_val = max(float(z2 - z1), 1e-6)
-        center = (z1 + z2) / 2.0
-        new_range = range_val / contrast
-        adjusted_z1 = center - new_range / 2.0 + brightness * range_val
-        adjusted_z2 = center + new_range / 2.0 + brightness * range_val
-        scaled = apply_scale(data, scale, vmin=adjusted_z1, vmax=adjusted_z2)
-        return np.clip(scaled.astype(np.float32), 0.0, 1.0)
-
-    def _compose_rgb_frame_image(self, frame: Frame) -> NDArray[np.uint8] | None:
-        """Compose display RGB image for an RGB frame."""
-        channels = {
-            name: frame.rgb_channels.get(name)
-            for name in self._rgb_channel_names()
-            if frame.rgb_channels.get(name) is not None
-        }
-        if not channels:
-            return None
-
-        base_shape = next(iter(channels.values())).shape
-
-        # Scale each channel with its own algorithm and limits, then let the
-        # frame combine them: RGBFrame stacks, HSVFrame and HLSFrame convert
-        # from their colour space. Frames created before the typed subclasses
-        # existed, and plain Frames carrying frame_type="rgb", fall back to a
-        # plain stack.
-        normalized = {
-            name: self._compute_rgb_channel_scaled(frame, name, data)
-            for name, data in ((name, frame.rgb_channels.get(name)) for name in self._rgb_channel_names())
-            if data is not None and data.shape == base_shape
-        }
-        compose = getattr(frame, "compose", None)
-        composed = (
-            compose(normalized, frame.rgb_view)
-            if compose is not None
-            else compose_rgb(normalized, frame.rgb_view)
-        )
-        if composed is None:
-            return np.zeros((base_shape[0], base_shape[1], 3), dtype=np.uint8)
-        return composed
-
-    def _apply_rgb_frame_channels_from_sources(
-        self,
-        frame: Frame,
-        channel_to_source_index: dict[str, int | None],
-    ) -> None:
-        """Assign RGB channels from existing mono frames."""
-        for channel, source_index in channel_to_source_index.items():
-            if channel not in frame.rgb_channels:
-                continue
-            if source_index is None:
-                frame.rgb_channels[channel] = None
-                frame.rgb_source_frame_ids[channel] = None
-                continue
-            if source_index < 0 or source_index >= len(self.frame_manager.frames):
-                continue
-            source_frame = self.frame_manager.frames[source_index]
-            source_data = source_frame.image_data
-            if source_data is None or source_data.ndim != 2:
-                continue
-            frame.rgb_channels[channel] = np.array(source_data, copy=True)
-            frame.rgb_source_frame_ids[channel] = source_frame.frame_id
-        self._sync_rgb_scalar_view(frame)
-
-    def _sync_view_state_from_rgb_channel(self, frame: Frame) -> None:
-        """Load current window scale/limits/contrast from active RGB channel."""
-        channel = frame.rgb_current_channel if frame.rgb_current_channel in frame.rgb_channels else "red"
-        scale, z1, z2, contrast, brightness = self._rgb_channel_view_settings(frame, channel)
-        self.current_scale = scale
-        self.z1 = z1
-        self.z2 = z2
-        self.color.set_contrast_brightness(contrast, brightness)
-
     def _setup_controllers(self) -> None:
         """Create the per-menu controllers.
 
@@ -358,11 +234,17 @@ class MainWindow(QMainWindow):
         `connect()` to wire its own actions. See `ui/controllers/base.py` for
         why controllers hold a reference to the window.
         """
+        # Not a menu controller, but extracted for the same reason: the
+        # render pipeline is 600 lines of behaviour that nothing could test
+        # without building the whole window.
+        self.display = DisplayPipeline(self)
+
         self.analysis = AnalysisController(self)
         self.color = ColorController(self)
         # Named `frame_controller`: `self.frame` would shadow nothing on the
         # window, but reads as a Frame everywhere else in the codebase.
         self.frame_controller = FrameController(self)
+        self.help = HelpController(self)
         self.edit = EditController(self)
         self.file = FileController(self)
         self.region = RegionController(self)
@@ -378,6 +260,7 @@ class MainWindow(QMainWindow):
             self.color,
             self.edit,
             self.frame_controller,
+            self.help,
             self.file,
             self.region,
             self.scale,
@@ -438,10 +321,7 @@ class MainWindow(QMainWindow):
         self.zoom.connect()
 
         # Help menu
-        self.menu_bar.action_help_contents.triggered.connect(self._show_help_contents)
-        self.menu_bar.action_keyboard_shortcuts.triggered.connect(self._show_keyboard_shortcuts)
-        self.menu_bar.action_about.triggered.connect(self.show_about)
-        self.menu_bar.action_about_qt.triggered.connect(self.show_about_qt)
+        self.help.connect()
 
     def _setup_toolbar(self) -> None:
         """Set up the main toolbar."""
@@ -514,8 +394,8 @@ class MainWindow(QMainWindow):
 
         # Connect button bar signals
         self.button_bar.zoom_changed.connect(self.zoom.on_button_bar_zoom)
-        self.button_bar.scale_changed.connect(self._on_button_bar_scale)
-        self.button_bar.colormap_changed.connect(self._on_button_bar_colormap)
+        self.button_bar.scale_changed.connect(self.scale.on_button_bar_scale)
+        self.button_bar.colormap_changed.connect(self.color.on_button_bar_colormap)
         self.button_bar.region_mode_changed.connect(self.region.on_button_bar_mode)
 
         self.button_bar_dock.setWidget(self.button_bar)
@@ -561,7 +441,7 @@ class MainWindow(QMainWindow):
         self.image_viewer = new_viewer
         self.scroll_area.setWidget(self.image_viewer)
         if self.image_data is not None:
-            self._display_image()
+            self.display.display()
 
     def _apply_background_color(self, color_hex: str) -> None:
         """Apply background color to the viewer."""
@@ -570,500 +450,6 @@ class MainWindow(QMainWindow):
         # two branches were identical, making the GPU test dead.)
         if hasattr(self.image_viewer, "set_background_color"):
             self.image_viewer.set_background_color(color_hex)
-
-    def _load_fits_file(self, filepath: str) -> None:
-        """
-        Load a FITS file into current frame.
-
-        Args:
-            filepath: Path to the FITS file.
-        """
-        # Get current frame
-        frame = self.frame_manager.current_frame
-        if not frame:
-            frame = self.frame_manager.new_frame()
-            self._active_frame_ids.add(frame.frame_id)
-
-        old_handler = frame.fits_handler
-        if old_handler is not None:
-            try:
-                old_handler.close()
-            except Exception:
-                pass
-
-        # Load FITS file. ImageData gathers the array, header, WCS and derived
-        # metadata (BITPIX, cached min/max) in one place; M4 extends this to
-        # extensions, cubes and mosaics.
-        fits_handler = FITSHandler()
-        fits_handler.load(filepath)
-        image = fits_handler.load_image_data()
-        image_data = image.data
-        header = image.header
-        wcs_handler = WCSHandler(header)
-
-        # Update frame
-        frame.filepath = Path(filepath)
-        frame.fits_handler = fits_handler
-        frame.image = image
-        if frame.frame_type == "rgb":
-            channel = frame.rgb_current_channel if frame.rgb_current_channel in frame.rgb_channels else "red"
-            frame.rgb_channels[channel] = np.array(image_data, copy=True)
-            frame.rgb_source_frame_ids[channel] = None
-            self._sync_rgb_scalar_view(frame)
-        else:
-            frame.image_data = image_data
-            frame.original_image_data = image_data
-        frame.bin_factor = 1
-        frame.header = header
-        frame.wcs_handler = wcs_handler
-        frame.colormap = self.current_colormap
-        frame.scale = self.current_scale
-        frame.invert_colormap = self.invert_colormap
-        frame.z1 = None
-        frame.z2 = None
-
-        # Reset display state for new data
-        self.z1 = None
-        self.z2 = None
-        if hasattr(self.image_viewer, "reset_contrast_brightness"):
-            self.image_viewer.reset_contrast_brightness()
-
-        # Update window title
-        filename = Path(filepath).name
-        frame_info = f"Frame {self.frame_manager.current_index + 1}/{self.frame_manager.num_frames}"
-        self.setWindowTitle(f"NCRADS9 - {filename} [{frame_info}]")
-
-        # Display the image
-        self._display_image()
-
-        # Fit image to window on initial load
-        self.zoom.zoom_fit()
-
-        # Update status bar image info
-        shape = image_data.shape
-        dtype = image_data.dtype
-        self.status_bar.update_image_info(shape[1], shape[0])
-
-        # Update temporary message
-        stats_msg = f"Loaded: {shape[1]}x{shape[0]} pixels, {dtype}"
-        if wcs_handler.is_valid:
-            stats_msg += " (WCS available)"
-        self.statusBar().showMessage(stats_msg, 3000)
-
-    @staticmethod
-    def _downsample_for_preview(
-        image_data: NDArray[np.float32],
-        max_pixels: int = 4_000_000,
-    ) -> NDArray[np.float32]:
-        """Return a strided preview view for large images."""
-        height, width = image_data.shape[:2]
-        total_pixels = int(height * width)
-        if total_pixels <= max_pixels:
-            return image_data
-        stride = max(1, int(np.ceil(np.sqrt(total_pixels / max_pixels))))
-        return image_data[::stride, ::stride]
-
-    def _render_preview_rgb(
-        self,
-        image_data: NDArray[np.float32],
-        z1: float,
-        z2: float,
-        cmap: Colormap,
-    ) -> NDArray[np.uint8]:
-        """Render a lightweight RGB preview for panner/magnifier panels."""
-        preview_data = self._downsample_for_preview(image_data)
-        scaled_preview = apply_scale(
-            preview_data,
-            self.current_scale,
-            vmin=z1,
-            vmax=z2,
-        )
-        rgb_preview = cmap.apply_normalized(scaled_preview)
-        return np.ascontiguousarray(np.flipud(rgb_preview))
-
-    @staticmethod
-    def _extract_gpu_tile_data(
-        data: NDArray[np.floating],
-        x: int,
-        y: int,
-        w: int,
-        h: int,
-    ) -> NDArray[np.floating]:
-        """Extract tile data for GPU upload."""
-        return np.ascontiguousarray(data[y : y + h, x : x + w])
-
-    def _apply_view_transform_to_viewer(self, frame: Frame) -> None:
-        """Apply per-frame orientation/rotation to the active viewer."""
-        if self.using_gpu_rendering and (not np.isclose(frame.rotation, 0.0) or frame.flip_x or frame.flip_y):
-            self._rebuild_image_viewer(False)
-            self.statusBar().showMessage(
-                "Switched to CPU rendering for rotated/flipped display",
-                2500,
-            )
-        if hasattr(self.image_viewer, "set_view_transform"):
-            self.image_viewer.set_view_transform(frame.rotation, frame.flip_x, frame.flip_y)
-
-    def _get_cpu_pan_center(self) -> tuple[float, float] | None:
-        """Return the current CPU-view center in source image coordinates."""
-        viewer = getattr(self.image_viewer, "image_viewer", None)
-        if viewer is None or self.image_data is None:
-            return None
-        zoom = max(self.image_viewer.get_zoom(), 1e-6)
-        display_x = (
-            self.scroll_area.horizontalScrollBar().value() + self.scroll_area.viewport().width() / 2
-        ) / zoom
-        display_y = (
-            self.scroll_area.verticalScrollBar().value() + self.scroll_area.viewport().height() / 2
-        ) / zoom
-        source_x, source_top_y = viewer.get_view_transform().display_to_source(display_x, display_y)
-        source_y = viewer.get_image_size()[1] - 1 - source_top_y
-        return (float(source_x), float(source_y))
-
-    def _transform_preview_image(
-        self,
-        image: NDArray[np.generic],
-        frame: Frame,
-    ) -> NDArray[np.generic]:
-        """Apply frame orientation/rotation to panner and magnifier previews."""
-        return transform_image_array(image, frame.rotation, frame.flip_x, frame.flip_y)
-
-    def _cache_preview_rgb(self, frame: Frame, image: NDArray[np.uint8]) -> None:
-        """Remember the latest untransformed preview RGB for fast view updates."""
-        self._preview_rgb_cache = np.ascontiguousarray(image)
-        self._preview_rgb_cache_frame_id = frame.frame_id
-
-    def _update_preview_panels(self, frame: Frame) -> None:
-        """Refresh panner/magnifier panels from the cached preview image."""
-        if self._preview_rgb_cache is None or self._preview_rgb_cache_frame_id != frame.frame_id:
-            return
-        transformed_preview = self._transform_preview_image(self._preview_rgb_cache, frame)
-        if hasattr(self, "panner_panel"):
-            self.panner_panel.set_image(
-                transformed_preview,
-                source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
-            )
-        if hasattr(self, "magnifier_panel"):
-            self.magnifier_panel.set_image(
-                transformed_preview,
-                source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
-            )
-
-    def _refresh_transformed_view(self, frame: Frame) -> None:
-        """Apply a pure view transform change without re-rendering image data."""
-        self._apply_view_transform_to_viewer(frame)
-        self._update_preview_panels(frame)
-        self.zoom.update_panner_rect()
-        self.wcs.update_direction_arrows()
-        if self._last_mouse_pos is not None:
-            self._on_mouse_moved(*self._last_mouse_pos)
-
-    def _display_image(self) -> None:
-        """Display the current frame's image data."""
-        if self._tile_mode_enabled:
-            self._display_tiled_frames()
-            return
-
-        frame = self.frame_manager.current_frame
-        if not frame:
-            return
-        if frame.frame_type == "rgb":
-            self._display_rgb_frame(frame)
-            return
-        if not frame.has_data:
-            return
-
-        image_data = self._get_display_image_data(frame)
-        self._apply_view_transform_to_viewer(frame)
-
-        # Compute scale limits using zscale (once, or when reset)
-        if self.z1 is None or self.z2 is None:
-            self.z1, self.z2 = compute_zscale_limits(image_data)
-
-        # Get contrast/brightness adjustments from viewer
-        contrast, brightness = self.image_viewer.get_contrast_brightness()
-
-        # Apply adjustments to scale limits
-        range_val = self.z2 - self.z1
-        center = (self.z1 + self.z2) / 2
-        new_range = range_val / contrast
-        adjusted_z1 = center - new_range / 2 + brightness * range_val
-        adjusted_z2 = center + new_range / 2 + brightness * range_val
-
-        # Apply colormap
-        try:
-            cmap = self.color.colormap(self.current_colormap)
-        except ValueError:
-            self.current_colormap = "grey"
-            cmap = self.color.colormap(self.current_colormap)
-
-        # Invert colormap if needed
-        if self.invert_colormap:
-            # Get colormap data and invert
-            cmap_data = cmap.colors.copy()
-            cmap_data = cmap_data[::-1]  # Reverse the colormap
-            cmap = Colormap(f"{self.current_colormap}_inverted", cmap_data)
-
-        # Update colorbar
-        self.colorbar_widget.set_colormap(
-            cmap.colors, adjusted_z1, adjusted_z2, self.current_colormap, self.invert_colormap
-        )
-
-        if self.using_gpu_rendering:
-
-            def tile_provider(x: int, y: int, w: int, h: int) -> NDArray[np.uint8]:
-                tile = self._extract_gpu_tile_data(image_data, x, y, w, h)
-                scaled = apply_scale(tile, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
-                rgb = cmap.apply_normalized(scaled)
-                return rgb
-
-            self.image_viewer.set_tile_provider(image_data.shape[1], image_data.shape[0], tile_provider)
-            self.image_viewer.set_value_source(image_data)
-            display_rgb = self._render_preview_rgb(
-                image_data,
-                adjusted_z1,
-                adjusted_z2,
-                cmap,
-            )
-        else:
-            scaled = apply_scale(image_data, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
-            rgb_full = cmap.apply_normalized(scaled)
-            display_rgb = np.ascontiguousarray(np.flipud(rgb_full))
-
-            # Convert to QImage
-            height, width = display_rgb.shape[:2]
-            bytes_per_line = 3 * width
-            qimage = QImage(display_rgb.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
-
-            # Create pixmap and display
-            pixmap = QPixmap.fromImage(qimage)
-            self.image_viewer.set_image(pixmap)
-
-        preview_rgb = self._render_preview_rgb(
-            image_data,
-            adjusted_z1,
-            adjusted_z2,
-            cmap,
-        )
-        self._cache_preview_rgb(frame, preview_rgb)
-        transformed_preview = self._transform_preview_image(preview_rgb, frame)
-
-        # Update panner panel with RGB data (DS9 style)
-        if hasattr(self, "panner_panel"):
-            self.panner_panel.set_image(
-                transformed_preview,
-                source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
-            )
-            self.zoom.update_panner_rect()
-
-        # Update magnifier panel with RGB data (DS9 style)
-        if hasattr(self, "magnifier_panel"):
-            self.magnifier_panel.set_image(
-                transformed_preview,
-                source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
-            )
-        if hasattr(self, "horizontal_graph_dock"):
-            self.horizontal_graph_dock.set_image(image_data)
-        if hasattr(self, "vertical_graph_dock"):
-            self.vertical_graph_dock.set_image(image_data)
-
-        # Update zoom display
-        self.status_bar.update_zoom(self.image_viewer.get_zoom())
-        self.analysis.sync_bin_menu(getattr(frame, "bin_factor", 1))
-        self.region.show_frame_regions(frame)
-        self.frame_controller.sync_view_state()
-        if self._contour_settings is not None:
-            self.analysis.update_contours()
-        self.wcs.update_direction_arrows()
-        self.analysis.refresh_overlays()
-
-    def _display_rgb_frame(self, frame: Frame) -> bool:
-        """Display a composite RGB frame."""
-        active_channel = (
-            frame.rgb_current_channel if frame.rgb_current_channel in frame.rgb_channels else "red"
-        )
-        contrast, brightness = self.image_viewer.get_contrast_brightness()
-        frame.rgb_channel_scale[active_channel] = self.current_scale
-        frame.rgb_channel_z1[active_channel] = self.z1
-        frame.rgb_channel_z2[active_channel] = self.z2
-        frame.rgb_channel_contrast[active_channel] = contrast
-        frame.rgb_channel_brightness[active_channel] = brightness
-        composite = self._compose_rgb_frame_image(frame)
-        if composite is None:
-            self.statusBar().showMessage("RGB frame has no channel data", 2000)
-            return False
-
-        active_data = self._get_rgb_active_channel_data(frame)
-        if active_data is None:
-            active_data = np.mean(composite.astype(np.float32), axis=2)
-
-        self._sync_rgb_scalar_view(frame)
-        self.colorbar_widget.set_colormap(
-            self.color.colormap("grey").colors,
-            0.0,
-            255.0,
-            "RGB Composite",
-            False,
-        )
-        display_rgb = np.ascontiguousarray(np.flipud(composite))
-        self._apply_view_transform_to_viewer(frame)
-
-        if self.using_gpu_rendering:
-
-            def tile_provider(x: int, y: int, w: int, h: int) -> NDArray[np.uint8]:
-                return self._extract_gpu_tile_data(composite, x, y, w, h)
-
-            self.image_viewer.set_tile_provider(composite.shape[1], composite.shape[0], tile_provider)
-            self.image_viewer.set_value_source(active_data.astype(np.float32))
-        else:
-            height, width = display_rgb.shape[:2]
-            bytes_per_line = 3 * width
-            qimage = QImage(display_rgb.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
-            self.image_viewer.set_image(QPixmap.fromImage(qimage))
-
-        self._cache_preview_rgb(frame, display_rgb)
-        transformed_preview = self._transform_preview_image(display_rgb, frame)
-
-        if hasattr(self, "panner_panel"):
-            self.panner_panel.set_image(
-                transformed_preview,
-                source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
-            )
-            self.zoom.update_panner_rect()
-        if hasattr(self, "magnifier_panel"):
-            self.magnifier_panel.set_image(
-                transformed_preview,
-                source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
-            )
-        if hasattr(self, "horizontal_graph_dock"):
-            self.horizontal_graph_dock.set_image(active_data)
-        if hasattr(self, "vertical_graph_dock"):
-            self.vertical_graph_dock.set_image(active_data)
-
-        self.status_bar.update_image_info(composite.shape[1], composite.shape[0])
-        self.status_bar.update_zoom(self.image_viewer.get_zoom())
-        self.analysis.sync_bin_menu(getattr(frame, "bin_factor", 1))
-        self.region.show_frame_regions(frame)
-        self.frame_controller.sync_view_state()
-        if self._contour_settings is not None:
-            self.analysis.update_contours()
-        self.wcs.update_direction_arrows()
-        self.analysis.refresh_overlays()
-        return True
-
-    def _render_frame_rgb(self, frame: Frame) -> NDArray[np.uint8] | None:
-        """Render a frame to RGB using its own display settings."""
-        if frame.frame_type == "rgb":
-            return self._compose_rgb_frame_image(frame)
-        if not frame.has_data:
-            return None
-
-        image_data = self._get_display_image_data(frame)
-        if image_data is None:
-            return None
-
-        z1 = frame.z1
-        z2 = frame.z2
-        if z1 is None or z2 is None:
-            z1, z2 = compute_zscale_limits(image_data)
-
-        contrast = max(frame.contrast, 0.1)
-        brightness = max(-1.0, min(frame.brightness, 1.0))
-        range_val = max(float(z2 - z1), 1e-6)
-        center = (z1 + z2) / 2.0
-        new_range = range_val / contrast
-        adjusted_z1 = center - new_range / 2.0 + brightness * range_val
-        adjusted_z2 = center + new_range / 2.0 + brightness * range_val
-
-        try:
-            cmap = self.color.colormap(frame.colormap)
-        except ValueError:
-            frame.colormap = "grey"
-            cmap = self.color.colormap("grey")
-        if frame.invert_colormap:
-            cmap_data = cmap.colors.copy()[::-1]
-            cmap = Colormap(f"{frame.colormap}_inverted", cmap_data)
-
-        scaled = apply_scale(image_data, frame.scale, vmin=adjusted_z1, vmax=adjusted_z2)
-        return cmap.apply_normalized(scaled)
-
-    def _display_tiled_frames(self) -> bool:
-        """Render all loaded frames in a tiled grid."""
-        rgb_frames: list[NDArray[np.uint8]] = []
-        frame_indices: list[int] = []
-        active_indices = self.frame_controller.active_indices()
-        for frame_index in active_indices:
-            frame = self.frame_manager.frames[frame_index]
-            rgb = self._render_frame_rgb(frame)
-            if rgb is not None:
-                rgb_frames.append(rgb)
-                frame_indices.append(frame_index)
-
-        if not rgb_frames:
-            self._tile_layout = None
-            self.statusBar().showMessage("No loaded frames to tile", 2000)
-            return False
-
-        layout = TileLayout.compute(
-            count=len(rgb_frames),
-            cell_width=max(rgb.shape[1] for rgb in rgb_frames),
-            cell_height=max(rgb.shape[0] for rgb in rgb_frames),
-            mode=self._tile_arrangement_mode,
-        )
-        self._tile_layout = layout
-        self._tile_frame_indices = frame_indices
-
-        cell_w, cell_h = layout.cell_width, layout.cell_height
-        tiled_w, tiled_h = layout.width, layout.height
-        tiled_rgb = np.zeros((tiled_h, tiled_w, 3), dtype=np.uint8)
-
-        for placement, rgb in zip(layout.placements(), rgb_frames, strict=True):
-            if rgb.shape[0] != cell_h or rgb.shape[1] != cell_w:
-                y_idx = np.linspace(0, rgb.shape[0] - 1, cell_h).astype(np.int32)
-                x_idx = np.linspace(0, rgb.shape[1] - 1, cell_w).astype(np.int32)
-                rgb = rgb[y_idx][:, x_idx]
-            # `placement` is bottom-up; `tiled_rgb` rows are top-down.
-            top = tiled_h - placement.y - cell_h
-            tiled_rgb[top : top + cell_h, placement.x : placement.x + cell_w] = rgb
-        display_rgb = np.flipud(tiled_rgb)
-        display_rgb = np.ascontiguousarray(display_rgb)
-
-        if self.using_gpu_rendering:
-
-            def tile_provider(x: int, y: int, w: int, h: int) -> NDArray[np.uint8]:
-                return self._extract_gpu_tile_data(tiled_rgb, x, y, w, h)
-
-            self.image_viewer.set_tile_provider(tiled_w, tiled_h, tile_provider)
-            self.image_viewer.set_value_source(np.mean(tiled_rgb, axis=2).astype(np.float32))
-        else:
-            bytes_per_line = 3 * tiled_w
-            qimage = QImage(display_rgb.data, tiled_w, tiled_h, bytes_per_line, QImage.Format.Format_RGB888)
-            self.image_viewer.set_image(QPixmap.fromImage(qimage))
-
-        if hasattr(self.image_viewer, "clear_regions"):
-            self.image_viewer.clear_regions()
-        if hasattr(self.image_viewer, "clear_contours"):
-            self.image_viewer.clear_contours()
-        if hasattr(self.image_viewer, "set_direction_arrows"):
-            self.image_viewer.set_direction_arrows(None, None, False)
-        if hasattr(self, "panner_panel"):
-            self.panner_panel.set_image(display_rgb)
-            self.panner_panel.set_view_rect(None)
-        if hasattr(self, "magnifier_panel"):
-            self.magnifier_panel.set_image(display_rgb)
-        self.status_bar.update_image_info(tiled_w, tiled_h)
-        self.status_bar.update_zoom(self.image_viewer.get_zoom())
-        return True
-
-    def _get_display_image_data(self, frame: Frame) -> NDArray[np.floating]:
-        """Return frame data after display-level analysis transforms."""
-        image_data = (
-            self._get_rgb_active_channel_data(frame) if frame.frame_type == "rgb" else frame.image_data
-        )
-        if image_data is None:
-            return np.array([], dtype=np.float32)
-        if self.menu_bar.action_smooth.isChecked():
-            return self.analysis.apply_smoothing(image_data)
-        return image_data
 
     def _effective_viewport_size(self) -> QSize:
         """Return a usable viewport size for zoom/block-factor arithmetic.
@@ -1124,7 +510,7 @@ class MainWindow(QMainWindow):
         if not self._tile_mode_enabled or button != int(Qt.MouseButton.LeftButton.value):
             return
         if self.frame_controller.select_tile_at(x, y):
-            self._display_tiled_frames()
+            self.display.display_tiled()
             self.frame_controller.update_title()
             self.statusBar().showMessage(
                 f"Selected frame {self.frame_manager.current_index + 1}",
@@ -1152,63 +538,9 @@ class MainWindow(QMainWindow):
             return
         super().keyPressEvent(event)
 
-    def _on_button_bar_scale(self, scale_name: str) -> None:
-        """Handle scale change from button bar."""
-        scale_map = {
-            "Linear": ScaleAlgorithm.LINEAR,
-            "Log": ScaleAlgorithm.LOG,
-            "Sqrt": ScaleAlgorithm.SQRT,
-            "Squared": ScaleAlgorithm.POWER,
-            "Asinh": ScaleAlgorithm.ASINH,
-            "HistEq": ScaleAlgorithm.HISTOGRAM_EQUALIZATION,
-        }
-        if scale_name in scale_map:
-            self.scale.set_scale(scale_map[scale_name])
-
-    def _on_button_bar_colormap(self, cmap_name: str) -> None:
-        """Handle colormap change from button bar."""
-        cmap_map = {
-            "Gray": "grey",
-            "Heat": "heat",
-            "Cool": "cool",
-            "Rainbow": "rainbow",
-        }
-        if cmap_name in cmap_map:
-            self.color.set_colormap(cmap_map[cmap_name])
-
-    def _show_help_contents(self) -> None:
-        """Show help contents dialog."""
-        dialog = HelpContentsDialog(self)
-        dialog.exec()
-
-    def _show_keyboard_shortcuts(self) -> None:
-        """Show keyboard shortcuts dialog."""
-        dialog = KeyboardShortcutsDialog(self)
-        dialog.exec()
-
     def closeEvent(self, event) -> None:
         """Disconnect SAMP client on close."""
         if self._samp_client is not None:
             self._samp_client.disconnect()
             self._samp_connected = False
         super().closeEvent(event)
-
-    def show_about(self) -> None:
-        """Show the About dialog."""
-        from PyQt6.QtWidgets import QMessageBox
-
-        QMessageBox.about(
-            self,
-            "About NCRADS9",
-            "<h2>NCRADS9</h2>"
-            "<p>A Python/Qt6 clone of SAOImageDS9</p>"
-            "<p>Version 0.1.0</p>"
-            "<p>Copyright © 2026 Yogesh Wadadekar</p>"
-            "<p>Licensed under GPL v3</p>",
-        )
-
-    def show_about_qt(self) -> None:
-        """Show the About Qt dialog."""
-        from PyQt6.QtWidgets import QMessageBox
-
-        QMessageBox.aboutQt(self, "About Qt")

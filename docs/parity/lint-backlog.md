@@ -23,8 +23,8 @@ python tools/menu_diff.py --summary                 # DS9 menu parity
 | `ruff check` | `ncrads9`, `tests`, `tools` — rule set in `pyproject.toml`, incl. `UP` and `I` since M1-0b | **clean** |
 | `mypy` | `ncrads9/core`, `ncrads9/coordinates`, `ncrads9/regions` | **clean** (39 files) |
 | `black --check` | `ncrads9`, `tests`, `tools` — whole tree since M1-0a | **clean** |
-| `pytest` | whole suite | **clean**, 447 tests |
-| coverage | whole tree | **47.6%**, floor 40% |
+| `pytest` | whole suite | **clean**, 533 tests |
+| coverage | whole tree | **48.3%**, floor 40% |
 
 ---
 

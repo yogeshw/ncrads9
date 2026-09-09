@@ -135,6 +135,13 @@ class ColorController(Controller):
             self.refresh()
             self.status(f"Colormap: {cmap_name}")
 
+    def on_button_bar_colormap(self, label: str) -> None:
+        """Select a colormap from a button-bar label."""
+        for name, text in BUTTON_LABELS.items():
+            if text == label:
+                self.set_colormap(name)
+                return
+
     def reset(self) -> None:
         """Return to the default colormap, not inverted."""
         self.window.invert_colormap = False

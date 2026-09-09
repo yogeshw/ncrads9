@@ -15,13 +15,13 @@ was verified against actual source, not inferred from documentation.
 |---|---|---|
 | Application logic | 98,088 lines Tcl (`ds9/library/*.tcl`, 232 files) | 40,000 lines Python (180 files) |
 | Rendering/marker engine | 144,879 lines C++ (`tksao/`) | Qt/NumPy/OpenGL in `rendering/`, `ui/widgets/` |
-| Menu entries (excl. separators) | 526 | 286 |
+| Menu entries (excl. separators) | 526 | 286, all wired |
 | XPA access points | 143 | 23 |
 | Colormaps | 23 built-in + 168 bundled `.sao`/`.lut` files | 23 built-in, 0 bundled files |
 | Region/marker shapes | 20 shapes + 7 point glyphs | 16 classes, 8 parseable, **6 interactively creatable** |
 | Region file formats | ds9, ciao, saotng, funtools, xy, pros, XML | ds9, ciao, saotng, funtools, xy (parse only) |
 | UI locales | 8 (`cs da de es fr ja pt zh`) | 0 |
-| Tests | — | 447 tests, all passing, 47.6% coverage (69 with 1 failure before M0) |
+| Tests | — | 533 tests, all passing, 48.3% coverage (69 with 1 failure before M0) |
 
 DS9's top-level menus: `File Edit View Frame Bin Zoom Scale Color Region Illustrate WCS Analysis Help`.
 NCRADS9's: `File Edit View Frame Bin Zoom Scale Color Region VO WCS Analysis Help`.
@@ -103,10 +103,15 @@ They give a false impression of coverage.
 **Decision required per orphan: adopt, or delete.** The plan below adopts the ones that map onto
 DS9 features and deletes the pure duplicates.
 
-### 3.2 `main_window.py` is a god object
+### 3.2 `main_window.py` was a god object — fixed in M2
 
-*(4,719 lines / 238 methods when surveyed; M1 trimmed it to ~4,600 by moving tiling, blink
-sequencing, coordinate formatting and region translation out. M2 is what actually fixes this.)*
+4,719 lines and 238 methods when surveyed. M1 trimmed it to ~4,600; **M2 brought it to 546 lines
+and 28 methods**, split across twelve per-menu controllers plus a display pipeline
+(`ui/controllers/`, `ui/display.py`). `tests/unit/test_controllers.py` ratchets the size and
+asserts that no moved method was left behind as a shim.
+
+Controllers still reach shared state through `self.window`, which is an intermediate step;
+`ui/controllers/base.py` documents why, and what the end state is.
 
 It holds file I/O, rendering, colormaps, scaling, blocking, smoothing, contours, grid, mask,
 crosshair, WCS formatting, frames, tiling, RGB composition, regions, SAMP, VO queries, printing,
