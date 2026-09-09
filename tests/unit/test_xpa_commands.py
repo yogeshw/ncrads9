@@ -90,6 +90,28 @@ class _DummyFrameManager:
         return None
 
 
+class _DummyColorController:
+    """The slice of ColorController that XPA calls."""
+
+    def __init__(self, window):
+        self.window = window
+
+    def available_colormaps(self):
+        return ["grey", "heat", "cool", "rainbow", "viridis", "magma"]
+
+    def set_colormap(self, name: str):
+        self.window.current_colormap = name
+
+    def set_colorbar_orientation(self, orientation: str):
+        self.window.colorbar_orientation = orientation
+
+    def set_colorbar_numerics(self, show: bool):
+        self.window.colorbar_numerics = bool(show)
+
+    def set_colorbar_spacing(self, mode: str):
+        self.window.colorbar_spacing = mode
+
+
 class _DummyScaleController:
     """The slice of ScaleController that XPA calls."""
 
@@ -137,9 +159,11 @@ class _DummyViewer:
         self.coord_context = CoordinateContext()
         self.colorbar_orientation = "vertical"
         self.colorbar_numerics = True
+        self.colorbar_spacing = "value"
         self._last_mouse_pos = (5, 6)
         # XPA reaches scale and WCS through the controllers as of M2, so the
         # fake exposes the same surface rather than the old flat methods.
+        self.color = _DummyColorController(self)
         self.scale = _DummyScaleController(self)
         self.wcs = _DummyWCSController(self)
         self._w = 800
@@ -188,15 +212,6 @@ class _DummyViewer:
 
     def _zoom_out(self):
         self.image_viewer.zoom_to(self.image_viewer.get_zoom() / 1.2)
-
-    def _set_colormap(self, name: str):
-        self.current_colormap = name
-
-    def _set_colorbar_orientation(self, orientation: str):
-        self.colorbar_orientation = orientation
-
-    def _set_colorbar_numerics(self, show: bool):
-        self.colorbar_numerics = bool(show)
 
     def _display_image(self):
         return

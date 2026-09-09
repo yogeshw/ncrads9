@@ -79,10 +79,10 @@ def test_zoom_menu_state_tracks_frame_view(main_window: MainWindow):
     frame1 = main_window.frame_manager.current_frame
     assert frame1 is not None
 
-    main_window._set_zoom_level(4.0)
-    main_window._set_orientation("x")
-    main_window._set_rotation(90)
-    main_window._set_align_wcs(True)
+    main_window.zoom.set_zoom(4.0)
+    main_window.zoom.set_orientation("x")
+    main_window.zoom.set_rotation(90)
+    main_window.zoom.set_align_wcs(True)
 
     assert frame1.zoom == pytest.approx(4.0)
     assert frame1.flip_x is True and frame1.flip_y is False
@@ -108,11 +108,11 @@ def test_zoom_menu_state_tracks_frame_view(main_window: MainWindow):
 
 def test_center_image_recenters_scrollbars(main_window: MainWindow):
     _load_test_image(main_window, width=1200, height=900)
-    main_window._set_zoom_level(3.0)
+    main_window.zoom.set_zoom(3.0)
     main_window.scroll_area.horizontalScrollBar().setValue(0)
     main_window.scroll_area.verticalScrollBar().setValue(0)
 
-    main_window._center_image()
+    main_window.zoom.center_image()
 
     assert main_window.scroll_area.horizontalScrollBar().value() > 0
     assert main_window.scroll_area.verticalScrollBar().value() > 0
@@ -123,14 +123,16 @@ def test_crop_and_pan_zoom_rotate_parameters_apply_to_frame(main_window: MainWin
     frame = main_window.frame_manager.current_frame
     assert frame is not None
 
-    main_window._apply_crop_parameters({"center_x": 120.0, "center_y": 80.0, "width": 40.0, "height": 20.0})
+    main_window.zoom.apply_crop_parameters(
+        {"center_x": 120.0, "center_y": 80.0, "width": 40.0, "height": 20.0}
+    )
     assert frame.crop_center_x == pytest.approx(120.0)
     assert frame.crop_center_y == pytest.approx(80.0)
     assert frame.crop_width == pytest.approx(40.0)
     assert frame.crop_height == pytest.approx(20.0)
     assert frame.zoom > 1.0
 
-    main_window._apply_pan_zoom_rotate_parameters(
+    main_window.zoom.apply_pan_zoom_rotate_parameters(
         {"zoom": 2.5, "pan_x": 150.0, "pan_y": 120.0, "rotation": 180.0, "align": True}
     )
     assert frame.zoom == pytest.approx(2.5)
@@ -150,9 +152,9 @@ def test_frame_lock_matches_zoom_orientation_and_rotation(main_window: MainWindo
     assert source is not None
 
     main_window._set_frame_lock_scope("frame", "image")
-    main_window._set_zoom_level(8.0)
-    main_window._set_orientation("xy")
-    main_window._set_rotation(270)
+    main_window.zoom.set_zoom(8.0)
+    main_window.zoom.set_orientation("xy")
+    main_window.zoom.set_rotation(270)
 
     assert other.zoom == pytest.approx(8.0)
     assert other.flip_x is True and other.flip_y is True
@@ -196,7 +198,7 @@ def test_invert_updates_direction_arrows_without_full_rerender(main_window: Main
         "_display_image",
         lambda: (_ for _ in ()).throw(AssertionError("unexpected rerender")),
     )
-    main_window._set_orientation("x")
+    main_window.zoom.set_orientation("x")
 
     after_north = overlay._north_vector
     after_east = overlay._east_vector
@@ -244,5 +246,7 @@ def test_crop_zoom_is_independent_of_unlaid_out_viewport(main_window: MainWindow
     raw = main_window.scroll_area.viewport().size()
     assert raw.height() < 20, "precondition: viewport is not laid out in this test"
 
-    main_window._apply_crop_parameters({"center_x": 120.0, "center_y": 80.0, "width": 40.0, "height": 20.0})
+    main_window.zoom.apply_crop_parameters(
+        {"center_x": 120.0, "center_y": 80.0, "width": 40.0, "height": 20.0}
+    )
     assert frame.zoom > 1.0

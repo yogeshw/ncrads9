@@ -24,11 +24,15 @@ Author: Yogesh Wadadekar
 """
 
 from .base import Controller
+from .color import ColorController
 from .scale import ScaleController
 from .wcs import WCSController
+from .zoom import ZoomController
 
 __all__ = [
+    "ColorController",
     "Controller",
     "ScaleController",
     "WCSController",
+    "ZoomController",
 ]

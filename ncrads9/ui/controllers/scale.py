@@ -173,7 +173,8 @@ class ScaleController(Controller):
         # slider spans the same range but means -1..+1 around zero.
         contrast = params.get("contrast", 1.0)
         brightness = params.get("bias", 1.0) - 1.0
-        self.window._set_viewer_contrast_brightness(contrast, brightness)
+        # Contrast and bias belong to the colour pipeline.
+        self.window.color.set_contrast_brightness(contrast, brightness)
 
         self.refresh()
         self.window._persist_frame_view_state()

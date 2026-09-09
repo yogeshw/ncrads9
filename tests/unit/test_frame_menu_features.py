@@ -223,7 +223,7 @@ def test_tile_click_selects_frame_and_preserves_independent_settings(main_window
     main_window._on_image_clicked(x_second, y_click, int(Qt.MouseButton.LeftButton.value))
     assert main_window.frame_manager.current_index == 1
 
-    main_window._set_colormap("magma")
+    main_window.color.set_colormap("magma")
     assert frames[1].colormap == "magma"
     assert frames[0].colormap == "grey"
 
@@ -233,8 +233,8 @@ def test_panner_draws_viewport_rect_when_zoomed(main_window: MainWindow):
     frame.image_data = np.zeros((1200, 1600), dtype=np.float32)
     frame.original_image_data = frame.image_data
     main_window._update_frame_display()
-    main_window._zoom_actual()
-    main_window._zoom_in()
+    main_window.zoom.zoom_actual()
+    main_window.zoom.zoom_in()
 
     rect = main_window.panner_panel._view_rect
     assert rect is not None

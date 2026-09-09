@@ -40,13 +40,13 @@ def test_color_menu_exposes_extended_actions(main_window: MainWindow):
 
 
 def test_colorbar_controls_update_widget_state(main_window: MainWindow):
-    main_window._set_colorbar_orientation("horizontal")
+    main_window.color.set_colorbar_orientation("horizontal")
     assert main_window.colorbar_widget.orientation == "horizontal"
-    main_window._set_colorbar_numerics(False)
+    main_window.color.set_colorbar_numerics(False)
     assert main_window.colorbar_widget.show_numerics is False
-    main_window._set_colorbar_spacing_mode("distance")
+    main_window.color.set_colorbar_spacing("distance")
     assert main_window.colorbar_widget.spacing_mode == "distance"
-    main_window._set_colorbar_font_size(10)
+    main_window.color.set_colorbar_font_size(10)
     assert main_window.colorbar_widget.label_font_size == 10
 
 
@@ -54,6 +54,6 @@ def test_register_user_colormap_adds_menu_action(main_window: MainWindow):
     data = np.linspace(0, 1, 256)
     colors = np.column_stack([data, data[::-1], data])
     cmap = Colormap("test_user_map", colors)
-    main_window._register_user_colormap(cmap)
+    main_window.color.register_user_colormap(cmap)
     assert "test_user_map" in main_window.custom_colormaps
     assert "test_user_map" in main_window.menu_bar.colormap_actions

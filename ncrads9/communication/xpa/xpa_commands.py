@@ -343,13 +343,13 @@ class XPACommands:
             self.viewer.status_bar.update_zoom(self.viewer.image_viewer.get_zoom())
             return {"status": "ok", "result": f"{self.viewer.image_viewer.get_zoom():.6g}"}
         if action in {"fit", "tofit"}:
-            self.viewer._zoom_fit()
+            self.viewer.zoom.zoom_fit()
             return {"status": "ok", "result": f"{self.viewer.image_viewer.get_zoom():.6g}"}
         if action in {"in", "incr"}:
-            self.viewer._zoom_in()
+            self.viewer.zoom.zoom_in()
             return {"status": "ok", "result": f"{self.viewer.image_viewer.get_zoom():.6g}"}
         if action in {"out", "decr"}:
-            self.viewer._zoom_out()
+            self.viewer.zoom.zoom_out()
             return {"status": "ok", "result": f"{self.viewer.image_viewer.get_zoom():.6g}"}
         return {"status": "ok", "result": f"{self.viewer.image_viewer.get_zoom():.6g}"}
 
@@ -372,7 +372,7 @@ class XPACommands:
         if (x is None or y is None) and len(args) >= 2:
             x, y = args[0], args[1]
         if x is not None and y is not None:
-            self.viewer._on_panner_pan(float(x), float(y))
+            self.viewer.zoom.on_panner_pan(float(x), float(y))
         frame = self.viewer.frame_manager.current_frame
         if frame is None:
             return {"status": "ok", "result": "0 0"}
@@ -444,13 +444,13 @@ class XPACommands:
             selected = str(name).lower().strip()
             if selected == "gray":
                 selected = "grey"
-            if hasattr(self.viewer, "get_available_colormaps"):
-                available = set(self.viewer.get_available_colormaps())
+            if hasattr(self.viewer.color, "available_colormaps"):
+                available = set(self.viewer.color.available_colormaps())
             else:
                 available = {"grey", "heat", "cool", "rainbow", "viridis", "plasma", "inferno", "magma"}
             if selected not in available:
                 return {"status": "error", "message": f"Unsupported colormap: {name}"}
-            self.viewer._set_colormap(selected)
+            self.viewer.color.set_colormap(selected)
         return {"status": "ok", "result": self.viewer.current_colormap}
 
     def _handle_colorbar(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -482,22 +482,22 @@ class XPACommands:
             first = str(args[0]).lower()
             if first in {"horizontal", "vertical"}:
                 orientation = first
-        if orientation is not None and hasattr(self.viewer, "_set_colorbar_orientation"):
-            self.viewer._set_colorbar_orientation(str(orientation).lower())
+        if orientation is not None and hasattr(self.viewer.color, "set_colorbar_orientation"):
+            self.viewer.color.set_colorbar_orientation(str(orientation).lower())
 
         numerics = params.get("numerics")
         if numerics is None and len(args) > 1:
             numerics = args[1]
-        if numerics is not None and hasattr(self.viewer, "_set_colorbar_numerics"):
+        if numerics is not None and hasattr(self.viewer.color, "set_colorbar_numerics"):
             numerics_bool = self._as_bool(numerics)
             if numerics_bool is not None:
-                self.viewer._set_colorbar_numerics(numerics_bool)
+                self.viewer.color.set_colorbar_numerics(numerics_bool)
 
         spacing = params.get("spacing")
-        if spacing is not None and hasattr(self.viewer, "_set_colorbar_spacing_mode"):
+        if spacing is not None and hasattr(self.viewer.color, "set_colorbar_spacing"):
             spacing_mode = str(spacing).lower()
             if spacing_mode in {"value", "distance"}:
-                self.viewer._set_colorbar_spacing_mode(spacing_mode)
+                self.viewer.color.set_colorbar_spacing(spacing_mode)
 
         ticks = params.get("ticks")
         if ticks is not None and hasattr(self.viewer, "colorbar_widget"):

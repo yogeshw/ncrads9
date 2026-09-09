@@ -32,7 +32,7 @@ from astropy.coordinates import (
 )
 from astropy.table import Table
 from numpy.typing import NDArray
-from PyQt6.QtCore import QRectF, QSize, Qt, QTimer, QUrl, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QAction, QColor, QDesktopServices, QImage, QKeyEvent, QPixmap
 from PyQt6.QtWidgets import (
     QButtonGroup,
@@ -62,10 +62,7 @@ from ..analysis.contour import ContourGenerator
 from ..analysis.radial_profile import RadialProfile
 from ..analysis.smooth import boxcar_smooth, gaussian_smooth, tophat_smooth
 from ..catalogs.vizier import VizierCatalog
-from ..colormaps.builtin_maps import get_colormap
 from ..colormaps.colormap import Colormap
-from ..colormaps.lut_parser import parse_lut_file, save_lut_file
-from ..colormaps.sao_parser import parse_sao_file
 from ..communication.samp import SAMPClient
 from ..coordinates.coord_system import CoordinateContext
 from ..core.fits_handler import FITSHandler
@@ -91,16 +88,16 @@ from ..rendering.scale_algorithms import ScaleAlgorithm, apply_scale, compute_zs
 from ..utils.preferences import Preferences
 from .button_bar import ButtonBar
 from .controllers.base import Controller
+from .controllers.color import ColorController
 from .controllers.scale import ScaleController
 from .controllers.wcs import WCSController
+from .controllers.zoom import ZoomController
 from .dialogs.contour_dialog import ContourDialog
-from .dialogs.crop_parameters_dialog import CropParametersDialog
 from .dialogs.export_dialog import ExportDialog
 from .dialogs.grid_dialog import GridDialog
 from .dialogs.help_contents_dialog import HelpContentsDialog
 from .dialogs.histogram_dialog import HistogramDialog
 from .dialogs.keyboard_shortcuts_dialog import KeyboardShortcutsDialog
-from .dialogs.pan_zoom_rotate_dialog import PanZoomRotateDialog
 from .dialogs.pixel_table_dialog import PixelTableDialog
 from .dialogs.preferences_dialog import PreferencesDialog
 from .dialogs.smooth_dialog import SmoothDialog
@@ -114,9 +111,7 @@ from .panels.vertical_graph import VerticalGraph
 from .status_bar import StatusBar
 from .toolbar import MainToolbar
 from .view_transform import (
-    flags_to_orientation,
     normalize_rotation,
-    orientation_to_flags,
     transform_image_array,
 )
 from .widgets.colorbar_widget import ColorbarWidget
@@ -277,16 +272,6 @@ class MainWindow(QMainWindow):
     def _rgb_channel_names() -> tuple[str, str, str]:
         return ("red", "green", "blue")
 
-    def _set_viewer_contrast_brightness(self, contrast: float, brightness: float) -> None:
-        """Set contrast/brightness on CPU or GPU viewer implementation."""
-        if hasattr(self.image_viewer, "set_contrast_brightness"):
-            self.image_viewer.set_contrast_brightness(contrast, brightness)
-            return
-        if hasattr(self.image_viewer, "image_viewer") and hasattr(
-            self.image_viewer.image_viewer, "set_contrast_brightness"
-        ):
-            self.image_viewer.image_viewer.set_contrast_brightness(contrast, brightness)
-
     def _get_rgb_active_channel_data(self, frame: Frame) -> NDArray[np.floating] | None:
         """Return currently selected RGB channel data, or first available channel."""
         channel = frame.rgb_current_channel if frame.rgb_current_channel in frame.rgb_channels else "red"
@@ -398,7 +383,7 @@ class MainWindow(QMainWindow):
         self.current_scale = scale
         self.z1 = z1
         self.z2 = z2
-        self._set_viewer_contrast_brightness(contrast, brightness)
+        self.color.set_contrast_brightness(contrast, brightness)
 
     def _setup_controllers(self) -> None:
         """Create the per-menu controllers.
@@ -407,11 +392,13 @@ class MainWindow(QMainWindow):
         `connect()` to wire its own actions. See `ui/controllers/base.py` for
         why controllers hold a reference to the window.
         """
+        self.color = ColorController(self)
+        self.zoom = ZoomController(self)
         self.scale = ScaleController(self)
         self.wcs = WCSController(self)
 
         #: Every controller, for broadcasting `sync()` on a frame change.
-        self.controllers: tuple[Controller, ...] = (self.scale, self.wcs)
+        self.controllers: tuple[Controller, ...] = (self.color, self.scale, self.wcs, self.zoom)
 
     def _sync_controllers(self) -> None:
         """Bring every controller's menu state in step with the current frame."""
@@ -630,38 +617,7 @@ class MainWindow(QMainWindow):
         self.scale.connect()
 
         # Color menu
-        for cmap_name, action in self.menu_bar.colormap_actions.items():
-            action.triggered.connect(lambda checked=False, name=cmap_name: self._set_colormap(name))
-        self.menu_bar.action_invert_colormap.triggered.connect(self._toggle_invert_colormap)
-        self.menu_bar.action_reset_colormap.triggered.connect(self._reset_colormap)
-        self.menu_bar.action_colorbar.triggered.connect(self._toggle_colorbar_visibility)
-        self.menu_bar.action_colorbar_horizontal.triggered.connect(
-            lambda checked=False: self._set_colorbar_orientation("horizontal")
-        )
-        self.menu_bar.action_colorbar_vertical.triggered.connect(
-            lambda checked=False: self._set_colorbar_orientation("vertical")
-        )
-        self.menu_bar.action_colorbar_numerics_show.triggered.connect(self._set_colorbar_numerics)
-        self.menu_bar.action_colorbar_space_value.triggered.connect(
-            lambda checked=False: self._set_colorbar_spacing_mode("value")
-        )
-        self.menu_bar.action_colorbar_space_distance.triggered.connect(
-            lambda checked=False: self._set_colorbar_spacing_mode("distance")
-        )
-        self.menu_bar.action_colorbar_font_small.triggered.connect(
-            lambda checked=False: self._set_colorbar_font_size(7)
-        )
-        self.menu_bar.action_colorbar_font_medium.triggered.connect(
-            lambda checked=False: self._set_colorbar_font_size(8)
-        )
-        self.menu_bar.action_colorbar_font_large.triggered.connect(
-            lambda checked=False: self._set_colorbar_font_size(10)
-        )
-        self.menu_bar.action_colorbar_size.triggered.connect(self._show_colorbar_size_dialog)
-        self.menu_bar.action_colorbar_ticks.triggered.connect(self._show_colorbar_ticks_dialog)
-        self.menu_bar.action_colormap_params.triggered.connect(self._show_colormap_dialog)
-        self.menu_bar.action_load_user_colormap.triggered.connect(self._load_user_colormap)
-        self.menu_bar.action_save_user_colormap.triggered.connect(self._save_current_colormap)
+        self.color.connect()
 
         # Region menu
         self.menu_bar.action_region_none.triggered.connect(lambda: self._set_region_mode(RegionMode.NONE))
@@ -729,20 +685,7 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_fits_header.triggered.connect(self._show_fits_header)
 
         # Zoom menu
-        self.menu_bar.action_zoom_center.triggered.connect(self._center_image)
-        self.menu_bar.action_zoom_align.triggered.connect(self._set_align_wcs)
-        self.menu_bar.action_zoom_in.triggered.connect(self._zoom_in)
-        self.menu_bar.action_zoom_out.triggered.connect(self._zoom_out)
-        self.menu_bar.action_zoom_fit.triggered.connect(self._zoom_fit)
-        self.menu_bar.action_zoom_1.triggered.connect(lambda: self._set_zoom_level(1.0))
-        for zoom_value, action in self.menu_bar.zoom_preset_actions.items():
-            action.triggered.connect(lambda checked=False, value=zoom_value: self._set_zoom_level(value))
-        for orientation, action in self.menu_bar.zoom_orientation_actions.items():
-            action.triggered.connect(lambda checked=False, value=orientation: self._set_orientation(value))
-        for degrees, action in self.menu_bar.zoom_rotation_actions.items():
-            action.triggered.connect(lambda checked=False, value=degrees: self._set_rotation(value))
-        self.menu_bar.action_crop_parameters.triggered.connect(self._show_crop_parameters_dialog)
-        self.menu_bar.action_pan_zoom_rotate_parameters.triggered.connect(self._show_pan_zoom_rotate_dialog)
+        self.zoom.connect()
 
         # Help menu
         self.menu_bar.action_help_contents.triggered.connect(self._show_help_contents)
@@ -758,10 +701,10 @@ class MainWindow(QMainWindow):
         # Connect toolbar actions
         self.main_toolbar.action_open.triggered.connect(self.open_file)
         self.main_toolbar.action_save.triggered.connect(self.save_file)
-        self.main_toolbar.action_zoom_in.triggered.connect(self._zoom_in)
-        self.main_toolbar.action_zoom_out.triggered.connect(self._zoom_out)
-        self.main_toolbar.action_zoom_fit.triggered.connect(self._zoom_fit)
-        self.main_toolbar.action_zoom_1.triggered.connect(self._zoom_actual)
+        self.main_toolbar.action_zoom_in.triggered.connect(self.zoom.zoom_in)
+        self.main_toolbar.action_zoom_out.triggered.connect(self.zoom.zoom_out)
+        self.main_toolbar.action_zoom_fit.triggered.connect(self.zoom.zoom_fit)
+        self.main_toolbar.action_zoom_1.triggered.connect(self.zoom.zoom_actual)
         self.main_toolbar.action_statistics.triggered.connect(self._show_statistics)
         self.main_toolbar.action_histogram.triggered.connect(self._show_histogram)
         self.main_toolbar.action_prev_frame.triggered.connect(self._prev_frame)
@@ -780,8 +723,8 @@ class MainWindow(QMainWindow):
         self.scroll_area = QScrollArea(self)
         self.scroll_area.setWidgetResizable(True)  # Allow widget to use full viewport
         self.scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.scroll_area.horizontalScrollBar().valueChanged.connect(lambda _: self._update_panner_view_rect())
-        self.scroll_area.verticalScrollBar().valueChanged.connect(lambda _: self._update_panner_view_rect())
+        self.scroll_area.horizontalScrollBar().valueChanged.connect(lambda _: self.zoom.update_panner_rect())
+        self.scroll_area.verticalScrollBar().valueChanged.connect(lambda _: self.zoom.update_panner_rect())
 
         # Create interactive image viewer with regions
         self.image_viewer = self._create_image_viewer(self.use_gpu_rendering)
@@ -805,12 +748,12 @@ class MainWindow(QMainWindow):
         viewer.setText("No image loaded")
         viewer.mouse_moved.connect(self._on_mouse_moved)
         viewer.mouse_clicked.connect(self._on_image_clicked)
-        viewer.contrast_changed.connect(self._on_contrast_changed)
+        viewer.contrast_changed.connect(self.color.on_contrast_changed)
         viewer.region_created.connect(self._on_region_created)
         viewer.region_selected.connect(self._on_region_selected)
         if hasattr(viewer, "gl_canvas"):
-            viewer.gl_canvas.pan_changed.connect(lambda *_: self._update_panner_view_rect())
-            viewer.gl_canvas.zoom_changed.connect(lambda *_: self._update_panner_view_rect())
+            viewer.gl_canvas.pan_changed.connect(lambda *_: self.zoom.update_panner_rect())
+            viewer.gl_canvas.zoom_changed.connect(lambda *_: self.zoom.update_panner_rect())
         return viewer
 
     def _setup_dock_widgets(self) -> None:
@@ -820,7 +763,7 @@ class MainWindow(QMainWindow):
         self.button_bar = ButtonBar(self)
 
         # Connect button bar signals
-        self.button_bar.zoom_changed.connect(self._on_button_bar_zoom)
+        self.button_bar.zoom_changed.connect(self.zoom.on_button_bar_zoom)
         self.button_bar.scale_changed.connect(self._on_button_bar_scale)
         self.button_bar.colormap_changed.connect(self._on_button_bar_colormap)
         self.button_bar.region_mode_changed.connect(self._on_button_bar_region)
@@ -838,7 +781,7 @@ class MainWindow(QMainWindow):
         # Top-right dock for panner (DS9 style)
         self.panner_dock = QDockWidget("Panner", self)
         self.panner_panel = PannerPanel(self)
-        self.panner_panel.pan_to.connect(self._on_panner_pan)
+        self.panner_panel.pan_to.connect(self.zoom.on_panner_pan)
         self.panner_dock.setWidget(self.panner_panel)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.panner_dock)
 
@@ -922,9 +865,9 @@ class MainWindow(QMainWindow):
         if default_scale in scale_map:
             self.scale.set_scale(scale_map[default_scale])
 
-        default_colormap = self._normalize_colormap_name(str(prefs.get("default_colormap", "gray")))
+        default_colormap = self.color.normalize_name(str(prefs.get("default_colormap", "gray")))
         if default_colormap in self.menu_bar.colormap_actions:
-            self._set_colormap(default_colormap)
+            self.color.set_colormap(default_colormap)
 
         if self.image_data is not None:
             self._display_image()
@@ -948,17 +891,6 @@ class MainWindow(QMainWindow):
         # two branches were identical, making the GPU test dead.)
         if hasattr(self.image_viewer, "set_background_color"):
             self.image_viewer.set_background_color(color_hex)
-
-    def _apply_frame_pan(self, frame: Frame) -> None:
-        """Apply stored pan to the GPU canvas."""
-        if not (self.using_gpu_rendering and hasattr(self.image_viewer, "gl_canvas")):
-            return
-        if frame.pan_x == 0.0 and frame.pan_y == 0.0:
-            return
-        canvas = self.image_viewer.gl_canvas
-        canvas.pan_offset = (frame.pan_x, frame.pan_y)
-        canvas.pan_changed.emit(frame.pan_x, frame.pan_y)
-        canvas.update()
 
     def open_file(self, checked: bool = False, filepath: str | None = None) -> None:
         """
@@ -1058,7 +990,7 @@ class MainWindow(QMainWindow):
         self._display_image()
 
         # Fit image to window on initial load
-        self._zoom_fit()
+        self.zoom.zoom_fit()
 
         # Update status bar image info
         shape = image_data.shape
@@ -1173,7 +1105,7 @@ class MainWindow(QMainWindow):
         """Apply a pure view transform change without re-rendering image data."""
         self._apply_view_transform_to_viewer(frame)
         self._update_preview_panels(frame)
-        self._update_panner_view_rect()
+        self.zoom.update_panner_rect()
         self.wcs.update_direction_arrows()
         if self._last_mouse_pos is not None:
             self._on_mouse_moved(*self._last_mouse_pos)
@@ -1212,10 +1144,10 @@ class MainWindow(QMainWindow):
 
         # Apply colormap
         try:
-            cmap = self._get_colormap_instance(self.current_colormap)
+            cmap = self.color.colormap(self.current_colormap)
         except ValueError:
             self.current_colormap = "grey"
-            cmap = self._get_colormap_instance(self.current_colormap)
+            cmap = self.color.colormap(self.current_colormap)
 
         # Invert colormap if needed
         if self.invert_colormap:
@@ -1274,7 +1206,7 @@ class MainWindow(QMainWindow):
                 transformed_preview,
                 source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
             )
-            self._update_panner_view_rect()
+            self.zoom.update_panner_rect()
 
         # Update magnifier panel with RGB data (DS9 style)
         if hasattr(self, "magnifier_panel"):
@@ -1319,7 +1251,7 @@ class MainWindow(QMainWindow):
 
         self._sync_rgb_scalar_view(frame)
         self.colorbar_widget.set_colormap(
-            self._get_colormap_instance("grey").colors,
+            self.color.colormap("grey").colors,
             0.0,
             255.0,
             "RGB Composite",
@@ -1349,7 +1281,7 @@ class MainWindow(QMainWindow):
                 transformed_preview,
                 source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
             )
-            self._update_panner_view_rect()
+            self.zoom.update_panner_rect()
         if hasattr(self, "magnifier_panel"):
             self.magnifier_panel.set_image(
                 transformed_preview,
@@ -1396,10 +1328,10 @@ class MainWindow(QMainWindow):
         adjusted_z2 = center + new_range / 2.0 + brightness * range_val
 
         try:
-            cmap = self._get_colormap_instance(frame.colormap)
+            cmap = self.color.colormap(frame.colormap)
         except ValueError:
             frame.colormap = "grey"
-            cmap = self._get_colormap_instance("grey")
+            cmap = self.color.colormap("grey")
         if frame.invert_colormap:
             cmap_data = cmap.colors.copy()[::-1]
             cmap = Colormap(f"{frame.colormap}_inverted", cmap_data)
@@ -1474,201 +1406,6 @@ class MainWindow(QMainWindow):
         self.status_bar.update_image_info(tiled_w, tiled_h)
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
         return True
-
-    @staticmethod
-    def _normalize_colormap_name(name: str) -> str:
-        """Normalize colormap aliases to internal names."""
-        lower = name.strip().lower()
-        if lower == "gray":
-            return "grey"
-        return lower
-
-    def _get_colormap_instance(self, name: str) -> Colormap:
-        """Return built-in or runtime-loaded colormap instance."""
-        cmap_name = self._normalize_colormap_name(name)
-        if cmap_name in self.custom_colormaps:
-            return self.custom_colormaps[cmap_name]
-        cmap = get_colormap(cmap_name)
-        if cmap is None:
-            raise ValueError(f"Unknown colormap: {name}")
-        return cmap
-
-    def get_available_colormaps(self) -> list[str]:
-        """Return currently available colormap names."""
-        return sorted(self.menu_bar.colormap_actions.keys())
-
-    def _update_colormap_menu_checks(self) -> None:
-        """Sync menu check marks with current colormap selection."""
-        for cmap_name, action in self.menu_bar.colormap_actions.items():
-            action.setChecked(cmap_name == self.current_colormap)
-
-    def _set_colormap(self, colormap: str) -> None:
-        """
-        Set the colormap.
-
-        Args:
-            colormap: Name of the colormap to use.
-        """
-        cmap_name = self._normalize_colormap_name(colormap)
-        if cmap_name not in self.menu_bar.colormap_actions:
-            self.statusBar().showMessage(f"Unsupported colormap: {colormap}", 2000)
-            return
-        self.current_colormap = cmap_name
-        self._persist_frame_view_state()
-
-        # Update menu checkboxes
-        self._update_colormap_menu_checks()
-
-        # Update button bar
-        cmap_name_map = {
-            "grey": "Gray",
-            "heat": "Heat",
-            "cool": "Cool",
-            "rainbow": "Rainbow",
-        }
-        if cmap_name in cmap_name_map:
-            self.button_bar.set_colormap(cmap_name_map[cmap_name])
-
-        # Redisplay with new colormap
-        if self.image_data is not None:
-            self._display_image()
-            self.statusBar().showMessage(f"Colormap: {cmap_name}", 2000)
-
-    def _reset_colormap(self) -> None:
-        """Reset colormap and inversion to defaults."""
-        self.invert_colormap = False
-        self.menu_bar.action_invert_colormap.setChecked(False)
-        self._set_colormap(self._default_colormap)
-        self.statusBar().showMessage("Colormap reset", 2000)
-
-    def _toggle_colorbar_visibility(self, checked: bool) -> None:
-        """Show or hide colorbar dock."""
-        self.colorbar_dock.setVisible(checked)
-
-    def _set_colorbar_orientation(self, orientation: str) -> None:
-        """Set colorbar orientation."""
-        orientation_l = orientation.lower()
-        self.colorbar_widget.set_orientation(orientation_l)
-        self.menu_bar.action_colorbar_horizontal.setChecked(orientation_l == "horizontal")
-        self.menu_bar.action_colorbar_vertical.setChecked(orientation_l == "vertical")
-        self.statusBar().showMessage(f"Colorbar orientation: {orientation}", 2000)
-
-    def _set_colorbar_numerics(self, checked: bool) -> None:
-        """Set colorbar numerics visibility."""
-        self.colorbar_widget.set_show_numerics(checked)
-        self.menu_bar.action_colorbar_numerics_show.setChecked(checked)
-
-    def _set_colorbar_spacing_mode(self, mode: str) -> None:
-        """Set colorbar tick spacing mode."""
-        mode_l = mode.lower()
-        self.colorbar_widget.set_spacing_mode(mode_l)
-        self.menu_bar.action_colorbar_space_value.setChecked(mode_l == "value")
-        self.menu_bar.action_colorbar_space_distance.setChecked(mode_l == "distance")
-
-    def _set_colorbar_font_size(self, size: int) -> None:
-        """Set colorbar numeric label font size."""
-        self.colorbar_widget.set_label_font_size(size)
-        if size <= 7:
-            self.menu_bar.action_colorbar_font_small.setChecked(True)
-        elif size >= 10:
-            self.menu_bar.action_colorbar_font_large.setChecked(True)
-        else:
-            self.menu_bar.action_colorbar_font_medium.setChecked(True)
-
-    def _show_colorbar_size_dialog(self) -> None:
-        """Prompt for colorbar size and apply it."""
-        size, ok = QInputDialog.getInt(
-            self,
-            "Colorbar Size",
-            "Size:",
-            value=self.colorbar_widget.bar_size,
-            min=12,
-            max=96,
-        )
-        if ok:
-            self.colorbar_widget.set_bar_size(size)
-
-    def _show_colorbar_ticks_dialog(self) -> None:
-        """Prompt for number of colorbar ticks and apply it."""
-        ticks, ok = QInputDialog.getInt(
-            self,
-            "Colorbar Ticks",
-            "Number of ticks:",
-            value=self.colorbar_widget.tick_count,
-            min=2,
-            max=30,
-        )
-        if ok:
-            self.colorbar_widget.set_tick_count(ticks)
-
-    def _show_colormap_dialog(self) -> None:
-        """Open colormap parameter dialog."""
-        from .dialogs.colormap_dialog import ColormapDialog
-
-        dialog = ColormapDialog(self)
-        dialog.colormap_changed.connect(self._apply_colormap_dialog_settings)
-        dialog.exec()
-
-    def _apply_colormap_dialog_settings(self, settings: dict) -> None:
-        """Apply settings emitted by ColormapDialog."""
-        cmap_name = self._normalize_colormap_name(settings.get("colormap", self.current_colormap))
-        if cmap_name in self.menu_bar.colormap_actions:
-            self._set_colormap(cmap_name)
-        invert = bool(settings.get("invert", self.invert_colormap))
-        if invert != self.invert_colormap:
-            self.menu_bar.action_invert_colormap.setChecked(invert)
-            self._toggle_invert_colormap(invert)
-
-    def _register_user_colormap(self, colormap: Colormap) -> None:
-        """Register a user-loaded colormap and attach a menu action."""
-        name = self._normalize_colormap_name(colormap.name)
-        self.custom_colormaps[name] = Colormap(name, colormap.colors)
-        action = self.menu_bar.add_user_colormap_action(name)
-        if name not in self._user_colormap_actions:
-            action.triggered.connect(lambda checked=False, cmap=name: self._set_colormap(cmap))
-            self._user_colormap_actions[name] = action
-
-    def _load_user_colormap(self) -> None:
-        """Load a user colormap from .lut or .sao file."""
-        filepath, _ = QFileDialog.getOpenFileName(
-            self,
-            "Load Colormap",
-            "",
-            "Colormap Files (*.lut *.sao);;LUT Files (*.lut);;SAO Files (*.sao);;All Files (*)",
-        )
-        if not filepath:
-            return
-        try:
-            if filepath.lower().endswith(".sao"):
-                cmap = parse_sao_file(filepath)
-            else:
-                cmap = parse_lut_file(filepath)
-            self._register_user_colormap(cmap)
-            self._set_colormap(cmap.name)
-            self.statusBar().showMessage(f"Loaded colormap: {cmap.name}", 3000)
-        except Exception as exc:
-            self.statusBar().showMessage(f"Error loading colormap: {exc}", 3000)
-
-    def _save_current_colormap(self) -> None:
-        """Save current colormap to a LUT file."""
-        try:
-            cmap = self._get_colormap_instance(self.current_colormap)
-        except ValueError as exc:
-            self.statusBar().showMessage(str(exc), 3000)
-            return
-        filepath, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save Colormap",
-            f"{self.current_colormap}.lut",
-            "LUT Files (*.lut);;All Files (*)",
-        )
-        if not filepath:
-            return
-        try:
-            save_lut_file(cmap, filepath)
-            self.statusBar().showMessage(f"Saved colormap: {filepath}", 3000)
-        except Exception as exc:
-            self.statusBar().showMessage(f"Error saving colormap: {exc}", 3000)
 
     def _update_block_menu_checks(self, factor: int) -> None:
         """Update Analysis->Block checkmarks based on current factor."""
@@ -2017,9 +1754,9 @@ class MainWindow(QMainWindow):
                 if self.using_gpu_rendering and hasattr(self.image_viewer, "set_pan"):
                     self.image_viewer.set_pan(float(x), float(y))
                     self._persist_frame_view_state()
-                    self._update_panner_view_rect()
+                    self.zoom.update_panner_rect()
                 else:
-                    self._on_panner_pan(float(x), float(y))
+                    self.zoom.on_panner_pan(float(x), float(y))
                 self.statusBar().showMessage(
                     f"{query}: RA {coord.ra.deg:.6f} deg, Dec {coord.dec.deg:.6f} deg",
                     4000,
@@ -2183,99 +1920,6 @@ class MainWindow(QMainWindow):
         self.status_bar.update_image_info(frame.image_data.shape[1], frame.image_data.shape[0])
         self.statusBar().showMessage(f"Binning: {factor}x{factor}", 2000)
 
-    def _current_frame_orientation(self) -> str:
-        """Return the current frame orientation token."""
-        frame = self.frame_manager.current_frame
-        if frame is None:
-            return "none"
-        return flags_to_orientation(frame.flip_x, frame.flip_y)
-
-    def _update_zoom_menu_state(self) -> None:
-        """Sync Zoom menu check state with the active frame."""
-        frame = self.frame_manager.current_frame
-        if frame is None:
-            return
-
-        preset = min(
-            self.menu_bar.zoom_preset_actions.keys(),
-            key=lambda value: abs(value - frame.zoom),
-        )
-        if np.isclose(frame.zoom, preset, atol=1e-6, rtol=1e-6):
-            self.menu_bar.zoom_preset_actions[preset].setChecked(True)
-        else:
-            self.menu_bar.zoom_preset_group.setExclusive(False)
-            for action in self.menu_bar.zoom_preset_actions.values():
-                action.setChecked(False)
-            self.menu_bar.zoom_preset_group.setExclusive(True)
-
-        self.menu_bar.action_zoom_align.setChecked(bool(frame.align_wcs))
-        self.menu_bar.zoom_orientation_actions[self._current_frame_orientation()].setChecked(True)
-
-        snapped_rotation = int(round(normalize_rotation(frame.rotation) / 90.0) * 90) % 360
-        if np.isclose(normalize_rotation(frame.rotation), snapped_rotation, atol=1e-6):
-            self.menu_bar.zoom_rotation_actions[snapped_rotation].setChecked(True)
-        else:
-            self.menu_bar.zoom_rotation_group.setExclusive(False)
-            for action in self.menu_bar.zoom_rotation_actions.values():
-                action.setChecked(False)
-            self.menu_bar.zoom_rotation_group.setExclusive(True)
-
-    def _set_zoom_level(self, zoom: float) -> None:
-        """Set an explicit zoom level."""
-        self.image_viewer.zoom_to(zoom)
-        self.status_bar.update_zoom(self.image_viewer.get_zoom())
-        self._persist_frame_view_state()
-        self._update_zoom_menu_state()
-        self._apply_locked_frame_view_state()
-        self._update_panner_view_rect()
-        self.statusBar().showMessage(f"Zoom {self.image_viewer.get_zoom():.5g}", 1000)
-
-    def _set_orientation(self, orientation: str) -> None:
-        """Set frame orientation from a DS9 orientation token."""
-        frame = self.frame_manager.current_frame
-        if frame is None:
-            self.statusBar().showMessage("No image loaded", 2000)
-            return
-        frame.flip_x, frame.flip_y = orientation_to_flags(orientation)
-        if self.using_gpu_rendering and (frame.flip_x or frame.flip_y or not np.isclose(frame.rotation, 0.0)):
-            self._display_image()
-        else:
-            self._refresh_transformed_view(frame)
-        self._persist_frame_view_state()
-        self._update_zoom_menu_state()
-        self._apply_locked_frame_view_state()
-        self.statusBar().showMessage(f"Orientation: {orientation}", 1500)
-
-    def _set_rotation(self, degrees: float) -> None:
-        """Set frame rotation."""
-        frame = self.frame_manager.current_frame
-        if frame is None:
-            self.statusBar().showMessage("No image loaded", 2000)
-            return
-        frame.rotation = normalize_rotation(degrees)
-        if self.using_gpu_rendering and (not np.isclose(frame.rotation, 0.0) or frame.flip_x or frame.flip_y):
-            self._display_image()
-        else:
-            self._refresh_transformed_view(frame)
-        self._persist_frame_view_state()
-        self._update_zoom_menu_state()
-        self._apply_locked_frame_view_state()
-        self.statusBar().showMessage(f"Rotation: {frame.rotation:.2f} degrees", 1500)
-
-    def _set_align_wcs(self, enabled: bool) -> None:
-        """Toggle WCS alignment state for the active frame."""
-        frame = self.frame_manager.current_frame
-        if frame is None:
-            self.statusBar().showMessage("No image loaded", 2000)
-            return
-        frame.align_wcs = bool(enabled)
-        self.menu_bar.action_zoom_align.setChecked(frame.align_wcs)
-        self._apply_locked_frame_view_state()
-        self.statusBar().showMessage(
-            f"WCS alignment: {'on' if frame.align_wcs else 'off'}",
-            1500,
-        )
-
     def _effective_viewport_size(self) -> QSize:
         """Return a usable viewport size for zoom/block-factor arithmetic.
 
@@ -2295,143 +1939,6 @@ class MainWindow(QMainWindow):
                 return size
         return QSize(self.DEFAULT_CANVAS_WIDTH, self.DEFAULT_CANVAS_HEIGHT)
 
-    def _center_image(self) -> None:
-        """Center the current image in the viewport."""
-        frame = self.frame_manager.current_frame
-        if frame is None or not frame.has_data:
-            self.statusBar().showMessage("No image loaded", 2000)
-            return
-
-        if self.using_gpu_rendering and hasattr(self.image_viewer, "set_pan"):
-            width = float(frame.image_data.shape[1]) / 2.0
-            height = float(frame.image_data.shape[0]) / 2.0
-            self.image_viewer.set_pan(width, height)
-        else:
-            self.scroll_area.horizontalScrollBar().setValue(
-                self.scroll_area.horizontalScrollBar().maximum() // 2
-            )
-            self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().maximum() // 2)
-        self._persist_frame_view_state()
-        self._apply_locked_frame_view_state()
-        self._update_panner_view_rect()
-        self.statusBar().showMessage("Centered image", 1500)
-
-    def _apply_crop_parameters(self, params: dict) -> None:
-        """Apply crop/view parameters to the current frame."""
-        frame = self.frame_manager.current_frame
-        if frame is None or not frame.has_data:
-            self.statusBar().showMessage("No image loaded", 2000)
-            return
-
-        frame.crop_center_x = float(params["center_x"])
-        frame.crop_center_y = float(params["center_y"])
-        frame.crop_width = max(1.0, float(params["width"]))
-        frame.crop_height = max(1.0, float(params["height"]))
-
-        viewport = self._effective_viewport_size()
-        zoom = min(
-            viewport.width() / frame.crop_width,
-            viewport.height() / frame.crop_height,
-        )
-        self._set_zoom_level(zoom)
-
-        if self.using_gpu_rendering and hasattr(self.image_viewer, "set_pan"):
-            self.image_viewer.set_pan(frame.crop_center_x, frame.crop_center_y)
-        else:
-            display_coords = None
-            if hasattr(self.image_viewer, "image_viewer"):
-                display_coords = self.image_viewer.image_viewer.map_image_to_display_coords(
-                    frame.crop_center_x,
-                    frame.crop_center_y,
-                )
-            if display_coords is not None:
-                zoom_value = self.image_viewer.get_zoom()
-                display_x, display_y = display_coords
-                self.scroll_area.horizontalScrollBar().setValue(
-                    int(display_x * zoom_value - viewport.width() / 2)
-                )
-                self.scroll_area.verticalScrollBar().setValue(
-                    int(display_y * zoom_value - viewport.height() / 2)
-                )
-        self._persist_frame_view_state()
-        self._apply_locked_frame_view_state()
-        self.statusBar().showMessage("Crop parameters applied", 1500)
-
-    def _apply_pan_zoom_rotate_parameters(self, params: dict) -> None:
-        """Apply pan/zoom/rotate dialog parameters."""
-        frame = self.frame_manager.current_frame
-        if frame is None or not frame.has_data:
-            self.statusBar().showMessage("No image loaded", 2000)
-            return
-
-        zoom = max(0.01, float(params["zoom"]))
-        pan_x = float(params["pan_x"])
-        pan_y = float(params["pan_y"])
-        frame.align_wcs = bool(params.get("align", frame.align_wcs))
-        self.menu_bar.action_zoom_align.setChecked(frame.align_wcs)
-        self.image_viewer.zoom_to(zoom)
-        frame.rotation = normalize_rotation(float(params["rotation"]))
-        self._apply_view_transform_to_viewer(frame)
-
-        if self.using_gpu_rendering and hasattr(self.image_viewer, "set_pan"):
-            self.image_viewer.set_pan(pan_x, pan_y)
-        else:
-            display_coords = None
-            if hasattr(self.image_viewer, "image_viewer"):
-                display_coords = self.image_viewer.image_viewer.map_image_to_display_coords(pan_x, pan_y)
-            if display_coords is not None:
-                viewport = self.scroll_area.viewport().size()
-                zoom_value = self.image_viewer.get_zoom()
-                display_x, display_y = display_coords
-                self.scroll_area.horizontalScrollBar().setValue(
-                    int(display_x * zoom_value - viewport.width() / 2)
-                )
-                self.scroll_area.verticalScrollBar().setValue(
-                    int(display_y * zoom_value - viewport.height() / 2)
-                )
-
-        self._display_image()
-        self._persist_frame_view_state()
-        self._update_zoom_menu_state()
-        self._apply_locked_frame_view_state()
-        self._update_panner_view_rect()
-        self.statusBar().showMessage("Pan/zoom/rotate updated", 1500)
-
-    def _show_crop_parameters_dialog(self) -> None:
-        """Show the crop parameter dialog."""
-        frame = self.frame_manager.current_frame
-        if frame is None or not frame.has_data:
-            self.statusBar().showMessage("No image loaded", 2000)
-            return
-        dialog = CropParametersDialog(self)
-        width = float(frame.image_data.shape[1])
-        height = float(frame.image_data.shape[0])
-        dialog.set_values(
-            center_x=frame.crop_center_x if frame.crop_center_x is not None else width / 2.0,
-            center_y=frame.crop_center_y if frame.crop_center_y is not None else height / 2.0,
-            width=frame.crop_width if frame.crop_width is not None else width,
-            height=frame.crop_height if frame.crop_height is not None else height,
-        )
-        dialog.parameters_changed.connect(self._apply_crop_parameters)
-        dialog.exec()
-
-    def _show_pan_zoom_rotate_dialog(self) -> None:
-        """Show the pan/zoom/rotate parameter dialog."""
-        frame = self.frame_manager.current_frame
-        if frame is None or not frame.has_data:
-            self.statusBar().showMessage("No image loaded", 2000)
-            return
-        dialog = PanZoomRotateDialog(self)
-        dialog.set_values(
-            zoom=frame.zoom,
-            pan_x=frame.pan_x,
-            pan_y=frame.pan_y,
-            rotation=frame.rotation,
-            align=frame.align_wcs,
-        )
-        dialog.parameters_changed.connect(self._apply_pan_zoom_rotate_parameters)
-        dialog.exec()
-
     def _apply_locked_frame_view_state(self) -> None:
         """Propagate zoom/orientation/rotation according to frame lock scope."""
         scope = self._frame_lock_scope.get("frame", "none")
@@ -2439,28 +1946,6 @@ class MainWindow(QMainWindow):
             self._match_frames_wcs()
         elif scope != "none":
             self._match_frames_image()
-
-    def _zoom_in(self) -> None:
-        """Zoom in."""
-        self._set_zoom_level(self.image_viewer.get_zoom() * 1.2)
-
-    def _zoom_out(self) -> None:
-        """Zoom out."""
-        self._set_zoom_level(self.image_viewer.get_zoom() / 1.2)
-
-    def _zoom_fit(self) -> None:
-        """Zoom to fit window."""
-        self.image_viewer.zoom_fit(self._effective_viewport_size())
-        self.status_bar.update_zoom(self.image_viewer.get_zoom())
-        self._persist_frame_view_state()
-        self._update_zoom_menu_state()
-        self._apply_locked_frame_view_state()
-        self._update_panner_view_rect()
-        self.statusBar().showMessage("Zoom to fit", 1000)
-
-    def _zoom_actual(self) -> None:
-        """Zoom to 1:1."""
-        self._set_zoom_level(1.0)
 
     def _on_mouse_moved(self, x: int, y: int) -> None:
         """Handle mouse movement over image."""
@@ -2509,130 +1994,23 @@ class MainWindow(QMainWindow):
                 1500,
             )
 
-    def _on_contrast_changed(self, contrast: float, brightness: float) -> None:
-        """Handle contrast/brightness change from mouse drag."""
-        self._display_image()
-        self._persist_frame_view_state()
-        self.statusBar().showMessage(f"Contrast: {contrast:.2f}, Brightness: {brightness:.2f}", 1000)
-
-    def _on_panner_pan(self, x: float, y: float) -> None:
-        """Handle pan request from panner panel."""
-        if self.image_data is None:
-            return
-        if self.using_gpu_rendering:
-            image_height = self.image_data.shape[0]
-            y_bottom = image_height - 1 - y
-            # For GPU mode: set pan to the clicked position
-            # The pan coordinates represent the image point at viewport center
-            self.image_viewer.set_pan(x, y_bottom)
-            self.statusBar().showMessage(f"Panned to ({x:.0f}, {y_bottom:.0f})", 1000)
-        else:
-            zoom = self.image_viewer.get_zoom()
-            viewport = self.scroll_area.viewport()
-            self.scroll_area.horizontalScrollBar().setValue(int(x * zoom - viewport.width() / 2))
-            self.scroll_area.verticalScrollBar().setValue(int(y * zoom - viewport.height() / 2))
-            self.statusBar().showMessage(f"Panned to ({x:.0f}, {y:.0f})", 1000)
-
-        # Persist the new pan state
-        self._persist_frame_view_state()
-        self._update_panner_view_rect()
-
-    def _pan_by_pixels(self, dx: int, dy: int) -> None:
-        """Pan display by integer image pixels."""
-        if self.image_data is None:
-            return
-        if self.using_gpu_rendering and hasattr(self.image_viewer, "gl_canvas"):
-            pan_x, pan_y = self.image_viewer.gl_canvas.pan_offset
-            self.image_viewer.set_pan(pan_x + dx, pan_y + dy)
-        else:
-            zoom = max(self.image_viewer.get_zoom(), 1e-6)
-            step = max(1, int(round(zoom)))
-            self.scroll_area.horizontalScrollBar().setValue(
-                self.scroll_area.horizontalScrollBar().value() + dx * step
-            )
-            self.scroll_area.verticalScrollBar().setValue(
-                self.scroll_area.verticalScrollBar().value() - dy * step
-            )
-        self._persist_frame_view_state()
-        self._update_panner_view_rect()
-
-    def _update_panner_view_rect(self) -> None:
-        """Update panner viewport rectangle to match main display viewport."""
-        if not hasattr(self, "panner_panel"):
-            return
-        if self._tile_mode_enabled or self.image_data is None:
-            self.panner_panel.set_view_rect(None)
-            return
-
-        image_w, image_h = self.image_viewer.get_display_image_size()
-        if image_w <= 0 or image_h <= 0:
-            self.panner_panel.set_view_rect(None)
-            return
-
-        zoom = max(self.image_viewer.get_zoom(), 1e-6)
-        if self.using_gpu_rendering and hasattr(self.image_viewer, "gl_canvas"):
-            canvas = self.image_viewer.gl_canvas
-            view_w = canvas.width() / zoom
-            view_h = canvas.height() / zoom
-            pan_x, pan_y = canvas.pan_offset
-            x = pan_x - view_w / 2.0
-            y_bottom = pan_y - view_h / 2.0
-            y = image_h - (y_bottom + view_h)
-        else:
-            viewport = self.scroll_area.viewport()
-            view_w = viewport.width() / zoom
-            view_h = viewport.height() / zoom
-            x = self.scroll_area.horizontalScrollBar().value() / zoom
-            y = self.scroll_area.verticalScrollBar().value() / zoom
-
-        rect_w = min(float(image_w), max(1.0, float(view_w)))
-        rect_h = min(float(image_h), max(1.0, float(view_h)))
-        x = max(0.0, min(float(image_w) - rect_w, float(x)))
-        y = max(0.0, min(float(image_h) - rect_h, float(y)))
-        self.panner_panel.set_view_rect(QRectF(x, y, rect_w, rect_h))
-
-    def _on_button_bar_zoom(self, level: str) -> None:
-        """Handle zoom change from button bar."""
-        if level == "Fit":
-            self._zoom_fit()
-        elif level == "1":
-            self._zoom_actual()
-        else:
-            try:
-                zoom_val = float(level)
-                self.image_viewer.zoom_to(zoom_val)
-                self.status_bar.update_zoom(zoom_val)
-                self._persist_frame_view_state()
-                self._update_panner_view_rect()
-                self.statusBar().showMessage(f"Zoom: {zoom_val}x", 1000)
-            except ValueError:
-                # Handle fractions like "1/2"
-                if "/" in level:
-                    parts = level.split("/")
-                    zoom_val = float(parts[0]) / float(parts[1])
-                    self.image_viewer.zoom_to(zoom_val)
-                    self.status_bar.update_zoom(zoom_val)
-                    self._persist_frame_view_state()
-                    self._update_panner_view_rect()
-                    self.statusBar().showMessage(f"Zoom: {level}", 1000)
-
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Handle keyboard panning with arrow keys."""
         key = event.key()
         if key == Qt.Key.Key_Left:
-            self._pan_by_pixels(-1, 0)
+            self.zoom.pan_by_pixels(-1, 0)
             event.accept()
             return
         if key == Qt.Key.Key_Right:
-            self._pan_by_pixels(1, 0)
+            self.zoom.pan_by_pixels(1, 0)
             event.accept()
             return
         if key == Qt.Key.Key_Up:
-            self._pan_by_pixels(0, 1)
+            self.zoom.pan_by_pixels(0, 1)
             event.accept()
             return
         if key == Qt.Key.Key_Down:
-            self._pan_by_pixels(0, -1)
+            self.zoom.pan_by_pixels(0, -1)
             event.accept()
             return
         super().keyPressEvent(event)
@@ -2659,7 +2037,7 @@ class MainWindow(QMainWindow):
             "Rainbow": "rainbow",
         }
         if cmap_name in cmap_map:
-            self._set_colormap(cmap_map[cmap_name])
+            self.color.set_colormap(cmap_map[cmap_name])
 
     def _on_button_bar_region(self, mode: str) -> None:
         """Handle region mode change from button bar."""
@@ -2688,15 +2066,6 @@ class MainWindow(QMainWindow):
     def _toggle_statusbar(self, checked: bool) -> None:
         """Toggle status bar visibility."""
         self.statusBar().setVisible(checked)
-
-    def _toggle_invert_colormap(self, checked: bool) -> None:
-        """Toggle colormap inversion."""
-        self.invert_colormap = checked
-        self._persist_frame_view_state()
-        if self.image_data is not None:
-            self._display_image()
-            inv_str = "inverted" if checked else "normal"
-            self.statusBar().showMessage(f"Colormap {inv_str}", 2000)
 
     def _load_regions(self) -> None:
         """Load region file."""
@@ -3367,9 +2736,9 @@ class MainWindow(QMainWindow):
         scaled = apply_scale(image_data, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
 
         try:
-            cmap = self._get_colormap_instance(self.current_colormap)
+            cmap = self.color.colormap(self.current_colormap)
         except ValueError:
-            cmap = self._get_colormap_instance("grey")
+            cmap = self.color.colormap("grey")
         if self.invert_colormap:
             cmap_data = cmap.colors.copy()
             cmap_data = cmap_data[::-1]
@@ -4137,7 +3506,7 @@ class MainWindow(QMainWindow):
     def _apply_frame_view_state(self, frame: Frame) -> None:
         """Apply stored display settings from the frame."""
         self._apply_view_transform_to_viewer(frame)
-        self.current_colormap = self._normalize_colormap_name(frame.colormap)
+        self.current_colormap = self.color.normalize_name(frame.colormap)
         self.invert_colormap = frame.invert_colormap
         if frame.frame_type == "rgb":
             self._sync_view_state_from_rgb_channel(frame)
@@ -4145,7 +3514,7 @@ class MainWindow(QMainWindow):
             self.current_scale = frame.scale
             self.z1 = frame.z1
             self.z2 = frame.z2
-        self._update_colormap_menu_checks()
+        self.color.sync()
         self.menu_bar.action_invert_colormap.setChecked(self.invert_colormap)
         self.menu_bar.action_scale_linear.setChecked(self.current_scale == ScaleAlgorithm.LINEAR)
         self.menu_bar.action_scale_log.setChecked(self.current_scale == ScaleAlgorithm.LOG)
@@ -4174,7 +3543,7 @@ class MainWindow(QMainWindow):
         if self.current_scale in scale_name_map:
             self.button_bar.set_scale(scale_name_map[self.current_scale])
         if frame.frame_type != "rgb":
-            self._set_viewer_contrast_brightness(frame.contrast, frame.brightness)
+            self.color.set_contrast_brightness(frame.contrast, frame.brightness)
         if frame.zoom:
             self.image_viewer.zoom_to(frame.zoom)
         if self.using_gpu_rendering and hasattr(self.image_viewer, "set_pan"):
@@ -4190,7 +3559,7 @@ class MainWindow(QMainWindow):
                 display_x, display_y = display_coords
                 self.scroll_area.horizontalScrollBar().setValue(int(display_x * zoom - viewport.width() / 2))
                 self.scroll_area.verticalScrollBar().setValue(int(display_y * zoom - viewport.height() / 2))
-        self._update_zoom_menu_state()
+        self.zoom.sync()
 
     def _sync_frame_view_state(self) -> None:
         """Persist current view state after rendering."""

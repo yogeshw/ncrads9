@@ -324,7 +324,7 @@ def apply_startup_cli(main_window: MainWindow, argv: Sequence[str]) -> None:
     items = parse_cli_sequence(list(argv)[1:])
     xpa_commands = XPACommands(main_window)
     xpa_supported = set(xpa_commands.get_available_commands())
-    available_colormaps = set(main_window.get_available_colormaps())
+    available_colormaps = set(main_window.color.available_colormaps())
     rgb_channel_paths: dict[str, str] = {}
     rgb_requested = False
 
@@ -394,13 +394,13 @@ def apply_startup_cli(main_window: MainWindow, argv: Sequence[str]) -> None:
                 logger.warning("Invalid -bin value: %s", args[0])
             continue
         if option == "invert":
-            main_window._toggle_invert_colormap(True)
+            main_window.color.set_inverted(True)
             continue
         if option in {"noinvert", "uninvert"}:
-            main_window._toggle_invert_colormap(False)
+            main_window.color.set_inverted(False)
             continue
         if option in available_colormaps:
-            main_window._set_colormap(option)
+            main_window.color.set_colormap(option)
             continue
         if option in xpa_supported:
             response = xpa_commands.handle(option, {"args": args})
