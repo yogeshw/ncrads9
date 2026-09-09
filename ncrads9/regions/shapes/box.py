@@ -40,6 +40,7 @@ class Box(BaseRegion):
         font: str = "helvetica 10 normal roman",
         text: str = "",
         tags: list[str] | None = None,
+        **kwargs: Any,
     ) -> None:
         """
         Initialize a box region.
@@ -55,7 +56,7 @@ class Box(BaseRegion):
             text: The text label for the region.
             tags: Optional list of tags for grouping regions.
         """
-        super().__init__(center, color, width, font, text, tags)
+        super().__init__(center, color, width, font, text, tags, **kwargs)
         self._width_box = width_box
         self._height_box = height_box
         self._angle = angle

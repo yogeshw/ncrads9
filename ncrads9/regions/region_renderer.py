@@ -15,351 +15,404 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
-Region renderer for Qt-based drawing.
+Painting for region shapes.
+
+Regions are held in image coordinates; painting happens in widget
+coordinates. Callers pass a ``to_widget`` callable that maps one image point
+to one widget point, so this module needs to know nothing about zoom, pan,
+rotation or flips -- the overlay owns that transform.
+
+Shapes are dispatched by type rather than by asking the shape to draw itself:
+``BaseRegion.draw()`` would have to know about Qt, which would drag Qt into
+the region model. Keeping the painting here lets the model stay pure and
+gives M6's twenty shapes a single place to grow.
 
 Author: Yogesh Wadadekar
 """
 
+from __future__ import annotations
+
+import math
+from collections.abc import Callable, Iterable, Sequence
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
-from PyQt6.QtGui import QColor, QFont, QPainter, QPen
+from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
 
 from .base_region import BaseRegion
-from .region_manager import RegionManager
+from .shapes.box import Box
+from .shapes.circle import Circle
+from .shapes.ellipse import Ellipse
+from .shapes.line import Line
+from .shapes.point import Point
+from .shapes.polygon import Polygon
+from .shapes.text import Text
+
+#: Maps one image-coordinate point to one widget-coordinate point.
+ToWidget = Callable[[float, float], QPointF]
+
+#: DS9's region colour names. Anything Qt understands also works.
+DS9_COLORS: dict[str, QColor] = {
+    "black": QColor(0, 0, 0),
+    "white": QColor(255, 255, 255),
+    "red": QColor(255, 0, 0),
+    "green": QColor(0, 255, 0),
+    "blue": QColor(0, 0, 255),
+    "cyan": QColor(0, 255, 255),
+    "magenta": QColor(255, 0, 255),
+    "yellow": QColor(255, 255, 0),
+}
+
+#: Colour used to outline the selected region, matching DS9's highlight.
+SELECTION_COLOR = QColor(255, 255, 0)
+
+#: Side length, in widget pixels, of a selection handle.
+HANDLE_SIZE = 6
+
+
+def resolve_color(name: str) -> QColor:
+    """Return a QColor for a DS9 colour name, falling back to green."""
+    lowered = (name or "").strip().lower()
+    if lowered in DS9_COLORS:
+        return DS9_COLORS[lowered]
+    color = QColor(name)
+    return color if color.isValid() else DS9_COLORS["green"]
+
+
+def parse_font(spec: str) -> QFont:
+    """Parse a DS9 font spec, e.g. ``helvetica 10 normal roman``."""
+    parts = (spec or "").split()
+    font = QFont(parts[0] if parts else "Helvetica")
+    if len(parts) > 1:
+        try:
+            font.setPointSize(int(parts[1]))
+        except ValueError:
+            pass
+    if "bold" in parts:
+        font.setBold(True)
+    if "italic" in parts:
+        font.setItalic(True)
+    return font
 
 
 class RegionRenderer:
-    """Renderer for drawing regions using Qt."""
+    """Draws regions and in-progress previews onto a QPainter."""
 
-    # Color name to QColor mapping
-    COLOR_MAP: dict[str, QColor] = {
-        "green": QColor(0, 255, 0),
-        "red": QColor(255, 0, 0),
-        "blue": QColor(0, 0, 255),
-        "cyan": QColor(0, 255, 255),
-        "magenta": QColor(255, 0, 255),
-        "yellow": QColor(255, 255, 0),
-        "white": QColor(255, 255, 255),
-        "black": QColor(0, 0, 0),
-        "orange": QColor(255, 165, 0),
-        "pink": QColor(255, 192, 203),
-    }
+    def __init__(self, show_labels: bool = True, antialiasing: bool = True) -> None:
+        """
+        Args:
+            show_labels: Draw each region's text label.
+            antialiasing: Enable antialiased outlines.
+        """
+        self.show_labels = show_labels
+        self.antialiasing = antialiasing
 
-    # Selection highlight color
-    SELECTION_COLOR = QColor(255, 255, 0, 128)
+    # -- pens ---------------------------------------------------------------
 
-    def __init__(
+    def pen_for(self, region: BaseRegion) -> QPen:
+        """Build the pen for a region, honouring selection, width and dash."""
+        selected = getattr(region, "selected", False)
+        color = SELECTION_COLOR if selected else resolve_color(region.color)
+        pen = QPen(color, max(1, region.width) + (1 if selected else 0))
+        if getattr(region, "dash", False):
+            pen.setStyle(Qt.PenStyle.DashLine)
+        return pen
+
+    @staticmethod
+    def preview_pen() -> QPen:
+        """Pen for the dashed shape that follows the cursor while drawing."""
+        return QPen(SELECTION_COLOR, 1, Qt.PenStyle.DashLine)
+
+    # -- whole-list rendering ----------------------------------------------
+
+    def render(
         self,
-        region_manager: RegionManager | None = None,
-        scale: float = 1.0,
-        offset: tuple[float, float] = (0.0, 0.0),
+        painter: QPainter,
+        regions: Iterable[BaseRegion],
+        to_widget: ToWidget,
     ) -> None:
-        """
-        Initialize the region renderer.
-
-        Args:
-            region_manager: Optional region manager to use.
-            scale: The zoom scale factor.
-            offset: The (x, y) offset for panning.
-        """
-        self._region_manager = region_manager
-        self._scale = scale
-        self._offset = offset
-        self._show_labels = True
-        self._antialiasing = True
-
-    @property
-    def scale(self) -> float:
-        """Get the zoom scale."""
-        return self._scale
-
-    @scale.setter
-    def scale(self, value: float) -> None:
-        """Set the zoom scale."""
-        self._scale = max(0.01, value)
-
-    @property
-    def offset(self) -> tuple[float, float]:
-        """Get the pan offset."""
-        return self._offset
-
-    @offset.setter
-    def offset(self, value: tuple[float, float]) -> None:
-        """Set the pan offset."""
-        self._offset = value
-
-    @property
-    def show_labels(self) -> bool:
-        """Get whether labels are shown."""
-        return self._show_labels
-
-    @show_labels.setter
-    def show_labels(self, value: bool) -> None:
-        """Set whether labels are shown."""
-        self._show_labels = value
-
-    @property
-    def antialiasing(self) -> bool:
-        """Get whether antialiasing is enabled."""
-        return self._antialiasing
-
-    @antialiasing.setter
-    def antialiasing(self, value: bool) -> None:
-        """Set whether antialiasing is enabled."""
-        self._antialiasing = value
-
-    def set_region_manager(self, manager: RegionManager) -> None:
-        """
-        Set the region manager.
-
-        Args:
-            manager: The region manager to use.
-        """
-        self._region_manager = manager
-
-    def render(self, painter: QPainter) -> None:
-        """
-        Render all regions.
-
-        Args:
-            painter: The QPainter to draw with.
-        """
-        if self._region_manager is None:
-            return
-
-        # Enable antialiasing if requested
-        if self._antialiasing:
+        """Draw every region, then the selection handles on top."""
+        if self.antialiasing:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Draw all regions
-        for i, region in enumerate(self._region_manager):
-            is_selected = self._region_manager.is_selected(i)
-            self.render_region(painter, region, is_selected)
+        for region in regions:
+            self.render_region(painter, region, to_widget)
 
     def render_region(
         self,
         painter: QPainter,
         region: BaseRegion,
-        selected: bool = False,
+        to_widget: ToWidget,
     ) -> None:
-        """
-        Render a single region.
+        """Draw one region, its label, and its handles if selected."""
+        painter.setPen(self.pen_for(region))
+        self._draw_shape(painter, region, to_widget)
 
-        Args:
-            painter: The QPainter to draw with.
-            region: The region to render.
-            selected: Whether the region is selected.
-        """
-        # Set up the pen
-        pen = self._create_pen(region, selected)
-        painter.setPen(pen)
+        if self.show_labels and region.text:
+            self._draw_label(painter, region, to_widget)
 
-        # Transform coordinates
-        center = self._transform_point(region.center)
+        if getattr(region, "selected", False):
+            self._draw_handles(painter, region, to_widget)
 
-        # Draw the region (delegates to region's draw method)
-        region.draw(painter)
+    # -- per-shape painting -------------------------------------------------
 
-        # Draw selection handles if selected
-        if selected:
-            self._draw_selection_handles(painter, region)
-
-        # Draw label if enabled
-        if self._show_labels and region.text:
-            self._draw_label(painter, region, center)
-
-    def render_regions(
-        self,
-        painter: QPainter,
-        regions: list[BaseRegion],
-        selected_indices: set[int] | None = None,
-    ) -> None:
-        """
-        Render a list of regions.
-
-        Args:
-            painter: The QPainter to draw with.
-            regions: The list of regions to render.
-            selected_indices: Optional set of selected region indices.
-        """
-        if self._antialiasing:
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        selected_indices = selected_indices or set()
-
-        for i, region in enumerate(regions):
-            is_selected = i in selected_indices
-            self.render_region(painter, region, is_selected)
-
-    def _create_pen(self, region: BaseRegion, selected: bool) -> QPen:
-        """
-        Create a pen for drawing a region.
-
-        Args:
-            region: The region to create a pen for.
-            selected: Whether the region is selected.
-
-        Returns:
-            A QPen configured for the region.
-        """
-        color = self._get_color(region.color)
-        if selected:
-            # Make selected regions slightly brighter
-            color = color.lighter(120)
-
-        pen = QPen(color)
-        pen.setWidth(region.width)
-        pen.setStyle(Qt.PenStyle.SolidLine)
-
-        return pen
-
-    def _get_color(self, color_name: str) -> QColor:
-        """
-        Get a QColor from a color name.
-
-        Args:
-            color_name: The color name.
-
-        Returns:
-            The corresponding QColor.
-        """
-        color_name = color_name.lower()
-        if color_name in self.COLOR_MAP:
-            return self.COLOR_MAP[color_name]
-
-        # Try to parse as hex color
-        if color_name.startswith("#"):
-            return QColor(color_name)
-
-        # Default to green
-        return self.COLOR_MAP["green"]
-
-    def _transform_point(self, point: tuple[float, float]) -> tuple[float, float]:
-        """
-        Transform a point from image to screen coordinates.
-
-        Args:
-            point: The (x, y) point in image coordinates.
-
-        Returns:
-            The (x, y) point in screen coordinates.
-        """
-        x = (point[0] + self._offset[0]) * self._scale
-        y = (point[1] + self._offset[1]) * self._scale
-        return (x, y)
-
-    def _inverse_transform_point(self, point: tuple[float, float]) -> tuple[float, float]:
-        """
-        Transform a point from screen to image coordinates.
-
-        Args:
-            point: The (x, y) point in screen coordinates.
-
-        Returns:
-            The (x, y) point in image coordinates.
-        """
-        x = point[0] / self._scale - self._offset[0]
-        y = point[1] / self._scale - self._offset[1]
-        return (x, y)
-
-    def _draw_selection_handles(self, painter: QPainter, region: BaseRegion) -> None:
-        """
-        Draw selection handles around a region.
-
-        Args:
-            painter: The QPainter to draw with.
-            region: The region to draw handles for.
-        """
-        # Draw a small square at the center
-        center = self._transform_point(region.center)
-        handle_size = 6
-
-        pen = QPen(self.SELECTION_COLOR)
-        pen.setWidth(2)
-        painter.setPen(pen)
-
-        rect = QRectF(
-            center[0] - handle_size / 2,
-            center[1] - handle_size / 2,
-            handle_size,
-            handle_size,
-        )
-        painter.drawRect(rect)
-
-    def _draw_label(
+    def _draw_shape(
         self,
         painter: QPainter,
         region: BaseRegion,
-        center: tuple[float, float],
+        to_widget: ToWidget,
     ) -> None:
+        """Dispatch to the right primitive for this shape type.
+
+        Radii are measured along +x in image space and transformed, so the
+        drawn size tracks zoom. A rotated or flipped display leaves circles
+        circular, which is correct: DS9 draws a circle of radius r as a circle
+        whatever the display orientation.
         """
-        Draw a text label for a region.
+        if isinstance(region, Circle):
+            center = to_widget(*region.center)
+            painter.drawEllipse(center, *self._radii(region.center, region.radius, region.radius, to_widget))
 
-        Args:
-            painter: The QPainter to draw with.
-            region: The region to label.
-            center: The center point in screen coordinates.
+        elif isinstance(region, Ellipse):
+            self._draw_rotated_ellipse(
+                painter,
+                region.center,
+                region.semi_major,
+                region.semi_minor,
+                region.angle,
+                to_widget,
+            )
+
+        elif isinstance(region, Box):
+            self._draw_rotated_box(
+                painter,
+                region.center,
+                region.width_box,
+                region.height_box,
+                region.angle,
+                to_widget,
+            )
+
+        elif isinstance(region, Polygon):
+            if len(region.vertices) >= 2:
+                painter.drawPolygon(QPolygonF([to_widget(x, y) for x, y in region.vertices]))
+
+        elif isinstance(region, Line):
+            painter.drawLine(to_widget(*region.start), to_widget(*region.end))
+
+        elif isinstance(region, Point):
+            self._draw_point(painter, region, to_widget)
+
+        elif isinstance(region, Text):
+            painter.setFont(parse_font(region.font))
+            painter.drawText(to_widget(*region.center), region.label)
+
+        else:
+            # Shapes without a painter yet (annulus, panda, ruler, ...) get a
+            # centre tick so they are at least visible. M6 draws them properly.
+            center = to_widget(*region.center)
+            painter.drawLine(
+                QPointF(center.x() - 4, center.y()),
+                QPointF(center.x() + 4, center.y()),
+            )
+            painter.drawLine(
+                QPointF(center.x(), center.y() - 4),
+                QPointF(center.x(), center.y() + 4),
+            )
+
+    @staticmethod
+    def _radii(
+        center: tuple[float, float],
+        rx_image: float,
+        ry_image: float,
+        to_widget: ToWidget,
+    ) -> tuple[float, float]:
+        """Convert image-space radii to widget-space radii."""
+        origin = to_widget(*center)
+        along_x = to_widget(center[0] + rx_image, center[1])
+        along_y = to_widget(center[0], center[1] + ry_image)
+        rx = math.hypot(along_x.x() - origin.x(), along_x.y() - origin.y())
+        ry = math.hypot(along_y.x() - origin.x(), along_y.y() - origin.y())
+        return rx, ry
+
+    def _draw_rotated_ellipse(
+        self,
+        painter: QPainter,
+        center: tuple[float, float],
+        semi_major: float,
+        semi_minor: float,
+        angle: float,
+        to_widget: ToWidget,
+    ) -> None:
+        """Draw an ellipse, rotating the painter when the shape is rotated."""
+        widget_center = to_widget(*center)
+        rx, ry = self._radii(center, semi_major, semi_minor, to_widget)
+        if angle:
+            painter.save()
+            painter.translate(widget_center)
+            painter.rotate(-angle)
+            painter.drawEllipse(QPointF(0, 0), rx, ry)
+            painter.restore()
+        else:
+            painter.drawEllipse(widget_center, rx, ry)
+
+    def _draw_rotated_box(
+        self,
+        painter: QPainter,
+        center: tuple[float, float],
+        width_box: float,
+        height_box: float,
+        angle: float,
+        to_widget: ToWidget,
+    ) -> None:
+        """Draw a box, rotating the painter when the shape is rotated."""
+        widget_center = to_widget(*center)
+        half_w, half_h = self._radii(center, width_box / 2.0, height_box / 2.0, to_widget)
+        rect = QRectF(-half_w, -half_h, half_w * 2, half_h * 2)
+        painter.save()
+        painter.translate(widget_center)
+        if angle:
+            painter.rotate(-angle)
+        painter.drawRect(rect)
+        painter.restore()
+
+    @staticmethod
+    def _draw_point(painter: QPainter, region: Point, to_widget: ToWidget) -> None:
+        """Draw a point marker in DS9's glyph for its shape.
+
+        Point size is in *screen* pixels in DS9, not image pixels, so it is
+        not passed through ``to_widget``.
         """
-        font = self._parse_font(region.font)
-        painter.setFont(font)
+        center = to_widget(*region.center)
+        half = max(1.0, region.size / 2.0)
+        shape = (region.shape or "circle").lower()
 
-        color = self._get_color(region.color)
-        painter.setPen(color)
+        if shape == "circle":
+            painter.drawEllipse(center, half, half)
+        elif shape == "box":
+            painter.drawRect(QRectF(center.x() - half, center.y() - half, half * 2, half * 2))
+        elif shape == "diamond":
+            painter.drawPolygon(
+                QPolygonF(
+                    [
+                        QPointF(center.x(), center.y() - half),
+                        QPointF(center.x() + half, center.y()),
+                        QPointF(center.x(), center.y() + half),
+                        QPointF(center.x() - half, center.y()),
+                    ]
+                )
+            )
+        elif shape == "cross":
+            painter.drawLine(QPointF(center.x() - half, center.y()), QPointF(center.x() + half, center.y()))
+            painter.drawLine(QPointF(center.x(), center.y() - half), QPointF(center.x(), center.y() + half))
+        elif shape == "x":
+            painter.drawLine(
+                QPointF(center.x() - half, center.y() - half),
+                QPointF(center.x() + half, center.y() + half),
+            )
+            painter.drawLine(
+                QPointF(center.x() - half, center.y() + half),
+                QPointF(center.x() + half, center.y() - half),
+            )
+        elif shape == "boxcircle":
+            painter.drawRect(QRectF(center.x() - half, center.y() - half, half * 2, half * 2))
+            painter.drawEllipse(center, half * 0.7, half * 0.7)
+        elif shape == "arrow":
+            painter.drawLine(QPointF(center.x(), center.y() + half), center)
+            painter.drawPolygon(
+                QPolygonF(
+                    [
+                        center,
+                        QPointF(center.x() - half * 0.5, center.y() + half * 0.5),
+                        QPointF(center.x() + half * 0.5, center.y() + half * 0.5),
+                    ]
+                )
+            )
+        else:
+            painter.drawEllipse(center, half, half)
 
-        # Draw text slightly above the center
-        point = QPointF(center[0], center[1] - 10)
-        painter.drawText(point, region.text)
+    # -- decorations --------------------------------------------------------
 
-    def _parse_font(self, font_spec: str) -> QFont:
+    def _draw_label(self, painter: QPainter, region: BaseRegion, to_widget: ToWidget) -> None:
+        """Draw a region's text label just above its centre."""
+        painter.save()
+        painter.setFont(parse_font(region.font))
+        center = to_widget(*region.center)
+        painter.drawText(QPointF(center.x() + HANDLE_SIZE, center.y() - HANDLE_SIZE), region.text)
+        painter.restore()
+
+    def _draw_handles(self, painter: QPainter, region: BaseRegion, to_widget: ToWidget) -> None:
+        """Draw square handles at a selected region's control points."""
+        painter.save()
+        painter.setPen(QPen(SELECTION_COLOR, 1))
+        painter.setBrush(SELECTION_COLOR)
+        for x, y in self.handle_points(region):
+            widget = to_widget(x, y)
+            painter.drawRect(
+                QRectF(
+                    widget.x() - HANDLE_SIZE / 2,
+                    widget.y() - HANDLE_SIZE / 2,
+                    HANDLE_SIZE,
+                    HANDLE_SIZE,
+                )
+            )
+        painter.restore()
+
+    @staticmethod
+    def handle_points(region: BaseRegion) -> Sequence[tuple[float, float]]:
+        """Return a region's control points, in image coordinates.
+
+        M6 makes these draggable; for now they only indicate selection.
         """
-        Parse a DS9 font specification.
+        if isinstance(region, Polygon):
+            return list(region.vertices)
+        if isinstance(region, Line):
+            return [region.start, region.end]
+        if isinstance(region, Circle):
+            cx, cy = region.center
+            return [(cx + region.radius, cy)]
+        if isinstance(region, Ellipse):
+            cx, cy = region.center
+            return [(cx + region.semi_major, cy), (cx, cy + region.semi_minor)]
+        if isinstance(region, Box):
+            cx, cy = region.center
+            half_w, half_h = region.width_box / 2.0, region.height_box / 2.0
+            return [
+                (cx - half_w, cy - half_h),
+                (cx + half_w, cy - half_h),
+                (cx + half_w, cy + half_h),
+                (cx - half_w, cy + half_h),
+            ]
+        return [region.center]
 
-        Args:
-            font_spec: The font specification string.
+    # -- drawing preview ----------------------------------------------------
 
-        Returns:
-            A QFont object.
+    def render_preview(
+        self,
+        painter: QPainter,
+        mode: str,
+        image_points: Sequence[tuple[float, float]],
+        to_widget: ToWidget,
+    ) -> None:
+        """Draw the dashed outline that follows the cursor while drawing.
+
+        ``mode`` is a `RegionMode` value; it is taken as a plain string so
+        this module does not depend on the UI layer.
         """
-        parts = font_spec.split()
-        font = QFont()
+        if not image_points:
+            return
 
-        if len(parts) >= 1:
-            font.setFamily(parts[0])
-        if len(parts) >= 2:
-            try:
-                font.setPointSize(int(parts[1]))
-            except ValueError:
-                pass
-        if len(parts) >= 3:
-            if parts[2] == "bold":
-                font.setBold(True)
-            elif parts[2] == "italic":
-                font.setItalic(True)
+        painter.setPen(self.preview_pen())
+        widget_points = [to_widget(x, y) for x, y in image_points]
 
-        return font
-
-    def screen_to_image(self, screen_x: float, screen_y: float) -> tuple[float, float]:
-        """
-        Convert screen coordinates to image coordinates.
-
-        Args:
-            screen_x: The x coordinate in screen space.
-            screen_y: The y coordinate in screen space.
-
-        Returns:
-            The (x, y) coordinates in image space.
-        """
-        return self._inverse_transform_point((screen_x, screen_y))
-
-    def image_to_screen(self, image_x: float, image_y: float) -> tuple[float, float]:
-        """
-        Convert image coordinates to screen coordinates.
-
-        Args:
-            image_x: The x coordinate in image space.
-            image_y: The y coordinate in image space.
-
-        Returns:
-            The (x, y) coordinates in screen space.
-        """
-        return self._transform_point((image_x, image_y))
+        if mode == "circle" and len(widget_points) >= 2:
+            center, edge = widget_points[0], widget_points[1]
+            radius = math.hypot(edge.x() - center.x(), edge.y() - center.y())
+            painter.drawEllipse(center, radius, radius)
+        elif mode == "box" and len(widget_points) >= 2:
+            painter.drawRect(QRectF(widget_points[0], widget_points[1]))
+        elif mode == "ellipse" and len(widget_points) >= 2:
+            painter.drawEllipse(QRectF(widget_points[0], widget_points[1]))
+        elif mode == "polygon" and len(widget_points) >= 2:
+            painter.drawPolyline(QPolygonF(widget_points))
+        elif mode == "line" and len(widget_points) >= 2:
+            painter.drawLine(widget_points[0], widget_points[1])

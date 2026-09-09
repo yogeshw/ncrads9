@@ -1,4 +1,4 @@
-# NCRA DS9 - Astronomical Image Viewer
+# NCRADS9 - NCRA DS9 Viewer
 # Copyright (C) 2026 Yogesh Wadadekar
 #
 # This program is free software: you can redistribute it and/or modify
@@ -13,320 +13,110 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-#
-# Author: Yogesh Wadadekar
 
-"""BlinkController class for frame blinking animation."""
+"""
+Frame sequencing for DS9's Blink and Fade modes.
+
+This decides *which frame comes next*; it does not own a timer. The UI drives
+it from a QTimer, so the sequencing logic stays free of Qt and is directly
+unit-testable.
+
+Only the frames the user has left visible take part -- DS9's Show/Hide Frames
+removes a frame from the blink cycle without deleting it -- so the caller
+passes the active frame indices on every step rather than the controller
+caching a stale list.
+
+Before M1 this was a `BlinkController` that polled a wall-clock `update()` and
+modelled frame ranges, and was never used; the sequencing actually driving the
+UI was inline in `MainWindow._update_blink`.
+
+Author: Yogesh Wadadekar
+"""
 
 from __future__ import annotations
 
-import time
-from collections.abc import Callable
+from collections.abc import Sequence
 from dataclasses import dataclass
-from enum import Enum, auto
+from enum import Enum
 
-from .frame import Frame
-from .frame_manager import FrameManager
+#: DS9's blink intervals, in milliseconds (Frame Parameters -> Blink Interval).
+BLINK_INTERVALS_MS: tuple[int, ...] = (125, 250, 500, 1000, 2000, 4000, 8000, 16000)
+
+#: DS9's fade intervals, in milliseconds.
+FADE_INTERVALS_MS: tuple[int, ...] = (1000, 2000, 4000, 8000)
+
+#: DS9's default blink and fade intervals.
+DEFAULT_BLINK_INTERVAL_MS = 500
+DEFAULT_FADE_INTERVAL_MS = 1000
 
 
-class BlinkMode(Enum):
-    """Blinking modes."""
+class BlinkOrder(Enum):
+    """Direction the cycle runs in."""
 
-    FORWARD = auto()
-    BACKWARD = auto()
-    BOUNCE = auto()
-
-
-class BlinkState(Enum):
-    """Blinking states."""
-
-    STOPPED = auto()
-    RUNNING = auto()
-    PAUSED = auto()
+    FORWARD = "forward"
+    REVERSE = "reverse"
+    PINGPONG = "pingpong"
 
 
 @dataclass
-class BlinkSettings:
-    """Settings for frame blinking."""
-
-    interval: float = 0.5  # seconds between frames
-    mode: BlinkMode = BlinkMode.FORWARD
-    loop: bool = True
-    start_frame: int = 0
-    end_frame: int | None = None
-
-
 class BlinkController:
-    """Controls frame blinking animation."""
+    """Chooses the next frame in a blink or fade cycle.
 
-    def __init__(self, frame_manager: FrameManager) -> None:
-        """Initialize a BlinkController.
+    Attributes:
+        order: Direction of travel through the active frames.
+        interval_ms: Milliseconds between steps; the caller applies this to its
+            timer.
+    """
 
-        Args:
-            frame_manager: The frame manager to control.
-        """
-        self._frame_manager = frame_manager
-        self._settings = BlinkSettings()
-        self._state = BlinkState.STOPPED
-        self._current_index: int = 0
-        self._direction: int = 1  # 1 for forward, -1 for backward
-        self._frame_order: list[int] = []
-        self._last_update_time: float = 0.0
-        self._callbacks: list[Callable[[Frame], None]] = []
+    order: BlinkOrder = BlinkOrder.FORWARD
+    interval_ms: int = DEFAULT_BLINK_INTERVAL_MS
 
-    @property
-    def settings(self) -> BlinkSettings:
-        """Return the blink settings."""
-        return self._settings
+    #: Only meaningful for PINGPONG: which way the cycle is currently going.
+    _descending: bool = False
 
-    @property
-    def state(self) -> BlinkState:
-        """Return the current blink state."""
-        return self._state
-
-    @property
-    def is_running(self) -> bool:
-        """Return whether blinking is running."""
-        return self._state == BlinkState.RUNNING
-
-    @property
-    def is_paused(self) -> bool:
-        """Return whether blinking is paused."""
-        return self._state == BlinkState.PAUSED
-
-    @property
-    def current_frame_index(self) -> int:
-        """Return the current frame index in the blink sequence."""
-        return self._current_index
-
-    @property
-    def frame_count(self) -> int:
-        """Return the number of frames in the blink sequence."""
-        return len(self._frame_order)
-
-    def set_interval(self, interval: float) -> None:
-        """Set the blink interval.
-
-        Args:
-            interval: Time between frames in seconds.
-        """
-        self._settings.interval = max(0.01, interval)
-
-    def set_mode(self, mode: BlinkMode) -> None:
-        """Set the blink mode.
-
-        Args:
-            mode: The blinking mode.
-        """
-        self._settings.mode = mode
-
-    def set_loop(self, loop: bool) -> None:
-        """Set whether blinking loops.
-
-        Args:
-            loop: Whether to loop.
-        """
-        self._settings.loop = loop
-
-    def set_frame_range(self, start: int | None = None, end: int | None = None) -> None:
-        """Set the frame range for blinking.
-
-        Args:
-            start: Start frame index.
-            end: End frame index.
-        """
-        if start is not None:
-            self._settings.start_frame = max(0, start)
-        if end is not None:
-            self._settings.end_frame = end
-
-    def _build_frame_order(self) -> None:
-        """Build the list of frame IDs in blink order."""
-        frame_ids = sorted(self._frame_manager.frames.keys())
-
-        if not frame_ids:
-            self._frame_order = []
-            return
-
-        start = min(self._settings.start_frame, len(frame_ids) - 1)
-        end = self._settings.end_frame if self._settings.end_frame is not None else len(frame_ids) - 1
-        end = min(end, len(frame_ids) - 1)
-
-        self._frame_order = frame_ids[start : end + 1]
-
-    def start(self) -> bool:
-        """Start blinking.
-
-        Returns:
-            True if blinking started, False if no frames.
-        """
-        self._build_frame_order()
-
-        if not self._frame_order:
-            return False
-
-        self._current_index = 0
-        self._direction = 1
-        self._last_update_time = time.time()
-        self._state = BlinkState.RUNNING
-
-        # Set first frame
-        self._frame_manager.set_active_frame(self._frame_order[0])
-
-        return True
-
-    def stop(self) -> None:
-        """Stop blinking."""
-        self._state = BlinkState.STOPPED
-        self._current_index = 0
-        self._direction = 1
-
-    def pause(self) -> None:
-        """Pause blinking."""
-        if self._state == BlinkState.RUNNING:
-            self._state = BlinkState.PAUSED
-
-    def resume(self) -> None:
-        """Resume blinking."""
-        if self._state == BlinkState.PAUSED:
-            self._state = BlinkState.RUNNING
-            self._last_update_time = time.time()
-
-    def toggle(self) -> None:
-        """Toggle between running and paused states."""
-        if self._state == BlinkState.RUNNING:
-            self.pause()
-        elif self._state == BlinkState.PAUSED:
-            self.resume()
-        else:
-            self.start()
-
-    def update(self) -> bool:
-        """Update the blink animation.
-
-        Returns:
-            True if the frame changed, False otherwise.
-        """
-        if self._state != BlinkState.RUNNING:
-            return False
-
-        if not self._frame_order:
-            return False
-
-        current_time = time.time()
-        elapsed = current_time - self._last_update_time
-
-        if elapsed < self._settings.interval:
-            return False
-
-        self._last_update_time = current_time
-
-        # Calculate next frame
-        next_index = self._current_index + self._direction
-
-        if self._settings.mode == BlinkMode.FORWARD:
-            if next_index >= len(self._frame_order):
-                if self._settings.loop:
-                    next_index = 0
-                else:
-                    self.stop()
-                    return False
-        elif self._settings.mode == BlinkMode.BACKWARD:
-            if next_index < 0:
-                if self._settings.loop:
-                    next_index = len(self._frame_order) - 1
-                else:
-                    self.stop()
-                    return False
-        elif self._settings.mode == BlinkMode.BOUNCE:
-            if next_index >= len(self._frame_order):
-                self._direction = -1
-                next_index = len(self._frame_order) - 2
-                next_index = max(next_index, 0)
-            elif next_index < 0:
-                self._direction = 1
-                next_index = 1
-                if next_index >= len(self._frame_order):
-                    next_index = 0
-
-        self._current_index = next_index
-        frame_id = self._frame_order[self._current_index]
-        self._frame_manager.set_active_frame(frame_id)
-
-        # Notify callbacks
-        frame = self._frame_manager.get_frame(frame_id)
-        if frame is not None:
-            for callback in self._callbacks:
-                callback(frame)
-
-        return True
-
-    def next_frame(self) -> Frame | None:
-        """Manually advance to the next frame.
-
-        Returns:
-            The new active frame, or None.
-        """
-        if not self._frame_order:
-            return None
-
-        self._current_index = (self._current_index + 1) % len(self._frame_order)
-        frame_id = self._frame_order[self._current_index]
-        self._frame_manager.set_active_frame(frame_id)
-        return self._frame_manager.get_frame(frame_id)
-
-    def previous_frame(self) -> Frame | None:
-        """Manually go to the previous frame.
-
-        Returns:
-            The new active frame, or None.
-        """
-        if not self._frame_order:
-            return None
-
-        self._current_index = (self._current_index - 1) % len(self._frame_order)
-        frame_id = self._frame_order[self._current_index]
-        self._frame_manager.set_active_frame(frame_id)
-        return self._frame_manager.get_frame(frame_id)
-
-    def goto_frame(self, index: int) -> Frame | None:
-        """Go to a specific frame in the blink sequence.
-
-        Args:
-            index: Frame index in the blink sequence.
-
-        Returns:
-            The frame, or None if index is invalid.
-        """
-        if not self._frame_order:
-            return None
-
-        if 0 <= index < len(self._frame_order):
-            self._current_index = index
-            frame_id = self._frame_order[self._current_index]
-            self._frame_manager.set_active_frame(frame_id)
-            return self._frame_manager.get_frame(frame_id)
-        return None
-
-    def add_callback(self, callback: Callable[[Frame], None]) -> None:
-        """Add a callback for frame change events.
-
-        Args:
-            callback: Callback function that receives the new frame.
-        """
-        self._callbacks.append(callback)
-
-    def remove_callback(self, callback: Callable[[Frame], None]) -> None:
-        """Remove a frame change callback.
-
-        Args:
-            callback: The callback to remove.
-        """
-        if callback in self._callbacks:
-            self._callbacks.remove(callback)
+    def set_interval(self, interval_ms: int) -> int:
+        """Set the step interval, clamped to at least 1 ms. Returns the value."""
+        self.interval_ms = max(1, int(interval_ms))
+        return self.interval_ms
 
     def reset(self) -> None:
-        """Reset the blink controller."""
-        self.stop()
-        self._settings = BlinkSettings()
-        self._callbacks.clear()
+        """Forget any ping-pong direction state."""
+        self._descending = False
+
+    def next_index(self, active: Sequence[int], current: int) -> int | None:
+        """Return the next frame index to show, or None if there is nothing to do.
+
+        Args:
+            active: Indices of the frames taking part, in display order.
+            current: The frame index showing now. It need not be in `active`;
+                if it is not -- the user just hid the visible frame -- the
+                cycle restarts at the first active frame.
+
+        Returns:
+            The next index, or None when fewer than two frames are active
+            (a one-frame blink has nothing to alternate between).
+        """
+        if len(active) < 2:
+            return None
+
+        if current not in active:
+            return active[0]
+
+        position = active.index(current)
+
+        if self.order is BlinkOrder.FORWARD:
+            return active[(position + 1) % len(active)]
+
+        if self.order is BlinkOrder.REVERSE:
+            return active[(position - 1) % len(active)]
+
+        # Ping-pong: walk to one end, turn around, walk back.
+        if self._descending:
+            if position == 0:
+                self._descending = False
+                return active[1]
+            return active[position - 1]
+        if position == len(active) - 1:
+            self._descending = True
+            return active[position - 1]
+        return active[position + 1]

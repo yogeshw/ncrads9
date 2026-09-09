@@ -131,15 +131,18 @@ class RegionWriter:
         Returns:
             The region as a DS9 format string.
         """
-        # Get the basic region string from the region object
-        region_str = region.to_ds9_string()
+        # The shape line itself, e.g. `circle(10,20,5)`. Some shapes (point,
+        # text, ruler) already carry a `# ...` tail of their own, so the
+        # property tokens have to merge into that comment rather than start a
+        # second one -- two `#` on a line would make the second unparseable.
+        region_str = region.prefix + region.to_ds9_string()
 
-        # Add properties as a comment
         properties = self._format_region_properties(region)
-        if properties:
-            region_str = f"{region_str} # {properties}"
-
-        return region_str
+        if not properties:
+            return region_str
+        if "#" in region_str:
+            return f"{region_str} {properties}"
+        return f"{region_str} # {properties}"
 
     def _format_region_properties(self, region: BaseRegion) -> str:
         """
@@ -171,8 +174,11 @@ class RegionWriter:
 
         # Add tags if present
         if region.tags:
-            for tag in region.tags:
-                props.append(f"tag={{{tag}}}")
+            props.extend(f"tag={{{tag}}}" for tag in region.tags)
+
+        # DS9 property flags: fixed, edit, move, rotate, delete, dash, fill,
+        # and source/background. Only non-default values are written.
+        props.extend(region.ds9_properties())
 
         return " ".join(props)
 

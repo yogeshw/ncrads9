@@ -39,6 +39,7 @@ class Annulus(BaseRegion):
         font: str = "helvetica 10 normal roman",
         text: str = "",
         tags: list[str] | None = None,
+        **kwargs: Any,
     ) -> None:
         """
         Initialize an annulus region.
@@ -53,7 +54,7 @@ class Annulus(BaseRegion):
             text: The text label for the region.
             tags: Optional list of tags for grouping regions.
         """
-        super().__init__(center, color, width, font, text, tags)
+        super().__init__(center, color, width, font, text, tags, **kwargs)
         self._inner_radius = inner_radius
         self._outer_radius = outer_radius
 

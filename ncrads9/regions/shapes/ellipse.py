@@ -40,6 +40,7 @@ class Ellipse(BaseRegion):
         font: str = "helvetica 10 normal roman",
         text: str = "",
         tags: list[str] | None = None,
+        **kwargs: Any,
     ) -> None:
         """
         Initialize an ellipse region.
@@ -55,7 +56,7 @@ class Ellipse(BaseRegion):
             text: The text label for the region.
             tags: Optional list of tags for grouping regions.
         """
-        super().__init__(center, color, width, font, text, tags)
+        super().__init__(center, color, width, font, text, tags, **kwargs)
         self._semi_major = semi_major
         self._semi_minor = semi_minor
         self._angle = angle

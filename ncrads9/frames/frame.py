@@ -1,4 +1,4 @@
-# NCRA DS9 - Astronomical Image Viewer
+# NCRADS9 - NCRA DS9-like FITS Viewer
 # Copyright (C) 2026 Yogesh Wadadekar
 #
 # This program is free software: you can redistribute it and/or modify
@@ -13,193 +13,105 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-#
-# Author: Yogesh Wadadekar
 
-"""Frame class representing a single image frame."""
+"""
+The frame model: one loaded image plus everything the display remembers
+about it.
 
-from __future__ import annotations
+A frame carries its own view state (zoom, pan, rotation, flips, scale limits,
+colormap, block factor, crop, per-channel RGB settings) so that switching
+frames restores exactly what the user last saw, which is how DS9 behaves.
 
-from dataclasses import dataclass, field
-from typing import Any
+Before M1 there were two Frame classes: this one -- reached through
+`simple_frame_manager` -- and an unused `frames/frame.py` with a different,
+smaller field set. This is the one the application actually used; the other
+was deleted along with its FrameManager.
+
+Author: Yogesh Wadadekar
+"""
+
+from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
-from numpy.typing import NDArray
+
+from ..rendering.scale_algorithms import ScaleAlgorithm
 
 
 @dataclass
-class FrameSettings:
-    """Settings for a frame."""
+class Frame:
+    """Container for a single frame (image + metadata)."""
 
-    colormap: str = "gray"
-    scale: str = "linear"
-    scale_min: float | None = None
-    scale_max: float | None = None
+    frame_id: int
+    filepath: Path | None = None
+    image_data: np.ndarray | None = None
+    header: dict | None = None
+    wcs_handler: object | None = None
+    fits_handler: object | None = None
+    regions: list = None
+    original_image_data: np.ndarray | None = None
+    bin_factor: int = 1
+    colormap: str = "grey"
+    scale: ScaleAlgorithm = ScaleAlgorithm.LINEAR
+    invert_colormap: bool = False
+    z1: float | None = None
+    z2: float | None = None
     zoom: float = 1.0
     pan_x: float = 0.0
     pan_y: float = 0.0
     rotation: float = 0.0
     flip_x: bool = False
     flip_y: bool = False
+    align_wcs: bool = False
+    contrast: float = 1.0
+    brightness: float = 0.0
+    crop_center_x: float | None = None
+    crop_center_y: float | None = None
+    crop_width: float | None = None
+    crop_height: float | None = None
+    frame_type: str = "base"
+    rgb_channels: dict[str, np.ndarray | None] = None
+    rgb_view: dict[str, bool] = None
+    rgb_source_frame_ids: dict[str, int | None] = None
+    rgb_current_channel: str = "red"
+    rgb_channel_scale: dict[str, ScaleAlgorithm] = None
+    rgb_channel_z1: dict[str, float | None] = None
+    rgb_channel_z2: dict[str, float | None] = None
+    rgb_channel_contrast: dict[str, float] = None
+    rgb_channel_brightness: dict[str, float] = None
 
-
-@dataclass
-class Region:
-    """A region annotation on a frame."""
-
-    shape: str
-    coordinates: list[float]
-    color: str = "green"
-    width: int = 1
-    text: str = ""
-    properties: dict[str, Any] = field(default_factory=dict)
-
-
-class Frame:
-    """Represents a single image frame with image data, regions, and settings."""
-
-    def __init__(
-        self,
-        frame_id: int,
-        name: str = "",
-        image_data: NDArray[np.floating[Any]] | None = None,
-    ) -> None:
-        """Initialize a Frame.
-
-        Args:
-            frame_id: Unique identifier for the frame.
-            name: Display name for the frame.
-            image_data: Optional numpy array containing image data.
-        """
-        self._frame_id = frame_id
-        self._name = name or f"Frame {frame_id}"
-        self._image_data = image_data
-        self._settings = FrameSettings()
-        self._regions: list[Region] = []
-        self._header: dict[str, Any] = {}
-        self._wcs: Any | None = None
-        self._modified: bool = False
-
-    @property
-    def frame_id(self) -> int:
-        """Return the frame ID."""
-        return self._frame_id
+    def __post_init__(self):
+        if self.regions is None:
+            self.regions = []
+        if self.rgb_channels is None:
+            self.rgb_channels = {"red": None, "green": None, "blue": None}
+        if self.rgb_view is None:
+            self.rgb_view = {"red": True, "green": True, "blue": True}
+        if self.rgb_source_frame_ids is None:
+            self.rgb_source_frame_ids = {"red": None, "green": None, "blue": None}
+        if self.rgb_channel_scale is None:
+            self.rgb_channel_scale = {
+                "red": ScaleAlgorithm.LINEAR,
+                "green": ScaleAlgorithm.LINEAR,
+                "blue": ScaleAlgorithm.LINEAR,
+            }
+        if self.rgb_channel_z1 is None:
+            self.rgb_channel_z1 = {"red": None, "green": None, "blue": None}
+        if self.rgb_channel_z2 is None:
+            self.rgb_channel_z2 = {"red": None, "green": None, "blue": None}
+        if self.rgb_channel_contrast is None:
+            self.rgb_channel_contrast = {"red": 1.0, "green": 1.0, "blue": 1.0}
+        if self.rgb_channel_brightness is None:
+            self.rgb_channel_brightness = {"red": 0.0, "green": 0.0, "blue": 0.0}
 
     @property
-    def name(self) -> str:
-        """Return the frame name."""
-        return self._name
-
-    @name.setter
-    def name(self, value: str) -> None:
-        """Set the frame name."""
-        self._name = value
+    def has_data(self) -> bool:
+        """Check if frame has image data."""
+        return self.image_data is not None
 
     @property
-    def image_data(self) -> NDArray[np.floating[Any]] | None:
-        """Return the image data."""
-        return self._image_data
-
-    @image_data.setter
-    def image_data(self, value: NDArray[np.floating[Any]] | None) -> None:
-        """Set the image data."""
-        self._image_data = value
-        self._modified = True
-
-    @property
-    def settings(self) -> FrameSettings:
-        """Return the frame settings."""
-        return self._settings
-
-    @property
-    def regions(self) -> list[Region]:
-        """Return the list of regions."""
-        return self._regions
-
-    @property
-    def header(self) -> dict[str, Any]:
-        """Return the FITS header."""
-        return self._header
-
-    @header.setter
-    def header(self, value: dict[str, Any]) -> None:
-        """Set the FITS header."""
-        self._header = value
-
-    @property
-    def wcs(self) -> Any | None:
-        """Return the WCS object."""
-        return self._wcs
-
-    @wcs.setter
-    def wcs(self, value: Any) -> None:
-        """Set the WCS object."""
-        self._wcs = value
-
-    @property
-    def shape(self) -> tuple[int, ...] | None:
-        """Return the shape of the image data."""
-        if self._image_data is not None:
-            return self._image_data.shape
-        return None
-
-    @property
-    def is_modified(self) -> bool:
-        """Return whether the frame has been modified."""
-        return self._modified
-
-    def add_region(self, region: Region) -> None:
-        """Add a region to the frame.
-
-        Args:
-            region: The region to add.
-        """
-        self._regions.append(region)
-        self._modified = True
-
-    def remove_region(self, index: int) -> None:
-        """Remove a region by index.
-
-        Args:
-            index: Index of the region to remove.
-        """
-        if 0 <= index < len(self._regions):
-            del self._regions[index]
-            self._modified = True
-
-    def clear_regions(self) -> None:
-        """Remove all regions from the frame."""
-        self._regions.clear()
-        self._modified = True
-
-    def clear(self) -> None:
-        """Clear the frame data and reset settings."""
-        self._image_data = None
-        self._header = {}
-        self._wcs = None
-        self._regions.clear()
-        self._settings = FrameSettings()
-        self._modified = False
-
-    def copy_settings_from(self, other: Frame) -> None:
-        """Copy settings from another frame.
-
-        Args:
-            other: The frame to copy settings from.
-        """
-        self._settings = FrameSettings(
-            colormap=other.settings.colormap,
-            scale=other.settings.scale,
-            scale_min=other.settings.scale_min,
-            scale_max=other.settings.scale_max,
-            zoom=other.settings.zoom,
-            pan_x=other.settings.pan_x,
-            pan_y=other.settings.pan_y,
-            rotation=other.settings.rotation,
-            flip_x=other.settings.flip_x,
-            flip_y=other.settings.flip_y,
-        )
-
-    def mark_saved(self) -> None:
-        """Mark the frame as saved (not modified)."""
-        self._modified = False
+    def filename(self) -> str:
+        """Get filename or 'Empty'."""
+        if self.filepath:
+            return self.filepath.name
+        return f"Frame {self.frame_id}"

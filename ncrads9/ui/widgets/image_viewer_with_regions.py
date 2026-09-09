@@ -25,9 +25,10 @@ from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QMouseEvent, QPixmap, QWheelEvent
 from PyQt6.QtWidgets import QScrollArea, QVBoxLayout, QWidget
 
+from ...regions.base_region import BaseRegion
 from ..image_viewer import ImageViewer
 from .contour_overlay import ContourOverlay
-from .region_overlay import Region, RegionMode, RegionOverlay
+from .region_overlay import RegionMode, RegionOverlay
 
 
 class ImageViewerWithRegions(QWidget):
@@ -124,7 +125,7 @@ class ImageViewerWithRegions(QWidget):
         """Set crosshair overlay visibility/style."""
         self.contour_overlay.set_crosshair(visible, position=position, color=color, size=size)
 
-    def add_region(self, region: Region) -> None:
+    def add_region(self, region: BaseRegion) -> None:
         """Add a region to display."""
         self.region_overlay.add_region(region)
 

@@ -43,18 +43,25 @@ def test_get_builtin_colormap_clamps_small_color_count():
     assert colormap.colors.shape == (2, 3)
 
 
-def test_next_and_previous_frame_handle_stale_active_id():
+def test_next_and_previous_frame_handle_a_stale_current_index():
+    """Navigation must recover from an out-of-range current index.
+
+    M1 deleted the orphaned FrameManager this originally covered (it tracked an
+    `_active_frame_id`); the surviving manager tracks an index and wraps it
+    modulo the frame count, so a stale value self-corrects. The invariant under
+    test is the same: navigation never crashes and always lands on a real frame.
+    """
     manager = FrameManager()
-    first = manager.create_frame()
-    second = manager.create_frame()
+    manager.new_frame()
+    manager.new_frame()
 
-    manager._active_frame_id = 999
-    manager.next_frame()
-    assert manager.active_frame_id == first.frame_id
+    manager._current_index = 999
+    assert manager.next_frame() in manager.frames
+    assert 0 <= manager.current_index < manager.num_frames
 
-    manager._active_frame_id = 999
-    manager.previous_frame()
-    assert manager.active_frame_id == second.frame_id
+    manager._current_index = 999
+    assert manager.prev_frame() in manager.frames
+    assert 0 <= manager.current_index < manager.num_frames
 
 
 def test_backup_reader_parse_region_ignores_missing_close_paren():

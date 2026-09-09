@@ -37,7 +37,7 @@ from astropy.coordinates import (
 )
 from astropy.table import Table
 from numpy.typing import NDArray
-from PyQt6.QtCore import QPointF, QRectF, QSize, Qt, QTimer, QUrl, pyqtSignal
+from PyQt6.QtCore import QRectF, QSize, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QAction, QColor, QDesktopServices, QImage, QKeyEvent, QPixmap
 from PyQt6.QtWidgets import (
     QButtonGroup,
@@ -74,16 +74,22 @@ from ..colormaps.sao_parser import parse_sao_file
 from ..communication.samp import SAMPClient
 from ..core.fits_handler import FITSHandler
 from ..core.wcs_handler import WCSHandler
-from ..frames.simple_frame_manager import Frame, FrameManager
+from ..frames.blink_controller import (
+    DEFAULT_BLINK_INTERVAL_MS,
+    DEFAULT_FADE_INTERVAL_MS,
+    BlinkController,
+)
+from ..frames.frame import Frame
+from ..frames.frame_manager import FrameManager
+from ..frames.tile_layout import TileLayout
 from ..image_servers.sia_client import SIAClient
+from ..regions.base_region import BaseRegion
 from ..regions.region_parser import RegionParser
 from ..regions.region_writer import RegionWriter
 from ..regions.shapes.box import Box
 from ..regions.shapes.circle import Circle
 from ..regions.shapes.ellipse import Ellipse
-from ..regions.shapes.line import Line
 from ..regions.shapes.point import Point
-from ..regions.shapes.polygon import Polygon
 from ..rendering.scale_algorithms import ScaleAlgorithm, apply_scale, compute_zscale_limits
 from ..utils.preferences import Preferences
 from .button_bar import ButtonBar
@@ -118,7 +124,7 @@ from .view_transform import (
 from .widgets.colorbar_widget import ColorbarWidget
 from .widgets.gl_image_viewer_with_regions import GLImageViewerWithRegions
 from .widgets.image_viewer_with_regions import ImageViewerWithRegions
-from .widgets.region_overlay import Region, RegionMode
+from .widgets.region_overlay import RegionMode
 
 if TYPE_CHECKING:
     from ncrads9.utils.config import Config
@@ -194,7 +200,8 @@ class MainWindow(QMainWindow):
         self._frame_display_mode = "single"
         self._tile_mode_enabled = False
         self._tile_arrangement_mode = "grid"
-        self._tile_layout: dict | None = None
+        self._tile_layout: TileLayout | None = None
+        self._tile_frame_indices: list[int] = []
         current_frame = self.frame_manager.current_frame
         self._active_frame_ids: set[int] = {current_frame.frame_id} if current_frame else set()
         self._known_frame_ids: set[int] = set(self._active_frame_ids)
@@ -214,15 +221,16 @@ class MainWindow(QMainWindow):
             "smooth": False,
             "3d": False,
         }
-        self._fade_interval_ms = 1000
+        self._fade_interval_ms = DEFAULT_FADE_INTERVAL_MS
         self._samp_client: SAMPClient | None = None
         self._samp_connected = False
         self._samp_marker_color = QColor(255, 255, 0)
         self._samp_marker_shape = "box"
         self._samp_marker_size = 6.0
         self._samp_catalog_sources: dict[int, list[tuple[float, float]]] = {}
+        self._blink_controller = BlinkController(interval_ms=DEFAULT_BLINK_INTERVAL_MS)
         self._blink_timer = QTimer(self)
-        self._blink_timer.setInterval(500)
+        self._blink_timer.setInterval(DEFAULT_BLINK_INTERVAL_MS)
         self._blink_timer.timeout.connect(self._update_blink)
         self.samp_table_received.connect(self._handle_samp_table_message)
 
@@ -1412,43 +1420,27 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("No loaded frames to tile", 2000)
             return False
 
-        count = len(rgb_frames)
-        if self._tile_arrangement_mode == "column":
-            cols = 1
-            rows = count
-        elif self._tile_arrangement_mode == "row":
-            cols = count
-            rows = 1
-        else:
-            cols = max(1, int(np.ceil(np.sqrt(count))))
-            rows = int(np.ceil(count / cols))
-        cell_h = max(rgb.shape[0] for rgb in rgb_frames)
-        cell_w = max(rgb.shape[1] for rgb in rgb_frames)
-        gap = 8
+        layout = TileLayout.compute(
+            count=len(rgb_frames),
+            cell_width=max(rgb.shape[1] for rgb in rgb_frames),
+            cell_height=max(rgb.shape[0] for rgb in rgb_frames),
+            mode=self._tile_arrangement_mode,
+        )
+        self._tile_layout = layout
+        self._tile_frame_indices = frame_indices
 
-        tiled_h = rows * cell_h + (rows + 1) * gap
-        tiled_w = cols * cell_w + (cols + 1) * gap
+        cell_w, cell_h = layout.cell_width, layout.cell_height
+        tiled_w, tiled_h = layout.width, layout.height
         tiled_rgb = np.zeros((tiled_h, tiled_w, 3), dtype=np.uint8)
-        self._tile_layout = {
-            "cols": cols,
-            "rows": rows,
-            "cell_w": cell_w,
-            "cell_h": cell_h,
-            "gap": gap,
-            "tiled_w": tiled_w,
-            "tiled_h": tiled_h,
-            "frame_indices": frame_indices,
-        }
 
-        for index, rgb in enumerate(rgb_frames):
-            row, col = divmod(index, cols)
-            y0 = gap + row * (cell_h + gap)
-            x0 = gap + col * (cell_w + gap)
+        for placement, rgb in zip(layout.placements(), rgb_frames, strict=True):
             if rgb.shape[0] != cell_h or rgb.shape[1] != cell_w:
                 y_idx = np.linspace(0, rgb.shape[0] - 1, cell_h).astype(np.int32)
                 x_idx = np.linspace(0, rgb.shape[1] - 1, cell_w).astype(np.int32)
                 rgb = rgb[y_idx][:, x_idx]
-            tiled_rgb[y0 : y0 + cell_h, x0 : x0 + cell_w] = rgb
+            # `placement` is bottom-up; `tiled_rgb` rows are top-down.
+            top = tiled_h - placement.y - cell_h
+            tiled_rgb[top : top + cell_h, placement.x : placement.x + cell_w] = rgb
         display_rgb = np.flipud(tiled_rgb)
         display_rgb = np.ascontiguousarray(display_rgb)
 
@@ -2791,18 +2783,12 @@ class MainWindow(QMainWindow):
         )
         if filepath:
             try:
-                parser = RegionParser()
-                base_regions = parser.parse_file(filepath)
-                overlay_regions = []
-                for base_region in base_regions:
-                    overlay = self._base_region_to_overlay(base_region)
-                    if overlay is not None:
-                        overlay_regions.append(overlay)
+                regions = RegionParser().parse_file(filepath)
                 frame = self.frame_manager.current_frame
                 if frame:
-                    frame.regions = overlay_regions
+                    frame.regions = regions
                     self._update_regions_for_frame(frame)
-                self.statusBar().showMessage(f"Loaded {len(overlay_regions)} regions from {filepath}", 3000)
+                self.statusBar().showMessage(f"Loaded {len(regions)} regions from {filepath}", 3000)
             except Exception as e:
                 self.statusBar().showMessage(f"Error loading regions: {e}", 3000)
 
@@ -2863,7 +2849,7 @@ class MainWindow(QMainWindow):
             if pixel is None:
                 continue
             x, y = pixel
-            region = Region(mode=RegionMode.POINT, points=[QPointF(x, y)])
+            region = Point(center=(x, y), origin="vizier_catalog")
             self._on_region_created(region)
             self.image_viewer.add_region(region)
 
@@ -2996,47 +2982,29 @@ class MainWindow(QMainWindow):
                 continue
         return coords if coords else None
 
-    def _build_samp_marker_region(self, x: float, y: float) -> Region:
-        """Create a region for a SAMP catalog source."""
-        size = max(1.0, float(self._samp_marker_size))
-        color = QColor(self._samp_marker_color)
+    def _build_samp_marker_region(self, x: float, y: float) -> BaseRegion:
+        """Create a region marking a SAMP catalog source.
 
-        if self._samp_marker_shape == "circle":
-            return Region(
-                mode=RegionMode.CIRCLE,
-                points=[QPointF(x, y), QPointF(x + size, y)],
-                color=color,
-                marker_size=size,
-                source="samp_catalog",
-            )
-        if self._samp_marker_shape == "box":
-            return Region(
-                mode=RegionMode.BOX,
-                points=[QPointF(x - size, y - size), QPointF(x + size, y + size)],
-                color=color,
-                marker_size=size,
-                source="samp_catalog",
-            )
-        if self._samp_marker_shape == "ellipse":
-            return Region(
-                mode=RegionMode.ELLIPSE,
-                points=[QPointF(x - size, y - size), QPointF(x + size, y + size)],
-                color=color,
-                marker_size=size,
-                source="samp_catalog",
-            )
-        return Region(
-            mode=RegionMode.POINT,
-            points=[QPointF(x, y)],
-            color=color,
-            marker_size=size,
-            source="samp_catalog",
-        )
+        Tagged with origin="samp_catalog" so `_rebuild_samp_regions_for_frame`
+        can replace exactly these regions when the marker style changes,
+        without disturbing anything the user drew.
+        """
+        size = max(1.0, float(self._samp_marker_size))
+        shape = self._samp_marker_shape
+        common = {"color": self._samp_marker_color, "origin": "samp_catalog"}
+
+        if shape == "circle":
+            return Circle(center=(x, y), radius=size, **common)
+        if shape == "box":
+            return Box(center=(x, y), width_box=size * 2, height_box=size * 2, **common)
+        if shape == "ellipse":
+            return Ellipse(center=(x, y), semi_major=size, semi_minor=size, **common)
+        return Point(center=(x, y), size=int(round(size * 2)), **common)
 
     def _rebuild_samp_regions_for_frame(self, frame: Frame) -> None:
         """Rebuild SAMP regions for a frame from stored source positions."""
         frame.regions = [
-            region for region in frame.regions if getattr(region, "source", "user") != "samp_catalog"
+            region for region in frame.regions if getattr(region, "origin", "user") != "samp_catalog"
         ]
         for x, y in self._samp_catalog_sources.get(frame.frame_id, []):
             frame.regions.append(self._build_samp_marker_region(x, y))
@@ -4012,16 +3980,14 @@ class MainWindow(QMainWindow):
         """Advance blink animation and refresh display."""
         if self._frame_display_mode not in {"blink", "fade"}:
             return
-        active_indices = self._get_active_frame_indices()
-        if len(active_indices) <= 1:
+        next_index = self._blink_controller.next_index(
+            self._get_active_frame_indices(),
+            self.frame_manager.current_index,
+        )
+        if next_index is None:
+            # Fewer than two frames left visible; nothing to blink between.
             self._set_frame_display_mode("single")
             return
-        current = self.frame_manager.current_index
-        if current not in active_indices:
-            next_index = active_indices[0]
-        else:
-            position = active_indices.index(current)
-            next_index = active_indices[(position + 1) % len(active_indices)]
         self.frame_manager.goto_frame(next_index)
         self._update_frame_display()
 
@@ -4099,18 +4065,16 @@ class MainWindow(QMainWindow):
             self._update_frame_display()
 
     def _set_blink_interval(self, interval_ms: int) -> None:
-        """Set blink interval."""
-        self._blink_timer.setInterval(int(interval_ms))
+        """Set the blink step interval and restart the timer if blinking."""
+        self._blink_timer.setInterval(self._blink_controller.set_interval(interval_ms))
         if self._frame_display_mode == "blink":
             self._blink_timer.start(self._blink_timer.interval())
-        self.statusBar().showMessage(f"Blink interval set to {interval_ms} ms", 1500)
 
     def _set_fade_interval(self, interval_ms: int) -> None:
-        """Set fade interval."""
-        self._fade_interval_ms = int(interval_ms)
+        """Set the fade step interval and restart the timer if fading."""
+        self._fade_interval_ms = max(1, int(interval_ms))
         if self._frame_display_mode == "fade":
             self._blink_timer.start(self._fade_interval_ms)
-        self.statusBar().showMessage(f"Fade interval set to {interval_ms} ms", 1500)
 
     def _show_frame_dialog(self, frame_mode: str) -> None:
         """Open frame mode dialog."""
@@ -4365,32 +4329,11 @@ class MainWindow(QMainWindow):
         """Select frame corresponding to a click on the tiled composite."""
         if self._tile_layout is None:
             return False
-        gap = int(self._tile_layout["gap"])
-        cell_w = int(self._tile_layout["cell_w"])
-        cell_h = int(self._tile_layout["cell_h"])
-        cols = int(self._tile_layout["cols"])
-        tiled_h = int(self._tile_layout["tiled_h"])
-        frame_indices = self._tile_layout["frame_indices"]
 
-        if x < gap or y < 0:
+        tile_index = self._tile_layout.tile_at(x, y)
+        if tile_index is None or tile_index >= len(self._tile_frame_indices):
             return False
-        top_y = tiled_h - 1 - y
-        if top_y < gap:
-            return False
-
-        col = (x - gap) // (cell_w + gap)
-        row = (top_y - gap) // (cell_h + gap)
-        if col < 0 or row < 0 or col >= cols:
-            return False
-        if (x - gap) % (cell_w + gap) >= cell_w:
-            return False
-        if (top_y - gap) % (cell_h + gap) >= cell_h:
-            return False
-
-        tile_index = int(row * cols + col)
-        if tile_index < 0 or tile_index >= len(frame_indices):
-            return False
-        frame_index = int(frame_indices[tile_index])
+        frame_index = int(self._tile_frame_indices[tile_index])
         if frame_index == self.frame_manager.current_index:
             return False
         self.frame_manager.goto_frame(frame_index)
@@ -4661,87 +4604,9 @@ class MainWindow(QMainWindow):
         )
         if not filepath:
             return
-        base_regions = self._overlay_regions_to_base(frame.regions)
-        if not base_regions:
-            self.statusBar().showMessage("No supported regions to save", 2000)
-            return
         writer = RegionWriter()
-        writer.write_file(base_regions, filepath)
+        writer.write_file(frame.regions, filepath)
         self.statusBar().showMessage(f"Saved regions to {filepath}", 3000)
-
-    def _overlay_regions_to_base(self, regions: list[Region]) -> list:
-        """Convert overlay regions to DS9 BaseRegion instances."""
-        converted = []
-        for region in regions:
-            if region.mode == RegionMode.CIRCLE and len(region.points) >= 2:
-                center = region.points[0]
-                edge = region.points[1]
-                radius = ((edge.x() - center.x()) ** 2 + (edge.y() - center.y()) ** 2) ** 0.5
-                converted.append(Circle(center=(center.x(), center.y()), radius=radius))
-            elif region.mode == RegionMode.ELLIPSE and len(region.points) >= 2:
-                p1, p2 = region.points[0], region.points[1]
-                center = ((p1.x() + p2.x()) / 2, (p1.y() + p2.y()) / 2)
-                semi_major = abs(p2.x() - p1.x()) / 2
-                semi_minor = abs(p2.y() - p1.y()) / 2
-                converted.append(Ellipse(center=center, semi_major=semi_major, semi_minor=semi_minor))
-            elif region.mode == RegionMode.BOX and len(region.points) >= 2:
-                p1, p2 = region.points[0], region.points[1]
-                center = ((p1.x() + p2.x()) / 2, (p1.y() + p2.y()) / 2)
-                width_box = abs(p2.x() - p1.x())
-                height_box = abs(p2.y() - p1.y())
-                converted.append(Box(center=center, width_box=width_box, height_box=height_box))
-            elif region.mode == RegionMode.LINE and len(region.points) >= 2:
-                p1, p2 = region.points[0], region.points[1]
-                converted.append(Line(start=(p1.x(), p1.y()), end=(p2.x(), p2.y())))
-            elif region.mode == RegionMode.POINT and len(region.points) >= 1:
-                p1 = region.points[0]
-                converted.append(Point(center=(p1.x(), p1.y())))
-            elif region.mode == RegionMode.POLYGON and len(region.points) >= 3:
-                vertices = [(p.x(), p.y()) for p in region.points]
-                converted.append(Polygon(vertices=vertices))
-        return converted
-
-    def _base_region_to_overlay(self, region) -> Region | None:
-        """Convert a BaseRegion to an overlay Region."""
-        if isinstance(region, Circle):
-            cx, cy = region.center
-            r = region.radius
-            return Region(
-                mode=RegionMode.CIRCLE,
-                points=[QPointF(cx, cy), QPointF(cx + r, cy)],
-                color=QColor(region.color),
-            )
-        if isinstance(region, Ellipse):
-            cx, cy = region.center
-            a = region.semi_major
-            b = region.semi_minor
-            return Region(
-                mode=RegionMode.ELLIPSE,
-                points=[QPointF(cx - a, cy - b), QPointF(cx + a, cy + b)],
-                color=QColor(region.color),
-            )
-        if isinstance(region, Box):
-            cx, cy = region.center
-            half_w = region.width_box / 2
-            half_h = region.height_box / 2
-            return Region(
-                mode=RegionMode.BOX,
-                points=[QPointF(cx - half_w, cy - half_h), QPointF(cx + half_w, cy + half_h)],
-                color=QColor(region.color),
-            )
-        if isinstance(region, Line):
-            x1, y1 = region.start
-            x2, y2 = region.end
-            return Region(
-                mode=RegionMode.LINE, points=[QPointF(x1, y1), QPointF(x2, y2)], color=QColor(region.color)
-            )
-        if isinstance(region, Point):
-            cx, cy = region.center
-            return Region(mode=RegionMode.POINT, points=[QPointF(cx, cy)], color=QColor(region.color))
-        if isinstance(region, Polygon):
-            points = [QPointF(x, y) for x, y in region.vertices]
-            return Region(mode=RegionMode.POLYGON, points=points, color=QColor(region.color))
-        return None
 
     def closeEvent(self, event) -> None:
         """Disconnect SAMP client on close."""

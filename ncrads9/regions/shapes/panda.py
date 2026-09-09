@@ -43,6 +43,7 @@ class Panda(BaseRegion):
         font: str = "helvetica 10 normal roman",
         text: str = "",
         tags: list[str] | None = None,
+        **kwargs: Any,
     ) -> None:
         """
         Initialize a panda region.
@@ -61,7 +62,7 @@ class Panda(BaseRegion):
             text: The text label for the region.
             tags: Optional list of tags for grouping regions.
         """
-        super().__init__(center, color, width, font, text, tags)
+        super().__init__(center, color, width, font, text, tags, **kwargs)
         self._start_angle = start_angle
         self._stop_angle = stop_angle
         self._num_angles = num_angles

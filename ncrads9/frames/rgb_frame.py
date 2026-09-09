@@ -1,4 +1,4 @@
-# NCRA DS9 - Astronomical Image Viewer
+# NCRADS9 - NCRA DS9-like FITS Viewer
 # Copyright (C) 2026 Yogesh Wadadekar
 #
 # This program is free software: you can redistribute it and/or modify
@@ -13,248 +13,88 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-#
-# Author: Yogesh Wadadekar
 
-"""RGBFrame class for RGB compositing."""
+"""
+Multi-channel frame types: RGB, HSV and HLS.
+
+Each subclass differs from `Frame` in exactly one respect -- how its three
+normalized channels combine into a displayed image -- so each is a thin
+subclass overriding `compose`.
+
+Channels arrive already normalized to [0, 1]: the display pipeline applies
+each channel's own scale algorithm, clip limits, contrast and bias before
+compositing. The actual colour-space maths lives in
+`ncrads9.rendering.rgb_compositor`.
+
+Author: Yogesh Wadadekar
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
 
+from ..rendering.rgb_compositor import compose_hls, compose_hsv, compose_rgb
 from .frame import Frame
 
 
 @dataclass
-class ChannelSettings:
-    """Settings for an individual RGB channel."""
+class RGBFrame(Frame):
+    """A frame whose three channels are red, green and blue."""
 
-    visible: bool = True
-    scale_min: float | None = None
-    scale_max: float | None = None
-    bias: float = 0.5
-    contrast: float = 1.0
+    frame_type: str = "rgb"
 
+    #: Channel labels as shown in the UI, in composition order.
+    CHANNEL_LABELS: tuple[str, str, str] = ("Red", "Green", "Blue")
 
-class RGBFrame:
-    """Frame for RGB compositing from multiple image frames."""
-
-    def __init__(self, frame_id: int, name: str = "") -> None:
-        """Initialize an RGBFrame.
-
-        Args:
-            frame_id: Unique identifier for the frame.
-            name: Display name for the frame.
-        """
-        self._frame_id = frame_id
-        self._name = name or f"RGB Frame {frame_id}"
-        self._red_frame: Frame | None = None
-        self._green_frame: Frame | None = None
-        self._blue_frame: Frame | None = None
-        self._red_settings = ChannelSettings()
-        self._green_settings = ChannelSettings()
-        self._blue_settings = ChannelSettings()
-        self._composite: NDArray[np.uint8] | None = None
-
-    @property
-    def frame_id(self) -> int:
-        """Return the frame ID."""
-        return self._frame_id
-
-    @property
-    def name(self) -> str:
-        """Return the frame name."""
-        return self._name
-
-    @name.setter
-    def name(self, value: str) -> None:
-        """Set the frame name."""
-        self._name = value
-
-    @property
-    def red_frame(self) -> Frame | None:
-        """Return the red channel frame."""
-        return self._red_frame
-
-    @red_frame.setter
-    def red_frame(self, frame: Frame | None) -> None:
-        """Set the red channel frame."""
-        self._red_frame = frame
-        self._composite = None
-
-    @property
-    def green_frame(self) -> Frame | None:
-        """Return the green channel frame."""
-        return self._green_frame
-
-    @green_frame.setter
-    def green_frame(self, frame: Frame | None) -> None:
-        """Set the green channel frame."""
-        self._green_frame = frame
-        self._composite = None
-
-    @property
-    def blue_frame(self) -> Frame | None:
-        """Return the blue channel frame."""
-        return self._blue_frame
-
-    @blue_frame.setter
-    def blue_frame(self, frame: Frame | None) -> None:
-        """Set the blue channel frame."""
-        self._blue_frame = frame
-        self._composite = None
-
-    @property
-    def red_settings(self) -> ChannelSettings:
-        """Return the red channel settings."""
-        return self._red_settings
-
-    @property
-    def green_settings(self) -> ChannelSettings:
-        """Return the green channel settings."""
-        return self._green_settings
-
-    @property
-    def blue_settings(self) -> ChannelSettings:
-        """Return the blue channel settings."""
-        return self._blue_settings
-
-    def set_channel(self, channel: str, frame: Frame | None) -> None:
-        """Set a channel frame.
-
-        Args:
-            channel: Channel name ('red', 'green', or 'blue').
-            frame: The frame to use for this channel.
-        """
-        channel_lower = channel.lower()
-        if channel_lower == "red":
-            self.red_frame = frame
-        elif channel_lower == "green":
-            self.green_frame = frame
-        elif channel_lower == "blue":
-            self.blue_frame = frame
-        else:
-            raise ValueError(f"Unknown channel: {channel}")
-
-    def get_channel(self, channel: str) -> Frame | None:
-        """Get a channel frame.
-
-        Args:
-            channel: Channel name ('red', 'green', or 'blue').
-
-        Returns:
-            The frame for this channel, or None.
-        """
-        channel_lower = channel.lower()
-        if channel_lower == "red":
-            return self._red_frame
-        elif channel_lower == "green":
-            return self._green_frame
-        elif channel_lower == "blue":
-            return self._blue_frame
-        else:
-            raise ValueError(f"Unknown channel: {channel}")
-
-    def get_channel_settings(self, channel: str) -> ChannelSettings:
-        """Get settings for a channel.
-
-        Args:
-            channel: Channel name ('red', 'green', or 'blue').
-
-        Returns:
-            The settings for this channel.
-        """
-        channel_lower = channel.lower()
-        if channel_lower == "red":
-            return self._red_settings
-        elif channel_lower == "green":
-            return self._green_settings
-        elif channel_lower == "blue":
-            return self._blue_settings
-        else:
-            raise ValueError(f"Unknown channel: {channel}")
-
-    def _normalize_channel(
+    def compose(
         self,
-        data: NDArray[np.floating[Any]],
-        settings: ChannelSettings,
-    ) -> NDArray[np.floating[Any]]:
-        """Normalize channel data to 0-1 range.
+        normalized: dict[str, NDArray[np.floating] | None],
+        view: dict[str, bool] | None = None,
+    ) -> NDArray[np.uint8] | None:
+        """Combine normalized channels into an 8-bit RGB image.
 
         Args:
-            data: The image data to normalize.
-            settings: Channel settings for normalization.
+            normalized: Channel name -> plane in [0, 1], or None if unassigned.
+            view: Channel name -> visible. Defaults to all visible.
 
         Returns:
-            Normalized data array.
+            An (h, w, 3) uint8 array, or None if no channel is assigned.
         """
-        vmin = settings.scale_min if settings.scale_min is not None else np.nanmin(data)
-        vmax = settings.scale_max if settings.scale_max is not None else np.nanmax(data)
+        return compose_rgb(normalized, view if view is not None else self.rgb_view)
 
-        if vmax == vmin:
-            return np.zeros_like(data)
 
-        normalized = (data - vmin) / (vmax - vmin)
-        normalized = np.clip(normalized, 0.0, 1.0)
+@dataclass
+class HSVFrame(RGBFrame):
+    """A frame whose three channels are hue, saturation and value."""
 
-        # Apply bias and contrast
-        normalized = (normalized - settings.bias) * settings.contrast + 0.5
-        normalized = np.clip(normalized, 0.0, 1.0)
+    frame_type: str = "hsv"
 
-        return normalized
+    CHANNEL_LABELS: tuple[str, str, str] = ("Hue", "Saturation", "Value")
 
-    def compose(self) -> NDArray[np.uint8] | None:
-        """Compose the RGB image from the channel frames.
+    def compose(
+        self,
+        normalized: dict[str, NDArray[np.floating] | None],
+        view: dict[str, bool] | None = None,
+    ) -> NDArray[np.uint8] | None:
+        """Combine normalized channels as HSV."""
+        return compose_hsv(normalized, view if view is not None else self.rgb_view)
 
-        Returns:
-            RGB image as uint8 array with shape (height, width, 3), or None.
-        """
-        # Determine output shape from available frames
-        shape: tuple[int, ...] | None = None
-        for frame in [self._red_frame, self._green_frame, self._blue_frame]:
-            if frame is not None and frame.image_data is not None:
-                shape = frame.image_data.shape[:2]
-                break
 
-        if shape is None:
-            return None
+@dataclass
+class HLSFrame(RGBFrame):
+    """A frame whose three channels are hue, lightness and saturation."""
 
-        rgb = np.zeros((*shape, 3), dtype=np.float64)
+    frame_type: str = "hls"
 
-        # Process each channel
-        channels = [
-            (self._red_frame, self._red_settings, 0),
-            (self._green_frame, self._green_settings, 1),
-            (self._blue_frame, self._blue_settings, 2),
-        ]
+    CHANNEL_LABELS: tuple[str, str, str] = ("Hue", "Lightness", "Saturation")
 
-        for frame, settings, index in channels:
-            if frame is not None and frame.image_data is not None and settings.visible:
-                data = frame.image_data.astype(np.float64)
-                if data.shape[:2] == shape:
-                    rgb[:, :, index] = self._normalize_channel(data, settings)
-
-        self._composite = (rgb * 255).astype(np.uint8)
-        return self._composite
-
-    @property
-    def composite(self) -> NDArray[np.uint8] | None:
-        """Return the cached composite image, composing if necessary."""
-        if self._composite is None:
-            return self.compose()
-        return self._composite
-
-    def invalidate(self) -> None:
-        """Invalidate the cached composite image."""
-        self._composite = None
-
-    def clear(self) -> None:
-        """Clear all channel frames."""
-        self._red_frame = None
-        self._green_frame = None
-        self._blue_frame = None
-        self._composite = None
+    def compose(
+        self,
+        normalized: dict[str, NDArray[np.floating] | None],
+        view: dict[str, bool] | None = None,
+    ) -> NDArray[np.uint8] | None:
+        """Combine normalized channels as HLS."""
+        return compose_hls(normalized, view if view is not None else self.rgb_view)

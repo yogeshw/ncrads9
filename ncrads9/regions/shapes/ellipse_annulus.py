@@ -42,6 +42,7 @@ class EllipseAnnulus(BaseRegion):
         font: str = "helvetica 10 normal roman",
         text: str = "",
         tags: list[str] | None = None,
+        **kwargs: Any,
     ) -> None:
         """
         Initialize an ellipse annulus region.
@@ -59,7 +60,7 @@ class EllipseAnnulus(BaseRegion):
             text: The text label for the region.
             tags: Optional list of tags for grouping regions.
         """
-        super().__init__(center, color, width, font, text, tags)
+        super().__init__(center, color, width, font, text, tags, **kwargs)
         self._inner_semi_major = inner_semi_major
         self._inner_semi_minor = inner_semi_minor
         self._outer_semi_major = outer_semi_major

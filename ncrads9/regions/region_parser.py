@@ -30,6 +30,7 @@ Author: Yogesh Wadadekar
 import re
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 from .base_region import BaseRegion
 from .shapes.annulus import Annulus
@@ -78,6 +79,9 @@ class RegionParser:
 
     # Pattern for global properties
     GLOBAL_PATTERN = re.compile(r"^global\s+(.*)$", re.IGNORECASE)
+
+    #: DS9 properties written as a bare word rather than `key=value`.
+    BARE_PROPERTIES: tuple[str, ...] = ("background", "source")
 
     def __init__(self) -> None:
         """Initialize the region parser."""
@@ -289,7 +293,54 @@ class RegionParser:
         for match in self.PROPERTY_PATTERN.finditer(comment):
             properties[match.group(1)] = self._property_value(match)
 
+        # DS9 writes source/background as bare words, not key=value pairs, so
+        # the key=value pattern above never sees them. Record them with an
+        # empty value; _parse_property_flags only tests for their presence.
+        for bare in self.BARE_PROPERTIES:
+            if re.search(rf"(?<![\w=]){bare}(?![\w=])", comment):
+                properties.setdefault(bare, "")
+
         return properties
+
+    #: DS9 property keyword -> BaseRegion keyword argument.
+    _FLAG_KEYWORDS: dict[str, str] = {
+        "fixed": "fixed",
+        "edit": "can_edit",
+        "move": "can_move",
+        "rotate": "can_rotate",
+        "delete": "can_delete",
+        "dash": "dash",
+        "fill": "fill",
+    }
+
+    def _parse_property_flags(self, properties: dict[str, str], include: bool) -> dict[str, bool]:
+        """Turn DS9 property tokens into BaseRegion keyword arguments.
+
+        Falls back to the `global` line for any flag the shape does not set
+        itself, which is how DS9 applies global properties.
+        """
+        flags: dict[str, bool] = {"include": include}
+
+        for keyword, argument in self._FLAG_KEYWORDS.items():
+            raw = properties.get(keyword, self._global_properties.get(keyword))
+            if raw is not None:
+                flags[argument] = raw.strip() not in ("0", "false", "False")
+
+        # `source` and `background` are written as bare words, so the property
+        # parser records them with an empty value; either may also appear as
+        # `source=1` / `background=1`.
+        if "background" in properties or "background" in self._global_properties:
+            flags["source"] = False
+        if "source" in properties:
+            flags["source"] = properties["source"].strip() not in ("0", "false", "False")
+
+        return flags
+
+    @staticmethod
+    def _parse_tags(properties: dict[str, str]) -> list[str]:
+        """Return the region's tags. DS9 allows a tag to repeat per region."""
+        tag = properties.get("tag")
+        return [tag] if tag else []
 
     @staticmethod
     def _property_value(match: re.Match[str]) -> str:
@@ -327,11 +378,19 @@ class RegionParser:
         width = int(properties.get("width", self._global_properties.get("width", "1")))
         text = properties.get("text", "")
         font = properties.get("font", self._global_properties.get("font", "helvetica 10 normal roman"))
+        common: dict[str, Any] = {
+            "color": color,
+            "width": width,
+            "text": text,
+            "font": font,
+            "tags": self._parse_tags(properties),
+            **self._parse_property_flags(properties, include),
+        }
 
         try:
             if shape_type == "circle":
                 x, y, r = float(params[0]), float(params[1]), float(params[2])
-                return Circle(center=(x, y), radius=r, color=color, width=width, text=text, font=font)
+                return Circle(center=(x, y), radius=r, **common)
 
             elif shape_type == "ellipse":
                 x, y = float(params[0]), float(params[1])
@@ -342,10 +401,7 @@ class RegionParser:
                     semi_major=a,
                     semi_minor=b,
                     angle=angle,
-                    color=color,
-                    width=width,
-                    text=text,
-                    font=font,
+                    **common,
                 )
 
             elif shape_type == "box":
@@ -357,25 +413,22 @@ class RegionParser:
                     width_box=w,
                     height_box=h,
                     angle=angle,
-                    color=color,
-                    width=width,
-                    text=text,
-                    font=font,
+                    **common,
                 )
 
             elif shape_type == "point":
                 x, y = float(params[0]), float(params[1])
-                return Point(center=(x, y), color=color, width=width, text=text, font=font)
+                return Point(center=(x, y), **common)
 
             elif shape_type == "line":
                 x1, y1 = float(params[0]), float(params[1])
                 x2, y2 = float(params[2]), float(params[3])
-                return Line(start=(x1, y1), end=(x2, y2), color=color, width=width, text=text, font=font)
+                return Line(start=(x1, y1), end=(x2, y2), **common)
 
             elif shape_type == "polygon":
                 coords = [float(p) for p in params]
                 vertices = [(coords[i], coords[i + 1]) for i in range(0, len(coords), 2)]
-                return Polygon(vertices=vertices, color=color, width=width, text=text, font=font)
+                return Polygon(vertices=vertices, **common)
 
             elif shape_type == "annulus":
                 x, y = float(params[0]), float(params[1])
@@ -385,15 +438,13 @@ class RegionParser:
                     center=(x, y),
                     inner_radius=inner_r,
                     outer_radius=outer_r,
-                    color=color,
-                    width=width,
-                    text=text,
-                    font=font,
+                    **common,
                 )
 
             elif shape_type in ("text", "# text"):
                 x, y = float(params[0]), float(params[1])
-                return Text(center=(x, y), label=text, color=color, font=font)
+                text_common = {k: v for k, v in common.items() if k != "text"}
+                return Text(center=(x, y), label=text, **text_common)
 
         except (IndexError, ValueError):
             # Return None for malformed regions

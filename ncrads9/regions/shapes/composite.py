@@ -37,6 +37,7 @@ class Composite(BaseRegion):
         font: str = "helvetica 10 normal roman",
         text: str = "",
         tags: list[str] | None = None,
+        **kwargs: Any,
     ) -> None:
         """
         Initialize a composite region.
@@ -51,7 +52,7 @@ class Composite(BaseRegion):
         """
         self._regions: list[BaseRegion] = regions if regions is not None else []
         center = self._compute_center()
-        super().__init__(center, color, width, font, text, tags)
+        super().__init__(center, color, width, font, text, tags, **kwargs)
 
     def _compute_center(self) -> tuple[float, float]:
         """Compute the center from all child regions."""

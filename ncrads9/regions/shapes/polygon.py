@@ -36,6 +36,7 @@ class Polygon(BaseRegion):
         font: str = "helvetica 10 normal roman",
         text: str = "",
         tags: list[str] | None = None,
+        **kwargs: Any,
     ) -> None:
         """
         Initialize a polygon region.
@@ -49,7 +50,7 @@ class Polygon(BaseRegion):
             tags: Optional list of tags for grouping regions.
         """
         center = self._compute_centroid(vertices)
-        super().__init__(center, color, width, font, text, tags)
+        super().__init__(center, color, width, font, text, tags, **kwargs)
         self._vertices = vertices
 
     @staticmethod

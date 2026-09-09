@@ -131,7 +131,8 @@ def test_show_hide_frames_controls_active_tiling(main_window: MainWindow):
     assert len(main_window._active_frame_ids) == 1
     main_window._tile_frames(True)
     assert main_window._tile_layout is not None
-    assert len(main_window._tile_layout["frame_indices"]) == 1
+    assert main_window._tile_layout.count == 1
+    assert len(main_window._tile_frame_indices) == 1
     main_window._show_all_frames()
     assert len(main_window._active_frame_ids) == 2
 
@@ -211,11 +212,10 @@ def test_tile_click_selects_frame_and_preserves_independent_settings(main_window
     layout = main_window._tile_layout
     assert layout is not None
 
-    gap = int(layout["gap"])
-    cell_w = int(layout["cell_w"])
-    tiled_h = int(layout["tiled_h"])
+    gap = layout.gap
+    cell_w = layout.cell_width
     y_top = gap + 1
-    y_click = tiled_h - 1 - y_top
+    y_click = layout.height - 1 - y_top
 
     x_second = gap + cell_w + gap + 1
     main_window._on_image_clicked(x_second, y_click, int(Qt.MouseButton.LeftButton.value))

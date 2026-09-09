@@ -17,17 +17,34 @@
 """
 Region overlay for drawing and displaying regions.
 
+The overlay owns three things: the image<->widget coordinate transform, the
+mouse gestures that create and move regions, and a `RegionManager` holding the
+regions themselves. Painting is delegated to `RegionRenderer`.
+
+Regions are `BaseRegion` subclasses -- the same objects the parser produces and
+the writer consumes -- so nothing is converted on the way in or out. Before M1
+this widget had its own `Region` dataclass holding a `RegionMode` and a list of
+`QPointF`, and `main_window` translated between the two representations; that
+round trip silently dropped colour, width, text, tags and every DS9 property.
+
 Author: Yogesh Wadadekar
 """
 
-import math
-from dataclasses import dataclass, field
 from enum import Enum
 
-from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QPainter, QPen, QPolygonF
+from PyQt6.QtCore import QPointF, Qt, pyqtSignal
+from PyQt6.QtGui import QPainter
 from PyQt6.QtWidgets import QWidget
 
+from ...regions.base_region import BaseRegion
+from ...regions.region_manager import RegionManager
+from ...regions.region_renderer import RegionRenderer
+from ...regions.shapes.box import Box
+from ...regions.shapes.circle import Circle
+from ...regions.shapes.ellipse import Ellipse
+from ...regions.shapes.line import Line
+from ...regions.shapes.point import Point
+from ...regions.shapes.polygon import Polygon
 from ..view_transform import DisplayTransform
 
 
@@ -43,82 +60,18 @@ class RegionMode(Enum):
     LINE = "line"
 
 
-@dataclass
-class Region:
-    """Simple region representation."""
+#: Modes finalized by dragging out a second point.
+_DRAG_MODES = (RegionMode.CIRCLE, RegionMode.BOX, RegionMode.ELLIPSE, RegionMode.LINE)
 
-    mode: RegionMode
-    points: list[QPointF]  # Image coordinates
-    color: QColor = field(default_factory=lambda: QColor(0, 255, 0))  # Green
-    marker_size: float = 4.0
-    source: str = "user"
-    selected: bool = False
-
-    def contains_point(self, point: QPointF, tolerance: float = 5.0) -> bool:
-        """Check if point is inside or near region."""
-        if self.mode == RegionMode.CIRCLE:
-            if len(self.points) >= 2:
-                center = self.points[0]
-                radius_point = self.points[1]
-                radius = math.sqrt(
-                    (radius_point.x() - center.x()) ** 2 + (radius_point.y() - center.y()) ** 2
-                )
-                dist = math.sqrt((point.x() - center.x()) ** 2 + (point.y() - center.y()) ** 2)
-                return abs(dist - radius) < tolerance or dist < radius
-
-        elif self.mode == RegionMode.BOX:
-            if len(self.points) >= 2:
-                rect = QRectF(self.points[0], self.points[1])
-                return rect.contains(point)
-
-        elif self.mode == RegionMode.ELLIPSE:
-            if len(self.points) >= 2:
-                center = QPointF(
-                    (self.points[0].x() + self.points[1].x()) / 2,
-                    (self.points[0].y() + self.points[1].y()) / 2,
-                )
-                rx = abs(self.points[1].x() - self.points[0].x()) / 2
-                ry = abs(self.points[1].y() - self.points[0].y()) / 2
-                if rx > 0 and ry > 0:
-                    dx = (point.x() - center.x()) / rx
-                    dy = (point.y() - center.y()) / ry
-                    return dx * dx + dy * dy <= 1.0
-
-        elif self.mode == RegionMode.POLYGON:
-            if len(self.points) >= 3:
-                poly = QPolygonF(self.points)
-                return poly.containsPoint(point, Qt.FillRule.OddEvenFill)
-
-        elif self.mode == RegionMode.LINE:
-            if len(self.points) >= 2:
-                p1 = self.points[0]
-                p2 = self.points[1]
-                dx = p2.x() - p1.x()
-                dy = p2.y() - p1.y()
-                if dx == 0 and dy == 0:
-                    dist = math.sqrt((point.x() - p1.x()) ** 2 + (point.y() - p1.y()) ** 2)
-                    return dist <= tolerance
-                t = ((point.x() - p1.x()) * dx + (point.y() - p1.y()) * dy) / (dx * dx + dy * dy)
-                t = max(0.0, min(1.0, t))
-                proj_x = p1.x() + t * dx
-                proj_y = p1.y() + t * dy
-                dist = math.sqrt((point.x() - proj_x) ** 2 + (point.y() - proj_y) ** 2)
-                return dist <= tolerance
-
-        elif self.mode == RegionMode.POINT:
-            if len(self.points) >= 1:
-                center = self.points[0]
-                dist = math.sqrt((point.x() - center.x()) ** 2 + (point.y() - center.y()) ** 2)
-                return dist <= max(tolerance, self.marker_size)
-
-        return False
+#: Default colour for newly drawn regions, matching DS9.
+DEFAULT_REGION_COLOR = "green"
 
 
 class RegionOverlay(QWidget):
     """Overlay widget for drawing and displaying regions."""
 
-    region_created = pyqtSignal(object)  # Emits Region when complete
-    region_selected = pyqtSignal(object)  # Emits Region when selected
+    region_created = pyqtSignal(object)  # Emits the new BaseRegion
+    region_selected = pyqtSignal(object)  # Emits the selected BaseRegion
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -126,7 +79,9 @@ class RegionOverlay(QWidget):
         self.setMouseTracking(True)
 
         self.mode: RegionMode = RegionMode.NONE
-        self.regions: list[Region] = []
+        self.manager = RegionManager()
+        self.renderer = RegionRenderer()
+
         self.current_points: list[QPointF] = []
         self.is_drawing: bool = False
         self.zoom: float = 1.0
@@ -138,8 +93,37 @@ class RegionOverlay(QWidget):
         self.flip_y: bool = False
 
         # For moving/editing
-        self.selected_region: Region | None = None
+        self.selected_region: BaseRegion | None = None
         self.drag_start: QPointF | None = None
+
+    # -- region collection --------------------------------------------------
+
+    @property
+    def regions(self) -> list[BaseRegion]:
+        """The regions on this overlay, in draw order."""
+        return self.manager.regions
+
+    @regions.setter
+    def regions(self, value: list[BaseRegion]) -> None:
+        """Replace every region on the overlay."""
+        self.manager.clear()
+        for region in value:
+            self.manager.add_region(region)
+        self.selected_region = None
+        self.update()
+
+    def add_region(self, region: BaseRegion) -> None:
+        """Add a completed region."""
+        self.manager.add_region(region)
+        self.update()
+
+    def clear_regions(self) -> None:
+        """Clear all regions."""
+        self.manager.clear()
+        self.selected_region = None
+        self.update()
+
+    # -- view state ---------------------------------------------------------
 
     def set_mode(self, mode: RegionMode) -> None:
         """Set region drawing mode."""
@@ -179,16 +163,7 @@ class RegionOverlay(QWidget):
             flip_y=self.flip_y,
         )
 
-    def add_region(self, region: Region) -> None:
-        """Add a completed region."""
-        self.regions.append(region)
-        self.update()
-
-    def clear_regions(self) -> None:
-        """Clear all regions."""
-        self.regions = []
-        self.selected_region = None
-        self.update()
+    # -- coordinates --------------------------------------------------------
 
     def _widget_to_image_coords(self, widget_point: QPointF) -> QPointF:
         """Convert widget coordinates to image coordinates."""
@@ -216,6 +191,78 @@ class RegionOverlay(QWidget):
         widget_y = display_y * self.zoom + self.image_offset[1]
         return QPointF(widget_x, widget_y)
 
+    def _to_widget(self, x: float, y: float) -> QPointF:
+        """Adapter matching `RegionRenderer.ToWidget`."""
+        return self._image_to_widget_coords(QPointF(x, y))
+
+    # -- shape construction -------------------------------------------------
+
+    def _build_region(self, mode: RegionMode, points: list[QPointF]) -> BaseRegion | None:
+        """Build the concrete shape a finished gesture describes.
+
+        Gesture conventions, unchanged from the pre-M1 overlay:
+          circle          points[0] = centre, points[1] = a point on the rim
+          box / ellipse   points[0], points[1] = opposite corners of the bounds
+          line            points[0] = start, points[1] = end
+          point           points[0] = position
+          polygon         every point is a vertex
+        """
+        color = DEFAULT_REGION_COLOR
+
+        if mode == RegionMode.CIRCLE and len(points) >= 2:
+            center, edge = points[0], points[1]
+            radius = ((edge.x() - center.x()) ** 2 + (edge.y() - center.y()) ** 2) ** 0.5
+            return Circle(center=(center.x(), center.y()), radius=radius, color=color)
+
+        if mode == RegionMode.ELLIPSE and len(points) >= 2:
+            p1, p2 = points[0], points[1]
+            return Ellipse(
+                center=((p1.x() + p2.x()) / 2, (p1.y() + p2.y()) / 2),
+                semi_major=abs(p2.x() - p1.x()) / 2,
+                semi_minor=abs(p2.y() - p1.y()) / 2,
+                color=color,
+            )
+
+        if mode == RegionMode.BOX and len(points) >= 2:
+            p1, p2 = points[0], points[1]
+            return Box(
+                center=((p1.x() + p2.x()) / 2, (p1.y() + p2.y()) / 2),
+                width_box=abs(p2.x() - p1.x()),
+                height_box=abs(p2.y() - p1.y()),
+                color=color,
+            )
+
+        if mode == RegionMode.LINE and len(points) >= 2:
+            p1, p2 = points[0], points[1]
+            return Line(start=(p1.x(), p1.y()), end=(p2.x(), p2.y()), color=color)
+
+        if mode == RegionMode.POINT and len(points) >= 1:
+            return Point(center=(points[0].x(), points[0].y()), color=color)
+
+        if mode == RegionMode.POLYGON and len(points) >= 3:
+            return Polygon(vertices=[(p.x(), p.y()) for p in points], color=color)
+
+        return None
+
+    def _finalize(self, mode: RegionMode, points: list[QPointF]) -> bool:
+        """Turn a finished gesture into a region and announce it."""
+        region = self._build_region(mode, points)
+        if region is None:
+            return False
+        self.manager.add_region(region)
+        self.region_created.emit(region)
+        return True
+
+    def _select(self, region: BaseRegion | None) -> None:
+        """Make `region` the selection, clearing any previous one."""
+        if self.selected_region is not None:
+            self.selected_region.selected = False
+        self.selected_region = region
+        if region is not None:
+            region.selected = True
+
+    # -- mouse --------------------------------------------------------------
+
     def mousePressEvent(self, event) -> None:
         """Handle mouse press for region drawing."""
         if event.button() in (Qt.MouseButton.RightButton, Qt.MouseButton.MiddleButton):
@@ -226,11 +273,8 @@ class RegionOverlay(QWidget):
             # Selection mode - check if clicking on existing region
             img_point = self._widget_to_image_coords(event.position())
             for region in reversed(self.regions):  # Check from top
-                if region.contains_point(img_point):
-                    if self.selected_region:
-                        self.selected_region.selected = False
-                    self.selected_region = region
-                    region.selected = True
+                if region.contains(img_point.x(), img_point.y()):
+                    self._select(region)
                     self.drag_start = img_point
                     self.region_selected.emit(region)
                     self.update()
@@ -239,8 +283,7 @@ class RegionOverlay(QWidget):
 
             # Clicked on empty space - deselect
             if self.selected_region:
-                self.selected_region.selected = False
-                self.selected_region = None
+                self._select(None)
                 self.update()
             event.accept()
             return
@@ -255,16 +298,14 @@ class RegionOverlay(QWidget):
                 self.is_drawing = True
             elif self.mode == RegionMode.POINT:
                 # Point: place immediately
-                region = Region(mode=self.mode, points=[img_point], color=QColor(0, 255, 0))
-                self.regions.append(region)
-                self.region_created.emit(region)
+                self._finalize(self.mode, [img_point])
                 self.current_points = []
                 self.is_drawing = False
                 self.update()
                 event.accept()
                 return
             else:
-                # Circle, Box, Ellipse: start new region
+                # Circle, Box, Ellipse, Line: start new region
                 self.current_points = [img_point]
                 self.is_drawing = True
 
@@ -280,15 +321,14 @@ class RegionOverlay(QWidget):
         if not self.is_drawing and self.mode == RegionMode.NONE:
             # Moving selected region
             if self.selected_region and self.drag_start:
+                if not self.selected_region.can_move:
+                    event.accept()
+                    return
                 img_point = self._widget_to_image_coords(event.position())
-                dx = img_point.x() - self.drag_start.x()
-                dy = img_point.y() - self.drag_start.y()
-
-                # Move all points
-                for point in self.selected_region.points:
-                    point.setX(point.x() + dx)
-                    point.setY(point.y() + dy)
-
+                self.selected_region.move(
+                    img_point.x() - self.drag_start.x(),
+                    img_point.y() - self.drag_start.y(),
+                )
                 self.drag_start = img_point
                 self.update()
             event.accept()
@@ -298,7 +338,7 @@ class RegionOverlay(QWidget):
             # Update preview
             img_point = self._widget_to_image_coords(event.position())
 
-            if self.mode in [RegionMode.CIRCLE, RegionMode.BOX, RegionMode.ELLIPSE, RegionMode.LINE]:
+            if self.mode in _DRAG_MODES:
                 # For these, we update the second point
                 if len(self.current_points) == 1:
                     self.current_points.append(img_point)
@@ -310,7 +350,14 @@ class RegionOverlay(QWidget):
 
     def mouseReleaseEvent(self, event) -> None:
         """Handle mouse release to finalize region."""
-        if event.button() in (Qt.MouseButton.RightButton, Qt.MouseButton.MiddleButton):
+        # Right-click closes a polygon, so it has to reach the branch below.
+        # Every other right or middle release belongs to the viewer underneath
+        # (pan, context menu), so pass those through untouched.
+        finishing_polygon = self.mode == RegionMode.POLYGON and event.button() == Qt.MouseButton.RightButton
+        if not finishing_polygon and event.button() in (
+            Qt.MouseButton.RightButton,
+            Qt.MouseButton.MiddleButton,
+        ):
             event.ignore()
             return
 
@@ -324,21 +371,7 @@ class RegionOverlay(QWidget):
                 # Polygon continues until double-click or right-click
                 pass
             else:
-                # Finalize region for circle, box, ellipse, line, point
-                if self.mode == RegionMode.POINT:
-                    if len(self.current_points) >= 1:
-                        region = Region(
-                            mode=self.mode, points=[self.current_points[0]], color=QColor(0, 255, 0)
-                        )
-                        self.regions.append(region)
-                        self.region_created.emit(region)
-                elif len(self.current_points) >= 2:
-                    region = Region(
-                        mode=self.mode, points=self.current_points.copy(), color=QColor(0, 255, 0)
-                    )
-                    self.regions.append(region)
-                    self.region_created.emit(region)
-
+                self._finalize(self.mode, self.current_points)
                 self.current_points = []
                 self.is_drawing = False
                 self.update()
@@ -347,13 +380,7 @@ class RegionOverlay(QWidget):
 
         elif event.button() == Qt.MouseButton.RightButton and self.mode == RegionMode.POLYGON:
             # Finalize polygon
-            if len(self.current_points) >= 3:
-                region = Region(
-                    mode=RegionMode.POLYGON, points=self.current_points.copy(), color=QColor(0, 255, 0)
-                )
-                self.regions.append(region)
-                self.region_created.emit(region)
-
+            self._finalize(RegionMode.POLYGON, self.current_points)
             self.current_points = []
             self.is_drawing = False
             self.update()
@@ -362,12 +389,7 @@ class RegionOverlay(QWidget):
     def mouseDoubleClickEvent(self, event) -> None:
         """Handle double click to finalize polygon."""
         if self.mode == RegionMode.POLYGON and event.button() == Qt.MouseButton.LeftButton:
-            if len(self.current_points) >= 3:
-                region = Region(
-                    mode=RegionMode.POLYGON, points=self.current_points.copy(), color=QColor(0, 255, 0)
-                )
-                self.regions.append(region)
-                self.region_created.emit(region)
+            self._finalize(RegionMode.POLYGON, self.current_points)
             self.current_points = []
             self.is_drawing = False
             self.update()
@@ -375,73 +397,17 @@ class RegionOverlay(QWidget):
             return
         super().mouseDoubleClickEvent(event)
 
+    # -- painting -----------------------------------------------------------
+
     def paintEvent(self, event) -> None:
         """Paint regions on overlay."""
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.renderer.render(painter, self.regions, self._to_widget)
 
-        # Draw completed regions
-        for region in self.regions:
-            color = QColor(255, 255, 0) if region.selected else region.color
-            pen = QPen(color, 2 if region.selected else 1)
-            painter.setPen(pen)
-
-            widget_points = [self._image_to_widget_coords(p) for p in region.points]
-
-            if region.mode == RegionMode.CIRCLE and len(widget_points) >= 2:
-                center = widget_points[0]
-                radius_point = widget_points[1]
-                radius = math.sqrt(
-                    (radius_point.x() - center.x()) ** 2 + (radius_point.y() - center.y()) ** 2
-                )
-                painter.drawEllipse(center, radius, radius)
-
-            elif region.mode == RegionMode.BOX and len(widget_points) >= 2:
-                rect = QRectF(widget_points[0], widget_points[1])
-                painter.drawRect(rect)
-
-            elif region.mode == RegionMode.ELLIPSE and len(widget_points) >= 2:
-                rect = QRectF(widget_points[0], widget_points[1])
-                painter.drawEllipse(rect)
-
-            elif region.mode == RegionMode.POLYGON and len(widget_points) >= 3:
-                poly = QPolygonF(widget_points)
-                painter.drawPolygon(poly)
-
-            elif region.mode == RegionMode.LINE and len(widget_points) >= 2:
-                painter.drawLine(widget_points[0], widget_points[1])
-
-            elif region.mode == RegionMode.POINT and len(widget_points) >= 1:
-                center = widget_points[0]
-                radius = max(1.0, region.marker_size)
-                painter.drawEllipse(center, radius, radius)
-
-        # Draw current drawing preview
-        if self.is_drawing and len(self.current_points) > 0:
-            pen = QPen(QColor(255, 255, 0), 1, Qt.PenStyle.DashLine)
-            painter.setPen(pen)
-
-            widget_points = [self._image_to_widget_coords(p) for p in self.current_points]
-
-            if self.mode == RegionMode.CIRCLE and len(widget_points) >= 2:
-                center = widget_points[0]
-                radius_point = widget_points[1]
-                radius = math.sqrt(
-                    (radius_point.x() - center.x()) ** 2 + (radius_point.y() - center.y()) ** 2
-                )
-                painter.drawEllipse(center, radius, radius)
-
-            elif self.mode == RegionMode.BOX and len(widget_points) >= 2:
-                rect = QRectF(widget_points[0], widget_points[1])
-                painter.drawRect(rect)
-
-            elif self.mode == RegionMode.ELLIPSE and len(widget_points) >= 2:
-                rect = QRectF(widget_points[0], widget_points[1])
-                painter.drawEllipse(rect)
-
-            elif self.mode == RegionMode.POLYGON and len(widget_points) >= 2:
-                poly = QPolygonF(widget_points)
-                painter.drawPolyline(poly)
-
-            elif self.mode == RegionMode.LINE and len(widget_points) >= 2:
-                painter.drawLine(widget_points[0], widget_points[1])
+        if self.is_drawing and self.current_points:
+            self.renderer.render_preview(
+                painter,
+                self.mode.value,
+                [(p.x(), p.y()) for p in self.current_points],
+                self._to_widget,
+            )

@@ -20,20 +20,16 @@
 
 from .blink_controller import BlinkController
 from .frame import Frame
-from .frame_3d import Frame3D
 from .frame_manager import FrameManager
-from .hls_frame import HLSFrame
-from .hsv_frame import HSVFrame
-from .rgb_frame import RGBFrame
+from .rgb_frame import HLSFrame, HSVFrame, RGBFrame
 from .tile_layout import TileLayout
 
 __all__ = [
+    "BlinkController",
     "Frame",
     "FrameManager",
-    "RGBFrame",
     "HLSFrame",
     "HSVFrame",
-    "Frame3D",
+    "RGBFrame",
     "TileLayout",
-    "BlinkController",
 ]

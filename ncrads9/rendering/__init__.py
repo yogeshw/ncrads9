@@ -24,9 +24,8 @@ image display, including scaling algorithms, colormaps, and tile-based
 rendering for large images.
 """
 
-from .colormap_engine import ColormapEngine
 from .gl_canvas import GLCanvas
-from .rgb_compositor import RGBCompositor
+from .rgb_compositor import compose_hls, compose_hsv, compose_rgb, hls_to_rgb, hsv_to_rgb
 from .scale_algorithms import ScaleAlgorithm, apply_scale
 from .texture_manager import TextureManager
 from .tile_renderer import TileRenderer
@@ -34,9 +33,12 @@ from .tile_renderer import TileRenderer
 __all__ = [
     "GLCanvas",
     "ScaleAlgorithm",
-    "apply_scale",
-    "ColormapEngine",
     "TextureManager",
     "TileRenderer",
-    "RGBCompositor",
+    "apply_scale",
+    "compose_hls",
+    "compose_hsv",
+    "compose_rgb",
+    "hls_to_rgb",
+    "hsv_to_rgb",
 ]

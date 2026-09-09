@@ -37,6 +37,7 @@ class Text(BaseRegion):
         width: int = 1,
         font: str = "helvetica 10 normal roman",
         tags: list[str] | None = None,
+        **kwargs: Any,
     ) -> None:
         """
         Initialize a text region.
@@ -50,7 +51,7 @@ class Text(BaseRegion):
             font: The font specification for the text.
             tags: Optional list of tags for grouping regions.
         """
-        super().__init__(center, color, width, font, label, tags)
+        super().__init__(center, color, width, font, label, tags, **kwargs)
         self._label = label
         self._angle = angle
 

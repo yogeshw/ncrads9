@@ -38,6 +38,7 @@ class Ruler(BaseRegion):
         font: str = "helvetica 10 normal roman",
         text: str = "",
         tags: list[str] | None = None,
+        **kwargs: Any,
     ) -> None:
         """
         Initialize a ruler region.
@@ -52,7 +53,7 @@ class Ruler(BaseRegion):
             tags: Optional list of tags for grouping regions.
         """
         center = ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2)
-        super().__init__(center, color, width, font, text, tags)
+        super().__init__(center, color, width, font, text, tags, **kwargs)
         self._start = start
         self._end = end
 

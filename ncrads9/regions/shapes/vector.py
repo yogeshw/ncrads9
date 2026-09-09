@@ -40,6 +40,7 @@ class Vector(BaseRegion):
         font: str = "helvetica 10 normal roman",
         text: str = "",
         tags: list[str] | None = None,
+        **kwargs: Any,
     ) -> None:
         """
         Initialize a vector region.
@@ -55,7 +56,7 @@ class Vector(BaseRegion):
             text: The text label for the region.
             tags: Optional list of tags for grouping regions.
         """
-        super().__init__(start, color, width, font, text, tags)
+        super().__init__(start, color, width, font, text, tags, **kwargs)
         self._start = start
         self._length = length
         self._angle = angle

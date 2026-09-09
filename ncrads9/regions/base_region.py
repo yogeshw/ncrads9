@@ -35,6 +35,17 @@ class BaseRegion(ABC):
         font: str = "helvetica 10 normal roman",
         text: str = "",
         tags: list[str] | None = None,
+        *,
+        include: bool = True,
+        source: bool = True,
+        fixed: bool = False,
+        can_edit: bool = True,
+        can_move: bool = True,
+        can_rotate: bool = True,
+        can_delete: bool = True,
+        dash: bool = False,
+        fill: bool = False,
+        origin: str = "user",
     ) -> None:
         """
         Initialize a base region.
@@ -46,6 +57,29 @@ class BaseRegion(ABC):
             font: The font specification for text labels.
             text: The text label for the region.
             tags: Optional list of tags for grouping regions.
+            include: False for an excluded region, written with a `-` prefix.
+            source: True for `source=1`, False for `background=1`.
+            fixed: `fixed=1` -- the region keeps its screen size when zooming.
+            can_edit: `edit=0` when False.
+            can_move: `move=0` when False.
+            can_rotate: `rotate=0` when False.
+            can_delete: `delete=0` when False.
+            dash: `dash=1` -- draw the outline dashed.
+            fill: `fill=1` -- fill the shape.
+            origin: Provenance tag -- "user" for regions the user drew,
+                "samp_catalog" for markers pushed in over SAMP, and so on.
+                Not part of the DS9 file format; it lets the application find
+                and replace the regions it generated itself. Distinct from
+                `source`, which is DS9's source/background property.
+
+        The property flags mirror DS9's region properties (see the Region
+        Properties section of ds9/doc/ref/region.html). They are keyword-only:
+        every shape subclass forwards **kwargs here, so adding a property does
+        not disturb the positional geometry arguments each shape defines.
+
+        `can_move`, `can_edit`, `can_rotate` and `can_delete` are spelled with
+        the `can_` prefix because `move` is already a method on this class;
+        they serialize to DS9's bare `move=`, `edit=`, `rotate=`, `delete=`.
         """
         self._center = center
         self._color = color
@@ -53,6 +87,20 @@ class BaseRegion(ABC):
         self._font = font
         self._text = text
         self._tags = tags if tags is not None else []
+
+        self.include = include
+        self.source = source
+        self.fixed = fixed
+        self.can_edit = can_edit
+        self.can_move = can_move
+        self.can_rotate = can_rotate
+        self.can_delete = can_delete
+        self.dash = dash
+        self.fill = fill
+        self.origin = origin
+
+        #: Runtime selection state. Not part of the DS9 file format.
+        self.selected = False
 
     @property
     def center(self) -> tuple[float, float]:
@@ -113,6 +161,39 @@ class BaseRegion(ABC):
     def tags(self, value: list[str]) -> None:
         """Set the tags for this region."""
         self._tags = value
+
+    #: DS9 property keyword -> (attribute, value that is the DS9 default).
+    #: Only non-default values are written, matching DS9's own output.
+    _DS9_PROPERTY_DEFAULTS: tuple[tuple[str, str, bool], ...] = (
+        ("fixed", "fixed", False),
+        ("edit", "can_edit", True),
+        ("move", "can_move", True),
+        ("rotate", "can_rotate", True),
+        ("delete", "can_delete", True),
+        ("dash", "dash", False),
+        ("fill", "fill", False),
+    )
+
+    def ds9_properties(self) -> list[str]:
+        """Return the non-default DS9 property tokens for this region.
+
+        `source`/`background` is emitted only when the region is a background
+        region, since `source=1` is DS9's default. `include` is not emitted as
+        a property at all -- exclusion is the `-` prefix on the shape line.
+        """
+        props = [
+            f"{keyword}={int(getattr(self, attribute))}"
+            for keyword, attribute, default in self._DS9_PROPERTY_DEFAULTS
+            if getattr(self, attribute) != default
+        ]
+        if not self.source:
+            props.append("background")
+        return props
+
+    @property
+    def prefix(self) -> str:
+        """Return the DS9 shape-line prefix: `-` for an excluded region."""
+        return "" if self.include else "-"
 
     @abstractmethod
     def draw(self, context: Any) -> None:
