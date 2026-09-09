@@ -7,6 +7,11 @@ where = ["."]
 include = ["ncrads9*"]
 exclude = ["tests*", "docs*", "resources*"]
 
+# DS9's 164 bundled colour tables. Without this they are absent from a wheel
+# and ten of the Color menu's cascades come up empty.
+[tool.setuptools.package-data]
+"ncrads9.colormaps" = ["data/*.sao", "data/*.lut"]
+
 [project]
 name = "ncrads9"
 version = "0.1.0"

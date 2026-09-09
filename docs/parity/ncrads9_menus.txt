@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 478 (404 excluding separators)
+# entries: 651 (577 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -368,12 +368,185 @@
 .color|radiobutton|Standard
 .color|radiobutton|Staircase
 .color|radiobutton|Color
+.color|radiobutton|Viridis
+.color|radiobutton|Plasma
+.color|radiobutton|Inferno
+.color|radiobutton|Magma
 .color|separator|---
+.color|cascade|h5utils
+.color.h5utils|radiobutton|autumn
+.color.h5utils|radiobutton|bluered
+.color.h5utils|radiobutton|bone
+.color.h5utils|radiobutton|cool
+.color.h5utils|radiobutton|copper
+.color.h5utils|radiobutton|dkbluered
+.color.h5utils|radiobutton|gray
+.color.h5utils|radiobutton|green
+.color.h5utils|radiobutton|hot
+.color.h5utils|radiobutton|hsv
+.color.h5utils|radiobutton|jet
+.color.h5utils|radiobutton|pink
+.color.h5utils|radiobutton|spring
+.color.h5utils|radiobutton|summer
+.color.h5utils|radiobutton|winter
+.color.h5utils|radiobutton|yarg
+.color.h5utils|radiobutton|yellow
 .color|cascade|Matplotlib Uniform
-.color.matplotlibuniform|radiobutton|Viridis
-.color.matplotlibuniform|radiobutton|Plasma
-.color.matplotlibuniform|radiobutton|Inferno
-.color.matplotlibuniform|radiobutton|Magma
+.color.matplotlibuniform|radiobutton|viridis
+.color.matplotlibuniform|radiobutton|plasma
+.color.matplotlibuniform|radiobutton|inferno
+.color.matplotlibuniform|radiobutton|magma
+.color.matplotlibuniform|radiobutton|cividis
+.color|cascade|Matplotlib Sequential
+.color.matplotlibsequential|radiobutton|Greys
+.color.matplotlibsequential|radiobutton|Purples
+.color.matplotlibsequential|radiobutton|Blues
+.color.matplotlibsequential|radiobutton|Greens
+.color.matplotlibsequential|radiobutton|Oranges
+.color.matplotlibsequential|radiobutton|Reds
+.color.matplotlibsequential|radiobutton|YlOrBr
+.color.matplotlibsequential|radiobutton|YlOrRd
+.color.matplotlibsequential|radiobutton|OrRd
+.color.matplotlibsequential|radiobutton|PuRd
+.color.matplotlibsequential|radiobutton|RdPu
+.color.matplotlibsequential|radiobutton|BuPu
+.color.matplotlibsequential|radiobutton|GnBu
+.color.matplotlibsequential|radiobutton|PuBu
+.color.matplotlibsequential|radiobutton|YlGnBu
+.color.matplotlibsequential|radiobutton|PuBuGn
+.color.matplotlibsequential|radiobutton|BuGn
+.color.matplotlibsequential|radiobutton|YlGn
+.color.matplotlibsequential|radiobutton|turbo
+.color|cascade|Matplotlib Diverging
+.color.matplotlibdiverging|radiobutton|PiYG
+.color.matplotlibdiverging|radiobutton|PRGn
+.color.matplotlibdiverging|radiobutton|BrBG
+.color.matplotlibdiverging|radiobutton|PuOr
+.color.matplotlibdiverging|radiobutton|RdGy
+.color.matplotlibdiverging|radiobutton|RdBu
+.color.matplotlibdiverging|radiobutton|RdYlBu
+.color.matplotlibdiverging|radiobutton|RdYlGn
+.color.matplotlibdiverging|radiobutton|coolwarm
+.color.matplotlibdiverging|radiobutton|bwr
+.color.matplotlibdiverging|radiobutton|seismic
+.color|cascade|Matplotlib Cyclic
+.color.matplotlibcyclic|radiobutton|twilight
+.color.matplotlibcyclic|radiobutton|hsv
+.color.matplotlibcyclic|radiobutton|twilight
+.color|cascade|Cubehelix
+.color.cubehelix|radiobutton|ch05m151008
+.color.cubehelix|radiobutton|ch05m151010
+.color.cubehelix|radiobutton|ch05m151012
+.color.cubehelix|radiobutton|ch05m151410
+.color.cubehelix|radiobutton|ch05p151010
+.color.cubehelix|radiobutton|ch20m151010
+.color.cubehelix|radiobutton|cubehelix0
+.color.cubehelix|radiobutton|cubehelix1
+.color|cascade|Gist
+.color.gist|radiobutton|earth
+.color.gist|radiobutton|heat
+.color.gist|radiobutton|rainbow
+.color.gist|radiobutton|yarg
+.color.gist|radiobutton|gray
+.color.gist|radiobutton|ncar
+.color.gist|radiobutton|stern
+.color|cascade|Topographic
+.color.topographic|radiobutton|tpglarf
+.color.topographic|radiobutton|tpglhcf
+.color.topographic|radiobutton|tpglhwf
+.color.topographic|radiobutton|tpglpof
+.color.topographic|radiobutton|tpglarm
+.color.topographic|radiobutton|tpglhcm
+.color.topographic|radiobutton|tpglhwm
+.color.topographic|radiobutton|tpglpom
+.color.topographic|radiobutton|tpsfhf
+.color.topographic|radiobutton|tpsfhm
+.color.topographic|radiobutton|tpusarf
+.color.topographic|radiobutton|tpusarm
+.color.topographic|radiobutton|tpushuf
+.color.topographic|radiobutton|tpushum
+.color|cascade|Scientific Colour Maps
+.color.scientificcolourmaps|radiobutton|acton
+.color.scientificcolourmaps|radiobutton|bam
+.color.scientificcolourmaps|radiobutton|bamO
+.color.scientificcolourmaps|radiobutton|bamako
+.color.scientificcolourmaps|radiobutton|batlow
+.color.scientificcolourmaps|radiobutton|batlowK
+.color.scientificcolourmaps|radiobutton|batlowW
+.color.scientificcolourmaps|radiobutton|berlin
+.color.scientificcolourmaps|radiobutton|bilbao
+.color.scientificcolourmaps|radiobutton|broc
+.color.scientificcolourmaps|radiobutton|brocO
+.color.scientificcolourmaps|radiobutton|buda
+.color.scientificcolourmaps|radiobutton|bukavu
+.color.scientificcolourmaps|radiobutton|cork
+.color.scientificcolourmaps|radiobutton|corkO
+.color.scientificcolourmaps|radiobutton|davos
+.color.scientificcolourmaps|radiobutton|devon
+.color.scientificcolourmaps|radiobutton|fes
+.color.scientificcolourmaps|radiobutton|glasgow
+.color.scientificcolourmaps|radiobutton|greyC
+.color.scientificcolourmaps|radiobutton|hawaii
+.color.scientificcolourmaps|radiobutton|imola
+.color.scientificcolourmaps|radiobutton|lajolla
+.color.scientificcolourmaps|radiobutton|lapaz
+.color.scientificcolourmaps|radiobutton|lipari
+.color.scientificcolourmaps|radiobutton|lisbon
+.color.scientificcolourmaps|radiobutton|managua
+.color.scientificcolourmaps|radiobutton|navia
+.color.scientificcolourmaps|radiobutton|nuuk
+.color.scientificcolourmaps|radiobutton|oleron
+.color.scientificcolourmaps|radiobutton|oslo
+.color.scientificcolourmaps|radiobutton|roma
+.color.scientificcolourmaps|radiobutton|romaO
+.color.scientificcolourmaps|radiobutton|tofino
+.color.scientificcolourmaps|radiobutton|tokyo
+.color.scientificcolourmaps|radiobutton|turku
+.color.scientificcolourmaps|radiobutton|vanimo
+.color.scientificcolourmaps|radiobutton|vik
+.color.scientificcolourmaps|radiobutton|vikO
+.color|cascade|Solar Colormaps
+.color.solarcolormaps|radiobutton|soho 171
+.color.solarcolormaps|radiobutton|soho 195
+.color.solarcolormaps|radiobutton|soho 284
+.color.solarcolormaps|radiobutton|soho 304
+.color.solarcolormaps|radiobutton|soho lasco2
+.color.solarcolormaps|radiobutton|soho lasco3
+.color.solarcolormaps|radiobutton|sdo 94
+.color.solarcolormaps|radiobutton|sdo 131
+.color.solarcolormaps|radiobutton|sdo 171
+.color.solarcolormaps|radiobutton|sdo 193
+.color.solarcolormaps|radiobutton|sdo 211
+.color.solarcolormaps|radiobutton|sdo 304
+.color.solarcolormaps|radiobutton|sdo 335
+.color.solarcolormaps|radiobutton|sdo 1600
+.color.solarcolormaps|radiobutton|sdo 1700
+.color.solarcolormaps|radiobutton|sdo 4500
+.color.solarcolormaps|radiobutton|stereo 171
+.color.solarcolormaps|radiobutton|stereo 195
+.color.solarcolormaps|radiobutton|stereo 284
+.color.solarcolormaps|radiobutton|stereo 304
+.color.solarcolormaps|radiobutton|stereo cor1
+.color.solarcolormaps|radiobutton|stereo cor2
+.color.solarcolormaps|radiobutton|stereo hi1
+.color.solarcolormaps|radiobutton|stereo hi2
+.color.solarcolormaps|radiobutton|trace 171
+.color.solarcolormaps|radiobutton|trace 195
+.color.solarcolormaps|radiobutton|trace 284
+.color.solarcolormaps|radiobutton|trace 1216
+.color.solarcolormaps|radiobutton|trace 1550
+.color.solarcolormaps|radiobutton|trace 1600
+.color.solarcolormaps|radiobutton|trace 1700
+.color.solarcolormaps|radiobutton|iris 1330
+.color.solarcolormaps|radiobutton|iris 1400
+.color.solarcolormaps|radiobutton|iris 1600
+.color.solarcolormaps|radiobutton|iris 2796
+.color.solarcolormaps|radiobutton|iris 2832
+.color.solarcolormaps|radiobutton|iris 5000
+.color.solarcolormaps|radiobutton|sdo hmi color
+.color.solarcolormaps|radiobutton|yohkoh sxt
+.color.solarcolormaps|radiobutton|rhessi
+.color.solarcolormaps|radiobutton|solo lya1216
 .color|cascade|User
 .color.user|command|Load Colormap
 .color.user|command|Save Current Colormap

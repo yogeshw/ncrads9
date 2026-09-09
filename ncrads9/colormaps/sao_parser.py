@@ -18,12 +18,42 @@
 
 """Parser for SAO DS9 .sao colormap files."""
 
+import re
 from pathlib import Path
 
 import numpy as np
 from numpy.typing import NDArray
 
 from .colormap import Colormap
+
+#: A `(position, value)` control point, as DS9's .sao files write them.
+_POINT = re.compile(r"\(\s*([-+0-9.eE]+)\s*,\s*([-+0-9.eE]+)\s*\)")
+
+
+def _parse_points(line: str) -> list[tuple[float, float]]:
+    """Every `(position, value)` pair on one line.
+
+    Accepts DS9's own form, all pairs run together, and also a bare
+    `position value` or `position,value` pair on a line of its own, which is
+    what some hand-written files use.
+
+    Args:
+        line: One line of a .sao file, already stripped.
+
+    Returns:
+        The pairs found, in the order they appear.
+    """
+    matches = _POINT.findall(line)
+    if matches:
+        return [(float(position), float(value)) for position, value in matches]
+
+    parts = line.replace(",", " ").split()
+    if len(parts) >= 2:
+        try:
+            return [(float(parts[0]), float(parts[1]))]
+        except ValueError:
+            return []
+    return []
 
 
 def _interpolate_channel(
@@ -123,6 +153,10 @@ def parse_sao_file(
 
             # Check for channel headers
             line_upper = line.upper()
+            if line_upper in ("PSEUDOCOLOR", "TRUECOLOR"):
+                # DS9 writes the table's class on a line of its own. It says
+                # nothing about the channels, so there is nothing to do.
+                continue
             if line_upper.startswith("RED") or line_upper == "R:":
                 current_channel = "red"
                 continue
@@ -142,27 +176,20 @@ def parse_sao_file(
                 current_channel = "blue"  # Map value to blue
                 continue
 
-            # Parse control point
+            # Parse control points. DS9 writes an entire channel on one
+            # line -- `(0,0)(0.0042,0.0039216)(0.0084,0.0078431)...`, two
+            # hundred-odd pairs of it -- so every pair on the line has to be
+            # read. This used to strip the punctuation and take the first two
+            # numbers, which meant one control point per channel and a flat
+            # colour for all of DS9's own .sao files.
             if current_channel:
-                # Handle format: (x, y) or x y or x,y
-                line = line.replace("(", "").replace(")", "")
-                line = line.replace(",", " ")
-                parts = line.split()
-
-                if len(parts) >= 2:
-                    try:
-                        pos = float(parts[0])
-                        val = float(parts[1])
-                        point = (pos, val)
-
-                        if current_channel == "red":
-                            red_points.append(point)
-                        elif current_channel == "green":
-                            green_points.append(point)
-                        elif current_channel == "blue":
-                            blue_points.append(point)
-                    except ValueError:
-                        continue
+                points = _parse_points(line)
+                if current_channel == "red":
+                    red_points.extend(points)
+                elif current_channel == "green":
+                    green_points.extend(points)
+                elif current_channel == "blue":
+                    blue_points.extend(points)
 
     # Ensure we have at least some control points
     if not red_points:

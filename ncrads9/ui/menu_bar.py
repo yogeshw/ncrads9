@@ -24,6 +24,7 @@ Author: Yogesh Wadadekar
 from PyQt6.QtGui import QAction, QActionGroup, QKeySequence
 from PyQt6.QtWidgets import QMenu, QMenuBar, QWidget
 
+from ..colormaps.bundled import CATEGORIES, colormap_label
 from .layout.view_state import DEFAULT_INFO_FIELDS, WCS_SUFFIXES
 
 #: DS9's eight transfer functions, in the order its Scale menu lists them.
@@ -975,26 +976,32 @@ class MenuBar(QMenuBar):
             ("Standard", "standard"),
             ("Staircase", "staircase"),
             ("Color", "color"),
+            # DS9's eighteen built-ins end here. The four below are NCRADS9
+            # additions at the top level: DS9 accepts these names on its
+            # command line but reaches the tables through its Matplotlib
+            # Uniform cascade, where they also appear as `mpl_viridis` and
+            # friends.
+            ("Viridis", "viridis"),
+            ("Plasma", "plasma"),
+            ("Inferno", "inferno"),
+            ("Magma", "magma"),
         ]
         for label, cmap_name in default_maps:
             self._add_colormap_action(self.color_menu, label, cmap_name, checked=(cmap_name == "grey"))
 
         self.color_menu.addSeparator()
 
+        # DS9's ten cascades of bundled tables, with its own membership --
+        # see `colormaps/bundled.py`. The `viridis`, `plasma`, `inferno` and
+        # `magma` entries above are NCRADS9 built-ins carrying the same names
+        # DS9 uses at the top level; the same tables appear below as
+        # `mpl_viridis` and friends, which is what DS9's cascades call them.
         self.colormap_submenus: dict[str, QMenu] = {}
-        category_maps = {
-            "Matplotlib Uniform": [
-                ("Viridis", "viridis"),
-                ("Plasma", "plasma"),
-                ("Inferno", "inferno"),
-                ("Magma", "magma"),
-            ],
-        }
-        for category, maps in category_maps.items():
+        for category, names in CATEGORIES.items():
             submenu = self.color_menu.addMenu(category)
             self.colormap_submenus[category] = submenu
-            for label, cmap_name in maps:
-                self._add_colormap_action(submenu, label, cmap_name)
+            for name in names:
+                self._add_colormap_action(submenu, colormap_label(name), name)
 
         self.user_colormap_menu: QMenu = self.color_menu.addMenu("&User")
         self.action_load_user_colormap: QAction = QAction("&Load Colormap...", self)

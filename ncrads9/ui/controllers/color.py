@@ -17,9 +17,14 @@
 """
 The Color menu: colormap selection, inversion, and the colorbar.
 
-M5 adds what DS9 has and this does not (PLAN.md §5.8): the 168 bundled
-`.sao`/`.lut` colormaps and their category submenus, colour tags, multiple
-colorbars, and the RGB/HSV/HLS colorbar variants.
+M5 bundled DS9's colour tables (`colormaps/bundled.py`) and put them on
+DS9's ten cascades, so a name resolves in one of three ways: a built-in from
+`colormaps/builtin_maps.py`, a bundled `.sao`/`.lut` table parsed on first
+use, or a table the user loaded at runtime. `colormap()` is the one place
+that resolution happens.
+
+Still missing against DS9 (PLAN.md §5.8): colour tags, the Colorbar pointer
+mode, and the RGB/HSV/HLS colorbar variants.
 
 Author: Yogesh Wadadekar
 """
@@ -29,6 +34,7 @@ from __future__ import annotations
 from PyQt6.QtWidgets import QFileDialog, QInputDialog
 
 from ...colormaps.builtin_maps import get_colormap
+from ...colormaps.bundled import load as load_bundled
 from ...colormaps.colormap import Colormap
 from ...colormaps.lut_parser import parse_lut_file, save_lut_file
 from ...colormaps.sao_parser import parse_sao_file
@@ -96,7 +102,17 @@ class ColorController(Controller):
         return COLORMAP_ALIASES.get(lowered, lowered)
 
     def colormap(self, name: str) -> Colormap:
-        """Return a built-in or user-loaded colormap by name.
+        """Return a colormap by name, from wherever it comes from.
+
+        Looked up in the order a name should win: a table the user loaded at
+        runtime, then one of NCRADS9's built-ins, then one of DS9's bundled
+        files.
+
+        Args:
+            name: A colormap name or alias.
+
+        Returns:
+            The colormap.
 
         Raises:
             ValueError: If no such colormap is known.
@@ -105,9 +121,12 @@ class ColorController(Controller):
         if cmap_name in self.window.custom_colormaps:
             return self.window.custom_colormaps[cmap_name]
         cmap = get_colormap(cmap_name)
-        if cmap is None:
-            raise ValueError(f"Unknown colormap: {name}")
-        return cmap
+        if cmap is not None:
+            return cmap
+        bundled = load_bundled(cmap_name)
+        if bundled is not None:
+            return bundled
+        raise ValueError(f"Unknown colormap: {name}")
 
     def available_colormaps(self) -> list[str]:
         """Every colormap currently offered in the menu."""
