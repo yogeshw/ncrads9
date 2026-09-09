@@ -25,14 +25,20 @@ Author: Yogesh Wadadekar
 
 from .base import Controller
 from .color import ColorController
+from .edit import EditController
+from .file import FileController
 from .scale import ScaleController
+from .view import ViewController
 from .wcs import WCSController
 from .zoom import ZoomController
 
 __all__ = [
     "ColorController",
     "Controller",
+    "EditController",
+    "FileController",
     "ScaleController",
+    "ViewController",
     "WCSController",
     "ZoomController",
 ]

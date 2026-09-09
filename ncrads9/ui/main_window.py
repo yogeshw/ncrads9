@@ -89,17 +89,18 @@ from ..utils.preferences import Preferences
 from .button_bar import ButtonBar
 from .controllers.base import Controller
 from .controllers.color import ColorController
+from .controllers.edit import EditController
+from .controllers.file import FileController
 from .controllers.scale import ScaleController
+from .controllers.view import ViewController
 from .controllers.wcs import WCSController
 from .controllers.zoom import ZoomController
 from .dialogs.contour_dialog import ContourDialog
-from .dialogs.export_dialog import ExportDialog
 from .dialogs.grid_dialog import GridDialog
 from .dialogs.help_contents_dialog import HelpContentsDialog
 from .dialogs.histogram_dialog import HistogramDialog
 from .dialogs.keyboard_shortcuts_dialog import KeyboardShortcutsDialog
 from .dialogs.pixel_table_dialog import PixelTableDialog
-from .dialogs.preferences_dialog import PreferencesDialog
 from .dialogs.smooth_dialog import SmoothDialog
 from .dialogs.statistics_dialog import StatisticsDialog
 from .dialogs.vo_query_dialog import VOQueryDialog
@@ -162,7 +163,8 @@ class MainWindow(QMainWindow):
         self._last_mouse_pos: tuple[int, int] | None = None
         self._preview_rgb_cache: NDArray[np.uint8] | None = None
         self._preview_rgb_cache_frame_id: int | None = None
-        self.preferences = Preferences(self._preferences_path())
+        # A staticmethod, so it is callable before the controllers exist.
+        self.preferences = Preferences(EditController.preferences_path())
         self.use_gpu_rendering = bool(self.preferences.get("use_gpu", True))
         self.using_gpu_rendering = False
         self.z1 = None  # Scale limits
@@ -236,7 +238,7 @@ class MainWindow(QMainWindow):
         self._setup_status_bar()
         self._init_samp_client()
         self._update_samp_menu_state()
-        self._apply_preferences(self._get_preferences_dict(), persist=False, show_message=False)
+        self.edit.apply_preferences(self.edit.preferences_dict(), persist=False, show_message=False)
         self._refresh_frame_menu_items()
 
     @property
@@ -393,12 +395,23 @@ class MainWindow(QMainWindow):
         why controllers hold a reference to the window.
         """
         self.color = ColorController(self)
+        self.edit = EditController(self)
+        self.file = FileController(self)
+        self.view = ViewController(self)
         self.zoom = ZoomController(self)
         self.scale = ScaleController(self)
         self.wcs = WCSController(self)
 
         #: Every controller, for broadcasting `sync()` on a frame change.
-        self.controllers: tuple[Controller, ...] = (self.color, self.scale, self.wcs, self.zoom)
+        self.controllers: tuple[Controller, ...] = (
+            self.color,
+            self.edit,
+            self.file,
+            self.scale,
+            self.view,
+            self.wcs,
+            self.zoom,
+        )
 
     def _sync_controllers(self) -> None:
         """Bring every controller's menu state in step with the current frame."""
@@ -418,27 +431,9 @@ class MainWindow(QMainWindow):
 
     def _connect_menu_actions(self) -> None:
         """Connect menu actions to their handlers."""
-        # File menu
-        self.menu_bar.action_open.triggered.connect(self.open_file)
-        self.menu_bar.action_save.triggered.connect(self.save_file)
-        self.menu_bar.action_save_as.triggered.connect(self.save_file_as)
-        self.menu_bar.action_export.triggered.connect(self._export_image)
-        self.menu_bar.action_print.triggered.connect(self._print_image)
-        self.menu_bar.action_exit.triggered.connect(self.close)
-
-        # Edit menu
-        self.menu_bar.action_undo.triggered.connect(
-            lambda: self.statusBar().showMessage("Undo not implemented", 2000)
-        )
-        self.menu_bar.action_redo.triggered.connect(
-            lambda: self.statusBar().showMessage("Redo not implemented", 2000)
-        )
-        self.menu_bar.action_preferences.triggered.connect(self._show_preferences)
-
-        # View menu
-        self.menu_bar.action_fullscreen.triggered.connect(self._toggle_fullscreen)
-        self.menu_bar.action_show_toolbar.triggered.connect(self._toggle_toolbar)
-        self.menu_bar.action_show_statusbar.triggered.connect(self._toggle_statusbar)
+        self.file.connect()
+        self.edit.connect()
+        self.view.connect()
 
         # Frame menu
         self.menu_bar.action_new_frame.triggered.connect(self._new_frame)
@@ -682,7 +677,7 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_load_analysis_commands.triggered.connect(self._load_analysis_commands)
         self.menu_bar.action_clear_analysis_commands.triggered.connect(self._clear_analysis_commands)
         self.menu_bar.action_pixel_table.triggered.connect(self._show_pixel_table)
-        self.menu_bar.action_fits_header.triggered.connect(self._show_fits_header)
+        self.menu_bar.action_fits_header.triggered.connect(self.file.show_header)
 
         # Zoom menu
         self.zoom.connect()
@@ -699,8 +694,8 @@ class MainWindow(QMainWindow):
         self.addToolBar(self.main_toolbar)
 
         # Connect toolbar actions
-        self.main_toolbar.action_open.triggered.connect(self.open_file)
-        self.main_toolbar.action_save.triggered.connect(self.save_file)
+        self.main_toolbar.action_open.triggered.connect(self.file.open_file)
+        self.main_toolbar.action_save.triggered.connect(self.file.save_file)
         self.main_toolbar.action_zoom_in.triggered.connect(self.zoom.zoom_in)
         self.main_toolbar.action_zoom_out.triggered.connect(self.zoom.zoom_out)
         self.main_toolbar.action_zoom_fit.triggered.connect(self.zoom.zoom_fit)
@@ -804,77 +799,6 @@ class MainWindow(QMainWindow):
         self.status_bar = StatusBar(self)
         self.setStatusBar(self.status_bar)
 
-    def _preferences_path(self) -> Path:
-        """Return the default preferences file path."""
-        return Path.home() / ".ncrads9" / "preferences.json"
-
-    def _get_preferences_dict(self) -> dict:
-        """Get current preferences as a dict with defaults."""
-        return {
-            "use_gpu": self.preferences.get("use_gpu", True),
-            "tile_size": self.preferences.get("tile_size", 512),
-            "cache_size_mb": self.preferences.get("cache_size_mb", 1000),
-            "background_color": self.preferences.get("background_color", "#000000"),
-            "default_scale": self.preferences.get("default_scale", "Linear"),
-            "default_colormap": self.preferences.get("default_colormap", "gray"),
-            "anti_aliasing": self.preferences.get("anti_aliasing", True),
-        }
-
-    def _show_preferences(self) -> None:
-        """Show preferences dialog."""
-        dialog = PreferencesDialog(self)
-        dialog.load_preferences(self._get_preferences_dict())
-        dialog.preferences_changed.connect(self._apply_preferences)
-        dialog.exec()
-
-    def _apply_preferences(
-        self,
-        prefs: dict,
-        persist: bool = True,
-        show_message: bool = True,
-    ) -> None:
-        """Apply preferences and optionally persist them."""
-        if persist:
-            for key, value in prefs.items():
-                self.preferences.set(key, value, save=False)
-            self.preferences.save()
-
-        use_gpu = bool(prefs.get("use_gpu", self.use_gpu_rendering))
-        if use_gpu != self.use_gpu_rendering:
-            self._rebuild_image_viewer(use_gpu)
-
-        tile_size = int(prefs.get("tile_size", 512))
-        cache_size_mb = int(prefs.get("cache_size_mb", 1000))
-        if self.using_gpu_rendering:
-            if hasattr(self.image_viewer, "set_tile_size"):
-                self.image_viewer.set_tile_size(tile_size)
-            if hasattr(self.image_viewer, "set_cache_size_mb"):
-                self.image_viewer.set_cache_size_mb(cache_size_mb)
-
-        background_color = prefs.get("background_color", "#000000")
-        self._apply_background_color(background_color)
-
-        default_scale = prefs.get("default_scale", "Linear")
-        scale_map = {
-            "Linear": ScaleAlgorithm.LINEAR,
-            "Log": ScaleAlgorithm.LOG,
-            "Sqrt": ScaleAlgorithm.SQRT,
-            "Power": ScaleAlgorithm.POWER,
-            "Asinh": ScaleAlgorithm.ASINH,
-        }
-        if default_scale in scale_map:
-            self.scale.set_scale(scale_map[default_scale])
-
-        default_colormap = self.color.normalize_name(str(prefs.get("default_colormap", "gray")))
-        if default_colormap in self.menu_bar.colormap_actions:
-            self.color.set_colormap(default_colormap)
-
-        if self.image_data is not None:
-            self._display_image()
-
-        if show_message:
-            self.statusBar().showMessage("Preferences updated", 2000)
-
     def _rebuild_image_viewer(self, use_gpu: bool) -> None:
         """Recreate the image viewer based on GPU setting."""
         self.use_gpu_rendering = use_gpu
@@ -891,38 +815,6 @@ class MainWindow(QMainWindow):
         # two branches were identical, making the GPU test dead.)
         if hasattr(self.image_viewer, "set_background_color"):
             self.image_viewer.set_background_color(color_hex)
-
-    def open_file(self, checked: bool = False, filepath: str | None = None) -> None:
-        """
-        Open a FITS file.
-
-        Args:
-            checked: Ignored (from Qt signal).
-            filepath: Optional path to the file. If None, shows a file dialog.
-        """
-        # Handle case where checked is actually a filepath string
-        if isinstance(checked, str):
-            filepath = checked
-
-        if filepath is None or filepath is False:
-            filepath, _ = QFileDialog.getOpenFileName(
-                self,
-                "Open FITS File",
-                "",
-                "FITS Files (*.fits *.fit *.fts *.fits.gz *.fit.gz);;All Files (*)",
-            )
-
-        if filepath:
-            try:
-                self._load_fits_file(filepath)
-                self.statusBar().showMessage(f"Opened: {filepath}", 3000)
-            except Exception as e:
-                self.statusBar().showMessage(f"Error loading file: {e}", 5000)
-                from PyQt6.QtWidgets import QMessageBox
-
-                QMessageBox.critical(
-                    self, "Error Loading File", f"Could not load FITS file:\n{filepath}\n\nError: {e}"
-                )
 
     def _load_fits_file(self, filepath: str) -> None:
         """
@@ -1843,7 +1735,7 @@ class MainWindow(QMainWindow):
         if cmd.lower().startswith("open:"):
             target = cmd.split(":", 1)[1].strip()
             if target:
-                self.open_file(target)
+                self.file.open_file(target)
                 return
         if cmd.lower().startswith("message:"):
             self.statusBar().showMessage(cmd.split(":", 1)[1].strip(), 3000)
@@ -2051,21 +1943,6 @@ class MainWindow(QMainWindow):
         }
         region_mode = mode_map.get(mode, RegionMode.NONE)
         self._set_region_mode(region_mode)
-
-    def _toggle_fullscreen(self, checked: bool) -> None:
-        """Toggle fullscreen mode."""
-        if checked:
-            self.showFullScreen()
-        else:
-            self.showNormal()
-
-    def _toggle_toolbar(self, checked: bool) -> None:
-        """Toggle toolbar visibility."""
-        self.main_toolbar.setVisible(checked)
-
-    def _toggle_statusbar(self, checked: bool) -> None:
-        """Toggle status bar visibility."""
-        self.statusBar().setVisible(checked)
 
     def _load_regions(self) -> None:
         """Load region file."""
@@ -2659,18 +2536,6 @@ class MainWindow(QMainWindow):
         dialog.exec()
         self._log_analysis_command("pixel_table")
 
-    def _show_fits_header(self) -> None:
-        """Show FITS header dialog."""
-        if self.fits_handler is None:
-            self.statusBar().showMessage("No FITS file loaded", 2000)
-            return
-
-        from .dialogs.header_dialog import HeaderDialog
-
-        header = self.fits_handler.get_header()
-        dialog = HeaderDialog(header, self)
-        dialog.exec()
-
     def _show_help_contents(self) -> None:
         """Show help contents dialog."""
         dialog = HelpContentsDialog(self)
@@ -2680,90 +2545,6 @@ class MainWindow(QMainWindow):
         """Show keyboard shortcuts dialog."""
         dialog = KeyboardShortcutsDialog(self)
         dialog.exec()
-
-    def _export_image(self) -> None:
-        """Export current image view."""
-        pixmap = self._get_current_pixmap()
-        if pixmap is None:
-            self.statusBar().showMessage("No image to export", 2000)
-            return
-
-        dialog = ExportDialog(pixmap, self)
-        if dialog.exec():
-            self.statusBar().showMessage(f"Exported to {dialog.export_path}", 3000)
-
-    def _print_image(self) -> None:
-        """Print current image view."""
-        pixmap = self._get_current_pixmap()
-        if pixmap is None:
-            self.statusBar().showMessage("No image to print", 2000)
-            return
-
-        from PyQt6.QtGui import QPainter
-        from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
-
-        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
-        dialog = QPrintDialog(printer, self)
-
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            painter = QPainter(printer)
-            rect = painter.viewport()
-            size = pixmap.size()
-            size.scale(rect.size(), Qt.AspectRatioMode.KeepAspectRatio)
-            painter.setViewport(rect.x(), rect.y(), size.width(), size.height())
-            painter.setWindow(pixmap.rect())
-            painter.drawPixmap(0, 0, pixmap)
-            painter.end()
-            self.statusBar().showMessage("Print completed", 2000)
-
-    def _get_current_pixmap(self) -> QPixmap | None:
-        """Get a pixmap of the current image for export/print."""
-        if self.image_data is None:
-            return None
-
-        image_data = self.image_data
-
-        if self.z1 is None or self.z2 is None:
-            self.z1, self.z2 = compute_zscale_limits(image_data)
-
-        contrast, brightness = self.image_viewer.get_contrast_brightness()
-        range_val = self.z2 - self.z1
-        center = (self.z1 + self.z2) / 2
-        new_range = range_val / contrast
-        adjusted_z1 = center - new_range / 2 + brightness * range_val
-        adjusted_z2 = center + new_range / 2 + brightness * range_val
-
-        scaled = apply_scale(image_data, self.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
-
-        try:
-            cmap = self.color.colormap(self.current_colormap)
-        except ValueError:
-            cmap = self.color.colormap("grey")
-        if self.invert_colormap:
-            cmap_data = cmap.colors.copy()
-            cmap_data = cmap_data[::-1]
-            cmap = Colormap(f"{self.current_colormap}_inverted", cmap_data)
-
-        rgb = cmap.apply_normalized(scaled)
-        height, width = rgb.shape[:2]
-        bytes_per_line = 3 * width
-        qimage = QImage(rgb.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
-        return QPixmap.fromImage(qimage)
-
-    def save_file(self) -> None:
-        """Save the current file."""
-        self.statusBar().showMessage("Save not yet implemented", 3000)
-
-    def save_file_as(self) -> None:
-        """Save the current file with a new name."""
-        filepath, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save FITS File",
-            "",
-            "FITS Files (*.fits *.fit *.fts);;All Files (*)",
-        )
-        if filepath:
-            self.statusBar().showMessage(f"Save as: {filepath}", 3000)
 
     def _reset_frame_view_defaults(self, frame: Frame) -> None:
         """Reset a frame's display state to defaults."""

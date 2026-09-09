@@ -15,6 +15,7 @@ from ncrads9.app import (
     run_application,
 )
 from ncrads9.rendering.scale_algorithms import ScaleAlgorithm
+from ncrads9.ui.controllers.file import FileController
 from ncrads9.ui.main_window import MainWindow
 from ncrads9.utils.preferences import Preferences
 
@@ -79,12 +80,12 @@ def test_apply_startup_cli_builds_rgb_composite(main_window: MainWindow, monkeyp
         if isinstance(checked, str) and filepath is None:
             filepath = checked
         assert filepath is not None
-        frame = self.frame_manager.current_frame
+        frame = self.frames.current_frame
         frame.filepath = Path(filepath)
         frame.image_data = fake_data[Path(filepath).name]
         frame.original_image_data = frame.image_data
 
-    monkeypatch.setattr(MainWindow, "open_file", _fake_open)
+    monkeypatch.setattr(FileController, "open_file", _fake_open)
 
     apply_startup_cli(
         main_window,
@@ -109,12 +110,12 @@ def test_apply_startup_cli_log_then_file_loads_image(main_window: MainWindow, mo
             filepath = checked
         assert filepath is not None
         opened_paths.append(filepath)
-        frame = self.frame_manager.current_frame
+        frame = self.frames.current_frame
         frame.filepath = Path(filepath)
         frame.image_data = np.arange(100, dtype=np.float32).reshape(10, 10)
         frame.original_image_data = frame.image_data
 
-    monkeypatch.setattr(MainWindow, "open_file", _fake_open)
+    monkeypatch.setattr(FileController, "open_file", _fake_open)
     apply_startup_cli(main_window, ["ncrads9", "-log", "image.fits"])
     assert opened_paths == ["image.fits"]
     assert main_window.current_scale == ScaleAlgorithm.LOG
@@ -125,12 +126,12 @@ def test_apply_startup_cli_applies_display_options(main_window: MainWindow, monk
     def _fake_open(self, checked=False, filepath=None):
         if isinstance(checked, str) and filepath is None:
             filepath = checked
-        frame = self.frame_manager.current_frame
+        frame = self.frames.current_frame
         frame.filepath = Path(filepath or "image.fits")
         frame.image_data = np.arange(100, dtype=np.float32).reshape(10, 10)
         frame.original_image_data = frame.image_data
 
-    monkeypatch.setattr(MainWindow, "open_file", _fake_open)
+    monkeypatch.setattr(FileController, "open_file", _fake_open)
 
     apply_startup_cli(
         main_window,
@@ -209,11 +210,11 @@ def test_open_cli_help_in_browser_writes_and_opens(monkeypatch, tmp_path):
 
 def test_apply_startup_cli_colormap_alias(main_window: MainWindow, monkeypatch):
     def _fake_open(self, checked=False, filepath=None):
-        frame = self.frame_manager.current_frame
+        frame = self.frames.current_frame
         frame.filepath = Path(filepath or "image.fits")
         frame.image_data = np.arange(100, dtype=np.float32).reshape(10, 10)
         frame.original_image_data = frame.image_data
 
-    monkeypatch.setattr(MainWindow, "open_file", _fake_open)
+    monkeypatch.setattr(FileController, "open_file", _fake_open)
     apply_startup_cli(main_window, ["ncrads9", "image.fits", "-color", "heat"])
     assert main_window.current_colormap == "heat"

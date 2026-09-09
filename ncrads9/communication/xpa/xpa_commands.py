@@ -201,7 +201,7 @@ class XPACommands:
         if action in {"load", "open"}:
             if not path:
                 return {"status": "error", "message": "No file path specified"}
-            self.viewer.open_file(filepath=str(path))
+            self.viewer.file.open_file(filepath=str(path))
             return {"status": "ok", "result": f"Loaded: {path}"}
         if action in {"save", "saveas"}:
             return {"status": "error", "message": "Save through XPA is not implemented"}
@@ -733,7 +733,7 @@ class XPACommands:
         path = params.get("path", self._first_arg(params))
         if not path:
             return {"status": "error", "message": "No save path specified"}
-        pixmap = self.viewer._get_current_pixmap()
+        pixmap = self.viewer.file.current_pixmap()
         if pixmap is None:
             return {"status": "error", "message": "No image to save"}
         target = Path(str(path))

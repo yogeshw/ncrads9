@@ -300,7 +300,7 @@ def _load_rgb_channels_from_cli(main_window: MainWindow, channel_paths: dict[str
             pass
         else:
             main_window._new_frame_with_type("base")
-        main_window.open_file(filepath=filepath)
+        main_window.file.open_file(filepath=filepath)
         frame = main_window.frame_manager.current_frame
         if frame is not None and frame.image_data is not None:
             source_indices[channel] = main_window.frame_manager.current_index
@@ -330,7 +330,7 @@ def apply_startup_cli(main_window: MainWindow, argv: Sequence[str]) -> None:
 
     for item in items:
         if item.kind == "file":
-            main_window.open_file(filepath=item.name)
+            main_window.file.open_file(filepath=item.name)
             continue
 
         option = item.name

@@ -90,6 +90,19 @@ class _DummyFrameManager:
         return None
 
 
+class _DummyFileController:
+    """The slice of FileController that XPA calls."""
+
+    def __init__(self, window):
+        self.window = window
+
+    def open_file(self, checked=False, filepath=None):
+        self.window.frame_manager.current_frame.filepath = Path(filepath or checked)
+
+    def current_pixmap(self):
+        return None  # No XPA test exercises saveimage; the handler guards None.
+
+
 class _DummyColorController:
     """The slice of ColorController that XPA calls."""
 
@@ -163,14 +176,12 @@ class _DummyViewer:
         self._last_mouse_pos = (5, 6)
         # XPA reaches scale and WCS through the controllers as of M2, so the
         # fake exposes the same surface rather than the old flat methods.
+        self.file = _DummyFileController(self)
         self.color = _DummyColorController(self)
         self.scale = _DummyScaleController(self)
         self.wcs = _DummyWCSController(self)
         self._w = 800
         self._h = 600
-
-    def open_file(self, filepath):
-        self.frame_manager.current_frame.filepath = Path(filepath)
 
     def _new_frame(self):
         self.frame_manager.frames.append(_DummyFrame())
