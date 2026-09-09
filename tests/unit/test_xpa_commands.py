@@ -90,6 +90,16 @@ class _DummyFrameManager:
         return None
 
 
+class _DummyRegionController:
+    """The slice of RegionController that XPA calls."""
+
+    def __init__(self, window):
+        self.window = window
+
+    def clear_regions(self):
+        self.window.frame_manager.current_frame.regions.clear()
+
+
 class _DummyFileController:
     """The slice of FileController that XPA calls."""
 
@@ -176,6 +186,7 @@ class _DummyViewer:
         self._last_mouse_pos = (5, 6)
         # XPA reaches scale and WCS through the controllers as of M2, so the
         # fake exposes the same surface rather than the old flat methods.
+        self.region = _DummyRegionController(self)
         self.file = _DummyFileController(self)
         self.color = _DummyColorController(self)
         self.scale = _DummyScaleController(self)
@@ -231,9 +242,6 @@ class _DummyViewer:
         frame = self.frame_manager.current_frame
         frame.pan_x = x
         frame.pan_y = y
-
-    def _clear_regions(self):
-        self.frame_manager.current_frame.regions.clear()
 
     def _match_frames_image(self):
         return

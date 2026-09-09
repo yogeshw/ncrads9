@@ -27,6 +27,7 @@ from .base import Controller
 from .color import ColorController
 from .edit import EditController
 from .file import FileController
+from .region import RegionController
 from .scale import ScaleController
 from .view import ViewController
 from .wcs import WCSController
@@ -37,6 +38,7 @@ __all__ = [
     "Controller",
     "EditController",
     "FileController",
+    "RegionController",
     "ScaleController",
     "ViewController",
     "WCSController",

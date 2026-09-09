@@ -193,10 +193,10 @@ def test_wcs_direction_arrows_default_and_toggle(main_window: MainWindow):
 
 
 def test_clear_regions_returns_to_pan_mode(main_window: MainWindow):
-    main_window._set_region_mode(RegionMode.CIRCLE)
+    main_window.region.set_mode(RegionMode.CIRCLE)
     assert main_window.image_viewer.region_overlay.mode == RegionMode.CIRCLE
 
-    main_window._clear_regions()
+    main_window.region.clear_regions()
     assert main_window.image_viewer.region_overlay.mode == RegionMode.NONE
     assert main_window.image_viewer.region_overlay.testAttribute(
         Qt.WidgetAttribute.WA_TransparentForMouseEvents

@@ -224,6 +224,116 @@ class TestWCSController:
         assert overlay._north_vector is None
 
 
+class TestRegionController:
+    """The Region menu."""
+
+    def test_window_exposes_the_controller(self, main_window):
+        from ncrads9.ui.controllers.region import RegionController
+
+        assert isinstance(main_window.region, RegionController)
+
+    def test_drawing_a_region_does_not_crash_the_window(self, main_window):
+        """M1 broke this and nothing noticed for a whole milestone.
+
+        `_on_region_created` read `region.mode.value`, which existed on the
+        overlay's own `Region` dataclass but not on the `BaseRegion` subclasses
+        that replaced it. The M1 round-trip tests connected their own listener
+        to the overlay's signal, so the window's handler was never exercised
+        and every draw raised AttributeError in the running application.
+        """
+        from ncrads9.regions.shapes.circle import Circle
+
+        _load_image(main_window)
+        frame = main_window.frame_manager.current_frame
+        region = Circle(center=(10.0, 10.0), radius=5.0)
+
+        main_window.region.on_created(region)
+
+        assert region in frame.regions
+        assert "circle" in main_window.statusBar().currentMessage().lower()
+
+    def test_selecting_a_region_does_not_crash_the_window(self, main_window):
+        from ncrads9.regions.shapes.box import Box
+
+        _load_image(main_window)
+        main_window.region.on_selected(Box(center=(1.0, 2.0), width_box=3.0, height_box=4.0))
+        assert "box" in main_window.statusBar().currentMessage().lower()
+
+    @pytest.mark.parametrize(
+        ("shape_factory", "expected"),
+        [
+            (
+                lambda: __import__("ncrads9.regions.shapes.circle", fromlist=["Circle"]).Circle(
+                    center=(0.0, 0.0), radius=1.0
+                ),
+                "circle",
+            ),
+            (
+                lambda: __import__("ncrads9.regions.shapes.polygon", fromlist=["Polygon"]).Polygon(
+                    vertices=[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)]
+                ),
+                "polygon",
+            ),
+            (
+                lambda: __import__("ncrads9.regions.shapes.point", fromlist=["Point"]).Point(
+                    center=(0.0, 0.0)
+                ),
+                "point",
+            ),
+        ],
+    )
+    def test_describe_names_the_shape(self, shape_factory, expected):
+        from ncrads9.ui.controllers.region import describe
+
+        assert describe(shape_factory()) == expected
+
+    def test_the_overlay_signal_reaches_the_controller(self, main_window):
+        """End to end: a real gesture must not raise through the window."""
+        from PyQt6.QtCore import QPointF, Qt
+        from PyQt6.QtGui import QMouseEvent
+
+        from ncrads9.ui.widgets.region_overlay import RegionMode
+
+        _load_image(main_window, width=200, height=200)
+        overlay = main_window.image_viewer.region_overlay
+        overlay.set_zoom(1.0, (0.0, 0.0), image_width=0, image_height=0)
+        main_window.region.set_mode(RegionMode.CIRCLE)
+
+        def event(kind, x, y, button):
+            return QMouseEvent(kind, QPointF(x, y), button, button, Qt.KeyboardModifier.NoModifier)
+
+        overlay.mousePressEvent(event(QMouseEvent.Type.MouseButtonPress, 20, 20, Qt.MouseButton.LeftButton))
+        overlay.mouseMoveEvent(
+            QMouseEvent(
+                QMouseEvent.Type.MouseMove,
+                QPointF(40, 40),
+                Qt.MouseButton.NoButton,
+                Qt.MouseButton.LeftButton,
+                Qt.KeyboardModifier.NoModifier,
+            )
+        )
+        overlay.mouseReleaseEvent(
+            event(QMouseEvent.Type.MouseButtonRelease, 40, 40, Qt.MouseButton.LeftButton)
+        )
+
+        frame = main_window.frame_manager.current_frame
+        assert len(frame.regions) == 1
+        assert len(overlay.regions) == 1
+
+    def test_clear_returns_to_pan_mode(self, main_window):
+        from ncrads9.regions.shapes.circle import Circle
+        from ncrads9.ui.widgets.region_overlay import RegionMode
+
+        _load_image(main_window)
+        frame = main_window.frame_manager.current_frame
+        frame.regions.append(Circle(center=(1.0, 1.0), radius=2.0))
+
+        main_window.region.clear_regions()
+
+        assert frame.regions == []
+        assert main_window.image_viewer.region_overlay.mode is RegionMode.NONE
+
+
 class TestOneMethodPerAction:
     """Menu, XPA and CLI must all land on the controller, not on copies."""
 

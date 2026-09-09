@@ -77,8 +77,6 @@ from ..frames.frame_manager import FrameManager
 from ..frames.tile_layout import TileLayout
 from ..image_servers.sia_client import SIAClient
 from ..regions.base_region import BaseRegion
-from ..regions.region_parser import RegionParser
-from ..regions.region_writer import RegionWriter
 from ..regions.shapes.box import Box
 from ..regions.shapes.circle import Circle
 from ..regions.shapes.ellipse import Ellipse
@@ -91,6 +89,7 @@ from .controllers.base import Controller
 from .controllers.color import ColorController
 from .controllers.edit import EditController
 from .controllers.file import FileController
+from .controllers.region import RegionController
 from .controllers.scale import ScaleController
 from .controllers.view import ViewController
 from .controllers.wcs import WCSController
@@ -397,6 +396,7 @@ class MainWindow(QMainWindow):
         self.color = ColorController(self)
         self.edit = EditController(self)
         self.file = FileController(self)
+        self.region = RegionController(self)
         self.view = ViewController(self)
         self.zoom = ZoomController(self)
         self.scale = ScaleController(self)
@@ -407,6 +407,7 @@ class MainWindow(QMainWindow):
             self.color,
             self.edit,
             self.file,
+            self.region,
             self.scale,
             self.view,
             self.wcs,
@@ -615,20 +616,7 @@ class MainWindow(QMainWindow):
         self.color.connect()
 
         # Region menu
-        self.menu_bar.action_region_none.triggered.connect(lambda: self._set_region_mode(RegionMode.NONE))
-        self.menu_bar.action_region_circle.triggered.connect(lambda: self._set_region_mode(RegionMode.CIRCLE))
-        self.menu_bar.action_region_ellipse.triggered.connect(
-            lambda: self._set_region_mode(RegionMode.ELLIPSE)
-        )
-        self.menu_bar.action_region_box.triggered.connect(lambda: self._set_region_mode(RegionMode.BOX))
-        self.menu_bar.action_region_polygon.triggered.connect(
-            lambda: self._set_region_mode(RegionMode.POLYGON)
-        )
-        self.menu_bar.action_region_line.triggered.connect(lambda: self._set_region_mode(RegionMode.LINE))
-        self.menu_bar.action_region_point.triggered.connect(lambda: self._set_region_mode(RegionMode.POINT))
-        self.menu_bar.action_region_load.triggered.connect(self._load_regions)
-        self.menu_bar.action_region_save.triggered.connect(self._save_regions)
-        self.menu_bar.action_region_delete_all.triggered.connect(self._clear_regions)
+        self.region.connect()
 
         # VO menu
         self.menu_bar.action_siap_2mass.triggered.connect(self._vo_siap_2mass)
@@ -705,11 +693,11 @@ class MainWindow(QMainWindow):
         self.main_toolbar.action_prev_frame.triggered.connect(self._prev_frame)
         self.main_toolbar.action_next_frame.triggered.connect(self._next_frame)
         self.main_toolbar.action_region_circle.triggered.connect(
-            lambda: self._set_region_mode(RegionMode.CIRCLE)
+            lambda: self.region.set_mode(RegionMode.CIRCLE)
         )
-        self.main_toolbar.action_region_box.triggered.connect(lambda: self._set_region_mode(RegionMode.BOX))
+        self.main_toolbar.action_region_box.triggered.connect(lambda: self.region.set_mode(RegionMode.BOX))
         self.main_toolbar.action_region_polygon.triggered.connect(
-            lambda: self._set_region_mode(RegionMode.POLYGON)
+            lambda: self.region.set_mode(RegionMode.POLYGON)
         )
 
     def _setup_central_widget(self) -> None:
@@ -744,8 +732,8 @@ class MainWindow(QMainWindow):
         viewer.mouse_moved.connect(self._on_mouse_moved)
         viewer.mouse_clicked.connect(self._on_image_clicked)
         viewer.contrast_changed.connect(self.color.on_contrast_changed)
-        viewer.region_created.connect(self._on_region_created)
-        viewer.region_selected.connect(self._on_region_selected)
+        viewer.region_created.connect(self.region.on_created)
+        viewer.region_selected.connect(self.region.on_selected)
         if hasattr(viewer, "gl_canvas"):
             viewer.gl_canvas.pan_changed.connect(lambda *_: self.zoom.update_panner_rect())
             viewer.gl_canvas.zoom_changed.connect(lambda *_: self.zoom.update_panner_rect())
@@ -761,7 +749,7 @@ class MainWindow(QMainWindow):
         self.button_bar.zoom_changed.connect(self.zoom.on_button_bar_zoom)
         self.button_bar.scale_changed.connect(self._on_button_bar_scale)
         self.button_bar.colormap_changed.connect(self._on_button_bar_colormap)
-        self.button_bar.region_mode_changed.connect(self._on_button_bar_region)
+        self.button_bar.region_mode_changed.connect(self.region.on_button_bar_mode)
 
         self.button_bar_dock.setWidget(self.button_bar)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.button_bar_dock)
@@ -1114,7 +1102,7 @@ class MainWindow(QMainWindow):
         # Update zoom display
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
         self._update_bin_menu_checks(getattr(frame, "bin_factor", 1))
-        self._update_regions_for_frame(frame)
+        self.region.show_frame_regions(frame)
         self._sync_frame_view_state()
         if self._contour_settings is not None:
             self._update_contours()
@@ -1187,7 +1175,7 @@ class MainWindow(QMainWindow):
         self.status_bar.update_image_info(composite.shape[1], composite.shape[0])
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
         self._update_bin_menu_checks(getattr(frame, "bin_factor", 1))
-        self._update_regions_for_frame(frame)
+        self.region.show_frame_regions(frame)
         self._sync_frame_view_state()
         if self._contour_settings is not None:
             self._update_contours()
@@ -1931,38 +1919,6 @@ class MainWindow(QMainWindow):
         if cmap_name in cmap_map:
             self.color.set_colormap(cmap_map[cmap_name])
 
-    def _on_button_bar_region(self, mode: str) -> None:
-        """Handle region mode change from button bar."""
-        mode_map = {
-            "None": RegionMode.NONE,
-            "Circle": RegionMode.CIRCLE,
-            "Ellipse": RegionMode.ELLIPSE,
-            "Box": RegionMode.BOX,
-            "Polygon": RegionMode.POLYGON,
-            "Line": RegionMode.LINE,
-        }
-        region_mode = mode_map.get(mode, RegionMode.NONE)
-        self._set_region_mode(region_mode)
-
-    def _load_regions(self) -> None:
-        """Load region file."""
-        filepath, _ = QFileDialog.getOpenFileName(
-            self,
-            "Load Region File",
-            "",
-            "Region Files (*.reg);;All Files (*)",
-        )
-        if filepath:
-            try:
-                regions = RegionParser().parse_file(filepath)
-                frame = self.frame_manager.current_frame
-                if frame:
-                    frame.regions = regions
-                    self._update_regions_for_frame(frame)
-                self.statusBar().showMessage(f"Loaded {len(regions)} regions from {filepath}", 3000)
-            except Exception as e:
-                self.statusBar().showMessage(f"Error loading regions: {e}", 3000)
-
     def _vo_siap_2mass(self) -> None:
         """Query 2MASS via SIAP and load image into new frame."""
         ra, dec = self._get_query_coordinates()
@@ -2016,12 +1972,12 @@ class MainWindow(QMainWindow):
             return
 
         for coord in coords:
-            pixel = self._world_to_overlay_pixel(coord.ra.deg, coord.dec.deg)
+            pixel = self.region.world_to_pixel(coord.ra.deg, coord.dec.deg)
             if pixel is None:
                 continue
             x, y = pixel
             region = Point(center=(x, y), origin="vizier_catalog")
-            self._on_region_created(region)
+            self.region.on_created(region)
             self.image_viewer.add_region(region)
 
         self.statusBar().showMessage(f"Overlayed {len(coords)} catalog sources", 3000)
@@ -2098,7 +2054,7 @@ class MainWindow(QMainWindow):
 
         sources: list[tuple[float, float]] = []
         for coord in coords:
-            pixel = self._world_to_overlay_pixel(coord.ra.deg, coord.dec.deg)
+            pixel = self.region.world_to_pixel(coord.ra.deg, coord.dec.deg)
             if pixel is not None:
                 sources.append(pixel)
 
@@ -2108,7 +2064,7 @@ class MainWindow(QMainWindow):
 
         self._samp_catalog_sources[frame.frame_id] = sources
         self._rebuild_samp_regions_for_frame(frame)
-        self._update_regions_for_frame(frame)
+        self.region.show_frame_regions(frame)
         self.statusBar().showMessage(f"Loaded SAMP catalog {table_id}: {len(sources)} sources", 4000)
 
     def _read_samp_table(self, url: str, table_format: str) -> Table | None:
@@ -2185,7 +2141,7 @@ class MainWindow(QMainWindow):
         for frame in self.frame_manager.frames:
             if frame.frame_id in self._samp_catalog_sources:
                 self._rebuild_samp_regions_for_frame(frame)
-        self._update_regions_for_frame(self.frame_manager.current_frame)
+        self.region.show_frame_regions(self.frame_manager.current_frame)
 
     def _samp_choose_marker_color(self) -> None:
         """Change SAMP catalog marker color."""
@@ -2259,18 +2215,6 @@ class MainWindow(QMainWindow):
             if col in table.colnames:
                 return str(table[col][0])
         return ""
-
-    def _world_to_overlay_pixel(self, ra_deg: float, dec_deg: float) -> tuple[float, float] | None:
-        """Convert WCS world coordinates to overlay pixel coordinates."""
-        if self.wcs_handler is None or not self.wcs_handler.is_valid or self.image_data is None:
-            return None
-        try:
-            x, y = self.wcs_handler.world_to_pixel(ra_deg, dec_deg)
-            if not np.isfinite(x) or not np.isfinite(y):
-                return None
-            return float(x), float(y)
-        except Exception:
-            return None
 
     def _show_statistics(self) -> None:
         """Show statistics dialog."""
@@ -2863,7 +2807,7 @@ class MainWindow(QMainWindow):
             return
 
         frame = self.frame_manager.current_frame
-        self._update_regions_for_frame(frame)
+        self.region.show_frame_regions(frame)
         if frame and frame.has_data:
             self._apply_frame_view_state(frame)
             self._display_image()
@@ -2881,15 +2825,6 @@ class MainWindow(QMainWindow):
                 self.panner_panel.set_view_rect(None)
         self._refresh_frame_menu_items()
         self._update_frame_title()
-
-    def _update_regions_for_frame(self, frame: Frame | None) -> None:
-        """Sync region overlay with current frame."""
-        if not hasattr(self.image_viewer, "clear_regions"):
-            return
-        self.image_viewer.clear_regions()
-        if frame:
-            for region in frame.regions:
-                self.image_viewer.add_region(region)
 
     def _update_blink(self) -> None:
         """Advance blink animation and refresh display."""
@@ -3466,62 +3401,6 @@ class MainWindow(QMainWindow):
     def _match_frames_3d(self) -> None:
         """Match 3D parameters across frames."""
         self.statusBar().showMessage("3D matching is not yet implemented", 2000)
-
-    def _on_region_created(self, region) -> None:
-        """Handle region creation."""
-        frame = self.frame_manager.current_frame
-        if frame:
-            frame.regions.append(region)
-        self.statusBar().showMessage(f"Created {region.mode.value} region", 2000)
-
-    def _on_region_selected(self, region) -> None:
-        """Handle region selection."""
-        self.statusBar().showMessage(f"Selected {region.mode.value} region", 2000)
-
-    def _set_region_mode(self, mode: RegionMode) -> None:
-        """Set current region mode and sync UI."""
-        self.image_viewer.set_region_mode(mode)
-        mode_name_map = {
-            RegionMode.NONE: "None",
-            RegionMode.CIRCLE: "Circle",
-            RegionMode.ELLIPSE: "Ellipse",
-            RegionMode.BOX: "Box",
-            RegionMode.POLYGON: "Polygon",
-            RegionMode.LINE: "Line",
-            RegionMode.POINT: "Point",
-        }
-        mode_name = mode_name_map.get(mode, "None")
-        self.button_bar.set_region_mode(mode_name)
-        self.statusBar().showMessage(f"Region mode: {mode_name}", 2000)
-
-    def _clear_regions(self) -> None:
-        """Clear all regions from the current frame."""
-        frame = self.frame_manager.current_frame
-        if frame:
-            frame.regions.clear()
-            self._samp_catalog_sources.pop(frame.frame_id, None)
-        if hasattr(self.image_viewer, "clear_regions"):
-            self.image_viewer.clear_regions()
-        self._set_region_mode(RegionMode.NONE)
-        self.statusBar().showMessage("Cleared all regions", 2000)
-
-    def _save_regions(self) -> None:
-        """Save regions to a DS9 region file."""
-        frame = self.frame_manager.current_frame
-        if not frame or not frame.regions:
-            self.statusBar().showMessage("No regions to save", 2000)
-            return
-        filepath, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save Region File",
-            "",
-            "Region Files (*.reg);;All Files (*)",
-        )
-        if not filepath:
-            return
-        writer = RegionWriter()
-        writer.write_file(frame.regions, filepath)
-        self.statusBar().showMessage(f"Saved regions to {filepath}", 3000)
 
     def closeEvent(self, event) -> None:
         """Disconnect SAMP client on close."""

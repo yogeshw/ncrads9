@@ -533,7 +533,7 @@ class XPACommands:
 
         action = str(params.get("action", self._first_arg(params, "get"))).lower()
         if action in {"delete", "clear"}:
-            self.viewer._clear_regions()
+            self.viewer.region.clear_regions()
             return {"status": "ok", "result": "Regions deleted"}
         frame = self.viewer.frame_manager.current_frame
         count = len(frame.regions) if frame else 0
