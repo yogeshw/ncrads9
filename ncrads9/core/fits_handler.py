@@ -34,7 +34,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from types import TracebackType
-from typing import Any, cast
+from typing import TYPE_CHECKING
 
 import numpy as np
 from astropy.io import fits
@@ -42,6 +42,9 @@ from numpy.typing import NDArray
 
 from .file_spec import BinSpec, FileSpec, Section
 from .image_data import ImageData
+
+if TYPE_CHECKING:
+    from .bin_table import BinSettings
 
 #: `EXTNAME` values DS9 recognises as an events table.
 EVENTS_EXTNAMES: frozenset[str] = frozenset({"EVENTS", "STDEVT", "RAYEVENT"})
@@ -412,7 +415,23 @@ class FITSHandler:
 
     # -- loading a specification ---------------------------------------------
 
-    def load_spec(self, spec: FileSpec) -> "ImageData":
+    def load_spec_with_bin(
+        self,
+        spec: FileSpec,
+        settings: "BinSettings | None" = None,
+    ) -> "ImageData":
+        """Load a specification, binning a table with the given settings.
+
+        Args:
+            spec: A `FileSpec`.
+            settings: DS9's Bin menu, or None for its defaults.
+
+        Returns:
+            The extension's `ImageData`.
+        """
+        return self.load_spec(spec, settings)
+
+    def load_spec(self, spec: FileSpec, bin_settings: "BinSettings | None" = None) -> "ImageData":
         """Load whatever a parsed file specification names.
 
         Applies, in DS9's order: choose the HDU, turn an events table into an
@@ -440,7 +459,11 @@ class FITSHandler:
 
         hdu = self.hdu_list[info.index]
         if info.kind is HDUKind.EVENTS:
-            image = bin_events(hdu, spec.bin)
+            # A filter may arrive in its own bracket group -- DS9's
+            # `foo.fits[bin=x,y][pha>500]` -- rather than inside the bin
+            # group, so the specification's whole filter expression is what
+            # the binning has to see.
+            image = bin_events(hdu, spec.bin, _with_filter(bin_settings, spec))
         else:
             image = ImageData.from_hdu(hdu)
 
@@ -557,113 +580,53 @@ def _shift_reference_pixel(header: fits.Header, dx: int, dy: int) -> None:
             header[key] = header[key] - shift
 
 
-def bin_events(hdu: fits.hdu.base.ExtensionHDU, spec: BinSpec | None) -> "ImageData":
-    """Turn a FITS binary table into an image by counting rows per pixel.
+def _with_filter(
+    settings: "BinSettings | None",
+    spec: FileSpec,
+) -> "BinSettings | None":
+    """Fold a specification's filter into the bin settings.
+
+    A filter set on the Bin menu wins, since the user asked for it more
+    recently than the file name did.
+    """
+    expression = spec.filter_expression
+    if not expression:
+        return settings
+
+    from dataclasses import replace
+
+    from .bin_table import BinSettings
+
+    base = settings if settings is not None else BinSettings()
+    return base if base.filter else replace(base, filter=expression)
+
+
+def bin_events(
+    hdu: fits.hdu.base.ExtensionHDU,
+    spec: BinSpec | None,
+    settings: "BinSettings | None" = None,
+) -> "ImageData":
+    """Turn a FITS binary table into an image.
 
     DS9 does this for any events table, which is why such a table counts as
-    displayable. This is the plain two-dimensional count: one bin per unit of
-    the two columns, over the range the columns' `TLMIN`/`TLMAX` cards give,
-    or the data's own range when they are absent.
-
-    Not yet done here, and the reason PLAN.md §3.4 puts binning in M5: the
-    Binning Parameters dialog, block factors, row filters, and binning a
-    third column's value rather than counting rows. A spec that asks for
-    those is accepted and its extra parts ignored rather than refused.
+    displayable. The work is in `core/bin_table.py`, which holds DS9's Bin
+    menu -- the function, the bin factor, the buffer size, the depth column
+    and the row filter -- and the four-card search for each axis's extent.
 
     Args:
         hdu: The table HDU.
         spec: The parsed `bin=` group, or None for DS9's default X and Y.
+        settings: The Bin menu's settings, or None for DS9's defaults.
 
     Returns:
-        The counts image, with a WCS built from the columns' own `TCRVL`,
-        `TCRPX`, `TCDLT` and `TCTYP` cards when the table carries them.
+        The image, with a WCS from the columns' own `TC*` cards where present.
 
     Raises:
-        FITSLoadError: If a named column is not in the table.
+        FITSLoadError: If the table cannot be binned as asked.
     """
-    columns = spec.columns[:2] if spec is not None else BinSpec().columns[:2]
-    data = hdu.data
-    available = _column_names(hdu)
+    from .bin_table import BinTableError, bin_table
 
-    values = []
-    for name in columns:
-        if name.upper() not in available:
-            raise FITSLoadError(f"no column {name!r} to bin on; the table has {', '.join(available)}")
-        values.append(np.asarray(data[name.upper()], dtype=np.float64))
-
-    edges = [_column_edges(hdu, name, column) for name, column in zip(columns, values, strict=True)]
-    # numpy accepts explicit bin edges here, but its stubs type `bins` as
-    # only a count or a sequence of counts, so the pair has to be cast.
-    bins = cast("Any", (edges[0], edges[1]))
-    counts, _x_edges, _y_edges = np.histogram2d(values[0], values[1], bins=bins)
-    # histogram2d indexes [x, y]; an image is [row, column] = [y, x].
-    image = counts.T.astype(np.float32)
-
-    return ImageData(data=image, header=_events_header(hdu, columns, edges))
-
-
-def _column_edges(
-    hdu: fits.hdu.base.ExtensionHDU,
-    name: str,
-    values: NDArray[np.floating],
-) -> NDArray[np.floating]:
-    """Bin edges for one column: one bin per unit over its declared range.
-
-    The edges fall on half-integers so that each bin is centred on a whole
-    coordinate value, which is what makes `TLMIN`..`TLMAX` inclusive come out
-    as `TLMAX - TLMIN + 1` pixels -- a column running 1..64 gives a 64-pixel
-    axis, as it does in DS9.
-    """
-    index = _column_index(hdu, name)
-    header = hdu.header
-    low = header.get(f"TLMIN{index}") if index else None
-    high = header.get(f"TLMAX{index}") if index else None
-    if not isinstance(low, (int, float)) or not isinstance(high, (int, float)):
-        low = float(np.floor(np.nanmin(values))) if values.size else 0.0
-        high = float(np.ceil(np.nanmax(values))) if values.size else 1.0
-    low, high = float(low), float(high)
-    if high < low:
-        low, high = high, low
-    return np.arange(low - 0.5, high + 1.0, 1.0, dtype=np.float64)
-
-
-def _column_index(hdu: fits.hdu.base.ExtensionHDU, name: str) -> int | None:
-    """A column's one-based position, for reading its `T*` cards."""
-    names = _column_names(hdu)
-    wanted = name.upper()
-    return names.index(wanted) + 1 if wanted in names else None
-
-
-def _events_header(
-    hdu: fits.hdu.base.ExtensionHDU,
-    columns: tuple[str, ...],
-    edges: list[NDArray[np.floating]],
-) -> fits.Header:
-    """Build an image header for a binned table.
-
-    Carries over the columns' own world-coordinate cards -- `TCTYPn`,
-    `TCRVLn`, `TCRPXn`, `TCDLTn` -- which is how DS9 gives a binned events
-    image sky coordinates. A table without them yields a header with no WCS.
-    """
-    header = fits.Header()
-    header["OBJECT"] = hdu.header.get("OBJECT", "")
-
-    for axis, (name, axis_edges) in enumerate(zip(columns, edges, strict=True), start=1):
-        index = _column_index(hdu, name)
-        if index is None:
-            continue
-        ctype = hdu.header.get(f"TCTYP{index}")
-        crval = hdu.header.get(f"TCRVL{index}")
-        crpix = hdu.header.get(f"TCRPX{index}")
-        cdelt = hdu.header.get(f"TCDLT{index}")
-        if ctype is None or crval is None or crpix is None or cdelt is None:
-            continue
-        header[f"CTYPE{axis}"] = ctype
-        header[f"CRVAL{axis}"] = crval
-        header[f"CDELT{axis}"] = cdelt
-        # Column value v lands on image pixel v - first_centre + 1, and the
-        # first bin centre is half a bin above the first edge.
-        first_centre = float(axis_edges[0]) + 0.5
-        header[f"CRPIX{axis}"] = float(crpix) - first_centre + 1.0
-
-    return header
+    try:
+        return bin_table(hdu, spec, settings)
+    except BinTableError as exc:
+        raise FITSLoadError(str(exc)) from exc

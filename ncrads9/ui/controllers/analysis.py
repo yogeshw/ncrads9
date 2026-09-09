@@ -75,11 +75,6 @@ from .base import Controller
 
 #: The block factors the menu offers, imported so the two cannot diverge.
 
-#: The Bin menu's factors. DS9's Bin turns a FITS table into an image; this
-#: menu block-averaged like Block until M5-15, and now says so rather than
-#: doing the wrong thing quietly. M5-16 gives it its real behaviour.
-BIN_FACTORS: tuple[int, ...] = (1, 2, 4, 8)
-
 
 class AnalysisController(Controller):
     """Owns the Analysis and Bin menus."""
@@ -119,11 +114,6 @@ class AnalysisController(Controller):
         menu.action_load_analysis_commands.triggered.connect(self.load_commands)
         menu.action_clear_analysis_commands.triggered.connect(self.clear_commands)
         menu.action_web_browser.triggered.connect(self.open_web_browser)
-
-        for factor in BIN_FACTORS:
-            getattr(menu, f"action_bin_{factor}").triggered.connect(
-                lambda _checked=False, f=factor: self.set_bin(f)
-            )
 
     def sync_block_menu(self, factor: int) -> None:
         """Tick the Block entry matching the current factor."""
@@ -588,11 +578,12 @@ class AnalysisController(Controller):
         self.status("Opened web browser", 2000)
 
     def sync_bin_menu(self, factor: int) -> None:
-        """Update Bin menu checkmarks based on current factor."""
-        self.menu.action_bin_1.setChecked(factor == 1)
-        self.menu.action_bin_2.setChecked(factor == 2)
-        self.menu.action_bin_4.setChecked(factor == 4)
-        self.menu.action_bin_8.setChecked(factor == 8)
+        """Tick the Block entry matching the current factor.
+
+        Named for the Bin menu it used to also tick. The Bin menu has its own
+        controller as of M5-16; this only touches Block now, and keeps the
+        name because the display pipeline and XPA both call it.
+        """
         self.sync_block_menu(factor)
 
     def set_block(self, factor: int) -> None:
@@ -638,8 +629,9 @@ class AnalysisController(Controller):
 
         DS9 distinguishes Bin, which turns a FITS table into an image, from
         Block, which reduces an image for display. NCRADS9 had one operation
-        doing the second under the first's name; this is that name, now
-        forwarding. Real bin-table binning is M5-16.
+        doing the second under the first's name; this is that name, still
+        forwarding to Block so an older caller behaves as it did. The real
+        Bin is `ui/controllers/bin.py`.
         """
         self.set_block(factor)
 

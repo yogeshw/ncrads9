@@ -25,7 +25,14 @@ from PyQt6.QtGui import QAction, QActionGroup, QKeySequence
 from PyQt6.QtWidgets import QMenu, QMenuBar, QWidget
 
 from ..colormaps.bundled import CATEGORIES, colormap_label
+from ..core.bin_table import BUFFER_SIZES, DEFAULT_BUFFER_SIZE
 from .layout.view_state import DEFAULT_INFO_FIELDS, WCS_SUFFIXES
+
+#: The bin factors and buffer sizes the Bin menu offers, from the module
+#: that does the binning so the two cannot diverge.
+BIN_FACTORS: tuple[int, ...] = (1, 2, 4, 8, 16, 32, 64, 128, 256)
+BIN_BUFFER_SIZES: tuple[int, ...] = BUFFER_SIZES
+DEFAULT_BIN_BUFFER_SIZE = DEFAULT_BUFFER_SIZE
 
 #: The block factors the Block menu offers. DS9 goes to 256.
 BLOCK_FACTORS: tuple[int, ...] = (1, 2, 4, 8, 16, 32, 64, 128, 256)
@@ -730,25 +737,73 @@ class MenuBar(QMenuBar):
             self.fade_interval_actions[ms] = action
 
     def _setup_bin_menu(self) -> None:
-        """Set up the Bin menu."""
+        """Set up the Bin menu.
+
+        DS9's order (`ds9/library/mbin.tcl`): the bin function as a radio
+        pair, Bin In / Out / Fit, nine bin factors, seven buffer sizes, and
+        the Binning Parameters dialog.
+
+        Bin applies to a FITS table, which is the difference from Block on
+        the Analysis menu -- see `core/bin_table.py` and PLAN.md §3.4. The
+        four `1x1` .. `8x8` entries that used to be this whole menu did
+        block-averaging, which is Block's job.
+        """
         self.bin_menu: QMenu = self.addMenu("&Bin")
 
-        self.action_bin_1: QAction = QAction("1x1", self)
-        self.action_bin_1.setCheckable(True)
-        self.action_bin_1.setChecked(True)
-        self.bin_menu.addAction(self.action_bin_1)
+        function_group = QActionGroup(self)
+        function_group.setExclusive(True)
+        #: Bin function name -> its action.
+        self.bin_function_actions: dict[str, QAction] = {}
+        for name, label, checked in (("average", "&Average", False), ("sum", "&Sum", True)):
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(checked)
+            function_group.addAction(action)
+            self.bin_menu.addAction(action)
+            self.bin_function_actions[name] = action
 
-        self.action_bin_2: QAction = QAction("2x2", self)
-        self.action_bin_2.setCheckable(True)
-        self.bin_menu.addAction(self.action_bin_2)
+        self.bin_menu.addSeparator()
 
-        self.action_bin_4: QAction = QAction("4x4", self)
-        self.action_bin_4.setCheckable(True)
-        self.bin_menu.addAction(self.action_bin_4)
+        self.action_bin_in: QAction = QAction("Bin &In", self)
+        self.bin_menu.addAction(self.action_bin_in)
+        self.action_bin_out: QAction = QAction("Bin &Out", self)
+        self.bin_menu.addAction(self.action_bin_out)
+        self.action_bin_fit: QAction = QAction("Bin &Fit", self)
+        self.bin_menu.addAction(self.action_bin_fit)
 
-        self.action_bin_8: QAction = QAction("8x8", self)
-        self.action_bin_8.setCheckable(True)
-        self.bin_menu.addAction(self.action_bin_8)
+        self.bin_menu.addSeparator()
+
+        factor_group = QActionGroup(self)
+        factor_group.setExclusive(True)
+        #: Bin factor -> its action.
+        self.bin_factor_actions: dict[int, QAction] = {}
+        for factor in BIN_FACTORS:
+            action = QAction(f"Bin {factor}", self)
+            action.setCheckable(True)
+            action.setChecked(factor == 1)
+            factor_group.addAction(action)
+            self.bin_menu.addAction(action)
+            self.bin_factor_actions[factor] = action
+            setattr(self, f"action_bin_{factor}", action)
+
+        self.bin_menu.addSeparator()
+
+        buffer_group = QActionGroup(self)
+        buffer_group.setExclusive(True)
+        #: Buffer size -> its action.
+        self.bin_buffer_actions: dict[int, QAction] = {}
+        for size in BIN_BUFFER_SIZES:
+            action = QAction(f"{size}x{size}", self)
+            action.setCheckable(True)
+            action.setChecked(size == DEFAULT_BIN_BUFFER_SIZE)
+            buffer_group.addAction(action)
+            self.bin_menu.addAction(action)
+            self.bin_buffer_actions[size] = action
+
+        self.bin_menu.addSeparator()
+
+        self.action_bin_params: QAction = QAction("Binning &Parameters...", self)
+        self.bin_menu.addAction(self.action_bin_params)
 
     def _setup_zoom_menu(self) -> None:
         """Set up the Zoom menu."""

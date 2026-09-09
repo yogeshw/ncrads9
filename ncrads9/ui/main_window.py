@@ -35,6 +35,8 @@ from PyQt6.QtWidgets import (
 from ..colormaps.colormap import Colormap
 from ..communication.samp import SAMPClient
 from ..coordinates.coord_system import CoordinateContext
+from ..core.bin_table import BinSettings
+from ..core.file_spec import BinSpec
 from ..core.fits_handler import FITSHandler
 from ..frames.blink_controller import (
     DEFAULT_BLINK_INTERVAL_MS,
@@ -49,6 +51,7 @@ from ..utils.preferences import Preferences
 from .button_bar import ButtonBar
 from .controllers.analysis import AnalysisController
 from .controllers.base import Controller
+from .controllers.bin import BinController
 from .controllers.color import ColorController
 from .controllers.edit import EditController
 from .controllers.file import FileController
@@ -122,6 +125,10 @@ class MainWindow(QMainWindow):
         self.custom_colormaps: dict[str, Colormap] = {}
         self._user_colormap_actions: dict[str, object] = {}
         self.current_bin = 1
+        # How a FITS table is turned into an image: DS9's Bin menu and its
+        # Binning Parameters dialog.
+        self.bin_settings = BinSettings()
+        self.bin_spec = BinSpec()
         # Single source of truth for how coordinates are transformed and
         # written. Every coordinate string in the UI goes through it.
         self.coord_context = CoordinateContext()
@@ -251,6 +258,7 @@ class MainWindow(QMainWindow):
         self.display = DisplayPipeline(self)
 
         self.analysis = AnalysisController(self)
+        self.bin = BinController(self)
         self.color = ColorController(self)
         # Named `frame_controller`: `self.frame` would shadow nothing on the
         # window, but reads as a Frame everywhere else in the codebase.
@@ -268,6 +276,7 @@ class MainWindow(QMainWindow):
         #: Every controller, for broadcasting `sync()` on a frame change.
         self.controllers: tuple[Controller, ...] = (
             self.analysis,
+            self.bin,
             self.color,
             self.edit,
             self.frame_controller,
@@ -319,6 +328,7 @@ class MainWindow(QMainWindow):
 
         # Analysis and Bin menus
         self.analysis.connect()
+        self.bin.connect()
 
         self.menu_bar.action_fits_header.triggered.connect(self.file.show_header)
         self.menu_bar.action_plot_tool_line.triggered.connect(

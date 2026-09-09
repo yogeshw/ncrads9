@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 654 (580 excluding separators)
+# entries: 676 (598 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -262,10 +262,32 @@
 .frame.frameparameters.fadeinterval|radiobutton|4 Seconds
 .frame.frameparameters.fadeinterval|radiobutton|8 Seconds
 # Bin
-.bin|checkbutton|1x1
-.bin|checkbutton|2x2
-.bin|checkbutton|4x4
-.bin|checkbutton|8x8
+.bin|radiobutton|Average
+.bin|radiobutton|Sum
+.bin|separator|---
+.bin|command|Bin In
+.bin|command|Bin Out
+.bin|command|Bin Fit
+.bin|separator|---
+.bin|radiobutton|Bin 1
+.bin|radiobutton|Bin 2
+.bin|radiobutton|Bin 4
+.bin|radiobutton|Bin 8
+.bin|radiobutton|Bin 16
+.bin|radiobutton|Bin 32
+.bin|radiobutton|Bin 64
+.bin|radiobutton|Bin 128
+.bin|radiobutton|Bin 256
+.bin|separator|---
+.bin|radiobutton|128x128
+.bin|radiobutton|256x256
+.bin|radiobutton|512x512
+.bin|radiobutton|1024x1024
+.bin|radiobutton|2048x2048
+.bin|radiobutton|4096x4096
+.bin|radiobutton|8192x8192
+.bin|separator|---
+.bin|command|Binning Parameters
 # Zoom
 .zoom|command|Center Image
 .zoom|checkbutton|Align

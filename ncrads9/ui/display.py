@@ -44,6 +44,8 @@ Author: Yogesh Wadadekar
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 from numpy.typing import NDArray
 from PyQt6.QtGui import QImage, QPixmap
@@ -249,7 +251,19 @@ class DisplayPipeline:
         fits_handler = FITSHandler()
         fits_handler.load(str(spec.path))
         info = fits_handler.resolve_extension(spec.extension)
-        image = fits_handler.load_spec(spec)
+        if info.kind is HDUKind.EVENTS:
+            # A table is binned with whatever the Bin menu currently says,
+            # and with the columns and filter the specification named if it
+            # named any. Those go onto the window rather than being folded in
+            # for this load alone, or the next re-bin from the Bin menu would
+            # silently drop them.
+            if spec.bin is not None:
+                self.window.bin_spec = spec.bin
+            if spec.filter_expression:
+                self.window.bin_settings = replace(self.window.bin_settings, filter=spec.filter_expression)
+            image = fits_handler.load_spec_with_bin(spec, self.window.bin_settings)
+        else:
+            image = fits_handler.load_spec(spec)
         image_data = image.data
         header = image.header
         wcs_handler = WCSHandler(header)
