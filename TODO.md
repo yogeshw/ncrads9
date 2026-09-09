@@ -270,26 +270,90 @@ Depends on M1.
 
 ## M3 — DS9 window layout
 
-Depends on M2.
+**Status: complete.** Every `QDockWidget` is gone; the window is one grid. View-menu parity with
+DS9 **3/27 -> 26/27 labels**, total menu entries **287 -> 337**, orphan modules **71 -> 66**,
+tests **533 -> 628**, coverage 48.3% -> 51.2%.
 
-- [ ] **M3-1** (M) `ui/layout/shell.py`: fixed vertical stack — header row, buttonbar, canvas,
+| Module | Lines | Owns |
+|---|---:|---|
+| `ui/layout/view_state.py` | 148 | DS9's `view(...)` array as a dataclass |
+| `ui/layout/shell.py` | 319 | the grid, in DS9's four arrangements |
+| `ui/panels/info_panel.py` | 429 | DS9's field table (rewritten) |
+| `ui/button_bar.py` | 497 | the two-row category bar (rewritten) |
+| `ui/controllers/view.py` | 384 | the View menu, and filling the panel |
+
+- [x] **M3-1** (M) `ui/layout/shell.py`: fixed vertical stack — header row, buttonbar, canvas,
       colorbar — replacing the `QDockWidget` arrangement in `_setup_dock_widgets()`.
-- [ ] **M3-2** (M) Header row: adopt `ui/panels/info_panel.py`, laid out DS9-style —
+- [x] **M3-2** (M) Header row: adopt `ui/panels/info_panel.py`, laid out DS9-style —
       File, Object, Value, Units, Min/Max, Low/High, then WCS α/δ, Physical x/y, Image x/y,
       Frame — alongside the panner and magnifier.
-- [ ] **M3-3** (M) Two-row buttonbar replacing the left `QGroupBox` dock: row 1 = category
+- [x] **M3-3** (M) Two-row buttonbar replacing the left `QGroupBox` dock: row 1 = category
       (File, Edit, View, Frame, Bin, Zoom, Scale, Color, Region, WCS, Analysis, Help),
       row 2 = that category's buttons.
-- [ ] **M3-4** (S) Horizontal / Vertical layout switch.
-- [ ] **M3-5** (S) Basic / Advanced view modes.
-- [ ] **M3-6** (M) Full `View` menu: Information Panel, Panner, Magnifier, Buttons, Icons,
+- [x] **M3-4** (S) Horizontal / Vertical layout switch.
+- [x] **M3-5** (S) Basic / Advanced view modes.
+- [x] **M3-6** (M) Full `View` menu: Information Panel, Panner, Magnifier, Buttons, Icons,
       Colorbar, Multiple Colorbars, Horizontal Graph, Vertical Graph.
-- [ ] **M3-7** (M) Info-panel field toggles: Filename, Object, Keyword, Min Max, Low High, Units,
+- [x] **M3-7** (M) Info-panel field toggles: Filename, Object, Keyword, Min Max, Low High, Units,
       WCS, Multiple WCS a–z, Image, Physical, Amplifier, Detector, Frame Information.
-- [ ] **M3-8** (S) Apply `ui/themes/{default,dark,native}.py`; wire to the Preferences theme
+- [x] **M3-8** (S) Apply `ui/themes/{default,dark,native}.py`; wire to the Preferences theme
       setting.
-- [ ] **M3-9** (S) Move the panner's compass/orientation indicator to match DS9's panner.
-- [ ] **M3-10** (S) Commit before/after screenshots to `docs/parity/`.
+- [x] **M3-9** (S) Move the panner's compass/orientation indicator to match DS9's panner.
+- [x] **M3-10** (S) Commit before/after screenshots to `docs/parity/`.
+
+### Where this deviated from the plan, and why
+
+* **`ui/layout/view_state.py` is new.** The plan named only `shell.py`. Splitting the state out
+  keeps the layout rules testable without a window, and gives the XPA `view` access point (M8)
+  one object to read and write. `WindowShell` owns no state at all.
+* **M3-2 says "adopt" the info panel; it was rewritten instead.** The existing panel was
+  NCRADS9's own design — four group boxes with pixel x/y, one value, RA/Dec, Galactic l/b, and
+  whole-image statistics — and shared almost nothing with DS9's table. Every DS9 field it lacked
+  (filename, object, units, min/max with positions, cut limits, physical/amplifier/detector,
+  frame/zoom/angle) is what a DS9 user actually reads. Statistics moved out: DS9's panel has
+  none, and `Analysis → Statistics` already covers it.
+* **M3-4 and M3-5 are one radio group, not a switch plus two modes.** DS9's `view(layout)` is a
+  single four-valued variable, so choosing Basic replaces Horizontal rather than modifying it.
+* **The buttonbar drives `MenuBar` actions rather than emitting its own signals.** A button now
+  triggers the same `QAction` as its menu entry, and a checkable one mirrors it — so the two
+  cannot drift apart, and a change made from the menu, a shortcut or XPA ticks the button too.
+  Only the zoom multipliers and region shapes, which have no single menu action, still go through
+  a signal. `ButtonBar.set_scale`/`set_colormap` survive as no-ops for their existing callers.
+* **M3-7 needed real alternate-WCS data.** The toggles and rows would have been decoration, so
+  `WCSHandler` gained a `key` argument and `available_alternates()`, and `pixel_to_world` now
+  reads the spherical representation instead of `.ra`/`.dec` — an alternate description is often
+  galactic, where those attributes do not exist.
+* **M3-9 kept the image overlay.** DS9 draws the compass in the panner only. Deleting the image
+  arrows would have made `contour_overlay._draw_direction_arrow` dead code that M6's compass
+  *region* needs, so the panner gets the compass and `WCS → Show Direction Arrows` still draws it
+  over the data — now unticked by default.
+* **`utils/resources.py` was not needed.** M3-3 expected the buttonbar to load icons; DS9's
+  buttonbar is text and so is ours. Repointed to M9-24.
+* **Six orphans are marked for deletion, not deleted.** `ui/panels/colorbar_panel.py` and the
+  five per-system coordinate value objects were tagged M3-6/M3-7 in the pending list, but M3 was
+  finished without them: `CoordinateContext`, `PhysicalTransform` and `WCSHandler(key=...)` do
+  the work. Removing ~800 lines is the maintainer's call, so the pending list now records
+  *delete* and the reason instead.
+* **DS9's vertical info panel is not fully replicated.** `LayoutInfoPanelVert` narrows every cell
+  to 13 characters *and* splits each title and value onto separate rows. The cell narrowing is
+  implemented (`InfoPanel.set_compact`); the row splitting is not.
+
+### Bugs found and fixed on the way
+
+* **The panner and magnifier had been dead since M2.** `ui/display.py` guarded all eight updates
+  with `hasattr(self, "panner_panel")` where `self` is the `DisplayPipeline`, not the window —
+  never true. Both panels were permanently black, and nothing noticed because neither was
+  visible enough to miss. The cut graphs' `set_image` had the same guard.
+* **The panner and magnifier were docks inside docks**, so each had two title bars (visible in
+  `docs/parity/screenshots/before-m3.png`).
+* **Applying a theme restyled the whole process on every window construction.**
+  `QApplication.setStyle` walks every live widget; guarding it on an actual change took the test
+  suite from 94 s to 17 s.
+* **The colorbar was sized for a dock** — a 140x200 minimum — which under the canvas took a
+  fifth of the window height. Now a strip pinned to the bar plus its labels, horizontal by
+  default as DS9 has it, with the end tick labels clamped inside the bar.
+* **`QSizePolicy.Ignored` on the info panel's value cells** let Qt shrink them below their own
+  minimum, and the columns printed over each other.
 
 ---
 

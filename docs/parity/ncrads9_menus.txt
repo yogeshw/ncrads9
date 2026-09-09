@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 344 (286 excluding separators)
+# entries: 398 (337 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -23,9 +23,63 @@
 .edit|separator|---
 .edit|command|Preferences
 # View
-.view|checkbutton|Fullscreen
+.view|radiobutton|Horizontal
+.view|radiobutton|Vertical
+.view|radiobutton|Basic
+.view|radiobutton|Advanced
 .view|separator|---
-.view|checkbutton|Show Toolbar
+.view|checkbutton|Information Panel
+.view|checkbutton|Panner
+.view|checkbutton|Magnifier
+.view|checkbutton|Buttons
+.view|checkbutton|Icons
+.view|separator|---
+.view|checkbutton|Colorbar
+.view|checkbutton|Multiple Colorbars
+.view|checkbutton|Horizontal Graph
+.view|checkbutton|Vertical Graph
+.view|separator|---
+.view|checkbutton|Filename
+.view|checkbutton|Object
+.view|checkbutton|Keyword
+.view|checkbutton|Min Max
+.view|checkbutton|Low High
+.view|checkbutton|Units
+.view|checkbutton|WCS
+.view|cascade|Multiple WCS
+.view.multiplewcs|checkbutton|WCS a
+.view.multiplewcs|checkbutton|WCS b
+.view.multiplewcs|checkbutton|WCS c
+.view.multiplewcs|checkbutton|WCS d
+.view.multiplewcs|checkbutton|WCS e
+.view.multiplewcs|checkbutton|WCS f
+.view.multiplewcs|checkbutton|WCS g
+.view.multiplewcs|checkbutton|WCS h
+.view.multiplewcs|checkbutton|WCS i
+.view.multiplewcs|checkbutton|WCS j
+.view.multiplewcs|checkbutton|WCS k
+.view.multiplewcs|checkbutton|WCS l
+.view.multiplewcs|checkbutton|WCS m
+.view.multiplewcs|checkbutton|WCS n
+.view.multiplewcs|checkbutton|WCS o
+.view.multiplewcs|checkbutton|WCS p
+.view.multiplewcs|checkbutton|WCS q
+.view.multiplewcs|checkbutton|WCS r
+.view.multiplewcs|checkbutton|WCS s
+.view.multiplewcs|checkbutton|WCS t
+.view.multiplewcs|checkbutton|WCS u
+.view.multiplewcs|checkbutton|WCS v
+.view.multiplewcs|checkbutton|WCS w
+.view.multiplewcs|checkbutton|WCS x
+.view.multiplewcs|checkbutton|WCS y
+.view.multiplewcs|checkbutton|WCS z
+.view|checkbutton|Image
+.view|checkbutton|Physical
+.view|checkbutton|Amplifier
+.view|checkbutton|Detector
+.view|checkbutton|Frame Information
+.view|separator|---
+.view|checkbutton|Fullscreen
 .view|checkbutton|Show Status Bar
 # Frame
 .frame|command|New Frame
@@ -248,7 +302,7 @@
 .color|checkbutton|Invert Colormap
 .color|command|Reset Colormap
 .color|separator|---
-.color|checkbutton|Show Colorbar
+.color|checkbutton|Colorbar
 .color|cascade|Colorbar Options
 .color.colorbaroptions|cascade|Orientation
 .color.colorbaroptions.orientation|radiobutton|Horizontal

@@ -72,10 +72,19 @@ harder to add. **Fix these before adding features.**
 
 ### 3.1 Two-thirds of the package is unreachable code
 
-> **M1 reduced this from 116 orphans to 71**, and
+> **M1 reduced this from 116 orphans to 71, and M3 to 66**, and
 > `tests/unit/test_no_orphan_modules.py` now fails on any new one that is not
-> listed against the milestone that adopts it. The remaining 71 are inventoried in
+> listed against the milestone that adopts it. The remaining 66 are inventoried in
 > `docs/parity/skeletons.md`. The table below records the original finding.
+>
+> M3 adopted `ui/panels/info_panel.py`, `coordinates/physical_coords.py` and the
+> three `ui/themes/` modules. It also settled six entries as **delete**, not
+> adopt: `ui/panels/colorbar_panel.py` (a second colorbar, without the controls
+> the one in use has) and the five per-system coordinate value objects
+> `coordinates/{wcs_coords,fk4_fk5,galactic,ecliptic,image_coords}.py`, whose job
+> M1's `CoordinateContext` took over — M3's information panel needed none of
+> them. They are still on disk, marked for deletion in the pending list rather
+> than removed, since deleting 800 lines is a call for the maintainer.
 
 An import-reachability analysis from `ncrads9.app` / `ncrads9.__main__` /
 `ncrads9.ui.main_window` found **116 of 191 modules were never imported by the running
@@ -155,7 +164,15 @@ numeric formats, axes, border, title, per-element colour/font), produced by the 
 extension chooser, no cube handling, no bin-table handling, no mosaic handling, no compressed-image
 (tile-compressed) handling, no `file.fits[ext]` / `[filter]` syntax, no URL loading.
 
-### 3.7 Layout does not resemble DS9
+### 3.7 Layout does not resemble DS9 — fixed in M3
+
+> **M3 replaced every `QDockWidget` with `ui/layout/shell.py`.** The window now
+> holds one grid, re-gridded by `WindowShell.relayout()` from a `ViewState` that
+> mirrors DS9's `view(...)` array, in all four of DS9's arrangements. The
+> information panel is shown for the first time, with DS9's field table; the
+> buttonbar is DS9's two rows; and the View menu went from 3 shared entries with
+> DS9 to 26 of 27 (see §9 on why the twenty-seventh is a tooling artefact). `docs/parity/screenshots/` records before and after.
+> The finding below is what was there.
 
 DS9's window is a fixed vertical stack: **menu bar → info panel | panner | magnifier (one row)
 → buttonbar (two rows: category, then that category's buttons) → image canvas → colorbar**,
@@ -165,6 +182,20 @@ NCRADS9 uses free-floating `QDockWidget`s: button bar (left, as vertical `QGroup
 colorbar + panner + magnifier (right), graphs (bottom). The info panel — the element a DS9 user
 looks at most — is never shown; coordinates go to the status bar with fewer fields.
 `View` menu offers only Fullscreen / Toolbar / Statusbar, versus DS9's 20+ visibility toggles.
+
+Three bugs that only came to light once the panels were laid out rather than docked:
+
+* `ui/display.py` guarded every panner and magnifier update with
+  `hasattr(self, "panner_panel")`, where `self` is the `DisplayPipeline` and not the
+  window. The condition was never true, so **neither panel had been fed since M2
+  extracted the pipeline** — both were permanently black. The same mistake hid the
+  cut graphs' `set_image`.
+* The panner and the magnifier were each a `QDockWidget` set as the widget of
+  *another* `QDockWidget`, so each carried two title bars.
+* Applying a theme called `QApplication.setStyle`, which walks every live widget.
+  Nothing called it before M3; once `apply_preferences` did, every window
+  construction restyled the whole process. Guarding it on an actual change cut the
+  test suite from 94 s to 17 s.
 
 ### 3.8 Dead menu wiring
 
@@ -433,8 +464,8 @@ an orphaned skeleton.
 
 ### 5.15 Cross-cutting
 
-○ Undo/redo framework · ○ i18n (DS9 ships 8 locales) · ○ theme application
-(`ui/themes/*` orphaned) · ○ configurable keyboard/mouse bindings ·
+○ Undo/redo framework · ○ i18n (DS9 ships 8 locales) · ● theme application
+(M3-8) · ○ configurable keyboard/mouse bindings ·
 ○ auto-recovery / autosave · ○ tracked `.pyc` cleanup · ○ CI · ○ lint/type gates ·
 ○ integration tests · ○ per-menu preference panels
 
@@ -459,11 +490,18 @@ Split into `ui/controllers/{file,edit,view,frame,bin,zoom,scale,color,region,wcs
 Route menu, XPA and CLI through the same controller methods. Target: `main_window.py` under
 600 lines.
 
-### M3 — DS9 window layout (8 d)
+### M3 — DS9 window layout (8 d) — **done**
 Replace docks with the DS9 header row (info panel | panner | magnifier), the two-row category
 buttonbar, canvas, and colorbar. Wire the full `View` menu including info-panel field toggles and
 the horizontal/vertical layout switch. Apply `ui/themes/`. This is the milestone that makes the
 app *look* like DS9.
+
+Delivered: `ui/layout/{view_state,shell}.py`; a rewritten `ui/panels/info_panel.py` with DS9's
+fourteen field rows plus the twenty-six alternate WCS systems; a rewritten `ui/button_bar.py`
+driving `MenuBar` actions directly, so a button and its menu entry cannot disagree; all four DS9
+layouts; the compass moved into the panner; themes wired to the Preferences setting; and
+alternate-WCS support (`WCSHandler(key=...)`) so the `Multiple WCS` rows carry real values.
+View-menu parity 3/27 → 26/27, total menu entries 287 → 337, orphans 71 → 66.
 
 ### M4 — FITS coverage (12 d)
 Extension model + HDU chooser; `file[ext][filter]` syntax; data cubes with the Cube dialog
@@ -512,7 +550,15 @@ i18n with the 8 DS9 locales. Per-menu preference panels.
 
 Kept as modern-UX improvements; documented so they are not mistaken for gaps:
 
-- **Direction arrows** in the WCS menu (compass overlay) — not in DS9.
+- **Direction arrows over the image** in the WCS menu — not in DS9. As of M3 the N/E compass is
+  drawn in the panner, which is where DS9 puts it; this toggle additionally draws it over the
+  data, and now defaults off.
+- **`View → Fullscreen` and `Show Status Bar`** — not in DS9's View menu. DS9's `Icons` toggle
+  and our `Show Toolbar` are the same action rather than two entries that could disagree.
+- **`Color → Show Colorbar`** — DS9 keeps colorbar visibility in View only. Ours appears in both
+  menus, as one shared `QAction`.
+- **A wrapped buttonbar.** DS9 lets a category's buttons run the width of its window; ours wrap
+  at fourteen, because Qt's buttons are wider than Tk's and the window minimum is 800 px.
 - **GPU tile rendering** with a CPU fallback — DS9 is CPU-only.
 - **A Python console** in place of DS9's TCL console; `Source TCL` becomes `Run Python Script`.
 - **`--help` opens HTML docs in a browser** rather than printing to the terminal. Reconsider:
@@ -537,12 +583,17 @@ For each milestone, parity is demonstrated by:
 
 1. **Menu diff** — a script that dumps NCRADS9's menu tree and diffs it against the DS9 menu tree
    extracted from `.tmp_sao_ds9/ds9/library/m*.tcl`. Reuse the extraction approach that produced
-   §5 of this document.
+   §5 of this document. One caveat found in M3: the extractor does not expand DS9's
+   `foreach l {a b c ...}` loops, so DS9's twenty-six `Multiple WCS` entries appear in the
+   snapshot as the single literal `WCS $l`. The View menu therefore reads 26/27 rather than
+   27/27; the missing entry is that artefact, not a gap.
 2. **XPA conformance** — for each of DS9's 143 access points, `xpaget`/`xpaset` against both
    applications on the same FITS file and compare responses.
 3. **Region round-trip** — parse every shape from DS9's own reference examples
    (`.tmp_sao_ds9/ds9/doc/ref/region.html`), write it back, and diff.
-4. **Screenshot comparison** for the layout milestone.
+4. **Screenshot comparison** for the layout milestone. `tools/screenshots.py` renders the window
+   headless in each of the four layouts into `docs/parity/screenshots/`; `before-m3.png` is the
+   dock-based layout at `c41f62a`.
 5. **Session backup round-trip** once M9 lands.
 
 See `TODO.md` for the task-level breakdown.
