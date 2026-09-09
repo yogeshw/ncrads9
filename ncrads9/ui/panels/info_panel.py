@@ -63,13 +63,33 @@ MAX_CELL_WIDTH = 16777215
 STRETCH_COLUMN = 7
 
 
+#: In the narrow layout, column 0 holds the axis labels and column 1 the
+#: titles and values. DS9's `LayoutInfoPanelVert` grids nothing else.
+NARROW_LABEL_COLUMN = 0
+NARROW_VALUE_COLUMN = 1
+
+
 @dataclass
 class _Row:
-    """One field of the panel: its widgets, and where they sit in the grid."""
+    """One field of the panel, and where it sits in each of DS9's layouts.
+
+    DS9 does not merely restyle the panel between layouts: `LayoutInfoPanelHorz`
+    grids a field on one line across seven columns, while
+    `LayoutInfoPanelVert` -- used for both the vertical and the advanced
+    layout, whose two procedures are byte-identical -- breaks the same field
+    over several lines in two columns, the axis label above-left of its value.
+    So each row carries both placements over the same widgets.
+    """
 
     name: str
-    #: (widget, column, column span) triples.
-    cells: list[tuple[QWidget, int, int]] = field(default_factory=list)
+    #: One line, as (widget, column, column span) -- the horizontal layout.
+    wide: list[tuple[QWidget, int, int]] = field(default_factory=list)
+    #: One list per line, each of (widget, column) -- the narrow layouts.
+    narrow: list[list[tuple[QWidget, int]]] = field(default_factory=list)
+
+    def widgets(self):
+        """Every widget the row owns, however it is laid out."""
+        return [widget for widget, _column, _span in self.wide]
 
 
 class InfoPanel(QWidget):
@@ -159,9 +179,41 @@ class InfoPanel(QWidget):
         label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         return label
 
-    def _add_row(self, name: str, cells: list[tuple[QWidget, int, int]]) -> None:
-        """Register one field's row."""
-        self._rows.append(_Row(name, cells))
+    def _add_row(
+        self,
+        name: str,
+        wide: list[tuple[QWidget, int, int]],
+        narrow: list[list[tuple[QWidget, int]]],
+    ) -> None:
+        """Register one field's row, in both of DS9's placements."""
+        self._rows.append(_Row(name, wide, narrow))
+
+    def _stacked_row(
+        self,
+        name: str,
+        head: QWidget,
+        pairs: list[tuple[QWidget, QWidget]],
+        tail: list[QWidget] | None = None,
+    ) -> list[list[tuple[QWidget, int]]]:
+        """The narrow placement DS9 uses for most fields.
+
+        A title on its own line, then one line per labelled axis with the
+        label in column 0 and the value in column 1, then any unlabelled
+        values on lines of their own.
+
+        Args:
+            name: The field name, for the error message only.
+            head: The widget on the first line -- a title, or the WCS row's
+                frame-name cell.
+            pairs: (label, value) for each labelled line.
+            tail: Values that get a line to themselves, e.g. Min's extremum.
+        """
+        lines: list[list[tuple[QWidget, int]]] = [[(head, NARROW_VALUE_COLUMN)]]
+        lines += [[(label, NARROW_LABEL_COLUMN), (value, NARROW_VALUE_COLUMN)] for label, value in pairs]
+        lines += [[(widget, NARROW_VALUE_COLUMN)] for widget in tail or ()]
+        if not lines:
+            raise ValueError(f"{name}: a row needs at least one line")
+        return lines
 
     def _xy_row(self, name: str, title: str) -> None:
         """A row of the form `Title  x <value>  y <value>`.
@@ -169,27 +221,27 @@ class InfoPanel(QWidget):
         DS9 uses this shape for the image, physical, amplifier and detector
         coordinate systems, and for the WCS systems.
         """
+        head = self._title(title)
+        x_label, y_label = self._title("x"), self._title("y")
+        x_value, y_value = self._value(f"{name}_x"), self._value(f"{name}_y")
         self._add_row(
             name,
             [
-                (self._title(title), 0, 1),
-                (self._title("x"), 1, 1),
-                (self._value(f"{name}_x"), 2, 1),
-                (self._title("y"), 3, 1),
-                (self._value(f"{name}_y"), 4, 1),
+                (head, 0, 1),
+                (x_label, 1, 1),
+                (x_value, 2, 1),
+                (y_label, 3, 1),
+                (y_value, 4, 1),
             ],
+            self._stacked_row(name, head, [(x_label, x_value), (y_label, y_value)]),
         )
 
     def _build_rows(self) -> None:
         """Create every row, in DS9's `LayoutInfoPanelHorz` order."""
-        self._add_row(
-            "filename",
-            [(self._title("File"), 0, 1), (self._value("filename", width=WIDE_WIDTH), 2, 6)],
-        )
-        self._add_row(
-            "object",
-            [(self._title("Object"), 0, 1), (self._value("object", width=WIDE_WIDTH), 2, 6)],
-        )
+        for name, title in (("filename", "File"), ("object", "Object")):
+            head = self._title(title)
+            value = self._value(name, width=WIDE_WIDTH)
+            self._add_row(name, [(head, 0, 1), (value, 2, 6)], self._stacked_row(name, head, [], [value]))
 
         # DS9's keyword row is an editable entry: the user types a FITS
         # keyword and the panel shows that card's value for the current frame.
@@ -198,58 +250,78 @@ class InfoPanel(QWidget):
             VALUE_WIDTH * self.keyword_entry.fontMetrics().horizontalAdvance("0")
         )
         self.keyword_entry.setPlaceholderText("KEYWORD")
+        keyword_value = self._value("keyword", width=WIDE_WIDTH)
         self._add_row(
             "keyword",
-            [
-                (self.keyword_entry, 0, 1),
-                (self._value("keyword", width=WIDE_WIDTH), 2, 6),
-            ],
+            [(self.keyword_entry, 0, 1), (keyword_value, 2, 6)],
+            self._stacked_row("keyword", self.keyword_entry, [], [keyword_value]),
         )
 
         for name, title in (("min", "Min"), ("max", "Max")):
+            head = self._title(title)
+            x_label, y_label = self._title("x"), self._title("y")
+            x_value, y_value = self._value(f"{name}_x"), self._value(f"{name}_y")
+            extremum = self._value(name)
             self._add_row(
                 "minmax",
                 [
-                    (self._title(title), 0, 1),
-                    (self._title("x"), 1, 1),
-                    (self._value(f"{name}_x"), 2, 1),
-                    (self._title("y"), 3, 1),
-                    (self._value(f"{name}_y"), 4, 1),
-                    (self._value(name), 6, 1),
+                    (head, 0, 1),
+                    (x_label, 1, 1),
+                    (x_value, 2, 1),
+                    (y_label, 3, 1),
+                    (y_value, 4, 1),
+                    (extremum, 6, 1),
                 ],
+                self._stacked_row(
+                    name,
+                    head,
+                    [(x_label, x_value), (y_label, y_value)],
+                    [extremum],
+                ),
             )
 
+        head = self._title("Low High")
+        low, high = self._value("low"), self._value("high")
         self._add_row(
             "lowhigh",
-            [
-                (self._title("Low High"), 0, 1),
-                (self._value("low"), 2, 1),
-                (self._value("high"), 4, 1),
-            ],
-        )
-        self._add_row(
-            "value",
-            [(self._title("Value"), 0, 1), (self._value("value", width=WIDE_WIDTH), 2, 6)],
-        )
-        self._add_row(
-            "bunit",
-            [(self._title("Units"), 0, 1), (self._value("bunit"), 2, 1)],
+            [(head, 0, 1), (low, 2, 1), (high, 4, 1)],
+            self._stacked_row("lowhigh", head, [], [low, high]),
         )
 
-        # The primary WCS, then DS9's twenty-six alternates. The row title is
-        # the sky frame in use ("fk5", "galactic", ...), which the WCS menu
-        # changes, so it is a value cell rather than a fixed title.
+        head = self._title("Value")
+        value = self._value("value", width=WIDE_WIDTH)
+        self._add_row(
+            "value",
+            [(head, 0, 1), (value, 2, 6)],
+            self._stacked_row("value", head, [], [value]),
+        )
+
+        head = self._title("Units")
+        bunit = self._value("bunit")
+        self._add_row(
+            "bunit",
+            [(head, 0, 1), (bunit, 2, 1)],
+            self._stacked_row("bunit", head, [], [bunit]),
+        )
+
+        # The primary WCS, then DS9's twenty-six alternates. The row's first
+        # cell is the sky frame in use ("fk5", "galactic", ...), which the WCS
+        # menu changes, so it is a value cell rather than a fixed title.
         for suffix in ("", *WCS_SUFFIXES):
             name = "wcs" if not suffix else f"wcs_{suffix}"
+            head = self._value(f"{name}_label")
+            lon_label, lat_label = self._title("α"), self._title("δ")
+            lon, lat = self._value(f"{name}_x"), self._value(f"{name}_y")
             self._add_row(
                 name,
                 [
-                    (self._value(f"{name}_label"), 0, 1),
-                    (self._title("α"), 1, 1),
-                    (self._value(f"{name}_x"), 2, 1),
-                    (self._title("δ"), 3, 1),
-                    (self._value(f"{name}_y"), 4, 1),
+                    (head, 0, 1),
+                    (lon_label, 1, 1),
+                    (lon, 2, 1),
+                    (lat_label, 3, 1),
+                    (lat, 4, 1),
                 ],
+                self._stacked_row(name, head, [(lon_label, lon), (lat_label, lat)]),
             )
 
         self._xy_row("detector", "Detector")
@@ -257,15 +329,21 @@ class InfoPanel(QWidget):
         self._xy_row("physical", "Physical")
         self._xy_row("image", "Image")
 
+        # DS9 writes the angle's label *after* its value in the horizontal
+        # layout and before it in the narrow one; the same two widgets serve.
+        head = self._value("frame", width=8)
+        zoom_label, angle_label = self._title("Zoom"), self._title("Angle")
+        zoom, angle = self._value("zoom"), self._value("angle")
         self._add_row(
             "frame",
             [
-                (self._value("frame", width=8), 0, 1),
-                (self._title("Zoom"), 1, 1),
-                (self._value("zoom"), 2, 1),
-                (self._value("angle"), 4, 1),
-                (self._title("Angle"), 5, 1),
+                (head, 0, 1),
+                (zoom_label, 1, 1),
+                (zoom, 2, 1),
+                (angle, 4, 1),
+                (angle_label, 5, 1),
             ],
+            self._stacked_row("frame", head, [(zoom_label, zoom), (angle_label, angle)]),
         )
 
     # -- visibility ----------------------------------------------------------
@@ -300,27 +378,42 @@ class InfoPanel(QWidget):
         return tuple(name for name in INFO_FIELDS if self._visible.get(name))
 
     def _relayout(self) -> None:
-        """Re-grid the shown rows, packed from row zero with no gaps."""
+        """Re-grid the shown rows, packed from row zero with no gaps.
+
+        Uses each row's narrow placement when the panel is compact, matching
+        DS9: `LayoutInfoPanelVert` breaks a field over several lines rather
+        than running it across the seven columns `LayoutInfoPanelHorz` uses.
+        """
         while self._grid.count():
             self._grid.takeAt(0)
         for row in self._rows:
-            for widget, _column, _span in row.cells:
+            for widget in row.widgets():
                 widget.hide()
 
         index = 0
         for row in self._rows:
             if not self._visible.get(row.name, False):
                 continue
-            for widget, column, span in row.cells:
-                self._grid.addWidget(widget, index, column, 1, span)
-                widget.show()
-            self._grid.setRowStretch(index, 0)
-            index += 1
+            for line in self._lines(row):
+                for widget, column, span in line:
+                    self._grid.addWidget(widget, index, column, 1, span)
+                    widget.show()
+                self._grid.setRowStretch(index, 0)
+                index += 1
 
         # Pack the rows against the top. Without this the vertical layout,
         # where the panel has a whole column of height to fill, spreads them
         # evenly down it.
         self._grid.setRowStretch(index, 1)
+        # The horizontal layout lets column 7 take the slack, as DS9 does;
+        # the narrow one has no column 7 to give it to.
+        self._grid.setColumnStretch(STRETCH_COLUMN, 0 if self._compact else 1)
+
+    def _lines(self, row: _Row) -> list[list[tuple[QWidget, int, int]]]:
+        """One row's grid lines, for whichever layout is in force."""
+        if not self._compact:
+            return [row.wide]
+        return [[(widget, column, 1) for widget, column in line] for line in row.narrow]
 
     # -- readout -------------------------------------------------------------
 
@@ -331,8 +424,12 @@ class InfoPanel(QWidget):
         not have (an alternate WCS that this file lacks, say) without guarding.
         """
         label = self._values.get(key)
-        if label is not None:
-            label.setText(text)
+        if label is None:
+            return
+        label.setText(text)
+        # A narrow cell clips -- DS9's Tk entries do the same -- so keep the
+        # whole value reachable on hover.
+        label.setToolTip(text)
 
     def set_filename(self, filename: str) -> None:
         """Show the loaded file's name."""

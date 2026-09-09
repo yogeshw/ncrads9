@@ -38,7 +38,7 @@ from ncrads9.ui.layout.view_state import (
     ViewLayout,
     ViewState,
 )
-from ncrads9.ui.panels.info_panel import InfoPanel
+from ncrads9.ui.panels.info_panel import MAX_CELL_WIDTH, STRETCH_COLUMN, InfoPanel
 
 # -- ViewState ---------------------------------------------------------------
 
@@ -395,3 +395,128 @@ def test_setting_an_image_does_not_need_data(panel):
     """The panel is a readout: it formats what it is handed, nothing more."""
     assert not hasattr(panel, "set_image")
     assert isinstance(np.float64(1.0), np.floating)
+
+
+# -- InfoPanel: DS9's narrow layout ------------------------------------------
+
+
+def _panel_rows(panel: InfoPanel) -> int:
+    """How many grid rows the panel currently occupies."""
+    positions = [panel._grid.getItemPosition(i)[0] for i in range(panel._grid.count())]
+    return max(positions, default=-1) + 1
+
+
+def _row_of(panel: InfoPanel, key: str) -> int:
+    """The grid row one value cell sits on."""
+    label = panel._values[key]
+    for index in range(panel._grid.count()):
+        if panel._grid.itemAt(index).widget() is label:
+            return panel._grid.getItemPosition(index)[0]
+    raise AssertionError(f"{key} is not gridded")
+
+
+def _column_of(panel: InfoPanel, key: str) -> int:
+    """The grid column one value cell sits in."""
+    label = panel._values[key]
+    for index in range(panel._grid.count()):
+        if panel._grid.itemAt(index).widget() is label:
+            return panel._grid.getItemPosition(index)[1]
+    raise AssertionError(f"{key} is not gridded")
+
+
+@pytest.mark.parametrize("layout", [ViewLayout.VERTICAL, ViewLayout.ADVANCED])
+def test_narrow_layouts_break_fields_over_lines(panel, layout):
+    """DS9's LayoutInfoPanelVert, which its Advanced procedure duplicates.
+
+    The seven default fields take one line each across the seven columns, and
+    2 + 2 + 2 + 3 + 3 + 3 + 3 = 18 lines in two columns.
+    """
+    panel.apply_state(ViewState())
+    assert _panel_rows(panel) == 7
+    panel.apply_state(ViewState(layout=layout))
+    assert _panel_rows(panel) == 18
+
+
+def test_narrow_layout_uses_two_columns(panel):
+    state = ViewState(layout=ViewLayout.VERTICAL)
+    panel.apply_state(state)
+    columns = {panel._grid.getItemPosition(i)[1] for i in range(panel._grid.count())}
+    assert columns == {0, 1}
+
+
+def test_narrow_layout_puts_the_value_under_its_title(panel):
+    panel.apply_state(ViewState(layout=ViewLayout.VERTICAL))
+    # File on one line, its value on the next.
+    assert _row_of(panel, "filename") == 1
+    assert _column_of(panel, "filename") == 1
+
+
+def test_narrow_layout_puts_axis_labels_in_column_zero(panel):
+    panel.apply_state(ViewState(layout=ViewLayout.VERTICAL))
+    # Image: title, then "x <value>", then "y <value>".
+    x_row = _row_of(panel, "image_x")
+    assert _row_of(panel, "image_y") == x_row + 1
+    assert _column_of(panel, "image_x") == 1
+    labels = [
+        panel._grid.itemAt(i).widget()
+        for i in range(panel._grid.count())
+        if panel._grid.getItemPosition(i)[:2] == (x_row, 0)
+    ]
+    assert [w.text() for w in labels] == ["x"]
+
+
+def test_narrow_minmax_takes_four_lines_each(panel):
+    """DS9: title, x, y, then the extremum on its own line."""
+    state = ViewState(layout=ViewLayout.VERTICAL)
+    state.set_field_visible("minmax", True)
+    panel.apply_state(state)
+    assert _row_of(panel, "min_y") == _row_of(panel, "min_x") + 1
+    assert _row_of(panel, "min") == _row_of(panel, "min_y") + 1
+    # Four lines per block, so Max's extremum lands four rows after Min's.
+    assert _row_of(panel, "max") == _row_of(panel, "min") + 4
+
+
+def test_narrow_frame_row_labels_the_angle_before_its_value(panel):
+    """The horizontal layout writes `Angle` after the value, the narrow one before."""
+    panel.apply_state(ViewState())
+    angle_column = _column_of(panel, "angle")
+    panel.apply_state(ViewState(layout=ViewLayout.VERTICAL))
+    assert _column_of(panel, "angle") == 1
+    assert angle_column == 4
+
+
+def test_switching_back_restores_the_wide_layout(panel):
+    panel.apply_state(ViewState(layout=ViewLayout.VERTICAL))
+    panel.apply_state(ViewState(layout=ViewLayout.HORIZONTAL))
+    assert _panel_rows(panel) == 7
+    assert _column_of(panel, "image_y") == 4
+
+
+def test_narrow_layout_caps_the_wide_cells(panel):
+    """DS9 drops every cell to thirteen characters in a column."""
+    panel.apply_state(ViewState(layout=ViewLayout.VERTICAL))
+    label = panel._values["filename"]
+    assert label.maximumWidth() < MAX_CELL_WIDTH
+    panel.apply_state(ViewState(layout=ViewLayout.HORIZONTAL))
+    assert panel._values["filename"].maximumWidth() == MAX_CELL_WIDTH
+
+
+def test_narrow_layout_has_nothing_in_the_stretch_column(panel):
+    panel.apply_state(ViewState(layout=ViewLayout.VERTICAL))
+    assert panel._grid.columnStretch(STRETCH_COLUMN) == 0
+    panel.apply_state(ViewState(layout=ViewLayout.HORIZONTAL))
+    assert panel._grid.columnStretch(STRETCH_COLUMN) == 1
+
+
+def test_a_clipped_cell_keeps_its_value_on_hover(panel):
+    panel.set_filename("/very/long/path/to/an/observation.fits")
+    assert panel._values["filename"].toolTip() == "/very/long/path/to/an/observation.fits"
+
+
+def test_hiding_a_field_removes_all_of_its_lines(panel):
+    state = ViewState(layout=ViewLayout.VERTICAL)
+    panel.apply_state(state)
+    before = _panel_rows(panel)
+    state.set_field_visible("image", False)
+    panel.apply_state(state)
+    assert _panel_rows(panel) == before - 3
