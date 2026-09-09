@@ -26,7 +26,6 @@ from numpy.typing import NDArray
 from PyQt6.QtCore import QPointF, Qt
 from PyQt6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
-    QDockWidget,
     QHBoxLayout,
     QLabel,
     QSpinBox,
@@ -34,9 +33,16 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+#: DS9's `imagnifier(size)` -- the magnifier is a fixed 128x128 square.
+MAGNIFIER_SIZE = 128
 
-class MagnifierPanel(QDockWidget):
-    """Dockable panel showing magnified view around cursor position."""
+
+class MagnifierPanel(QWidget):
+    """Panel showing a magnified view around the cursor.
+
+    A plain widget for the same reason as `PannerPanel`: DS9 packs the
+    magnifier into the fixed header row rather than letting it float.
+    """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         """
@@ -45,7 +51,7 @@ class MagnifierPanel(QDockWidget):
         Args:
             parent: Parent widget.
         """
-        super().__init__("Magnifier", parent)
+        super().__init__(parent)
         self.setObjectName("MagnifierPanel")
 
         self._zoom_factor: int = 4
@@ -58,8 +64,8 @@ class MagnifierPanel(QDockWidget):
 
     def _setup_ui(self) -> None:
         """Set up the user interface."""
-        container = QWidget()
-        layout = QVBoxLayout(container)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
 
         # Zoom control
         zoom_layout = QHBoxLayout()
@@ -75,12 +81,10 @@ class MagnifierPanel(QDockWidget):
 
         # Magnified view display
         self._magnifier_label = QLabel()
-        self._magnifier_label.setMinimumSize(256, 256)
+        self._magnifier_label.setFixedSize(MAGNIFIER_SIZE, MAGNIFIER_SIZE)
         self._magnifier_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._magnifier_label.setStyleSheet("background-color: black;")
         layout.addWidget(self._magnifier_label)
-
-        self.setWidget(container)
 
     def _on_zoom_changed(self, value: int) -> None:
         """Handle zoom factor change."""

@@ -27,7 +27,6 @@ from numpy.typing import NDArray
 from PyQt6.QtCore import QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QAction, QColor, QKeyEvent
 from PyQt6.QtWidgets import (
-    QDockWidget,
     QMainWindow,
     QScrollArea,
     QWidget,
@@ -61,8 +60,11 @@ from .controllers.vo import VOController
 from .controllers.wcs import WCSController
 from .controllers.zoom import ZoomController
 from .display import DisplayPipeline
+from .layout.shell import WindowShell
+from .layout.view_state import ViewState
 from .menu_bar import MenuBar
 from .panels.horizontal_graph import HorizontalGraph
+from .panels.info_panel import InfoPanel
 from .panels.magnifier import MagnifierPanel
 from .panels.panner import PannerPanel
 from .panels.vertical_graph import VerticalGraph
@@ -118,6 +120,8 @@ class MainWindow(QMainWindow):
         # Single source of truth for how coordinates are transformed and
         # written. Every coordinate string in the UI goes through it.
         self.coord_context = CoordinateContext()
+        # Which panels are shown and how they are arranged, at DS9's defaults.
+        self.view_state = ViewState()
         self._last_mouse_pos: tuple[int, int] | None = None
         self._preview_rgb_cache: NDArray[np.uint8] | None = None
         self._preview_rgb_cache_frame_id: int | None = None
@@ -150,7 +154,9 @@ class MainWindow(QMainWindow):
         self._crosshair_enabled = False
         self._crosshair_color = QColor(255, 0, 0)
         self._crosshair_size = 24
-        self._show_direction_arrows = True
+        # DS9 draws its N/E compass in the panner, not over the data, so the
+        # image overlay is opt-in via WCS -> Show Direction Arrows.
+        self._show_direction_arrows = False
         self._frame_display_mode = "single"
         self._tile_mode_enabled = False
         self._tile_arrangement_mode = "grid"
@@ -191,8 +197,8 @@ class MainWindow(QMainWindow):
         self._setup_menu_bar()
         self._setup_toolbar()
         self._setup_central_widget()
-        self._setup_dock_widgets()
         self._setup_status_bar()
+        self.view.apply()
         self.vo.init_samp()
         self.vo.sync_samp_menu()
         self.edit.apply_preferences(self.edit.preferences_dict(), persist=False, show_message=False)
@@ -360,7 +366,20 @@ class MainWindow(QMainWindow):
         self.image_viewer = self._create_image_viewer(self.use_gpu_rendering)
 
         self.scroll_area.setWidget(self.image_viewer)
-        self.setCentralWidget(self.scroll_area)
+
+        self._setup_panels()
+        self.shell = WindowShell(
+            info_panel=self.info_panel,
+            panner=self.panner_panel,
+            magnifier=self.magnifier_panel,
+            button_bar=self.button_bar,
+            image_area=self.scroll_area,
+            colorbar=self.colorbar_widget,
+            graph_horizontal=self.horizontal_graph,
+            graph_vertical=self.vertical_graph,
+            parent=self,
+        )
+        self.setCentralWidget(self.shell)
 
     def _create_image_viewer(self, use_gpu: bool):
         """Create an image viewer and connect signals."""
@@ -386,48 +405,46 @@ class MainWindow(QMainWindow):
             viewer.gl_canvas.zoom_changed.connect(lambda *_: self.zoom.update_panner_rect())
         return viewer
 
-    def _setup_dock_widgets(self) -> None:
-        """Set up dock widgets."""
-        # Left dock for button bar
-        self.button_bar_dock = QDockWidget("Controls", self)
-        self.button_bar = ButtonBar(self)
+    def _setup_panels(self) -> None:
+        """Create the panels the shell arranges.
 
-        # Connect button bar signals
-        self.button_bar.zoom_changed.connect(self.zoom.on_button_bar_zoom)
-        self.button_bar.scale_changed.connect(self.scale.on_button_bar_scale)
-        self.button_bar.colormap_changed.connect(self.color.on_button_bar_colormap)
-        self.button_bar.region_mode_changed.connect(self.region.on_button_bar_mode)
+        These were `QDockWidget`s until M3: draggable, tearable, and in the
+        panner's and magnifier's case a dock nested inside another dock, so
+        each carried two title bars. DS9 has no floating panels -- see
+        `ui/layout/shell.py`.
+        """
+        self.info_panel = InfoPanel(self)
 
-        self.button_bar_dock.setWidget(self.button_bar)
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.button_bar_dock)
+        self.button_bar = ButtonBar(self.menu_bar, self)
+        self.button_bar.command.connect(self._on_button_bar_command)
 
-        # Right dock for colorbar
-        self.colorbar_dock = QDockWidget("Colorbar", self)
         self.colorbar_widget = ColorbarWidget(self)
-        self.colorbar_dock.setWidget(self.colorbar_widget)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.colorbar_dock)
-        self.colorbar_dock.visibilityChanged.connect(self.menu_bar.action_colorbar.setChecked)
 
-        # Top-right dock for panner (DS9 style)
-        self.panner_dock = QDockWidget("Panner", self)
         self.panner_panel = PannerPanel(self)
         self.panner_panel.pan_to.connect(self.zoom.on_panner_pan)
-        self.panner_dock.setWidget(self.panner_panel)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.panner_dock)
 
-        # Top-right dock for magnifier (DS9 style)
-        self.magnifier_dock = QDockWidget("Magnifier", self)
         self.magnifier_panel = MagnifierPanel(self)
-        self.magnifier_dock.setWidget(self.magnifier_panel)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.magnifier_dock)
 
-        self.horizontal_graph_dock = HorizontalGraph(self)
-        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.horizontal_graph_dock)
-        self.horizontal_graph_dock.hide()
+        self.horizontal_graph = HorizontalGraph(self)
+        self.vertical_graph = VerticalGraph(self)
 
-        self.vertical_graph_dock = VerticalGraph(self)
-        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.vertical_graph_dock)
-        self.vertical_graph_dock.hide()
+    #: Button-bar command family -> the controller method that services it.
+    #: Buttons whose menu entry is a single `QAction` trigger that action
+    #: directly and never reach here; these are the ones with no such entry.
+    BUTTON_COMMANDS: dict[str, str] = {
+        "zoom": "on_button_bar_zoom",
+        "region": "on_button_bar_mode",
+    }
+
+    def _on_button_bar_command(self, command: str) -> None:
+        """Dispatch a button-bar command id of the form "family:label"."""
+        family, _, label = command.partition(":")
+        controller = {"zoom": self.zoom, "region": self.region}.get(family)
+        handler = self.BUTTON_COMMANDS.get(family)
+        if controller is None or handler is None:
+            self.statusBar().showMessage(f"Unhandled button: {command}", 2000)
+            return
+        getattr(controller, handler)(label)
 
     def _setup_status_bar(self) -> None:
         """Set up the status bar."""
@@ -499,10 +516,11 @@ class MainWindow(QMainWindow):
                 display_coords = viewer.map_image_to_display_coords(x, y)
                 if display_coords is not None:
                     self.magnifier_panel.update_cursor_position(*display_coords)
-        if hasattr(self, "horizontal_graph_dock") and self.horizontal_graph_dock.isVisible():
-            self.horizontal_graph_dock.update_cursor_position(x, row)
-        if hasattr(self, "vertical_graph_dock") and self.vertical_graph_dock.isVisible():
-            self.vertical_graph_dock.update_cursor_position(x, row)
+        self.view.update_cursor(x, y)
+        if hasattr(self, "horizontal_graph") and self.horizontal_graph.isVisible():
+            self.horizontal_graph.update_cursor_position(x, row)
+        if hasattr(self, "vertical_graph") and self.vertical_graph.isVisible():
+            self.vertical_graph.update_cursor_position(x, row)
         self.analysis.refresh_overlays()
 
     def _on_image_clicked(self, x: int, y: int, button: int) -> None:

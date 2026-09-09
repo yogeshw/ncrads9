@@ -35,9 +35,14 @@ from __future__ import annotations
 import copy
 from pathlib import Path
 
+from PyQt6.QtWidgets import QApplication
+
 from ...regions.base_region import BaseRegion
 from ...rendering.scale_algorithms import ScaleAlgorithm
 from ..dialogs.preferences_dialog import PreferencesDialog
+from ..themes.dark import DarkTheme
+from ..themes.default import DefaultTheme
+from ..themes.native import NativeTheme
 from .base import Controller
 
 #: Preference key -> default, and the full set the dialog round-trips.
@@ -49,11 +54,23 @@ PREFERENCE_DEFAULTS: dict[str, object] = {
     "default_scale": "Linear",
     "default_colormap": "gray",
     "anti_aliasing": True,
+    "theme": "System",
 }
 
 #: Image pixels a pasted region is shifted by, so it does not hide the
 #: original it was copied from.
 PASTE_OFFSET = 10.0
+
+#: Where the applied theme's name is kept, so re-applying can be skipped.
+THEME_PROPERTY = "ncrads9_theme"
+
+#: Preferences-dialog theme name -> the theme class. The three theme modules
+#: existed since before M0 and nothing ever called them; M3-8 wires them up.
+THEMES: dict[str, type] = {
+    "System": NativeTheme,
+    "Light": DefaultTheme,
+    "Dark": DarkTheme,
+}
 
 #: Preference name for a scale algorithm -> the algorithm.
 DEFAULT_SCALES: dict[str, ScaleAlgorithm] = {
@@ -149,6 +166,35 @@ class EditController(Controller):
         """Where preferences are stored."""
         return Path.home() / ".ncrads9" / "preferences.json"
 
+    def apply_theme(self, name: str) -> None:
+        """Restyle the application.
+
+        A theme is application-wide, not per-window: it sets the
+        `QApplication` stylesheet, and the System theme also swaps the
+        `QStyle`. Both walk every existing widget, so the current theme is
+        recorded on the application object and re-applying the same one is
+        skipped -- otherwise every window construction would restyle the
+        whole process, which is both wasteful and, with several windows
+        already up, a way to crash Qt.
+
+        Args:
+            name: "System", "Light" or "Dark". An unknown name leaves the
+                current styling alone rather than falling back, so a
+                hand-edited preferences file cannot silently change the look.
+        """
+        theme = THEMES.get(name)
+        if theme is None:
+            self.status(f"Unknown theme: {name}", 3000)
+            return
+
+        app = QApplication.instance()
+        if app is None:
+            return
+        if app.property(THEME_PROPERTY) == name:
+            return
+        theme.apply(app)
+        app.setProperty(THEME_PROPERTY, name)
+
     def preferences_dict(self) -> dict:
         """The current preferences, with defaults filled in."""
         store = self.window.preferences
@@ -192,6 +238,8 @@ class EditController(Controller):
                 self.viewer.set_tile_size(int(prefs.get("tile_size", 512)))
             if hasattr(self.viewer, "set_cache_size_mb"):
                 self.viewer.set_cache_size_mb(int(prefs.get("cache_size_mb", 1000)))
+
+        self.apply_theme(str(prefs.get("theme", "System")))
 
         window._apply_background_color(prefs.get("background_color", "#000000"))
 

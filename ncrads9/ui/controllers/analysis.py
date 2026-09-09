@@ -393,11 +393,11 @@ class AnalysisController(Controller):
     def show_graph_dialog(self) -> None:
         """Show graph panel visibility controls."""
         current = "None"
-        if self.window.horizontal_graph_dock.isVisible() and self.window.vertical_graph_dock.isVisible():
+        if self.window.horizontal_graph.isVisible() and self.window.vertical_graph.isVisible():
             current = "Both"
-        elif self.window.horizontal_graph_dock.isVisible():
+        elif self.window.horizontal_graph.isVisible():
             current = "Horizontal"
-        elif self.window.vertical_graph_dock.isVisible():
+        elif self.window.vertical_graph.isVisible():
             current = "Vertical"
         mode, ok = QInputDialog.getItem(
             self,
@@ -416,14 +416,14 @@ class AnalysisController(Controller):
         """Set visibility for horizontal/vertical graph docks."""
         show_horizontal = mode in ("Horizontal", "Both")
         show_vertical = mode in ("Vertical", "Both")
-        self.window.horizontal_graph_dock.setVisible(show_horizontal)
-        self.window.vertical_graph_dock.setVisible(show_vertical)
+        self.window.horizontal_graph.setVisible(show_horizontal)
+        self.window.vertical_graph.setVisible(show_vertical)
         self.log_command(f"graph {mode.lower()}")
         frame = self.frames.current_frame
         if frame and frame.image_data is not None:
             analysis_data = self.analysis_image_data(frame)
-            self.window.horizontal_graph_dock.set_image(analysis_data)
-            self.window.vertical_graph_dock.set_image(analysis_data)
+            self.window.horizontal_graph.set_image(analysis_data)
+            self.window.vertical_graph.set_image(analysis_data)
 
     def refresh_overlays(self) -> None:
         """Apply grid/crosshair overlay states to the active viewer."""

@@ -99,25 +99,25 @@ PENDING_ADOPTION: dict[str, str] = {
     "prism.line_id": "M9-9",
     "prism.prism_main": "M9-9",
     "prism.spectrum_plot": "M9-9",
-    # M3 -- the DS9 window layout reaches these panels and themes.
-    "ui.panels.info_panel": "M3-2",
-    "ui.panels.colorbar_panel": "M3-6",
+    # A second colorbar. The window shell hosts widgets/colorbar_widget.py,
+    # which is the one with the orientation, numerics, font, size and tick
+    # controls behind it; this panel has none of them. Delete, not adopt.
+    "ui.panels.colorbar_panel": "delete -- superseded by ui.widgets.colorbar_widget",
     "ui.panels.cube_panel": "M4-4",
-    "ui.themes.dark": "M3-8",
-    "ui.themes.default": "M3-8",
-    "ui.themes.native": "M3-8",
     # M4 -- FITS coverage.
     "core.cube_handler": "M4-4",
     "ui.dialogs.open_dialog": "M4-2",
     "ui.dialogs.save_dialog": "M4-10",
-    # Coordinate helpers. CoordinateContext (coord_system) is wired up; these
-    # per-frame classes are reached once the info panel shows multiple systems.
-    "coordinates.ecliptic": "M3-7",
-    "coordinates.fk4_fk5": "M3-7",
-    "coordinates.galactic": "M3-7",
-    "coordinates.image_coords": "M3-7",
-    "coordinates.physical_coords": "M3-7",
-    "coordinates.wcs_coords": "M3-7",
+    # Per-system coordinate value objects, each a thin wrapper over SkyCoord.
+    # M1 replaced their job with CoordinateContext, and M3's information panel
+    # uses that plus PhysicalTransform and WCSHandler(key=...) -- so the
+    # milestone that was meant to adopt them has been finished without them.
+    # Nothing imports any of the five. Delete, not adopt.
+    "coordinates.ecliptic": "delete -- superseded by CoordinateContext",
+    "coordinates.fk4_fk5": "delete -- superseded by CoordinateContext",
+    "coordinates.galactic": "delete -- superseded by CoordinateContext",
+    "coordinates.image_coords": "delete -- superseded by CoordinateContext",
+    "coordinates.wcs_coords": "delete -- superseded by CoordinateContext",
     # Widgets with no host yet.
     "ui.dialogs.region_dialog": "M6-7",
     "ui.widgets.region_list": "M6-15",
@@ -128,7 +128,9 @@ PENDING_ADOPTION: dict[str, str] = {
     "colormaps.colorbar_widget": "M5-12 (PyQt5-era code, or delete)",
     # Utilities nothing calls yet.
     "utils.math_utils": "M5-1",
-    "utils.resources": "M3-3",
+    # Was expected to load the buttonbar's icons. DS9's buttonbar is text,
+    # so M3-3's is too, and this has no caller until the icon bars land.
+    "utils.resources": "M9-24",
     "utils.threading": "M8-13",
 }
 
@@ -257,10 +259,12 @@ def test_pending_modules_exist(module):
 def test_orphan_count_does_not_grow():
     """A ratchet on the headline number from PLAN.md §3.1.
 
-    M1 brought the orphan count down from 116 to 71. Raise this ceiling only
+    M1 brought the orphan count down from 116 to 71, and M3 to 69 by
+    adopting the information panel and the physical-coordinate transform.
+    Raise this ceiling only
     when a milestone deliberately adds an unreachable module -- never to make
     a failing run pass.
     """
-    assert len(ORPHANS) <= 71, (
-        f"{len(ORPHANS)} orphan modules; the M1 baseline is 71. " "New unreachable code needs a reason."
+    assert len(ORPHANS) <= 69, (
+        f"{len(ORPHANS)} orphan modules; the M3 baseline is 69. " "New unreachable code needs a reason."
     )

@@ -474,8 +474,8 @@ class XPACommands:
                 visible = candidate
         if visible is not None:
             visible_bool = self._as_bool(visible)
-            if visible_bool is not None and hasattr(self.viewer, "colorbar_dock"):
-                self.viewer.colorbar_dock.setVisible(visible_bool)
+            if visible_bool is not None and hasattr(self.viewer.view, "set_colorbar_visible"):
+                self.viewer.view.set_colorbar_visible(visible_bool)
 
         orientation = params.get("orientation")
         if orientation is None and args:
@@ -514,8 +514,9 @@ class XPACommands:
                 pass
 
         result = "yes"
-        if hasattr(self.viewer, "colorbar_dock"):
-            result = "yes" if self.viewer.colorbar_dock.isVisible() else "no"
+        state = getattr(self.viewer, "view_state", None)
+        if state is not None:
+            result = "yes" if state.colorbar else "no"
         return {"status": "ok", "result": result}
 
     def _handle_regions(self, params: dict[str, Any]) -> dict[str, Any]:

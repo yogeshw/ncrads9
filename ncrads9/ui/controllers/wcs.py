@@ -130,19 +130,23 @@ class WCSController(Controller):
         The arrows point along increasing declination and increasing right
         ascension at the image centre, then go through the same display
         transform as the image so they stay correct under rotation and flips.
-        """
-        if not hasattr(self.viewer, "set_direction_arrows"):
-            return
 
-        data = self.window.image_data
-        if (
-            self.window._tile_mode_enabled
-            or not self.window._show_direction_arrows
-            or not self._has_wcs
-            or data is None
-        ):
-            self.viewer.set_direction_arrows(None, None, False)
+        The result goes to the panner, which is where DS9 draws its compass,
+        and -- only while `WCS -> Show Direction Arrows` is ticked -- over the
+        image as well. NCRADS9 used to draw them over the image alone, on top
+        of the data; that is now off by default (M3-9).
+        """
+        vectors = self._compass_vectors()
+        if vectors is None:
+            self._publish_compass(None, None, False)
             return
+        self._publish_compass(*vectors, True)
+
+    def _compass_vectors(self) -> tuple[tuple[float, float], tuple[float, float]] | None:
+        """North and east as display-space vectors, or None if unavailable."""
+        data = self.window.image_data
+        if self.window._tile_mode_enabled or not self._has_wcs or data is None:
+            return None
 
         handler = self.window.wcs_handler
         height, width = data.shape[:2]
@@ -164,8 +168,21 @@ class WCSController(Controller):
             flip_x=frame.flip_x if frame is not None else False,
             flip_y=frame.flip_y if frame is not None else False,
         )
-        self.viewer.set_direction_arrows(
+        return (
             transform.source_vector_to_display(float(nx - cx), float(ny - cy)),
             transform.source_vector_to_display(float(ex - cx), float(ey - cy)),
-            True,
         )
+
+    def _publish_compass(
+        self,
+        north: tuple[float, float] | None,
+        east: tuple[float, float] | None,
+        valid: bool,
+    ) -> None:
+        """Send the compass to the panner, and to the image if asked for."""
+        panner = getattr(self.window, "panner_panel", None)
+        if panner is not None:
+            panner.set_compass(north, east, valid)
+        if hasattr(self.viewer, "set_direction_arrows"):
+            on_image = valid and self.window._show_direction_arrows
+            self.viewer.set_direction_arrows(north, east, on_image)

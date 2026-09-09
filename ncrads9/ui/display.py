@@ -386,12 +386,12 @@ class DisplayPipeline:
         ):
             return
         transformed_preview = self.transform_preview(self.window._preview_rgb_cache, frame)
-        if hasattr(self, "panner_panel"):
+        if hasattr(self.window, "panner_panel"):
             self.window.panner_panel.set_image(
                 transformed_preview,
                 source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
             )
-        if hasattr(self, "magnifier_panel"):
+        if hasattr(self.window, "magnifier_panel"):
             self.window.magnifier_panel.set_image(
                 transformed_preview,
                 source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
@@ -403,6 +403,7 @@ class DisplayPipeline:
         self.update_preview_panels(frame)
         self.window.zoom.update_panner_rect()
         self.window.wcs.update_direction_arrows()
+        self.window.view.refresh_info()
         if self.window._last_mouse_pos is not None:
             self.window._on_mouse_moved(*self.window._last_mouse_pos)
 
@@ -497,7 +498,7 @@ class DisplayPipeline:
         transformed_preview = self.transform_preview(preview_rgb, frame)
 
         # Update panner panel with RGB data (DS9 style)
-        if hasattr(self, "panner_panel"):
+        if hasattr(self.window, "panner_panel"):
             self.window.panner_panel.set_image(
                 transformed_preview,
                 source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
@@ -505,15 +506,15 @@ class DisplayPipeline:
             self.window.zoom.update_panner_rect()
 
         # Update magnifier panel with RGB data (DS9 style)
-        if hasattr(self, "magnifier_panel"):
+        if hasattr(self.window, "magnifier_panel"):
             self.window.magnifier_panel.set_image(
                 transformed_preview,
                 source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
             )
-        if hasattr(self, "horizontal_graph_dock"):
-            self.window.horizontal_graph_dock.set_image(image_data)
-        if hasattr(self, "vertical_graph_dock"):
-            self.window.vertical_graph_dock.set_image(image_data)
+        if hasattr(self.window, "horizontal_graph"):
+            self.window.horizontal_graph.set_image(image_data)
+        if hasattr(self.window, "vertical_graph"):
+            self.window.vertical_graph.set_image(image_data)
 
         # Update zoom display
         self.status_bar.update_zoom(self.viewer.get_zoom())
@@ -523,6 +524,7 @@ class DisplayPipeline:
         if self.window._contour_settings is not None:
             self.window.analysis.update_contours()
         self.window.wcs.update_direction_arrows()
+        self.window.view.refresh_info()
         self.window.analysis.refresh_overlays()
 
     def display_rgb_frame(self, frame: Frame) -> bool:
@@ -572,21 +574,21 @@ class DisplayPipeline:
         self.cache_preview(frame, display_rgb)
         transformed_preview = self.transform_preview(display_rgb, frame)
 
-        if hasattr(self, "panner_panel"):
+        if hasattr(self.window, "panner_panel"):
             self.window.panner_panel.set_image(
                 transformed_preview,
                 source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
             )
             self.window.zoom.update_panner_rect()
-        if hasattr(self, "magnifier_panel"):
+        if hasattr(self.window, "magnifier_panel"):
             self.window.magnifier_panel.set_image(
                 transformed_preview,
                 source_size=(transformed_preview.shape[1], transformed_preview.shape[0]),
             )
-        if hasattr(self, "horizontal_graph_dock"):
-            self.window.horizontal_graph_dock.set_image(active_data)
-        if hasattr(self, "vertical_graph_dock"):
-            self.window.vertical_graph_dock.set_image(active_data)
+        if hasattr(self.window, "horizontal_graph"):
+            self.window.horizontal_graph.set_image(active_data)
+        if hasattr(self.window, "vertical_graph"):
+            self.window.vertical_graph.set_image(active_data)
 
         self.status_bar.update_image_info(composite.shape[1], composite.shape[0])
         self.status_bar.update_zoom(self.viewer.get_zoom())
@@ -596,6 +598,7 @@ class DisplayPipeline:
         if self.window._contour_settings is not None:
             self.window.analysis.update_contours()
         self.window.wcs.update_direction_arrows()
+        self.window.view.refresh_info()
         self.window.analysis.refresh_overlays()
         return True
 
@@ -694,10 +697,10 @@ class DisplayPipeline:
             self.viewer.clear_contours()
         if hasattr(self.viewer, "set_direction_arrows"):
             self.viewer.set_direction_arrows(None, None, False)
-        if hasattr(self, "panner_panel"):
+        if hasattr(self.window, "panner_panel"):
             self.window.panner_panel.set_image(display_rgb)
             self.window.panner_panel.set_view_rect(None)
-        if hasattr(self, "magnifier_panel"):
+        if hasattr(self.window, "magnifier_panel"):
             self.window.magnifier_panel.set_image(display_rgb)
         self.status_bar.update_image_info(tiled_w, tiled_h)
         self.status_bar.update_zoom(self.viewer.get_zoom())

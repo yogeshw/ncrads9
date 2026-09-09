@@ -3,6 +3,7 @@ from pathlib import Path
 from ncrads9.communication.xpa.xpa_commands import XPACommands
 from ncrads9.coordinates.coord_system import CoordinateContext
 from ncrads9.rendering.scale_algorithms import ScaleAlgorithm
+from ncrads9.ui.layout.view_state import ViewState
 
 
 class _DummyAction:
@@ -43,15 +44,14 @@ class _DummyStatusBar:
         self.zoom = zoom
 
 
-class _DummyDock:
-    def __init__(self) -> None:
-        self._visible = True
+class _DummyViewController:
+    """Stands in for `ViewController`, which owns colorbar visibility."""
 
-    def setVisible(self, visible: bool) -> None:
-        self._visible = visible
+    def __init__(self, state) -> None:
+        self._state = state
 
-    def isVisible(self) -> bool:
-        return self._visible
+    def set_colorbar_visible(self, visible: bool) -> None:
+        self._state.colorbar = bool(visible)
 
 
 class _DummyColorbarWidget:
@@ -238,7 +238,10 @@ class _DummyViewer:
         self._blink_timer = _DummyTimer()
         self.image_viewer = _DummyImageViewer()
         self.status_bar = _DummyStatusBar()
-        self.colorbar_dock = _DummyDock()
+        # Colorbar visibility became a View-menu flag in M3, so it is read
+        # off the window's ViewState rather than a dock's isVisible().
+        self.view_state = ViewState()
+        self.view = _DummyViewController(self.view_state)
         self.colorbar_widget = _DummyColorbarWidget()
         self.current_colormap = "grey"
         self.current_scale = ScaleAlgorithm.LINEAR
@@ -339,7 +342,7 @@ def test_colorbar_extended_commands():
         "colorbar",
         {"visible": False, "orientation": "horizontal", "numerics": False, "ticks": 5, "size": 24},
     )
-    assert viewer.colorbar_dock.isVisible() is False
+    assert viewer.view_state.colorbar is False
     assert viewer.colorbar_orientation == "horizontal"
     assert viewer.colorbar_numerics is False
     assert viewer.colorbar_widget.tick_count == 5

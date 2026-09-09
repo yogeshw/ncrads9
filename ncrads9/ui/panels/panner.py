@@ -21,11 +21,22 @@ Author: Yogesh Wadadekar
 """
 
 
+import math
+
 import numpy as np
 from numpy.typing import NDArray
-from PyQt6.QtCore import QRectF, Qt, pyqtSignal
+from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QImage, QMouseEvent, QPainter, QPen, QPixmap
-from PyQt6.QtWidgets import QDockWidget, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
+
+#: DS9's `ipanner(size)` -- the panner is a fixed 128x128 square.
+PANNER_SIZE = 128
+#: How long the compass arrows are drawn, in panner pixels.
+COMPASS_LENGTH = 22
+#: Where the compass sits, inset from the panner's bottom-left corner.
+COMPASS_INSET = 6
+#: How far past the arrow head its N/E letter is drawn.
+COMPASS_LABEL_GAP = 6
 
 
 class PannerLabel(QLabel):
@@ -72,8 +83,14 @@ class PannerLabel(QLabel):
         self.pan_requested.emit(x, y)
 
 
-class PannerPanel(QDockWidget):
-    """Dockable panel showing image overview with pan rectangle."""
+class PannerPanel(QWidget):
+    """Panel showing an image overview with the current view rectangle.
+
+    A plain widget, not a dock: DS9 packs the panner into the fixed header row
+    (`LayoutViewHorz` in `ds9/library/layout.tcl`), and the shell does the
+    same. It used to be a `QDockWidget` placed *inside* another dock, which
+    gave it two title bars and let the user tear it out of the window.
+    """
 
     pan_to = pyqtSignal(float, float)
 
@@ -84,29 +101,30 @@ class PannerPanel(QDockWidget):
         Args:
             parent: Parent widget.
         """
-        super().__init__("Panner", parent)
+        super().__init__(parent)
         self.setObjectName("PannerPanel")
 
         self._current_image: NDArray[np.float64] | None = None
         self._view_rect: QRectF | None = None
-        self._thumbnail_size: int = 200
+        self._thumbnail_size: int = PANNER_SIZE
         self._source_image_size: tuple[int, int] | None = None
+        self._north: tuple[float, float] | None = None
+        self._east: tuple[float, float] | None = None
+        self._show_compass: bool = True
 
         self._setup_ui()
 
     def _setup_ui(self) -> None:
         """Set up the user interface."""
-        container = QWidget()
-        layout = QVBoxLayout(container)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
 
         self._panner_label = PannerLabel()
-        self._panner_label.setMinimumSize(self._thumbnail_size, self._thumbnail_size)
+        self._panner_label.setFixedSize(self._thumbnail_size, self._thumbnail_size)
         self._panner_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._panner_label.setStyleSheet("background-color: black;")
         self._panner_label.pan_requested.connect(self._on_pan_requested)
         layout.addWidget(self._panner_label)
-
-        self.setWidget(container)
 
     def _on_pan_requested(self, x: float, y: float) -> None:
         """Handle pan request from label click."""
@@ -131,6 +149,60 @@ class PannerPanel(QDockWidget):
         else:
             self._source_image_size = source_size
         self._update_thumbnail()
+
+    def set_compass(
+        self,
+        north: tuple[float, float] | None,
+        east: tuple[float, float] | None,
+        visible: bool = True,
+    ) -> None:
+        """Set the WCS compass drawn over the thumbnail.
+
+        DS9 draws this compass in the panner, not on the image -- the panner
+        widget in `tksao` carries both a WCS compass and an image-orientation
+        one. NCRADS9 drew the N/E arrows over the image itself, where they sat
+        on top of the data; this is where a DS9 user looks for them.
+
+        Args:
+            north: Screen-space (dx, dy) along increasing declination, or None
+                when the frame has no usable WCS.
+            east: Screen-space (dx, dy) along increasing right ascension.
+            visible: Whether to draw the compass at all.
+        """
+        self._north = north
+        self._east = east
+        self._show_compass = visible
+        self._update_thumbnail()
+
+    def _draw_compass(self, painter: QPainter, size: tuple[int, int]) -> None:
+        """Draw the N and E arrows in the panner's bottom-left corner."""
+        if not self._show_compass or self._north is None or self._east is None:
+            return
+
+        width, height = size
+        origin = QPointF(COMPASS_INSET + COMPASS_LENGTH, height - COMPASS_INSET - COMPASS_LENGTH)
+        if origin.x() > width or origin.y() < 0:
+            return
+
+        painter.setPen(QPen(QColor(0, 255, 0), 1))
+        for vector, label in ((self._north, "N"), (self._east, "E")):
+            dx, dy = vector
+            norm = math.hypot(dx, dy)
+            if norm <= 0:
+                continue
+            tip = QPointF(
+                origin.x() + dx / norm * COMPASS_LENGTH,
+                origin.y() + dy / norm * COMPASS_LENGTH,
+            )
+            painter.drawLine(origin, tip)
+            # Nudge the letter clear of the arrow head.
+            painter.drawText(
+                QPointF(
+                    tip.x() + dx / norm * COMPASS_LABEL_GAP - COMPASS_LABEL_GAP / 2,
+                    tip.y() + dy / norm * COMPASS_LABEL_GAP + COMPASS_LABEL_GAP / 2,
+                ),
+                label,
+            )
 
     def set_view_rect(self, rect: QRectF | None) -> None:
         """
@@ -207,7 +279,7 @@ class PannerPanel(QDockWidget):
             view_cover_x = self._view_rect.width() / max(source_w, 1)
             view_cover_y = self._view_rect.height() / max(source_h, 1)
             if view_cover_x >= 0.98 and view_cover_y >= 0.98:
-                self._panner_label.setPixmap(pixmap)
+                self._paint_overlay(pixmap)
                 return
 
             if is_rgb:
@@ -243,6 +315,17 @@ class PannerPanel(QDockWidget):
                 self._view_rect.height() * scale,
             )
             painter.drawRect(scaled_rect)
+            self._draw_compass(painter, (pixmap.width(), pixmap.height()))
             painter.end()
+            self._panner_label.setPixmap(pixmap)
+            return
 
+        self._paint_overlay(pixmap)
+
+    def _paint_overlay(self, pixmap: QPixmap) -> None:
+        """Draw the compass onto a thumbnail that has no view rectangle."""
+        if self._show_compass and self._north is not None and self._east is not None:
+            painter = QPainter(pixmap)
+            self._draw_compass(painter, (pixmap.width(), pixmap.height()))
+            painter.end()
         self._panner_label.setPixmap(pixmap)

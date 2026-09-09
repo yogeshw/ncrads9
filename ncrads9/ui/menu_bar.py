@@ -24,6 +24,8 @@ Author: Yogesh Wadadekar
 from PyQt6.QtGui import QAction, QActionGroup, QKeySequence
 from PyQt6.QtWidgets import QMenu, QMenuBar, QWidget
 
+from .layout.view_state import DEFAULT_INFO_FIELDS, WCS_SUFFIXES
+
 
 class MenuBar(QMenuBar):
     """Menu bar with DS9-style menus."""
@@ -117,20 +119,114 @@ class MenuBar(QMenuBar):
         self.edit_menu.addAction(self.action_preferences)
 
     def _setup_view_menu(self) -> None:
-        """Set up the View menu."""
+        """Set up the View menu.
+
+        DS9's `ViewMainMenu` (`ds9/library/mview.tcl`) in order: the four
+        layouts as one radio group, then the panel toggles, then the frame
+        decorations, then one toggle per information-panel field with the
+        twenty-six alternate WCS systems on a submenu. NCRADS9 adds Fullscreen
+        and Show Status Bar at the end, which DS9 has nowhere.
+
+        DS9's `Icons` toggle shows and hides its icon bars; the closest thing
+        NCRADS9 has is the toolbar, so `action_show_toolbar` is an alias of
+        the same action rather than a second entry that could disagree with it.
+        """
         self.view_menu: QMenu = self.addMenu("&View")
+
+        layout_group = QActionGroup(self)
+        layout_group.setExclusive(True)
+        for attribute, label, checked in (
+            ("action_view_horizontal", "&Horizontal", True),
+            ("action_view_vertical", "&Vertical", False),
+            ("action_view_basic", "&Basic", False),
+            ("action_view_advanced", "&Advanced", False),
+        ):
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(checked)
+            layout_group.addAction(action)
+            self.view_menu.addAction(action)
+            setattr(self, attribute, action)
+
+        self.view_menu.addSeparator()
+
+        for attribute, label, checked in (
+            ("action_view_info", "&Information Panel", True),
+            ("action_view_panner", "&Panner", True),
+            ("action_view_magnifier", "&Magnifier", True),
+            ("action_view_buttons", "B&uttons", True),
+            ("action_view_icons", "&Icons", True),
+        ):
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(checked)
+            self.view_menu.addAction(action)
+            setattr(self, attribute, action)
+
+        #: DS9 has no separate toolbar toggle; its icon bars are `Icons`.
+        self.action_show_toolbar: QAction = self.action_view_icons
+
+        self.view_menu.addSeparator()
+
+        for attribute, label, checked in (
+            ("action_view_colorbar", "Color&bar", True),
+            ("action_view_multi_colorbar", "Multiple Colorbar&s", True),
+            ("action_view_graph_horizontal", "Hori&zontal Graph", False),
+            ("action_view_graph_vertical", "Vertica&l Graph", False),
+        ):
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(checked)
+            self.view_menu.addAction(action)
+            setattr(self, attribute, action)
+
+        self.view_menu.addSeparator()
+
+        #: Information-panel field name -> its toggle. Keyed by the names in
+        #: `ui/layout/view_state.INFO_FIELDS`, so the controller can walk the
+        #: two together.
+        self.info_field_actions: dict[str, QAction] = {}
+        for name, label in (
+            ("filename", "Filename"),
+            ("object", "Object"),
+            ("keyword", "Keyword"),
+            ("minmax", "Min Max"),
+            ("lowhigh", "Low High"),
+            ("bunit", "Units"),
+            ("wcs", "WCS"),
+        ):
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(name in DEFAULT_INFO_FIELDS)
+            self.view_menu.addAction(action)
+            self.info_field_actions[name] = action
+
+        self.multiple_wcs_menu: QMenu = self.view_menu.addMenu("Multiple &WCS")
+        for suffix in WCS_SUFFIXES:
+            action = QAction(f"WCS {suffix}", self)
+            action.setCheckable(True)
+            self.multiple_wcs_menu.addAction(action)
+            self.info_field_actions[f"wcs_{suffix}"] = action
+
+        for name, label in (
+            ("image", "Image"),
+            ("physical", "Physical"),
+            ("amplifier", "Amplifier"),
+            ("detector", "Detector"),
+            ("frame", "Frame Information"),
+        ):
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(name in DEFAULT_INFO_FIELDS)
+            self.view_menu.addAction(action)
+            self.info_field_actions[name] = action
+
+        self.view_menu.addSeparator()
 
         self.action_fullscreen: QAction = QAction("&Fullscreen", self)
         self.action_fullscreen.setShortcut("F11")
         self.action_fullscreen.setCheckable(True)
         self.view_menu.addAction(self.action_fullscreen)
-
-        self.view_menu.addSeparator()
-
-        self.action_show_toolbar: QAction = QAction("Show &Toolbar", self)
-        self.action_show_toolbar.setCheckable(True)
-        self.action_show_toolbar.setChecked(True)
-        self.view_menu.addAction(self.action_show_toolbar)
 
         self.action_show_statusbar: QAction = QAction("Show &Status Bar", self)
         self.action_show_statusbar.setCheckable(True)
@@ -718,9 +814,10 @@ class MenuBar(QMenuBar):
 
         self.color_menu.addSeparator()
 
-        self.action_colorbar: QAction = QAction("Show Color&bar", self)
-        self.action_colorbar.setCheckable(True)
-        self.action_colorbar.setChecked(True)
+        # DS9 keeps colorbar visibility in the View menu only; NCRADS9 also
+        # offers it here. Same action in both menus, so the two tick marks
+        # cannot disagree.
+        self.action_colorbar: QAction = self.action_view_colorbar
         self.color_menu.addAction(self.action_colorbar)
 
         self.colorbar_submenu: QMenu = self.color_menu.addMenu("Colorbar &Options")
@@ -728,11 +825,13 @@ class MenuBar(QMenuBar):
         self.colorbar_orientation_menu: QMenu = self.colorbar_submenu.addMenu("&Orientation")
         self.colorbar_orientation_group = QActionGroup(self)
         self.colorbar_orientation_group.setExclusive(True)
+        # Horizontal by default, matching DS9, which lays the colorbar out
+        # under the canvas.
         self.action_colorbar_horizontal: QAction = QAction("&Horizontal", self)
         self.action_colorbar_horizontal.setCheckable(True)
+        self.action_colorbar_horizontal.setChecked(True)
         self.action_colorbar_vertical: QAction = QAction("&Vertical", self)
         self.action_colorbar_vertical.setCheckable(True)
-        self.action_colorbar_vertical.setChecked(True)
         self.colorbar_orientation_menu.addAction(self.action_colorbar_horizontal)
         self.colorbar_orientation_menu.addAction(self.action_colorbar_vertical)
         self.colorbar_orientation_group.addAction(self.action_colorbar_horizontal)
@@ -927,9 +1026,10 @@ class MenuBar(QMenuBar):
 
         self.wcs_menu.addSeparator()
 
+        # Off by default since M3: the compass lives in the panner, as it
+        # does in DS9. This draws it over the image as well.
         self.action_show_direction_arrows: QAction = QAction("Show &Direction Arrows", self)
         self.action_show_direction_arrows.setCheckable(True)
-        self.action_show_direction_arrows.setChecked(True)
         self.wcs_menu.addAction(self.action_show_direction_arrows)
 
     def _setup_analysis_menu(self) -> None:

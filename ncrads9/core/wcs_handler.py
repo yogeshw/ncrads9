@@ -30,6 +30,28 @@ from astropy.io import fits
 from astropy.wcs import WCS
 from numpy.typing import NDArray
 
+#: The letters FITS allows for an alternate WCS description.
+ALTERNATE_KEYS: tuple[str, ...] = tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+
+def available_alternates(header: fits.Header | None) -> tuple[str, ...]:
+    """Which alternate WCS descriptions a header actually carries.
+
+    A header declares an alternate by suffixing its keywords with a letter,
+    so `CTYPE1A` marks description "A" as present. Returns the letters in
+    order, lowercased to match the `wcs_a`..`wcs_z` field names the
+    information panel and the View menu use.
+
+    Args:
+        header: A FITS header, or None.
+
+    Returns:
+        The suffixes present, e.g. ("a", "d").
+    """
+    if header is None:
+        return ()
+    return tuple(key.lower() for key in ALTERNATE_KEYS if f"CTYPE1{key}" in header)
+
 
 class WCSHandler:
     """Handler class for WCS coordinate transformations.
@@ -45,19 +67,31 @@ class WCSHandler:
         self,
         header: fits.Header | None = None,
         wcs: WCS | None = None,
+        key: str = "",
     ) -> None:
         """Initialize WCSHandler.
 
         Args:
             header: FITS header to extract WCS from.
             wcs: Existing WCS object to wrap.
+            key: Which WCS description to read, "" for the primary or a
+                single letter "A".."Z" for one of the alternates FITS allows
+                (`CTYPE1A`, `CRVAL1A` and so on). DS9 offers all twenty-six
+                on its `View -> Multiple WCS` submenu.
         """
         self._wcs: WCS | None = None
+        self._key = key.upper()
 
         if wcs is not None:
             self._wcs = wcs
         elif header is not None:
-            self._wcs = WCS(header)
+            # astropy spells the primary description as a space, not "".
+            self._wcs = WCS(header, key=self._key or " ")
+
+    @property
+    def key(self) -> str:
+        """The WCS description this handler reads: "" or "A".."Z"."""
+        return self._key
 
     @property
     def wcs(self) -> WCS | None:
@@ -79,7 +113,8 @@ class WCSHandler:
             y: Y pixel coordinate(s).
 
         Returns:
-            Tuple of (RA, Dec) in degrees.
+            Tuple of (longitude, latitude) in degrees, in whatever frame the
+            WCS declares -- (RA, Dec) for an equatorial one.
 
         Raises:
             ValueError: If WCS is not initialized.
@@ -89,7 +124,11 @@ class WCSHandler:
 
         world = self._wcs.pixel_to_world(x, y)
         if isinstance(world, SkyCoord):
-            return world.ra.deg, world.dec.deg
+            # `.ra`/`.dec` exist only on equatorial frames, and an alternate
+            # WCS description is often galactic or ecliptic; the spherical
+            # representation names its axes the same way for every frame.
+            spherical = world.spherical
+            return spherical.lon.deg, spherical.lat.deg
         return world
 
     def world_to_pixel(

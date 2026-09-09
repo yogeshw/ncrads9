@@ -26,6 +26,16 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QImage, QPainter, QPixmap
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
+#: Room left below (or beside) the bar for its tick labels.
+NUMERICS_ALLOWANCE = 22
+#: Room left for the colormap-name label above the bar.
+NAME_ALLOWANCE = 20
+#: Extra width a vertical colorbar needs, its labels being written across.
+VERTICAL_LABEL_ALLOWANCE = 44
+#: The bar never gets thinner than this along its long edge, nor wider.
+MIN_LONG_EDGE = 120
+MAX_LONG_EDGE = 16777215
+
 
 class ColorbarWidget(QWidget):
     """Widget displaying a colorbar with scale values."""
@@ -43,14 +53,13 @@ class ColorbarWidget(QWidget):
         self.vmax = 1.0
         self.colormap_name = "grey"
         self.inverted = False
-        self.orientation = "vertical"
+        # DS9 lays the colorbar out horizontally under the canvas.
+        self.orientation = "horizontal"
         self.show_numerics = True
         self.spacing_mode = "value"
         self.tick_count = 7
         self.bar_size = 40
         self.label_font_size = 8
-
-        self.setMinimumSize(140, 200)
 
         layout = QVBoxLayout()
         layout.setContentsMargins(5, 5, 5, 5)
@@ -62,11 +71,10 @@ class ColorbarWidget(QWidget):
 
         # Colorbar display
         self.colorbar_label = QLabel()
-        self.colorbar_label.setMinimumHeight(150)
-        self.colorbar_label.setMinimumWidth(120)
         layout.addWidget(self.colorbar_label, 1)
 
         self.setLayout(layout)
+        self._apply_size_constraints()
 
     def set_colormap(
         self, colormap_data: np.ndarray, vmin: float, vmax: float, name: str, inverted: bool = False
@@ -195,7 +203,13 @@ class ColorbarWidget(QWidget):
             norm = 0.0 if self.vmax == self.vmin else (value - self.vmin) / (self.vmax - self.vmin)
             x_pos = int(np.clip(norm, 0, 1) * (bar_width - 1))
             painter.drawLine(x_pos, bar_height, x_pos, bar_height + tick_length)
-            painter.drawText(x_pos - 16, bar_height + tick_length + 12, f"{value:.3g}")
+            # Keep the end labels inside the bar: centred on the tick they
+            # would hang off both edges, which is what the first and last
+            # numbers used to do once the bar spanned the whole canvas.
+            text = f"{value:.3g}"
+            text_width = painter.fontMetrics().horizontalAdvance(text)
+            left = int(np.clip(x_pos - text_width / 2, 0, max(0, bar_width - text_width)))
+            painter.drawText(left, bar_height + tick_length + 12, text)
 
     def set_orientation(self, orientation: str) -> None:
         """Set colorbar orientation (vertical or horizontal)."""
@@ -203,6 +217,7 @@ class ColorbarWidget(QWidget):
         if orientation_l not in {"vertical", "horizontal"}:
             return
         self.orientation = orientation_l
+        self._apply_size_constraints()
         self._update_colorbar()
 
     def set_show_numerics(self, show: bool) -> None:
@@ -226,12 +241,34 @@ class ColorbarWidget(QWidget):
     def set_bar_size(self, size: int) -> None:
         """Set bar thickness/height depending on orientation."""
         self.bar_size = max(12, int(size))
+        self._apply_size_constraints()
         self._update_colorbar()
 
     def set_label_font_size(self, size: int) -> None:
         """Set numeric label font size."""
         self.label_font_size = max(6, int(size))
         self._update_colorbar()
+
+    def _apply_size_constraints(self) -> None:
+        """Pin the thin dimension and let the long one stretch.
+
+        The widget used to be sized for a dock down the right-hand edge -- a
+        140x200 minimum -- which, once it sits under the canvas in the window
+        shell, would take a fifth of the window's height. DS9's colorbar is a
+        strip as wide as the canvas and only as tall as the bar plus its tick
+        labels.
+        """
+        thickness = self.bar_size + NUMERICS_ALLOWANCE + NAME_ALLOWANCE
+        if self.orientation == "horizontal":
+            self.setMaximumHeight(thickness)
+            self.setMinimumHeight(thickness)
+            self.setMinimumWidth(MIN_LONG_EDGE)
+            self.setMaximumWidth(MAX_LONG_EDGE)
+        else:
+            self.setMaximumWidth(thickness + VERTICAL_LABEL_ALLOWANCE)
+            self.setMinimumWidth(thickness + VERTICAL_LABEL_ALLOWANCE)
+            self.setMinimumHeight(MIN_LONG_EDGE)
+            self.setMaximumHeight(MAX_LONG_EDGE)
 
     def resizeEvent(self, event) -> None:
         """Handle resize events."""

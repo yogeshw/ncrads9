@@ -230,8 +230,12 @@ class ColorController(Controller):
     # -- colorbar ------------------------------------------------------------
 
     def set_colorbar_visible(self, visible: bool) -> None:
-        """Show or hide the colorbar."""
-        self.window.colorbar_dock.setVisible(visible)
+        """Show or hide the colorbar.
+
+        Colorbar visibility is one of DS9's View flags, so the View
+        controller owns it; the Color menu's entry is the same `QAction`.
+        """
+        self.window.view.set_colorbar_visible(visible)
 
     def set_colorbar_orientation(self, orientation: str) -> None:
         """Lay the colorbar out horizontally or vertically."""

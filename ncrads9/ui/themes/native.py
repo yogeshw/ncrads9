@@ -87,8 +87,12 @@ class NativeTheme:
         if app is None:
             app = QApplication.instance()
         if app is not None:
+            # setStyle re-parents the QStyle of every live widget, so only
+            # do it when the style would actually change.
             style_name = cls.get_platform_style()
-            app.setStyle(style_name)
+            current = app.style()
+            if current is None or current.objectName().lower() != style_name.lower():
+                app.setStyle(style_name)
             app.setStyleSheet(cls.STYLESHEET)
 
     @classmethod

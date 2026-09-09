@@ -87,11 +87,11 @@ def test_grid_settings_enable_grid_action(main_window: MainWindow):
 
 def test_graph_visibility_controls(main_window: MainWindow):
     main_window.analysis.set_graph_visibility("Both")
-    assert not main_window.horizontal_graph_dock.isHidden()
-    assert not main_window.vertical_graph_dock.isHidden()
+    assert not main_window.horizontal_graph.isHidden()
+    assert not main_window.vertical_graph.isHidden()
     main_window.analysis.set_graph_visibility("None")
-    assert main_window.horizontal_graph_dock.isHidden()
-    assert main_window.vertical_graph_dock.isHidden()
+    assert main_window.horizontal_graph.isHidden()
+    assert main_window.vertical_graph.isHidden()
 
 
 def test_analysis_mask_range(main_window: MainWindow):

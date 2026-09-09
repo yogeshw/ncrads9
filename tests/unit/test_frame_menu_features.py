@@ -177,19 +177,30 @@ def test_mouse_move_uses_bottom_left_origin(main_window: MainWindow):
 
 
 def test_wcs_direction_arrows_default_and_toggle(main_window: MainWindow):
+    """The compass goes to the panner; the image overlay is opt-in.
+
+    DS9 draws its N/E compass in the panner, so M3 moved it there and left
+    `WCS -> Show Direction Arrows` as the (unticked) way to draw it over the
+    data as well.
+    """
     frame = main_window.frame_manager.current_frame
     frame.image_data = np.arange(100, dtype=np.float32).reshape(10, 10)
     frame.original_image_data = frame.image_data
     frame.wcs_handler = _make_test_wcs(10, 10)
     main_window.frame_controller.update_display()
 
+    panner = main_window.panner_panel
+    assert panner._show_compass is True
+    assert panner._north is not None
+    assert panner._east is not None
+
     overlay = main_window.image_viewer.contour_overlay
+    assert overlay._show_direction_arrows is False
+
+    main_window.menu_bar.action_show_direction_arrows.trigger()
     assert overlay._show_direction_arrows is True
     assert overlay._north_vector is not None
     assert overlay._east_vector is not None
-
-    main_window.menu_bar.action_show_direction_arrows.trigger()
-    assert overlay._show_direction_arrows is False
 
 
 def test_clear_regions_returns_to_pan_mode(main_window: MainWindow):

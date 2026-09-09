@@ -26,7 +26,6 @@ from numpy.typing import NDArray
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import (
-    QDockWidget,
     QLabel,
     QVBoxLayout,
     QWidget,
@@ -110,8 +109,8 @@ class VerticalGraphWidget(QWidget):
         painter.end()
 
 
-class VerticalGraph(QDockWidget):
-    """Dockable panel showing pixel values along vertical line."""
+class VerticalGraph(QWidget):
+    """Panel showing pixel values along vertical line."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         """
@@ -120,7 +119,7 @@ class VerticalGraph(QDockWidget):
         Args:
             parent: Parent widget.
         """
-        super().__init__("Vertical Profile", parent)
+        super().__init__(parent)
         self.setObjectName("VerticalGraph")
 
         self._current_image: NDArray[np.float64] | None = None
@@ -130,8 +129,8 @@ class VerticalGraph(QDockWidget):
 
     def _setup_ui(self) -> None:
         """Set up the user interface."""
-        container = QWidget()
-        layout = QVBoxLayout(container)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
 
         # Info label
         self._info_label = QLabel("X: ---")
@@ -140,8 +139,6 @@ class VerticalGraph(QDockWidget):
         # Graph widget
         self._graph_widget = VerticalGraphWidget()
         layout.addWidget(self._graph_widget)
-
-        self.setWidget(container)
 
     def set_image(self, image: NDArray[np.float64]) -> None:
         """
