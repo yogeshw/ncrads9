@@ -52,7 +52,7 @@ def test_block_factor_actions_update_frame(main_window: MainWindow):
     _load_test_image(main_window)
     frame = main_window.frame_manager.current_frame
     assert frame is not None
-    main_window._set_block_factor(4)
+    main_window.analysis.set_block_factor(4)
     assert frame.bin_factor == 4
     assert main_window.menu_bar.action_block_4.isChecked()
 
@@ -72,7 +72,7 @@ def test_smoothing_pipeline_updates_display_data(main_window: MainWindow):
         "preserve_nan": True,
         "normalize": True,
     }
-    main_window._apply_smooth_settings(settings)
+    main_window.analysis.apply_smooth_settings(settings)
     smoothed = main_window._get_display_image_data(frame)
     assert main_window.menu_bar.action_smooth.isChecked()
     assert smoothed.shape == original.shape
@@ -80,16 +80,16 @@ def test_smoothing_pipeline_updates_display_data(main_window: MainWindow):
 
 
 def test_grid_settings_enable_grid_action(main_window: MainWindow):
-    main_window._apply_grid_settings({"coord_system": "WCS", "show_labels": True})
+    main_window.analysis.apply_grid_settings({"coord_system": "WCS", "show_labels": True})
     assert main_window.menu_bar.action_coordinate_grid.isChecked()
     assert main_window._grid_settings is not None
 
 
 def test_graph_visibility_controls(main_window: MainWindow):
-    main_window._set_graph_visibility("Both")
+    main_window.analysis.set_graph_visibility("Both")
     assert not main_window.horizontal_graph_dock.isHidden()
     assert not main_window.vertical_graph_dock.isHidden()
-    main_window._set_graph_visibility("None")
+    main_window.analysis.set_graph_visibility("None")
     assert main_window.horizontal_graph_dock.isHidden()
     assert main_window.vertical_graph_dock.isHidden()
 
@@ -99,7 +99,7 @@ def test_analysis_mask_range(main_window: MainWindow):
     main_window._analysis_mask_min = 0.0
     main_window._analysis_mask_max = 1.0
     data = np.array([[-1.0, 0.5, 2.0, np.nan]], dtype=np.float32)
-    masked = main_window._apply_analysis_mask(data)
+    masked = main_window.analysis.apply_mask(data)
     assert np.isnan(masked[0, 0])
     assert np.isclose(masked[0, 1], 0.5)
     assert np.isnan(masked[0, 2])
@@ -114,7 +114,7 @@ def test_load_and_clear_analysis_commands(main_window: MainWindow, tmp_path, mon
         "getOpenFileName",
         staticmethod(lambda *args, **kwargs: (str(command_file), "")),
     )
-    main_window._load_analysis_commands()
+    main_window.analysis.load_commands()
     assert len(main_window._loaded_analysis_actions) == 1
-    main_window._clear_analysis_commands(show_message=False)
+    main_window.analysis.clear_commands(show_message=False)
     assert len(main_window._loaded_analysis_actions) == 0

@@ -389,7 +389,7 @@ def apply_startup_cli(main_window: MainWindow, argv: Sequence[str]) -> None:
             continue
         if option == "bin" and args:
             try:
-                main_window._set_bin(int(args[0]))
+                main_window.analysis.set_bin(int(args[0]))
             except ValueError:
                 logger.warning("Invalid -bin value: %s", args[0])
             continue

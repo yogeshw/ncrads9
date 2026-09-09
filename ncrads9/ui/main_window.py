@@ -32,25 +32,18 @@ from astropy.coordinates import (
 )
 from astropy.table import Table
 from numpy.typing import NDArray
-from PyQt6.QtCore import QSize, Qt, QTimer, QUrl, pyqtSignal
-from PyQt6.QtGui import QAction, QColor, QDesktopServices, QImage, QKeyEvent, QPixmap
+from PyQt6.QtCore import QSize, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QAction, QColor, QImage, QKeyEvent, QPixmap
 from PyQt6.QtWidgets import (
     QColorDialog,
     QDialog,
     QDockWidget,
-    QFileDialog,
-    QHBoxLayout,
     QInputDialog,
     QMainWindow,
     QScrollArea,
-    QVBoxLayout,
     QWidget,
 )
-from scipy import ndimage
 
-from ..analysis.contour import ContourGenerator
-from ..analysis.radial_profile import RadialProfile
-from ..analysis.smooth import boxcar_smooth, gaussian_smooth, tophat_smooth
 from ..catalogs.vizier import VizierCatalog
 from ..colormaps.colormap import Colormap
 from ..communication.samp import SAMPClient
@@ -75,6 +68,7 @@ from ..rendering.rgb_compositor import compose_rgb
 from ..rendering.scale_algorithms import ScaleAlgorithm, apply_scale, compute_zscale_limits
 from ..utils.preferences import Preferences
 from .button_bar import ButtonBar
+from .controllers.analysis import AnalysisController
 from .controllers.base import Controller
 from .controllers.color import ColorController
 from .controllers.edit import EditController
@@ -85,14 +79,8 @@ from .controllers.scale import ScaleController
 from .controllers.view import ViewController
 from .controllers.wcs import WCSController
 from .controllers.zoom import ZoomController
-from .dialogs.contour_dialog import ContourDialog
-from .dialogs.grid_dialog import GridDialog
 from .dialogs.help_contents_dialog import HelpContentsDialog
-from .dialogs.histogram_dialog import HistogramDialog
 from .dialogs.keyboard_shortcuts_dialog import KeyboardShortcutsDialog
-from .dialogs.pixel_table_dialog import PixelTableDialog
-from .dialogs.smooth_dialog import SmoothDialog
-from .dialogs.statistics_dialog import StatisticsDialog
 from .dialogs.vo_query_dialog import VOQueryDialog
 from .menu_bar import MenuBar
 from .panels.horizontal_graph import HorizontalGraph
@@ -387,6 +375,7 @@ class MainWindow(QMainWindow):
         `connect()` to wire its own actions. See `ui/controllers/base.py` for
         why controllers hold a reference to the window.
         """
+        self.analysis = AnalysisController(self)
         self.color = ColorController(self)
         # Named `frame_controller`: `self.frame` would shadow nothing on the
         # window, but reads as a Frame everywhere else in the codebase.
@@ -401,6 +390,7 @@ class MainWindow(QMainWindow):
 
         #: Every controller, for broadcasting `sync()` on a frame change.
         self.controllers: tuple[Controller, ...] = (
+            self.analysis,
             self.color,
             self.edit,
             self.frame_controller,
@@ -437,22 +427,13 @@ class MainWindow(QMainWindow):
         # Frame menu
         self.frame_controller.connect()
 
-        # Bin menu
-        self.menu_bar.action_bin_1.triggered.connect(lambda: self._set_bin(1))
-        self.menu_bar.action_bin_2.triggered.connect(lambda: self._set_bin(2))
-        self.menu_bar.action_bin_4.triggered.connect(lambda: self._set_bin(4))
-        self.menu_bar.action_bin_8.triggered.connect(lambda: self._set_bin(8))
-
-        # Scale menu
+        # Scale, Color and Region menus
         self.scale.connect()
-
-        # Color menu
         self.color.connect()
-
-        # Region menu
         self.region.connect()
 
-        # VO menu
+        # VO menu. Not a DS9 menu -- DS9 reaches these from Analysis
+        # (PLAN.md section 7). M8 folds them into the Analysis menu proper.
         self.menu_bar.action_siap_2mass.triggered.connect(self._vo_siap_2mass)
         self.menu_bar.action_catalog_vizier.triggered.connect(self._vo_catalog_vizier)
         self.menu_bar.action_samp_connect.triggered.connect(self._samp_connect)
@@ -461,45 +442,25 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_samp_marker_shape.triggered.connect(self._samp_choose_marker_shape)
         self.menu_bar.action_samp_marker_size.triggered.connect(self._samp_choose_marker_size)
 
-        # WCS menu - connect all coordinate system options
+        # WCS menu
         self.wcs.connect()
 
-        # Analysis menu - connect all tools
-        self.menu_bar.action_name_resolution.triggered.connect(self._resolve_object_name)
-        self.menu_bar.action_statistics.triggered.connect(self._show_statistics)
-        self.menu_bar.action_histogram.triggered.connect(self._show_histogram)
-        self.menu_bar.action_radial_profile.triggered.connect(self._show_radial_profile)
-        self.menu_bar.action_mask_params.triggered.connect(self._show_mask_parameters)
-        self.menu_bar.action_crosshair_params.triggered.connect(self._show_crosshair_parameters)
-        self.menu_bar.action_graph_params.triggered.connect(self._show_graph_parameters)
-        self.menu_bar.action_contours.triggered.connect(self._toggle_contours)
-        self.menu_bar.action_contour_params.triggered.connect(self._show_contours)
-        self.menu_bar.action_coordinate_grid.triggered.connect(self._toggle_coordinate_grid)
-        self.menu_bar.action_coordinate_grid_params.triggered.connect(self._show_grid_dialog)
-        self.menu_bar.action_block_in.triggered.connect(self._block_in)
-        self.menu_bar.action_block_out.triggered.connect(self._block_out)
-        self.menu_bar.action_block_fit.triggered.connect(self._block_fit)
-        self.menu_bar.action_block_1.triggered.connect(lambda: self._set_block_factor(1))
-        self.menu_bar.action_block_2.triggered.connect(lambda: self._set_block_factor(2))
-        self.menu_bar.action_block_4.triggered.connect(lambda: self._set_block_factor(4))
-        self.menu_bar.action_block_8.triggered.connect(lambda: self._set_block_factor(8))
-        self.menu_bar.action_block_16.triggered.connect(lambda: self._set_block_factor(16))
-        self.menu_bar.action_block_32.triggered.connect(lambda: self._set_block_factor(32))
-        self.menu_bar.action_block_params.triggered.connect(self._show_block_parameters)
-        self.menu_bar.action_smooth.triggered.connect(self._toggle_smooth)
-        self.menu_bar.action_smooth_params.triggered.connect(self._show_smooth_dialog)
+        # Analysis and Bin menus
+        self.analysis.connect()
+
+        # Analysis entries still served by the window: the VO and catalog
+        # tools, and the FITS header viewer.
         self.menu_bar.action_analysis_2mass.triggered.connect(self._vo_siap_2mass)
         self.menu_bar.action_analysis_vizier.triggered.connect(self._vo_catalog_vizier)
         self.menu_bar.action_catalog_tool.triggered.connect(self._vo_catalog_vizier)
-        self.menu_bar.action_plot_tool_line.triggered.connect(lambda: self._set_graph_visibility("Both"))
-        self.menu_bar.action_plot_tool_bar.triggered.connect(lambda: self._set_graph_visibility("Vertical"))
         self.menu_bar.action_virtual_observatory.triggered.connect(self._vo_catalog_vizier)
-        self.menu_bar.action_web_browser.triggered.connect(self._open_analysis_web_browser)
-        self.menu_bar.action_analysis_command_log.triggered.connect(self._set_analysis_command_log)
-        self.menu_bar.action_load_analysis_commands.triggered.connect(self._load_analysis_commands)
-        self.menu_bar.action_clear_analysis_commands.triggered.connect(self._clear_analysis_commands)
-        self.menu_bar.action_pixel_table.triggered.connect(self._show_pixel_table)
         self.menu_bar.action_fits_header.triggered.connect(self.file.show_header)
+        self.menu_bar.action_plot_tool_line.triggered.connect(
+            lambda: self.statusBar().showMessage("Plot Tool arrives in M7-15", 2000)
+        )
+        self.menu_bar.action_plot_tool_bar.triggered.connect(
+            lambda: self.statusBar().showMessage("Plot Tool arrives in M7-15", 2000)
+        )
 
         # Zoom menu
         self.zoom.connect()
@@ -522,8 +483,8 @@ class MainWindow(QMainWindow):
         self.main_toolbar.action_zoom_out.triggered.connect(self.zoom.zoom_out)
         self.main_toolbar.action_zoom_fit.triggered.connect(self.zoom.zoom_fit)
         self.main_toolbar.action_zoom_1.triggered.connect(self.zoom.zoom_actual)
-        self.main_toolbar.action_statistics.triggered.connect(self._show_statistics)
-        self.main_toolbar.action_histogram.triggered.connect(self._show_histogram)
+        self.main_toolbar.action_statistics.triggered.connect(self.analysis.show_statistics)
+        self.main_toolbar.action_histogram.triggered.connect(self.analysis.show_histogram)
         self.main_toolbar.action_prev_frame.triggered.connect(self.frame_controller.previous)
         self.main_toolbar.action_next_frame.triggered.connect(self.frame_controller.next)
         self.main_toolbar.action_region_circle.triggered.connect(
@@ -935,13 +896,13 @@ class MainWindow(QMainWindow):
 
         # Update zoom display
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
-        self._update_bin_menu_checks(getattr(frame, "bin_factor", 1))
+        self.analysis.sync_bin_menu(getattr(frame, "bin_factor", 1))
         self.region.show_frame_regions(frame)
         self.frame_controller.sync_view_state()
         if self._contour_settings is not None:
-            self._update_contours()
+            self.analysis.update_contours()
         self.wcs.update_direction_arrows()
-        self._refresh_analysis_overlays()
+        self.analysis.refresh_overlays()
 
     def _display_rgb_frame(self, frame: Frame) -> bool:
         """Display a composite RGB frame."""
@@ -1008,13 +969,13 @@ class MainWindow(QMainWindow):
 
         self.status_bar.update_image_info(composite.shape[1], composite.shape[0])
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
-        self._update_bin_menu_checks(getattr(frame, "bin_factor", 1))
+        self.analysis.sync_bin_menu(getattr(frame, "bin_factor", 1))
         self.region.show_frame_regions(frame)
         self.frame_controller.sync_view_state()
         if self._contour_settings is not None:
-            self._update_contours()
+            self.analysis.update_contours()
         self.wcs.update_direction_arrows()
-        self._refresh_analysis_overlays()
+        self.analysis.refresh_overlays()
         return True
 
     def _render_frame_rgb(self, frame: Frame) -> NDArray[np.uint8] | None:
@@ -1121,94 +1082,6 @@ class MainWindow(QMainWindow):
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
         return True
 
-    def _update_block_menu_checks(self, factor: int) -> None:
-        """Update Analysis->Block checkmarks based on current factor."""
-        self.menu_bar.action_block_1.setChecked(factor == 1)
-        self.menu_bar.action_block_2.setChecked(factor == 2)
-        self.menu_bar.action_block_4.setChecked(factor == 4)
-        self.menu_bar.action_block_8.setChecked(factor == 8)
-        self.menu_bar.action_block_16.setChecked(factor == 16)
-        self.menu_bar.action_block_32.setChecked(factor == 32)
-
-    def _set_block_factor(self, factor: int) -> None:
-        """Set block/bin factor from Analysis->Block menu."""
-        allowed = [1, 2, 4, 8, 16, 32]
-        nearest = min(allowed, key=lambda item: abs(item - factor))
-        self._set_bin(nearest)
-        self._log_analysis_command(f"block {nearest}")
-
-    def _block_in(self) -> None:
-        """Decrease block factor to next lower preset."""
-        frame = self.frame_manager.current_frame
-        current = getattr(frame, "bin_factor", 1) if frame else 1
-        allowed = [1, 2, 4, 8, 16, 32]
-        idx = max(0, allowed.index(current) - 1) if current in allowed else 0
-        self._set_block_factor(allowed[idx])
-
-    def _block_out(self) -> None:
-        """Increase block factor to next higher preset."""
-        frame = self.frame_manager.current_frame
-        current = getattr(frame, "bin_factor", 1) if frame else 1
-        allowed = [1, 2, 4, 8, 16, 32]
-        idx = min(len(allowed) - 1, allowed.index(current) + 1) if current in allowed else 1
-        self._set_block_factor(allowed[idx])
-
-    def _block_fit(self) -> None:
-        """Choose a block factor that roughly fits image into viewport."""
-        frame = self.frame_manager.current_frame
-        if not frame or frame.original_image_data is None:
-            if frame and frame.image_data is not None:
-                frame.original_image_data = frame.image_data
-            else:
-                self.statusBar().showMessage("No image loaded", 2000)
-                return
-        if frame.original_image_data is None:
-            self.statusBar().showMessage("No image loaded", 2000)
-            return
-
-        height, width = frame.original_image_data.shape[:2]
-        viewport = self._effective_viewport_size()
-        vw = max(1, viewport.width())
-        vh = max(1, viewport.height())
-        needed = max(width / vw, height / vh)
-        allowed = [1, 2, 4, 8, 16, 32]
-        factor = next((value for value in allowed if value >= needed), 32)
-        self._set_block_factor(factor)
-
-    def _show_block_parameters(self) -> None:
-        """Show block-factor parameter dialog."""
-        frame = self.frame_manager.current_frame
-        current = getattr(frame, "bin_factor", 1) if frame else 1
-        value, ok = QInputDialog.getInt(self, "Block Parameters", "Block factor:", int(current), 1, 32, 1)
-        if not ok:
-            return
-        self._set_block_factor(value)
-
-    def _show_smooth_dialog(self) -> None:
-        """Show smoothing parameters dialog."""
-        if self.image_data is None:
-            self.statusBar().showMessage("No image loaded", 2000)
-            return
-        dialog = SmoothDialog(self)
-        dialog.smoothing_changed.connect(self._apply_smooth_settings)
-        dialog.exec()
-
-    def _apply_smooth_settings(self, settings: dict) -> None:
-        """Apply smoothing settings from dialog."""
-        self._smooth_settings = settings
-        self.menu_bar.action_smooth.blockSignals(True)
-        self.menu_bar.action_smooth.setChecked(True)
-        self.menu_bar.action_smooth.blockSignals(False)
-        self._toggle_smooth(True)
-
-    def _toggle_smooth(self, checked: bool) -> None:
-        """Toggle display smoothing."""
-        self.z1 = None
-        self.z2 = None
-        self._display_image()
-        self._log_analysis_command(f"smooth {'on' if checked else 'off'}")
-        self.statusBar().showMessage(f"Smooth {'enabled' if checked else 'disabled'}", 2000)
-
     def _get_display_image_data(self, frame: Frame) -> NDArray[np.floating]:
         """Return frame data after display-level analysis transforms."""
         image_data = (
@@ -1217,422 +1090,8 @@ class MainWindow(QMainWindow):
         if image_data is None:
             return np.array([], dtype=np.float32)
         if self.menu_bar.action_smooth.isChecked():
-            return self._apply_smoothing(image_data)
+            return self.analysis.apply_smoothing(image_data)
         return image_data
-
-    def _get_analysis_image_data(self, frame: Frame) -> NDArray[np.floating]:
-        """Return analysis-ready data with current smoothing and mask settings."""
-        display_data = self._get_display_image_data(frame)
-        return self._apply_analysis_mask(display_data)
-
-    def _apply_analysis_mask(self, data: NDArray[np.floating]) -> NDArray[np.floating]:
-        """Apply analysis mask settings to image data."""
-        if self._analysis_mask_mode == "disabled":
-            return data
-        masked = np.array(data, copy=True, dtype=np.float32)
-        finite_mask = np.isfinite(masked)
-        keep_mask = finite_mask
-        if self._analysis_mask_mode == "range":
-            low = self._analysis_mask_min if self._analysis_mask_min is not None else -np.inf
-            high = self._analysis_mask_max if self._analysis_mask_max is not None else np.inf
-            keep_mask = finite_mask & (masked >= low) & (masked <= high)
-        masked[~keep_mask] = np.nan
-        return masked
-
-    def _apply_smoothing(self, data: NDArray[np.floating]) -> NDArray[np.floating]:
-        """Apply configured smoothing to an image array."""
-        settings = self._smooth_settings
-        kernel = str(settings.get("kernel_type", "Gaussian")).lower()
-        preserve_nan = bool(settings.get("preserve_nan", True))
-        nan_mask = np.isnan(data)
-
-        working = data.astype(np.float32, copy=True)
-        if preserve_nan and np.any(nan_mask):
-            fill = float(np.nanmedian(working)) if np.isfinite(np.nanmedian(working)) else 0.0
-            working[nan_mask] = fill
-
-        if kernel == "gaussian":
-            sigma = float(settings.get("sigma", 2.0))
-            if settings.get("elliptical"):
-                axis_ratio = max(float(settings.get("axis_ratio", 1.0)), 0.1)
-                smoothed = gaussian_smooth(working, (sigma * axis_ratio, sigma))
-            else:
-                smoothed = gaussian_smooth(working, sigma)
-        elif kernel == "boxcar":
-            smoothed = boxcar_smooth(working, int(settings.get("kernel_size", 5)))
-        elif kernel == "tophat":
-            radius = max(1.0, float(settings.get("kernel_size", 5)) / 2.0)
-            smoothed = tophat_smooth(working, radius)
-        else:
-            smoothed = ndimage.median_filter(working, size=int(settings.get("kernel_size", 5)))
-
-        if preserve_nan and np.any(nan_mask):
-            smoothed = smoothed.astype(np.float32, copy=True)
-            smoothed[nan_mask] = np.nan
-        return smoothed
-
-    def _toggle_coordinate_grid(self, checked: bool) -> None:
-        """Toggle coordinate grid overlay."""
-        self._refresh_analysis_overlays()
-        self.statusBar().showMessage(
-            "Coordinate grid enabled" if checked else "Coordinate grid disabled",
-            2000,
-        )
-        self._log_analysis_command(f"grid {'on' if checked else 'off'}")
-
-    def _show_grid_dialog(self) -> None:
-        """Show coordinate grid parameters dialog."""
-        dialog = GridDialog(self)
-        if self._grid_settings:
-            dialog._coord_combo.setCurrentText(self._grid_settings.get("coord_system", "WCS"))
-            dialog._format_combo.setCurrentText(self._grid_settings.get("label_format", "Sexagesimal"))
-            dialog._auto_spacing_check.setChecked(self._grid_settings.get("auto_spacing", True))
-            dialog._ra_spacing_spin.setValue(float(self._grid_settings.get("ra_spacing", 1.0)))
-            dialog._dec_spacing_spin.setValue(float(self._grid_settings.get("dec_spacing", 1.0)))
-        dialog.grid_changed.connect(self._apply_grid_settings)
-        dialog.exec()
-
-    def _apply_grid_settings(self, settings: dict) -> None:
-        """Store coordinate grid settings."""
-        self._grid_settings = settings
-        self.menu_bar.action_coordinate_grid.blockSignals(True)
-        self.menu_bar.action_coordinate_grid.setChecked(True)
-        self.menu_bar.action_coordinate_grid.blockSignals(False)
-        self._refresh_analysis_overlays()
-        self._log_analysis_command("grid params")
-        self.statusBar().showMessage("Updated coordinate grid parameters", 2000)
-
-    def _show_mask_parameters(self) -> None:
-        """Show mask parameter controls for analysis tools."""
-        mode_labels = ["Disabled", "Finite Pixels Only", "Value Range"]
-        mode_map = {
-            "Disabled": "disabled",
-            "Finite Pixels Only": "finite",
-            "Value Range": "range",
-        }
-        current_label = next(
-            (label for label, mode in mode_map.items() if mode == self._analysis_mask_mode),
-            "Disabled",
-        )
-        choice, ok = QInputDialog.getItem(
-            self,
-            "Mask Parameters",
-            "Mask mode:",
-            mode_labels,
-            mode_labels.index(current_label),
-            False,
-        )
-        if not ok:
-            return
-        mode = mode_map[choice]
-        self._analysis_mask_mode = mode
-        if mode == "range":
-            min_default = self._analysis_mask_min if self._analysis_mask_min is not None else 0.0
-            max_default = self._analysis_mask_max if self._analysis_mask_max is not None else 1.0
-            min_val, ok_min = QInputDialog.getDouble(
-                self,
-                "Mask Parameters",
-                "Minimum value:",
-                float(min_default),
-                decimals=6,
-            )
-            if not ok_min:
-                return
-            max_val, ok_max = QInputDialog.getDouble(
-                self,
-                "Mask Parameters",
-                "Maximum value:",
-                float(max_default),
-                decimals=6,
-            )
-            if not ok_max:
-                return
-            if max_val < min_val:
-                min_val, max_val = max_val, min_val
-            self._analysis_mask_min = float(min_val)
-            self._analysis_mask_max = float(max_val)
-            self.statusBar().showMessage(
-                f"Mask range set to [{self._analysis_mask_min:.4g}, {self._analysis_mask_max:.4g}]",
-                3000,
-            )
-        else:
-            self._analysis_mask_min = None
-            self._analysis_mask_max = None
-            self.statusBar().showMessage(f"Mask mode: {choice}", 2500)
-        self._log_analysis_command(f"mask {mode}")
-
-    def _show_crosshair_parameters(self) -> None:
-        """Show crosshair parameter controls."""
-        enabled, ok = QInputDialog.getItem(
-            self,
-            "Crosshair Parameters",
-            "Crosshair:",
-            ["Off", "On"],
-            1 if self._crosshair_enabled else 0,
-            False,
-        )
-        if not ok:
-            return
-        self._crosshair_enabled = enabled == "On"
-        if self._crosshair_enabled:
-            color = QColorDialog.getColor(self._crosshair_color, self, "Crosshair Color")
-            if color.isValid():
-                self._crosshair_color = color
-            size, ok_size = QInputDialog.getInt(
-                self,
-                "Crosshair Parameters",
-                "Crosshair size (pixels):",
-                self._crosshair_size,
-                4,
-                256,
-            )
-            if ok_size:
-                self._crosshair_size = int(size)
-        self._refresh_analysis_overlays()
-        self._log_analysis_command(f"crosshair {'on' if self._crosshair_enabled else 'off'}")
-        self.statusBar().showMessage(
-            f"Crosshair {'enabled' if self._crosshair_enabled else 'disabled'}",
-            2000,
-        )
-
-    def _show_graph_parameters(self) -> None:
-        """Show graph panel visibility controls."""
-        current = "None"
-        if self.horizontal_graph_dock.isVisible() and self.vertical_graph_dock.isVisible():
-            current = "Both"
-        elif self.horizontal_graph_dock.isVisible():
-            current = "Horizontal"
-        elif self.vertical_graph_dock.isVisible():
-            current = "Vertical"
-        mode, ok = QInputDialog.getItem(
-            self,
-            "Graph Parameters",
-            "Visible graph panels:",
-            ["None", "Horizontal", "Vertical", "Both"],
-            ["None", "Horizontal", "Vertical", "Both"].index(current),
-            False,
-        )
-        if not ok:
-            return
-        self._set_graph_visibility(mode)
-        self.statusBar().showMessage(f"Graph panels: {mode}", 2000)
-
-    def _set_graph_visibility(self, mode: str) -> None:
-        """Set visibility for horizontal/vertical graph docks."""
-        show_horizontal = mode in ("Horizontal", "Both")
-        show_vertical = mode in ("Vertical", "Both")
-        self.horizontal_graph_dock.setVisible(show_horizontal)
-        self.vertical_graph_dock.setVisible(show_vertical)
-        self._log_analysis_command(f"graph {mode.lower()}")
-        frame = self.frame_manager.current_frame
-        if frame and frame.image_data is not None:
-            analysis_data = self._get_analysis_image_data(frame)
-            self.horizontal_graph_dock.set_image(analysis_data)
-            self.vertical_graph_dock.set_image(analysis_data)
-
-    def _refresh_analysis_overlays(self) -> None:
-        """Apply grid/crosshair overlay states to the active viewer."""
-        if hasattr(self.image_viewer, "set_grid"):
-            self.image_viewer.set_grid(
-                self.menu_bar.action_coordinate_grid.isChecked(),
-                self._grid_settings,
-            )
-        if hasattr(self.image_viewer, "set_crosshair"):
-            position = (
-                (float(self._last_mouse_pos[0]), float(self._last_mouse_pos[1]))
-                if self._last_mouse_pos is not None
-                else None
-            )
-            self.image_viewer.set_crosshair(
-                self._crosshair_enabled,
-                position=position,
-                color=self._crosshair_color,
-                size=self._crosshair_size,
-            )
-
-    def _resolve_object_name(self) -> None:
-        """Resolve an object name and pan to it if WCS is available."""
-        name, ok = QInputDialog.getText(self, "Name Resolution", "Object name:")
-        if not ok or not name.strip():
-            return
-        query = name.strip()
-        try:
-            coord = SkyCoord.from_name(query)
-        except Exception as exc:
-            self.statusBar().showMessage(f"Name resolution failed: {exc}", 3500)
-            return
-
-        if self.wcs_handler and self.wcs_handler.is_valid:
-            try:
-                x, y = self.wcs_handler.world_to_pixel(coord.ra.deg, coord.dec.deg)
-                if self.using_gpu_rendering and hasattr(self.image_viewer, "set_pan"):
-                    self.image_viewer.set_pan(float(x), float(y))
-                    self.frame_controller.persist_view_state()
-                    self.zoom.update_panner_rect()
-                else:
-                    self.zoom.on_panner_pan(float(x), float(y))
-                self.statusBar().showMessage(
-                    f"{query}: RA {coord.ra.deg:.6f} deg, Dec {coord.dec.deg:.6f} deg",
-                    4000,
-                )
-                self._log_analysis_command(f"name {query}")
-                return
-            except Exception:
-                pass
-
-        self.statusBar().showMessage(
-            f"{query}: RA {coord.ra.deg:.6f} deg, Dec {coord.dec.deg:.6f} deg",
-            4000,
-        )
-        self._log_analysis_command(f"name {query}")
-
-    def _set_analysis_command_log(self, checked: bool) -> None:
-        """Toggle analysis command logging preference."""
-        self._analysis_command_log = checked
-        self.statusBar().showMessage(
-            f"Analysis command log {'enabled' if checked else 'disabled'}",
-            2000,
-        )
-
-    def _log_analysis_command(self, command: str) -> None:
-        """Append an analysis command to in-memory log when enabled."""
-        if not self._analysis_command_log:
-            return
-        self._analysis_command_entries.append(command)
-        if len(self._analysis_command_entries) > 200:
-            self._analysis_command_entries = self._analysis_command_entries[-200:]
-
-    def _load_analysis_commands(self) -> None:
-        """Load simple external analysis commands into the Analysis menu."""
-        filepath, _ = QFileDialog.getOpenFileName(
-            self,
-            "Load Analysis Commands",
-            "",
-            "Analysis Command Files (*.ans *.analysis *.txt *.ds9);;All Files (*)",
-        )
-        if not filepath:
-            return
-
-        self._clear_analysis_commands(show_message=False)
-        loaded = 0
-        try:
-            with open(filepath, encoding="utf-8") as handle:
-                lines = handle.readlines()
-        except Exception as exc:
-            self.statusBar().showMessage(f"Failed to load analysis commands: {exc}", 3500)
-            return
-
-        for raw in lines:
-            line = raw.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "|" in line:
-                label, command = [part.strip() for part in line.split("|", 1)]
-            else:
-                label, command = line, line
-            if not label or not command:
-                continue
-            action = QAction(label, self)
-            action.triggered.connect(
-                lambda checked=False, cmd=command, title=label: self._execute_loaded_analysis_command(
-                    title, cmd
-                )
-            )
-            self.menu_bar.analysis_menu.insertAction(self.menu_bar.action_load_analysis_commands, action)
-            self._loaded_analysis_actions.append(action)
-            loaded += 1
-
-        self._log_analysis_command(f"load_analysis_commands {loaded}")
-        self.statusBar().showMessage(f"Loaded {loaded} analysis commands", 3000)
-
-    def _execute_loaded_analysis_command(self, title: str, command: str) -> None:
-        """Execute a simple loaded analysis command."""
-        cmd = command.strip()
-        self._log_analysis_command(f"run {title}: {cmd}")
-        if cmd.lower().startswith(("http://", "https://", "url:")):
-            target = cmd.split(":", 1)[1].strip() if cmd.lower().startswith("url:") else cmd
-            QDesktopServices.openUrl(QUrl(target))
-            self.statusBar().showMessage(f"Opened {title}", 2000)
-            return
-        if cmd.lower().startswith("open:"):
-            target = cmd.split(":", 1)[1].strip()
-            if target:
-                self.file.open_file(target)
-                return
-        if cmd.lower().startswith("message:"):
-            self.statusBar().showMessage(cmd.split(":", 1)[1].strip(), 3000)
-            return
-        self.statusBar().showMessage(f"{title}: {cmd}", 3000)
-
-    def _clear_analysis_commands(self, show_message: bool = True) -> None:
-        """Clear previously loaded external analysis commands."""
-        if not self._loaded_analysis_actions:
-            if show_message:
-                self.statusBar().showMessage("No external analysis commands are currently loaded", 2500)
-            return
-        for action in self._loaded_analysis_actions:
-            self.menu_bar.analysis_menu.removeAction(action)
-        cleared = len(self._loaded_analysis_actions)
-        self._loaded_analysis_actions = []
-        self._log_analysis_command(f"clear_analysis_commands {cleared}")
-        if show_message:
-            self.statusBar().showMessage(f"Cleared {cleared} analysis commands", 2500)
-
-    def _open_analysis_web_browser(self) -> None:
-        """Open a browser URL from the Analysis menu."""
-        QDesktopServices.openUrl(QUrl("https://sites.google.com/cfa.harvard.edu/saoimageds9"))
-        self._log_analysis_command("web")
-        self.statusBar().showMessage("Opened web browser", 2000)
-
-    def _update_bin_menu_checks(self, factor: int) -> None:
-        """Update Bin menu checkmarks based on current factor."""
-        self.menu_bar.action_bin_1.setChecked(factor == 1)
-        self.menu_bar.action_bin_2.setChecked(factor == 2)
-        self.menu_bar.action_bin_4.setChecked(factor == 4)
-        self.menu_bar.action_bin_8.setChecked(factor == 8)
-        self._update_block_menu_checks(factor)
-
-    def _rebin_image(self, data: np.ndarray, factor: int) -> np.ndarray:
-        """Rebin image by an integer factor using block mean."""
-        if factor <= 1:
-            return data
-
-        height, width = data.shape[:2]
-        new_height = (height // factor) * factor
-        new_width = (width // factor) * factor
-        if new_height == 0 or new_width == 0:
-            return data
-
-        trimmed = data[:new_height, :new_width]
-        reshaped = trimmed.reshape(new_height // factor, factor, new_width // factor, factor)
-        return np.nanmean(reshaped, axis=(1, 3)).astype(np.float32)
-
-    def _set_bin(self, factor: int) -> None:
-        """Set binning factor for the current frame."""
-        frame = self.frame_manager.current_frame
-        if not frame or not frame.has_data:
-            self.statusBar().showMessage("No image loaded", 2000)
-            return
-
-        if frame.original_image_data is None:
-            frame.original_image_data = frame.image_data
-
-        if factor == 1:
-            frame.image_data = frame.original_image_data
-        else:
-            frame.image_data = self._rebin_image(frame.original_image_data, factor)
-
-        frame.bin_factor = factor
-        self.current_bin = factor
-        self.z1 = None
-        self.z2 = None
-        frame.z1 = None
-        frame.z2 = None
-
-        self._update_bin_menu_checks(factor)
-        self._display_image()
-        self.status_bar.update_image_info(frame.image_data.shape[1], frame.image_data.shape[0])
-        self.statusBar().showMessage(f"Binning: {factor}x{factor}", 2000)
 
     def _effective_viewport_size(self) -> QSize:
         """Return a usable viewport size for zoom/block-factor arithmetic.
@@ -1686,7 +1145,7 @@ class MainWindow(QMainWindow):
             self.horizontal_graph_dock.update_cursor_position(x, row)
         if hasattr(self, "vertical_graph_dock") and self.vertical_graph_dock.isVisible():
             self.vertical_graph_dock.update_cursor_position(x, row)
-        self._refresh_analysis_overlays()
+        self.analysis.refresh_overlays()
 
     def _on_image_clicked(self, x: int, y: int, button: int) -> None:
         """Handle image clicks (used for tiled frame selection)."""
@@ -2041,270 +1500,6 @@ class MainWindow(QMainWindow):
             if col in table.colnames:
                 return str(table[col][0])
         return ""
-
-    def _show_statistics(self) -> None:
-        """Show statistics dialog."""
-        frame = self.frame_manager.current_frame
-        if frame is None or frame.image_data is None:
-            self.statusBar().showMessage("No image loaded", 2000)
-            return
-
-        dialog = StatisticsDialog(self._get_analysis_image_data(frame), self)
-        dialog.exec()
-        self._log_analysis_command("statistics")
-
-    def _show_histogram(self) -> None:
-        """Show histogram dialog."""
-        frame = self.frame_manager.current_frame
-        if frame is None or frame.image_data is None:
-            self.statusBar().showMessage("No image loaded", 2000)
-            return
-
-        dialog = HistogramDialog(self._get_analysis_image_data(frame), self)
-        dialog.exec()
-        self._log_analysis_command("histogram")
-
-    def _show_radial_profile(self) -> None:
-        """Show radial profile plot from the current frame."""
-        frame = self.frame_manager.current_frame
-        if frame is None or frame.image_data is None:
-            self.statusBar().showMessage("No image loaded", 2000)
-            return
-
-        data = self._get_analysis_image_data(frame)
-        if not np.any(np.isfinite(data)):
-            self.statusBar().showMessage("No valid pixels for radial profile", 2500)
-            return
-        profile = RadialProfile(data)
-        radii, values = profile.extract()
-
-        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
-        from matplotlib.figure import Figure
-        from PyQt6.QtWidgets import QDialog, QPushButton
-
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Radial Profile")
-        dialog.setMinimumSize(640, 420)
-        layout = QVBoxLayout(dialog)
-        figure = Figure(figsize=(7, 4))
-        canvas = FigureCanvasQTAgg(figure)
-        ax = figure.add_subplot(111)
-        ax.plot(radii, values, color="tab:blue", linewidth=1.5)
-        ax.set_xlabel("Radius (pixels)")
-        ax.set_ylabel("Mean value")
-        ax.set_title("Radial Profile")
-        ax.grid(True, alpha=0.3)
-        figure.tight_layout()
-        layout.addWidget(canvas)
-        btn_row = QHBoxLayout()
-        btn_row.addStretch()
-        close_btn = QPushButton("Close")
-        close_btn.clicked.connect(dialog.accept)
-        btn_row.addWidget(close_btn)
-        layout.addLayout(btn_row)
-        dialog.exec()
-        self._log_analysis_command("radial_profile")
-
-    def _show_contours(self) -> None:
-        """Show contour dialog and apply contours."""
-        if self.image_data is None:
-            self.statusBar().showMessage("No image loaded", 2000)
-            return
-
-        dialog = ContourDialog(self)
-        if self._contour_settings is not None:
-            dialog.load_settings(self._contour_settings)
-        dialog.contours_changed.connect(self._apply_contours)
-        dialog.contours_export_requested.connect(self._export_contours)
-        dialog.exec()
-
-    def _apply_contours(self, settings: dict) -> None:
-        """Compute and display contours based on settings."""
-        self._contour_settings = settings
-        self.menu_bar.action_contours.blockSignals(True)
-        self.menu_bar.action_contours.setChecked(True)
-        self.menu_bar.action_contours.blockSignals(False)
-        self._update_contours()
-        self._log_analysis_command("contour params")
-
-    def _toggle_contours(self, checked: bool) -> None:
-        """Toggle contour overlay visibility."""
-        if checked:
-            if self._contour_settings is None:
-                self._contour_settings = {
-                    "method": "Linear",
-                    "num_levels": 10,
-                    "smooth": False,
-                    "smooth_sigma": 1.0,
-                    "line_width": 1.0,
-                    "line_style": "Solid",
-                    "color": "#00ff00",
-                    "show_labels": False,
-                }
-            self._update_contours()
-            self._log_analysis_command("contour on")
-            self.statusBar().showMessage("Contours enabled", 2000)
-        else:
-            if hasattr(self.image_viewer, "clear_contours"):
-                self.image_viewer.clear_contours()
-            self._log_analysis_command("contour off")
-            self.statusBar().showMessage("Contours disabled", 2000)
-
-    def _update_contours(self) -> None:
-        """Recompute contours for current image."""
-        if not self.menu_bar.action_contours.isChecked():
-            if hasattr(self.image_viewer, "clear_contours"):
-                self.image_viewer.clear_contours()
-            return
-        frame = self.frame_manager.current_frame
-        if frame is None or frame.image_data is None or self._contour_settings is None:
-            if hasattr(self.image_viewer, "clear_contours"):
-                self.image_viewer.clear_contours()
-            return
-
-        contour_data = self._get_analysis_image_data(frame)
-        settings = self._contour_settings
-        smooth_sigma = settings.get("smooth_sigma", 1.0) if settings.get("smooth") else None
-        generator = ContourGenerator(contour_data, smooth=smooth_sigma)
-
-        levels = self._compute_contour_levels(generator, settings)
-
-        try:
-            contours = generator.find_contours(levels)
-            contour_paths = self._convert_skimage_contours(contours)
-        except Exception:
-            contours = generator.find_contours_scipy(levels)
-            contour_paths = self._convert_scipy_contours(contours)
-
-        self._contour_paths = contour_paths
-        self._contour_levels = levels
-
-        style = self._contour_style_from_settings(settings)
-        if hasattr(self.image_viewer, "set_contours"):
-            self.image_viewer.set_contours(contour_paths, levels, style)
-
-    def _compute_contour_levels(self, generator: ContourGenerator, settings: dict) -> list:
-        """Compute contour levels based on settings."""
-        if settings.get("use_sigma"):
-            sigmas = settings.get("sigma_levels") or [3.0, 5.0, 10.0]
-            base = settings.get("sigma_base", "Median")
-            if base == "Mean":
-                base_level = float(np.nanmean(generator.data))
-            else:
-                base_level = float(np.nanmedian(generator.data))
-            return generator.generate_sigma_levels(sigmas, base_level=base_level)
-
-        method = settings.get("method", "Linear")
-        num_levels = settings.get("num_levels", 10)
-        vmin = settings.get("min_level")
-        vmax = settings.get("max_level")
-
-        if vmin is not None and vmax is not None and vmin >= vmax:
-            vmin = None
-            vmax = None
-
-        if method == "Custom":
-            custom = settings.get("custom_levels") or []
-            return list(custom)
-
-        if method == "Logarithmic":
-            return generator.generate_levels(num_levels, vmin=vmin, vmax=vmax, log_scale=True)
-
-        if method == "Square Root":
-            valid = generator.data[~np.isnan(generator.data)]
-            if vmin is None:
-                vmin = float(np.min(valid))
-            if vmax is None:
-                vmax = float(np.max(valid))
-            vmin = max(0.0, vmin)
-            vmax = max(vmin + 1e-12, vmax)
-            levels = np.linspace(np.sqrt(vmin), np.sqrt(vmax), num_levels) ** 2
-            return list(levels)
-
-        return generator.generate_levels(num_levels, vmin=vmin, vmax=vmax, log_scale=False)
-
-    def _convert_skimage_contours(self, contours: list) -> list:
-        """Convert skimage contours to x/y arrays."""
-        contour_paths: list = []
-        for level_paths in contours:
-            converted = []
-            for path in level_paths:
-                if path.ndim == 2 and path.shape[1] == 2:
-                    coords = np.column_stack([path[:, 1], path[:, 0]]).astype(np.float64)
-                    converted.append(coords)
-            contour_paths.append(converted)
-        return contour_paths
-
-    def _convert_scipy_contours(self, contours: list) -> list:
-        """Convert scipy contours to x/y arrays."""
-        contour_paths: list = []
-        for level_paths in contours:
-            converted = []
-            for x_coords, y_coords in level_paths:
-                coords = np.column_stack([x_coords, y_coords]).astype(np.float64)
-                converted.append(coords)
-            contour_paths.append(converted)
-        return contour_paths
-
-    def _contour_style_from_settings(self, settings: dict):
-        """Build contour style tuple for overlay."""
-        color = QColor(settings.get("color", "#00ff00"))
-        line_width = float(settings.get("line_width", 1.0))
-        line_style = settings.get("line_style", "Solid")
-        style_map = {
-            "Solid": Qt.PenStyle.SolidLine,
-            "Dashed": Qt.PenStyle.DashLine,
-            "Dotted": Qt.PenStyle.DotLine,
-            "Dash-Dot": Qt.PenStyle.DashDotLine,
-        }
-        pen_style = style_map.get(line_style, Qt.PenStyle.SolidLine)
-        show_labels = bool(settings.get("show_labels", False))
-        return (color, line_width, pen_style, show_labels)
-
-    def _export_contours(self, settings: dict) -> None:
-        """Export current contours to a file."""
-        if self._contour_paths is None or self._contour_levels is None:
-            self._apply_contours(settings)
-            if self._contour_paths is None or self._contour_levels is None:
-                self.statusBar().showMessage("No contours to export", 2000)
-                return
-
-        filepath, _ = QFileDialog.getSaveFileName(
-            self,
-            "Export Contours",
-            "",
-            "JSON Files (*.json);;All Files (*)",
-        )
-        if not filepath:
-            return
-
-        export_data = {
-            "levels": self._contour_levels,
-            "contours": [[path.tolist() for path in level_paths] for level_paths in self._contour_paths],
-            "settings": settings,
-        }
-
-        import json
-
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(export_data, f, indent=2)
-        self.statusBar().showMessage(f"Exported contours to {filepath}", 3000)
-
-    def _show_pixel_table(self) -> None:
-        """Show pixel table dialog."""
-        frame = self.frame_manager.current_frame
-        if frame is None or frame.image_data is None:
-            self.statusBar().showMessage("No image loaded", 2000)
-            return
-
-        # Use image center as default
-        analysis_data = self._get_analysis_image_data(frame)
-        height, width = analysis_data.shape
-        x, y = width // 2, height // 2
-
-        dialog = PixelTableDialog(analysis_data, x, y, size=11, parent=self)
-        dialog.exec()
-        self._log_analysis_command("pixel_table")
 
     def _show_help_contents(self) -> None:
         """Show help contents dialog."""

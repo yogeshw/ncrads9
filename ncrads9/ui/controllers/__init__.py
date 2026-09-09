@@ -23,6 +23,7 @@ shared state through the main window.
 Author: Yogesh Wadadekar
 """
 
+from .analysis import AnalysisController
 from .base import Controller
 from .color import ColorController
 from .edit import EditController
@@ -35,6 +36,7 @@ from .wcs import WCSController
 from .zoom import ZoomController
 
 __all__ = [
+    "AnalysisController",
     "ColorController",
     "Controller",
     "EditController",
