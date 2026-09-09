@@ -26,6 +26,46 @@ from PyQt6.QtWidgets import QMenu, QMenuBar, QWidget
 
 from .layout.view_state import DEFAULT_INFO_FIELDS, WCS_SUFFIXES
 
+#: DS9's eight transfer functions, in the order its Scale menu lists them.
+SCALE_FUNCTIONS: tuple[tuple[str, str], ...] = (
+    ("linear", "&Linear"),
+    ("log", "Lo&g"),
+    ("power", "&Power"),
+    ("sqrt", "Square &Root"),
+    ("squared", "S&quared"),
+    ("asinh", "&ASINH"),
+    ("sinh", "S&INH"),
+    ("histeq", "&Histogram Equalization"),
+)
+
+#: The exponents DS9 offers for its log transfer function, and its default.
+LOG_EXPONENTS: tuple[float, ...] = (100.0, 200.0, 400.0, 600.0, 800.0, 1000.0, 2000.0, 5000.0)
+DEFAULT_LOG_EXPONENT = 1000.0
+
+#: DS9's limit modes. The percentile presets are keyed by their own figure.
+SCALE_LIMIT_MODES: tuple[tuple[str, str], ...] = (
+    ("minmax", "&Min Max"),
+    ("99.5", "99.&5%"),
+    ("99", "&99%"),
+    ("98", "9&8%"),
+    ("97", "97&%"),
+    ("96", "96%"),
+    ("95", "95%"),
+    ("92.5", "92.5%"),
+    ("90", "90%"),
+    ("zscale", "&ZScale"),
+    ("zmax", "Z&Max"),
+    ("user", "&User"),
+)
+
+#: DS9's Min Max methods.
+MINMAX_METHODS: tuple[tuple[str, str], ...] = (
+    ("scan", "&Scan"),
+    ("sample", "Sa&mple"),
+    ("datamin", "&DATAMIN DATAMAX"),
+    ("irafminmax", "&IRAF-MIN IRAF-MAX"),
+)
+
 #: DS9's `File -> Open as`, in DS9's order. A None name is a separator.
 OPEN_AS_ENTRIES: tuple[tuple[str | None, str], ...] = (
     ("slice", "&Slice..."),
@@ -800,43 +840,113 @@ class MenuBar(QMenuBar):
         self.zoom_menu.addAction(self.action_pan_zoom_rotate_parameters)
 
     def _setup_scale_menu(self) -> None:
-        """Set up the Scale menu."""
+        """Set up the Scale menu.
+
+        DS9's order (`ds9/library/mscale.tcl`): the eight transfer functions
+        as one radio group, the Log Exponent submenu, then the limit modes as
+        a second radio group -- Min Max, eight percentile presets, ZScale,
+        ZMax, User -- then the scope, the Min Max method submenu, Use DATASEC,
+        and the two parameter dialogs.
+        """
         self.scale_menu: QMenu = self.addMenu("&Scale")
 
-        self.action_scale_linear: QAction = QAction("&Linear", self)
-        self.action_scale_linear.setCheckable(True)
-        self.action_scale_linear.setChecked(True)
-        self.scale_menu.addAction(self.action_scale_linear)
+        function_group = QActionGroup(self)
+        function_group.setExclusive(True)
+        #: Transfer-function name -> its action.
+        self.scale_function_actions: dict[str, QAction] = {}
+        for name, label in SCALE_FUNCTIONS:
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(name == "linear")
+            function_group.addAction(action)
+            self.scale_menu.addAction(action)
+            self.scale_function_actions[name] = action
+            setattr(self, f"action_scale_{name}", action)
 
-        self.action_scale_log: QAction = QAction("Lo&g", self)
-        self.action_scale_log.setCheckable(True)
-        self.scale_menu.addAction(self.action_scale_log)
-
-        self.action_scale_sqrt: QAction = QAction("&Sqrt", self)
-        self.action_scale_sqrt.setCheckable(True)
-        self.scale_menu.addAction(self.action_scale_sqrt)
-
-        self.action_scale_squared: QAction = QAction("S&quared", self)
-        self.action_scale_squared.setCheckable(True)
-        self.scale_menu.addAction(self.action_scale_squared)
-
-        self.action_scale_asinh: QAction = QAction("&Asinh", self)
-        self.action_scale_asinh.setCheckable(True)
-        self.scale_menu.addAction(self.action_scale_asinh)
-
-        self.action_scale_histeq: QAction = QAction("&Histogram Equalization", self)
-        self.action_scale_histeq.setCheckable(True)
-        self.scale_menu.addAction(self.action_scale_histeq)
+        self.log_exponent_menu: QMenu = self.scale_menu.addMenu("Log &Exponent")
+        exponent_group = QActionGroup(self)
+        exponent_group.setExclusive(True)
+        #: Exponent -> its action.
+        self.log_exponent_actions: dict[float, QAction] = {}
+        for exponent in LOG_EXPONENTS:
+            action = QAction(f"{exponent:g}", self)
+            action.setCheckable(True)
+            action.setChecked(exponent == DEFAULT_LOG_EXPONENT)
+            exponent_group.addAction(action)
+            self.log_exponent_menu.addAction(action)
+            self.log_exponent_actions[exponent] = action
+        self.log_exponent_menu.addSeparator()
+        self.action_log_exponent_other: QAction = QAction("&Other...", self)
+        self.log_exponent_menu.addAction(self.action_log_exponent_other)
 
         self.scale_menu.addSeparator()
 
-        self.action_scale_minmax: QAction = QAction("&MinMax", self)
-        self.scale_menu.addAction(self.action_scale_minmax)
+        limit_group = QActionGroup(self)
+        limit_group.setExclusive(True)
+        #: Limit-mode name -> its action. Percentile presets are keyed by
+        #: their figure, e.g. "99.5".
+        self.scale_limit_actions: dict[str, QAction] = {}
+        for name, label in SCALE_LIMIT_MODES:
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(name == "minmax")
+            limit_group.addAction(action)
+            self.scale_menu.addAction(action)
+            self.scale_limit_actions[name] = action
 
-        self.action_scale_zscale: QAction = QAction("&ZScale", self)
-        self.scale_menu.addAction(self.action_scale_zscale)
+        #: DS9 calls the min/max entry `Min Max`; the old attribute name is
+        #: kept because XPA and the button bar already use it.
+        self.action_scale_minmax: QAction = self.scale_limit_actions["minmax"]
+        self.action_scale_zscale: QAction = self.scale_limit_actions["zscale"]
 
-        self.action_scale_params: QAction = QAction("&Parameters...", self)
+        self.action_scale_user_limits: QAction = QAction("Ot&her...", self)
+        self.scale_menu.addAction(self.action_scale_user_limits)
+
+        self.scale_menu.addSeparator()
+
+        scope_group = QActionGroup(self)
+        scope_group.setExclusive(True)
+        #: Scope name -> its action.
+        self.scale_scope_actions: dict[str, QAction] = {}
+        for name, label in (("global", "&Global"), ("local", "&Local")):
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(name == "local")
+            scope_group.addAction(action)
+            self.scale_menu.addAction(action)
+            self.scale_scope_actions[name] = action
+
+        self.scale_menu.addSeparator()
+
+        self.minmax_method_menu: QMenu = self.scale_menu.addMenu("&Min Max")
+        method_group = QActionGroup(self)
+        method_group.setExclusive(True)
+        #: Method name -> its action.
+        self.minmax_method_actions: dict[str, QAction] = {}
+        for name, label in MINMAX_METHODS:
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(name == "scan")
+            method_group.addAction(action)
+            self.minmax_method_menu.addAction(action)
+            self.minmax_method_actions[name] = action
+        self.minmax_method_menu.addSeparator()
+        self.action_sample_parameters: QAction = QAction("Sample &Parameters...", self)
+        self.minmax_method_menu.addAction(self.action_sample_parameters)
+
+        self.scale_menu.addSeparator()
+
+        self.action_use_datasec: QAction = QAction("Use &DATASEC", self)
+        self.action_use_datasec.setCheckable(True)
+        self.action_use_datasec.setChecked(True)
+        self.scale_menu.addAction(self.action_use_datasec)
+
+        self.action_zscale_parameters: QAction = QAction("&ZScale Parameters...", self)
+        self.scale_menu.addAction(self.action_zscale_parameters)
+
+        self.scale_menu.addSeparator()
+
+        self.action_scale_params: QAction = QAction("Scale &Parameters...", self)
         self.scale_menu.addAction(self.action_scale_params)
 
     def _setup_color_menu(self) -> None:

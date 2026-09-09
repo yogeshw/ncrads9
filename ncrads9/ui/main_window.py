@@ -44,6 +44,7 @@ from ..frames.blink_controller import (
 from ..frames.frame_manager import FrameManager
 from ..frames.tile_layout import TileLayout
 from ..rendering.scale_algorithms import ScaleAlgorithm
+from ..rendering.scale_limits import ScaleLimits
 from ..utils.preferences import Preferences
 from .button_bar import ButtonBar
 from .controllers.analysis import AnalysisController
@@ -112,6 +113,9 @@ class MainWindow(QMainWindow):
         # Initialize data storage
         self.frame_manager = FrameManager()
         self.current_scale = ScaleAlgorithm.LINEAR
+        # Where the clip limits come from: the mode, min/max method, scope,
+        # DATASEC and ZScale parameters of DS9's Scale menu.
+        self.scale_limits = ScaleLimits()
         self.current_colormap = "grey"
         self._default_colormap = "grey"
         self.invert_colormap = False

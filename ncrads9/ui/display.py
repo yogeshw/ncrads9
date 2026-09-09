@@ -56,7 +56,7 @@ from ..core.wcs_handler import WCSHandler
 from ..frames.frame import Frame
 from ..frames.tile_layout import TileLayout
 from ..rendering.rgb_compositor import compose_rgb
-from ..rendering.scale_algorithms import ScaleAlgorithm, apply_scale, compute_zscale_limits
+from ..rendering.scale_algorithms import ScaleAlgorithm, apply_scale
 from .view_transform import transform_image_array
 
 
@@ -140,7 +140,7 @@ class DisplayPipeline:
         """Apply per-channel limits/contrast/brightness/scale and return [0,1] channel."""
         scale, z1, z2, contrast, brightness = self.channel_view_settings(frame, channel)
         if z1 is None or z2 is None:
-            z1, z2 = compute_zscale_limits(data)
+            z1, z2 = self.window.scale.compute_limits(data)
         range_val = max(float(z2 - z1), 1e-6)
         center = (z1 + z2) / 2.0
         new_range = range_val / contrast
@@ -455,7 +455,7 @@ class DisplayPipeline:
 
         # Compute scale limits using zscale (once, or when reset)
         if self.window.z1 is None or self.window.z2 is None:
-            self.window.z1, self.window.z2 = compute_zscale_limits(image_data)
+            self.window.z1, self.window.z2 = self.window.scale.compute_limits(image_data)
 
         # Get contrast/brightness adjustments from viewer
         contrast, brightness = self.viewer.get_contrast_brightness()
@@ -644,7 +644,7 @@ class DisplayPipeline:
         z1 = frame.z1
         z2 = frame.z2
         if z1 is None or z2 is None:
-            z1, z2 = compute_zscale_limits(image_data)
+            z1, z2 = self.window.scale.compute_limits(image_data, frame=frame)
 
         contrast = max(frame.contrast, 0.1)
         brightness = max(-1.0, min(frame.brightness, 1.0))

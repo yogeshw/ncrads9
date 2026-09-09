@@ -28,14 +28,33 @@ from enum import Enum, auto
 import numpy as np
 from numpy.typing import NDArray
 
+#: DS9's default Log Exponent, its `scale(log)`. The same value drives the
+#: log and the power transfer functions -- DS9 has one exponent, not two.
+DEFAULT_LOG_EXPONENT = 1000.0
+
+#: The constants in DS9's asinh and sinh transfer functions. Neither reaches
+#: exactly 1.0 at the top of the range -- `asinh(10)/3` is 0.9994 -- which is
+#: DS9's own behaviour, kept so the two applications render alike.
+ASINH_GAIN, ASINH_DIVISOR = 10.0, 3.0
+SINH_GAIN, SINH_DIVISOR = 3.0, 10.0
+
 
 class ScaleAlgorithm(Enum):
-    """Enumeration of available scaling algorithms."""
+    """Enumeration of available scaling algorithms.
+
+    The eight DS9 offers on its Scale menu, plus ZSCALE, which in DS9 is a
+    limit mode rather than a transfer function (see
+    `rendering/scale_limits.py`) and is kept here for callers from before
+    that distinction was drawn.
+    """
 
     LINEAR = auto()
     LOG = auto()
     SQRT = auto()
+    #: DS9's Power: `(exp**x - 1) / exp`.
     POWER = auto()
+    #: DS9's Squared: `x**2`.
+    SQUARED = auto()
     SINH = auto()
     ASINH = auto()
     HISTOGRAM_EQUALIZATION = auto()
@@ -72,6 +91,7 @@ def apply_scale(
         ScaleAlgorithm.LOG: scale_log,
         ScaleAlgorithm.SQRT: scale_sqrt,
         ScaleAlgorithm.POWER: scale_power,
+        ScaleAlgorithm.SQUARED: scale_squared,
         ScaleAlgorithm.SINH: scale_sinh,
         ScaleAlgorithm.ASINH: scale_asinh,
         ScaleAlgorithm.HISTOGRAM_EQUALIZATION: scale_histogram_equalization,
@@ -109,23 +129,26 @@ def scale_log(
     data: NDArray[np.float32],
     vmin: float,
     vmax: float,
-    a: float = 1000.0,
+    exponent: float = DEFAULT_LOG_EXPONENT,
     **kwargs,
 ) -> NDArray[np.float32]:
     """
     Apply logarithmic scaling.
 
+    DS9's `LogScale`: `log10(exp * x + 1) / log10(exp)`.
+
     Args:
         data: Input data.
         vmin: Minimum value.
         vmax: Maximum value.
-        a: Scaling parameter (default 1000).
+        exponent: DS9's Log Exponent, its `scale(log)`.
 
     Returns:
         Log-scaled data in [0, 1].
     """
+    exponent = max(float(exponent), 1.0 + 1e-6)
     normalized = scale_linear(data, vmin, vmax)
-    result = np.log10(a * normalized + 1) / np.log10(a + 1)
+    result = np.log10(exponent * normalized + 1.0) / np.log10(exponent)
     return np.clip(result, 0.0, 1.0).astype(np.float32)
 
 
@@ -155,47 +178,75 @@ def scale_power(
     data: NDArray[np.float32],
     vmin: float,
     vmax: float,
-    exponent: float = 2.0,
+    exponent: float = DEFAULT_LOG_EXPONENT,
     **kwargs,
 ) -> NDArray[np.float32]:
     """
-    Apply power law scaling.
+    Apply DS9's power-law scaling.
+
+    DS9's `PowScale`: `(exp**x - 1) / exp`, driven by the same Log Exponent
+    as the log function -- DS9 has one exponent for both. This used to be
+    `x**exponent` with an exponent of two, which is DS9's *Squared* function,
+    not its Power one; `scale_squared` is that.
 
     Args:
         data: Input data.
         vmin: Minimum value.
         vmax: Maximum value.
-        exponent: Power law exponent (default 2.0).
+        exponent: DS9's Log Exponent.
 
     Returns:
         Power-scaled data in [0, 1].
     """
+    exponent = max(float(exponent), 1.0 + 1e-6)
     normalized = scale_linear(data, vmin, vmax)
-    result = np.power(normalized, exponent)
+    result = (np.power(exponent, normalized) - 1.0) / exponent
     return np.clip(result, 0.0, 1.0).astype(np.float32)
+
+
+def scale_squared(
+    data: NDArray[np.float32],
+    vmin: float,
+    vmax: float,
+    **kwargs,
+) -> NDArray[np.float32]:
+    """
+    Apply DS9's squared scaling: `x**2`.
+
+    Args:
+        data: Input data.
+        vmin: Minimum value.
+        vmax: Maximum value.
+
+    Returns:
+        Squared data in [0, 1].
+    """
+    normalized = scale_linear(data, vmin, vmax)
+    return np.clip(normalized * normalized, 0.0, 1.0).astype(np.float32)
 
 
 def scale_sinh(
     data: NDArray[np.float32],
     vmin: float,
     vmax: float,
-    a: float = 1.0,
     **kwargs,
 ) -> NDArray[np.float32]:
     """
     Apply hyperbolic sine scaling.
 
+    DS9's `SinhScale`: `sinh(3x) / 10`. This used to be `sinh(x)/sinh(1)`,
+    a far gentler curve than DS9's.
+
     Args:
         data: Input data.
         vmin: Minimum value.
         vmax: Maximum value.
-        a: Scaling parameter.
 
     Returns:
         Sinh-scaled data in [0, 1].
     """
     normalized = scale_linear(data, vmin, vmax)
-    result = np.sinh(a * normalized) / np.sinh(a)
+    result = np.sinh(SINH_GAIN * normalized) / SINH_DIVISOR
     return np.clip(result, 0.0, 1.0).astype(np.float32)
 
 
@@ -203,29 +254,25 @@ def scale_asinh(
     data: NDArray[np.float32],
     vmin: float,
     vmax: float,
-    a: float = 0.1,
     **kwargs,
 ) -> NDArray[np.float32]:
     """
     Apply inverse hyperbolic sine (arcsinh) scaling.
 
-    This is particularly useful for astronomical images with large
-    dynamic range, as it behaves like log for large values but
-    remains linear near zero.
+    DS9's `AsinhScale`: `asinh(10x) / 3`. Useful for astronomical images
+    with a large dynamic range, behaving like log for large values while
+    staying linear near zero.
 
     Args:
         data: Input data.
         vmin: Minimum value.
         vmax: Maximum value.
-        a: Softening parameter (default 0.1).
 
     Returns:
         Asinh-scaled data in [0, 1].
     """
-    if a <= 0:
-        raise ValueError("Parameter 'a' must be positive")
     normalized = scale_linear(data, vmin, vmax)
-    result = np.arcsinh(normalized / a) / np.arcsinh(1.0 / a)
+    result = np.arcsinh(ASINH_GAIN * normalized) / ASINH_DIVISOR
     return np.clip(result, 0.0, 1.0).astype(np.float32)
 
 

@@ -1,4 +1,5 @@
 import importlib.util
+import math
 from pathlib import Path
 
 import numpy as np
@@ -18,13 +19,27 @@ scale_asinh = _SCALE_ALGO_MODULE.scale_asinh
 scale_histogram_equalization = _SCALE_ALGO_MODULE.scale_histogram_equalization
 
 
-def test_scale_asinh_rejects_nonpositive_parameter():
+def test_scale_asinh_matches_ds9s_formula():
+    """DS9's `AsinhScale`: asinh(10x) / 3, from tksao/frame/colorscale.C.
+
+    This used to take a softening parameter and refuse a non-positive one.
+    M5 replaced the parameter with DS9's fixed constants, so that the two
+    applications render an image the same way; there is no longer a value to
+    reject.
+    """
     data = np.array([[0.0, 0.5, 1.0]], dtype=np.float32)
-    with pytest.raises(ValueError, match="positive"):
-        scale_asinh(data, 0.0, 1.0, a=0.0)
+    result = scale_asinh(data, 0.0, 1.0)
+    expected = [0.0, math.asinh(5.0) / 3.0, math.asinh(10.0) / 3.0]
+    assert result[0].tolist() == pytest.approx(expected, abs=1e-6)
 
 
 def test_apply_scaling_asinh_rejects_nonpositive_parameter():
+    """`utils/math_utils.apply_scaling` keeps its own softening parameter.
+
+    It is a separate implementation from `rendering/scale_algorithms`, is not
+    on the display path, and is not what M5 aligned to DS9 -- so its
+    parameter, and its rejection of a non-positive one, still stand.
+    """
     data = np.array([0.0, 0.5, 1.0], dtype=np.float64)
     with pytest.raises(ValueError, match="positive"):
         apply_scaling(data, scale="asinh", asinh_a=0.0)

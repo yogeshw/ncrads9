@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 439 (371 excluding separators)
+# entries: 478 (404 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -300,16 +300,55 @@
 .zoom|separator|---
 .zoom|command|Pan Zoom Rotate Parameters
 # Scale
-.scale|checkbutton|Linear
-.scale|checkbutton|Log
-.scale|checkbutton|Sqrt
-.scale|checkbutton|Squared
-.scale|checkbutton|Asinh
-.scale|checkbutton|Histogram Equalization
+.scale|radiobutton|Linear
+.scale|radiobutton|Log
+.scale|radiobutton|Power
+.scale|radiobutton|Square Root
+.scale|radiobutton|Squared
+.scale|radiobutton|ASINH
+.scale|radiobutton|SINH
+.scale|radiobutton|Histogram Equalization
+.scale|cascade|Log Exponent
+.scale.logexponent|radiobutton|100
+.scale.logexponent|radiobutton|200
+.scale.logexponent|radiobutton|400
+.scale.logexponent|radiobutton|600
+.scale.logexponent|radiobutton|800
+.scale.logexponent|radiobutton|1000
+.scale.logexponent|radiobutton|2000
+.scale.logexponent|radiobutton|5000
+.scale.logexponent|separator|---
+.scale.logexponent|command|Other
 .scale|separator|---
-.scale|command|MinMax
-.scale|command|ZScale
-.scale|command|Parameters
+.scale|radiobutton|Min Max
+.scale|radiobutton|99.5%
+.scale|radiobutton|99%
+.scale|radiobutton|98%
+.scale|radiobutton|97%
+.scale|radiobutton|96%
+.scale|radiobutton|95%
+.scale|radiobutton|92.5%
+.scale|radiobutton|90%
+.scale|radiobutton|ZScale
+.scale|radiobutton|ZMax
+.scale|radiobutton|User
+.scale|command|Other
+.scale|separator|---
+.scale|radiobutton|Global
+.scale|radiobutton|Local
+.scale|separator|---
+.scale|cascade|Min Max
+.scale.minmax|radiobutton|Scan
+.scale.minmax|radiobutton|Sample
+.scale.minmax|radiobutton|DATAMIN DATAMAX
+.scale.minmax|radiobutton|IRAF-MIN IRAF-MAX
+.scale.minmax|separator|---
+.scale.minmax|command|Sample Parameters
+.scale|separator|---
+.scale|checkbutton|Use DATASEC
+.scale|command|ZScale Parameters
+.scale|separator|---
+.scale|command|Scale Parameters
 # Color
 .color|radiobutton|Gray
 .color|radiobutton|Red
