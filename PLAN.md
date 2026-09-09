@@ -72,19 +72,20 @@ harder to add. **Fix these before adding features.**
 
 ### 3.1 Two-thirds of the package is unreachable code
 
-> **M1 reduced this from 116 orphans to 71, and M3 to 66**, and
+> **M1 reduced this from 116 orphans to 71, and M3 to 60**, and
 > `tests/unit/test_no_orphan_modules.py` now fails on any new one that is not
-> listed against the milestone that adopts it. The remaining 66 are inventoried in
+> listed against the milestone that adopts it. The remaining 60 are inventoried in
 > `docs/parity/skeletons.md`. The table below records the original finding.
 >
 > M3 adopted `ui/panels/info_panel.py`, `coordinates/physical_coords.py` and the
-> three `ui/themes/` modules. It also settled six entries as **delete**, not
-> adopt: `ui/panels/colorbar_panel.py` (a second colorbar, without the controls
-> the one in use has) and the five per-system coordinate value objects
-> `coordinates/{wcs_coords,fk4_fk5,galactic,ecliptic,image_coords}.py`, whose job
-> M1's `CoordinateContext` took over — M3's information panel needed none of
-> them. They are still on disk, marked for deletion in the pending list rather
-> than removed, since deleting 800 lines is a call for the maintainer.
+> three `ui/themes/` modules, and **deleted six** that were duplicates rather
+> than gaps: `ui/panels/colorbar_panel.py` (a second colorbar, without the
+> orientation, numerics, font, size or tick controls the one in use has) and the
+> five per-system coordinate value objects
+> `coordinates/{wcs_coords,fk4_fk5,galactic,ecliptic,image_coords}.py`, each a
+> thin wrapper over `SkyCoord` whose job M1's `CoordinateContext` took over.
+> Nothing imported any of the six, and M3's information panel — the milestone
+> that was meant to adopt the coordinate five — was finished without them.
 
 An import-reachability analysis from `ncrads9.app` / `ncrads9.__main__` /
 `ncrads9.ui.main_window` found **116 of 191 modules were never imported by the running
@@ -92,14 +93,14 @@ application**. Verified examples:
 
 | Orphaned | The app instead… |
 |---|---|
-| `coordinates/` (all 8 modules: `coord_system`, `wcs_coords`, `fk4_fk5`, `galactic`, `ecliptic`, `sexagesimal`, `image_coords`, `physical_coords`) | calls `astropy.coordinates` inline in `main_window.py` |
+| `coordinates/` (all 8 modules: `coord_system`, `wcs_coords`, `fk4_fk5`, `galactic`, `ecliptic`, `sexagesimal`, `image_coords`, `physical_coords`) | calls `astropy.coordinates` inline in `main_window.py` — `coord_system` and `physical_coords` adopted in M1/M3, five of the rest deleted in M3 |
 | `io/` (all 15 readers/writers + `io/session/`) | uses `QPixmap.save()` and `QPrinter` inline |
 | `printing/` (`page_setup`, `postscript`, `print_engine`) | uses `QPrinter` inline in `_print_image()` |
 | `analysis/statistics`, `analysis/histogram`, `analysis/pixel_table`, `analysis/centroid` | recomputes with NumPy inline in `main_window.py` |
 | `grid/` (`grid_renderer`, `grid_labels`, `ast_wrapper`, `grid_config`) | draws a pixel grid in `contour_overlay.py` |
 | `frames/frame.py`, `frames/frame_manager.py`, `frames/tile_layout.py`, `frames/blink_controller.py`, `frames/rgb_frame.py`, `frames/hsv_frame.py`, `frames/hls_frame.py`, `frames/frame_3d.py` | uses `frames/simple_frame_manager.py` + an ad-hoc `self._tile_layout` dict |
 | `regions/region_manager.py`, `regions/region_renderer.py`, `regions/group_manager.py` | uses a third `Region` class inside `ui/widgets/region_overlay.py` |
-| `ui/panels/info_panel.py`, `cube_panel.py`, `colorbar_panel.py` | never docked; coordinates go to the status bar |
+| `ui/panels/info_panel.py`, `cube_panel.py`, `colorbar_panel.py` | never docked; coordinates go to the status bar — `info_panel` rewritten and shown in M3, `colorbar_panel` deleted there, `cube_panel` is M4 |
 | `ui/themes/{default,dark,native}.py` | never applied |
 | `core/image_data.py`, `core/cube_handler.py`, `core/header_parser.py`, `core/data_cache.py` | uses `astropy.io.fits` directly |
 | `prism/`, `image_servers/{dss,eso,skyview,sdss_image,twomass_image}`, `communication/iis/`, `rendering/colormap_engine.py`, `rendering/rgb_compositor.py` | not used at all |
@@ -171,7 +172,10 @@ extension chooser, no cube handling, no bin-table handling, no mosaic handling, 
 > mirrors DS9's `view(...)` array, in all four of DS9's arrangements. The
 > information panel is shown for the first time, with DS9's field table; the
 > buttonbar is DS9's two rows; and the View menu went from 3 shared entries with
-> DS9 to 26 of 27 (see §9 on why the twenty-seventh is a tooling artefact). `docs/parity/screenshots/` records before and after.
+> DS9 to 26 of 27 (see §9 on why the twenty-seventh is a tooling artefact).
+> The information panel follows DS9 in both of its grids: one line per field
+> across seven columns when the panel sits above the canvas, and the same field
+> broken over several lines in two columns when it sits beside it. `docs/parity/screenshots/` records before and after.
 > The finding below is what was there.
 
 DS9's window is a fixed vertical stack: **menu bar → info panel | panner | magnifier (one row)
@@ -501,7 +505,7 @@ fourteen field rows plus the twenty-six alternate WCS systems; a rewritten `ui/b
 driving `MenuBar` actions directly, so a button and its menu entry cannot disagree; all four DS9
 layouts; the compass moved into the panner; themes wired to the Preferences setting; and
 alternate-WCS support (`WCSHandler(key=...)`) so the `Multiple WCS` rows carry real values.
-View-menu parity 3/27 → 26/27, total menu entries 287 → 337, orphans 71 → 66.
+View-menu parity 3/27 → 26/27, total menu entries 287 → 337, orphans 71 → 60.
 
 ### M4 — FITS coverage (12 d)
 Extension model + HDU chooser; `file[ext][filter]` syntax; data cubes with the Cube dialog

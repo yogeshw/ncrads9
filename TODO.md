@@ -271,8 +271,8 @@ Depends on M1.
 ## M3 — DS9 window layout
 
 **Status: complete.** Every `QDockWidget` is gone; the window is one grid. View-menu parity with
-DS9 **3/27 -> 26/27 labels**, total menu entries **287 -> 337**, orphan modules **71 -> 66**,
-tests **533 -> 628**, coverage 48.3% -> 51.2%.
+DS9 **3/27 -> 26/27 labels**, total menu entries **287 -> 337**, orphan modules **71 -> 60**,
+tests **533 -> 628**, coverage 48.3% -> 51.6%.
 
 | Module | Lines | Owns |
 |---|---:|---|
@@ -329,14 +329,18 @@ tests **533 -> 628**, coverage 48.3% -> 51.2%.
   over the data — now unticked by default.
 * **`utils/resources.py` was not needed.** M3-3 expected the buttonbar to load icons; DS9's
   buttonbar is text and so is ours. Repointed to M9-24.
-* **Six orphans are marked for deletion, not deleted.** `ui/panels/colorbar_panel.py` and the
-  five per-system coordinate value objects were tagged M3-6/M3-7 in the pending list, but M3 was
+* **Six orphans were duplicates, and are gone.** `ui/panels/colorbar_panel.py` and the five
+  per-system coordinate value objects were tagged M3-6/M3-7 in the pending list, but M3 was
   finished without them: `CoordinateContext`, `PhysicalTransform` and `WCSHandler(key=...)` do
-  the work. Removing ~800 lines is the maintainer's call, so the pending list now records
-  *delete* and the reason instead.
-* **DS9's vertical info panel is not fully replicated.** `LayoutInfoPanelVert` narrows every cell
-  to 13 characters *and* splits each title and value onto separate rows. The cell narrowing is
-  implemented (`InfoPanel.set_compact`); the row splitting is not.
+  the work, and nothing imported any of the six. 800 lines deleted, with the reasoning left in
+  each package's `__init__` docstring so the absence is explained where someone would look for
+  them.
+* **DS9's two information-panel grids are both implemented.** `LayoutInfoPanelHorz` puts a field
+  on one line across seven columns; `LayoutInfoPanelVert` -- which DS9's Advanced procedure
+  duplicates byte for byte -- narrows every cell to 13 characters *and* breaks the field over
+  several lines in two columns, the axis label to the left of its value. Each `_Row` therefore
+  carries both placements over the same widgets. The seven default fields occupy 7 grid rows
+  above the canvas and 18 beside it, which took the panel's width from ~460 px to ~150 px.
 
 ### Bugs found and fixed on the way
 
