@@ -34,6 +34,11 @@ last saw. `persist_view_state` and `apply_view_state` are the two halves.
 *Match and lock.* Match is a one-shot copy of one frame's setting to all the
 others; lock keeps them tied as the user works. Both walk the same scopes.
 
+*Cubes.* A frame whose extension has three or more axes shows one slice at a
+time. The slice index and axis order live on the frame, so each frame steps
+independently, and the Cube dialog reports what the user asked for rather than
+reaching into the frame itself.
+
 Author: Yogesh Wadadekar
 """
 
@@ -57,6 +62,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ...core.cube_handler import AxisOrder, CubeHandler, is_cube
 from ...frames.frame import Frame
 from ...rendering.scale_algorithms import ScaleAlgorithm
 from ..view_transform import normalize_rotation
@@ -611,7 +617,134 @@ class FrameController(Controller):
         if frame_mode == "rgb":
             self.show_rgb_dialog()
             return
+        if frame_mode == "cube":
+            self.show_cube_dialog()
+            return
         self.status(f"{frame_mode.upper()} parameters dialog not yet implemented", 2000)
+
+    # -- data cubes ----------------------------------------------------------
+
+    def cube_handler(self, frame: Frame | None = None) -> CubeHandler | None:
+        """A `CubeHandler` over a frame's extension, if it is a cube.
+
+        Reads `frame.image`, the array as it came off disk, not
+        `frame.image_data`, which by then holds the displayed slice.
+
+        Args:
+            frame: The frame to look at. Defaults to the current one.
+
+        Returns:
+            The handler, or None when the frame holds no cube.
+        """
+        frame = frame or self.frames.current_frame
+        if frame is None or frame.image is None or not is_cube(frame.image.data):
+            return None
+        return CubeHandler(frame.image.data, frame.image.header)
+
+    def show_cube_dialog(self) -> None:
+        """Show DS9's Cube dialog for the current frame."""
+        handler = self.cube_handler()
+        if handler is None:
+            self.status("The current frame holds no data cube", 3000)
+            return
+        frame = self.frames.current_frame
+        if frame is None:
+            return
+
+        dialog = self.window.cube_dialog
+        dialog.set_axis_order(frame.axis_order, notify=False)
+        dialog.set_depth(handler.depth(frame.axis_order), frame.slice_index)
+        self.update_cube_coordinate()
+        dialog.show()
+        dialog.raise_()
+
+    def set_slice(self, slice_index: int) -> None:
+        """Show one slice of the current frame's cube.
+
+        Args:
+            slice_index: The slice, counting from zero. Clamped to the cube.
+        """
+        handler = self.cube_handler()
+        frame = self.frames.current_frame
+        if handler is None or frame is None:
+            return
+
+        depth = handler.depth(frame.axis_order)
+        wanted = max(0, min(int(slice_index), depth - 1))
+        plane = handler.get_slice(wanted, frame.axis_order)
+        if plane is None:
+            return
+
+        frame.slice_index = wanted
+        frame.image_data = plane
+        frame.original_image_data = plane
+        # Rescale to the new slice. DS9's default scale scope is local, so the
+        # limits follow the displayed data; keeping the previous slice's
+        # limits makes a cube whose brightness varies with channel saturate
+        # to flat white or flat black as you step through it. M5-4 adds the
+        # global scope for anyone who wants the limits held still.
+        frame.z1 = None
+        frame.z2 = None
+        self.window.z1 = None
+        self.window.z2 = None
+        self.window.display.display()
+        self.update_cube_coordinate()
+
+    def set_axis_order(self, order: str | AxisOrder) -> None:
+        """Re-slice the current frame along a different axis.
+
+        Args:
+            order: A three-digit order, as DS9's Axis Order menu gives it.
+        """
+        handler = self.cube_handler()
+        frame = self.frames.current_frame
+        if handler is None or frame is None:
+            return
+
+        try:
+            axes = AxisOrder.parse(order)
+        except ValueError as exc:
+            self.status(str(exc), 3000)
+            return
+
+        frame.axis_order = str(axes)
+        depth = handler.depth(axes)
+        # The new slice axis is a different length, so the old index may be
+        # past its end.
+        frame.slice_index = min(frame.slice_index, depth - 1)
+        self.window.cube_dialog.set_depth(depth, frame.slice_index)
+        self.set_slice(frame.slice_index)
+        self.status(f"Axis order: {axes}")
+
+    def update_cube_coordinate(self) -> None:
+        """Show the current slice's world coordinate on the Cube dialog."""
+        handler = self.cube_handler()
+        frame = self.frames.current_frame
+        dialog = self.window.cube_dialog
+        if handler is None or frame is None:
+            dialog.set_coordinate("")
+            return
+        coordinate = handler.slice_coordinate(frame.slice_index, frame.axis_order)
+        if coordinate is None:
+            dialog.set_coordinate("")
+            return
+        value, unit = coordinate
+        dialog.set_coordinate(f"{value:.6g} {unit}".strip())
+
+    def sync_cube_dialog(self) -> None:
+        """Bring the Cube dialog in step with the current frame."""
+        dialog = getattr(self.window, "cube_dialog", None)
+        if dialog is None or not dialog.isVisible():
+            return
+        handler = self.cube_handler()
+        frame = self.frames.current_frame
+        if handler is None or frame is None:
+            dialog.set_depth(1, 0)
+            dialog.set_coordinate("")
+            return
+        dialog.set_axis_order(frame.axis_order, notify=False)
+        dialog.set_depth(handler.depth(frame.axis_order), frame.slice_index)
+        self.update_cube_coordinate()
 
     def show_rgb_dialog(self) -> None:
         """Show DS9-style RGB channel dialog."""

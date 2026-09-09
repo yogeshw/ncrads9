@@ -63,6 +63,7 @@ from .display import DisplayPipeline
 from .layout.shell import WindowShell
 from .layout.view_state import ViewState
 from .menu_bar import MenuBar
+from .panels.cube_panel import CubePanel
 from .panels.horizontal_graph import HorizontalGraph
 from .panels.info_panel import InfoPanel
 from .panels.magnifier import MagnifierPanel
@@ -427,6 +428,13 @@ class MainWindow(QMainWindow):
 
         self.horizontal_graph = HorizontalGraph(self)
         self.vertical_graph = VerticalGraph(self)
+
+        # DS9's Cube dialog. Not part of the shell -- it is a window the user
+        # opens from Frame -> Cube -- but built here so its signals are wired
+        # once rather than on every open.
+        self.cube_dialog = CubePanel(self)
+        self.cube_dialog.slice_changed.connect(self.frame_controller.set_slice)
+        self.cube_dialog.axis_order_changed.connect(self.frame_controller.set_axis_order)
 
     #: Button-bar command family -> the controller method that services it.
     #: Buttons whose menu entry is a single `QAction` trigger that action

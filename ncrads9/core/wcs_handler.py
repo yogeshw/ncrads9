@@ -34,6 +34,29 @@ from numpy.typing import NDArray
 ALTERNATE_KEYS: tuple[str, ...] = tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 
+def _celestial_only(wcs: WCS | None) -> WCS | None:
+    """Reduce a cube's WCS to its two celestial axes.
+
+    A frame displays one 2D slice at a time, and every readout here takes an
+    (x, y) pair, so a three-axis WCS would raise from `pixel_to_world` --
+    astropy insists on one argument per axis. Cube-aware code builds its own
+    full WCS through `core.cube_handler.CubeHandler`.
+
+    Args:
+        wcs: The WCS to reduce, or None.
+
+    Returns:
+        The celestial two-axis WCS, or the input unchanged when it is already
+        two-dimensional or has no celestial axes to pick out.
+    """
+    if wcs is None or wcs.naxis <= 2:
+        return wcs
+    try:
+        return wcs.celestial if wcs.has_celestial else wcs
+    except Exception:
+        return wcs
+
+
 def available_alternates(header: fits.Header | None) -> tuple[str, ...]:
     """Which alternate WCS descriptions a header actually carries.
 
@@ -87,6 +110,8 @@ class WCSHandler:
         elif header is not None:
             # astropy spells the primary description as a space, not "".
             self._wcs = WCS(header, key=self._key or " ")
+
+        self._wcs = _celestial_only(self._wcs)
 
     @property
     def key(self) -> str:

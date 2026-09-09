@@ -55,6 +55,9 @@ PREFERENCE_DEFAULTS: dict[str, object] = {
     "default_colormap": "gray",
     "anti_aliasing": True,
     "theme": "System",
+    #: Ask which HDU to load when a file has more than one displayable one.
+    #: DS9 never asks; see ui/dialogs/open_dialog.py.
+    "prompt_for_hdu": True,
 }
 
 #: Image pixels a pasted region is shifted by, so it does not hide the

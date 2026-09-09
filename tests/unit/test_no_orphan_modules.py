@@ -81,8 +81,9 @@ PENDING_ADOPTION: dict[str, str] = {
     "io.array_reader": "M9-13",
     "io.envi_reader": "M9-13",
     "io.nrrd_reader": "M9-13",
-    "io.fits_reader": "M4-1",
-    "io.fits_writer": "M4-10",
+    # A strict subset of core/fits_handler.py, which is the one the loader
+    # uses and which M4 gave the extension model to. Delete, not adopt.
+    "io.fits_reader": "delete -- superseded by core.fits_handler",
     "io.eps_writer": "M9-14",
     "io.gif_writer": "M9-14",
     "io.jpeg_writer": "M9-14",
@@ -99,11 +100,11 @@ PENDING_ADOPTION: dict[str, str] = {
     "prism.line_id": "M9-9",
     "prism.prism_main": "M9-9",
     "prism.spectrum_plot": "M9-9",
-    "ui.panels.cube_panel": "M4-4",
     # M4 -- FITS coverage.
-    "core.cube_handler": "M4-4",
-    "ui.dialogs.open_dialog": "M4-2",
-    "ui.dialogs.save_dialog": "M4-10",
+    # A save dialog with a format combo, duplicating QFileDialog's filter.
+    # DS9 puts each format on its own `Save as` entry and so does M4, so
+    # nothing needs this. Delete, not adopt.
+    "ui.dialogs.save_dialog": "delete -- superseded by the Save as submenu",
     # Widgets with no host yet.
     "ui.dialogs.region_dialog": "M6-7",
     "ui.widgets.region_list": "M6-15",
@@ -245,14 +246,12 @@ def test_pending_modules_exist(module):
 def test_orphan_count_does_not_grow():
     """A ratchet on the headline number from PLAN.md §3.1.
 
-    M1 brought the orphan count down from 116 to 71, and M3 to 60 -- by
-    adopting the information panel, the physical-coordinate transform and the
-    three themes, and by deleting six modules that M1's `CoordinateContext`
-    and `ui/widgets/colorbar_widget.py` had superseded.
-    Raise this ceiling only
+    M1 brought the orphan count down from 116 to 71, M3 to 60, and M4 to 56
+    by adopting the cube handler, the cube panel, the FITS writer and the
+    open dialog. Raise this ceiling only
     when a milestone deliberately adds an unreachable module -- never to make
     a failing run pass.
     """
-    assert len(ORPHANS) <= 60, (
-        f"{len(ORPHANS)} orphan modules; the M3 baseline is 60. " "New unreachable code needs a reason."
+    assert len(ORPHANS) <= 56, (
+        f"{len(ORPHANS)} orphan modules; the M4 baseline is 56. " "New unreachable code needs a reason."
     )

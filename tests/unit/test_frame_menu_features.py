@@ -7,6 +7,7 @@ from astropy.wcs import WCS
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication
 
+from ncrads9.core.fits_handler import HDUInfo, HDUKind
 from ncrads9.core.image_data import ImageData
 from ncrads9.core.wcs_handler import WCSHandler
 from ncrads9.rendering.scale_algorithms import ScaleAlgorithm
@@ -286,17 +287,39 @@ def test_rgb_frame_composes_channels_from_source_frames(main_window: MainWindow)
     assert composed[1, 0, 1] > 200  # green-dominant pixel
 
 
-def test_load_fits_in_rgb_frame_updates_active_channel(main_window: MainWindow, monkeypatch):
-    def _fake_load(self, filepath, memmap=True):
+def _stub_fits_loading(monkeypatch, data: np.ndarray, on_close=None) -> None:
+    """Make `FITSHandler` return `data` without touching the disk.
+
+    Stubs the three methods `DisplayPipeline.load_fits` calls: `load`, then
+    `resolve_extension` and `load_spec`, which since M4 choose the HDU and
+    cut any subsection the specification named.
+    """
+
+    def _load(self, filepath, memmap=True):
         self.filepath = filepath
         self.hdu_list = ["dummy"]
         return self.hdu_list
 
-    def _fake_load_image_data(self, ext=0):
-        return ImageData(data=np.arange(16, dtype=np.float32).reshape(4, 4), header=fits.Header())
+    def _resolve(self, ext=None):
+        return HDUInfo(index=0, name="PRIMARY", kind=HDUKind.IMAGE, shape=data.shape, displayable=True)
 
-    monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.load", _fake_load)
-    monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.load_image_data", _fake_load_image_data)
+    def _load_spec(self, spec):
+        return ImageData(data=data, header=fits.Header())
+
+    def _close(self):
+        if on_close is not None:
+            on_close()
+        self.hdu_list = None
+
+    monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.load", _load)
+    monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.resolve_extension", _resolve)
+    monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.load_spec", _load_spec)
+    if on_close is not None:
+        monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.close", _close)
+
+
+def test_load_fits_in_rgb_frame_updates_active_channel(main_window: MainWindow, monkeypatch):
+    _stub_fits_loading(monkeypatch, np.arange(16, dtype=np.float32).reshape(4, 4))
 
     main_window.frame_controller.new_frame_of_type("rgb")
     frame = main_window.frame_manager.current_frame
@@ -350,21 +373,14 @@ def test_rgb_channel_view_settings_persist_independently(main_window: MainWindow
 def test_load_fits_keeps_handler_alive_and_clear_closes_it(main_window: MainWindow, monkeypatch):
     close_calls = {"count": 0}
 
-    def _fake_load(self, filepath, memmap=True):
-        self.filepath = filepath
-        self.hdu_list = ["dummy"]
-        return self.hdu_list
-
-    def _fake_load_image_data(self, ext=0):
-        return ImageData(data=np.arange(100, dtype=np.float32).reshape(10, 10), header=fits.Header())
-
-    def _fake_close(self):
+    def _count_close():
         close_calls["count"] += 1
-        self.hdu_list = None
 
-    monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.load", _fake_load)
-    monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.load_image_data", _fake_load_image_data)
-    monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.close", _fake_close)
+    _stub_fits_loading(
+        monkeypatch,
+        np.arange(100, dtype=np.float32).reshape(10, 10),
+        on_close=_count_close,
+    )
 
     main_window.display.load_fits("/tmp/test-large.fits")
     frame = main_window.frame_manager.current_frame

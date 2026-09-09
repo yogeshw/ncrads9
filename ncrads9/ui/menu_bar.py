@@ -26,6 +26,57 @@ from PyQt6.QtWidgets import QMenu, QMenuBar, QWidget
 
 from .layout.view_state import DEFAULT_INFO_FIELDS, WCS_SUFFIXES
 
+#: DS9's `File -> Open as`, in DS9's order. A None name is a separator.
+OPEN_AS_ENTRIES: tuple[tuple[str | None, str], ...] = (
+    ("slice", "&Slice..."),
+    (None, ""),
+    ("rgb_image", "&RGB Image..."),
+    ("rgb_cube", "RGB &Cube..."),
+    ("hsv_image", "&HSV Image..."),
+    ("hsv_cube", "HSV C&ube..."),
+    ("hls_image", "H&LS Image..."),
+    ("hls_cube", "HLS Cu&be..."),
+    (None, ""),
+    ("mef_cube", "&Multiple Extension Cube..."),
+    ("mef_frames", "Multiple &Extension Frames..."),
+    (None, ""),
+    ("mosaic_wcs", "Mosaic &WCS..."),
+    ("mosaic_wcs_segment", "Mosaic WCS Se&gment..."),
+    ("mosaic_iraf", "Mosaic &IRAF..."),
+    ("mosaic_iraf_segment", "Mosaic IRAF Segmen&t..."),
+    ("mosaic_wfpc2", "Mosaic WF&PC2..."),
+    (None, ""),
+    ("url", "U&RL..."),
+)
+
+#: DS9's `File -> Save as`, in DS9's order.
+SAVE_AS_ENTRIES: tuple[tuple[str | None, str], ...] = (
+    ("slice", "&Slice..."),
+    (None, ""),
+    ("rgb_image", "&RGB Image..."),
+    ("rgb_cube", "RGB &Cube..."),
+    ("hsv_image", "&HSV Image..."),
+    ("hsv_cube", "HSV C&ube..."),
+    ("hls_image", "H&LS Image..."),
+    ("hls_cube", "HLS Cu&be..."),
+    (None, ""),
+    ("mef_cube", "&Multiple Extension Cube..."),
+    (None, ""),
+    ("mosaic_wcs", "Mosaic &WCS..."),
+    ("mosaic_wcs_segment", "Mosaic WCS Se&gment..."),
+)
+
+#: DS9's `File -> Save Image`. Only FITS is written by M4; the raster
+#: formats are M9-14, and EPS needs the PostScript driver of M9-18.
+SAVE_IMAGE_ENTRIES: tuple[tuple[str, str], ...] = (
+    ("fits", "&FITS..."),
+    ("eps", "&EPS..."),
+    ("gif", "&GIF..."),
+    ("tiff", "&TIFF..."),
+    ("jpeg", "&JPEG..."),
+    ("png", "&PNG..."),
+)
+
 
 class MenuBar(QMenuBar):
     """Menu bar with DS9-style menus."""
@@ -57,12 +108,30 @@ class MenuBar(QMenuBar):
             self.vo_menu.setVisible(True)
 
     def _setup_file_menu(self) -> None:
-        """Set up the File menu."""
+        """Set up the File menu.
+
+        DS9's `Open as` and `Save as` submenus each hold one entry per way of
+        reading or writing the same file (`ds9/library/mfile.tcl`). The lists
+        below are DS9's, in DS9's order.
+        """
         self.file_menu: QMenu = self.addMenu("&File")
 
         self.action_open: QAction = QAction("&Open...", self)
         self.action_open.setShortcut(QKeySequence.StandardKey.Open)
         self.file_menu.addAction(self.action_open)
+
+        self.open_as_menu: QMenu = self.file_menu.addMenu("Open &as")
+        #: Loader name -> its action, so the File controller can wire them in
+        #: one loop and a guard test can check none is left unconnected.
+        self.open_as_actions: dict[str, QAction] = {}
+        for name, label in OPEN_AS_ENTRIES:
+            if name is None:
+                self.open_as_menu.addSeparator()
+                continue
+            action = QAction(label, self)
+            self.open_as_menu.addAction(action)
+            self.open_as_actions[name] = action
+            setattr(self, f"action_open_{name}", action)
 
         self.action_save: QAction = QAction("&Save...", self)
         self.action_save.setShortcut(QKeySequence.StandardKey.Save)
@@ -72,7 +141,28 @@ class MenuBar(QMenuBar):
         self.action_save_as.setShortcut(QKeySequence.StandardKey.SaveAs)
         self.file_menu.addAction(self.action_save_as)
 
+        self.save_as_menu: QMenu = self.file_menu.addMenu("Save a&s")
+        #: Writer name -> its action. As `open_as_actions`.
+        self.save_as_actions: dict[str, QAction] = {}
+        for name, label in SAVE_AS_ENTRIES:
+            if name is None:
+                self.save_as_menu.addSeparator()
+                continue
+            action = QAction(label, self)
+            self.save_as_menu.addAction(action)
+            self.save_as_actions[name] = action
+            setattr(self, f"action_save_{name}", action)
+
         self.file_menu.addSeparator()
+
+        self.save_image_menu: QMenu = self.file_menu.addMenu("Save &Image")
+        #: Format name -> its action.
+        self.save_image_actions: dict[str, QAction] = {}
+        for name, label in SAVE_IMAGE_ENTRIES:
+            action = QAction(label, self)
+            self.save_image_menu.addAction(action)
+            self.save_image_actions[name] = action
+            setattr(self, f"action_save_image_{name}", action)
 
         self.action_export: QAction = QAction("&Export...", self)
         self.file_menu.addAction(self.action_export)

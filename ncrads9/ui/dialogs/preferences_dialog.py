@@ -118,6 +118,18 @@ class PreferencesDialog(QDialog):
         dir_layout.addRow("Export directory:", export_layout)
 
         general_layout.addWidget(dir_group)
+
+        loading_group = QGroupBox("Loading")
+        loading_layout = QFormLayout(loading_group)
+        self._prompt_hdu_check = QCheckBox("Ask which extension to load when a file has more than one")
+        self._prompt_hdu_check.setChecked(True)
+        self._prompt_hdu_check.setToolTip(
+            "DS9 never asks: it loads the primary HDU if it is an image, else "
+            "the first extension that is one. Uncheck for that behaviour."
+        )
+        loading_layout.addRow(self._prompt_hdu_check)
+        general_layout.addWidget(loading_group)
+
         general_layout.addStretch()
 
         tabs.addTab(general_widget, "General")
@@ -282,6 +294,7 @@ class PreferencesDialog(QDialog):
         self._recent_files_spin.setValue(10)
         self._data_dir_edit.clear()
         self._export_dir_edit.clear()
+        self._prompt_hdu_check.setChecked(True)
         self._theme_combo.setCurrentText("System")
         self._bg_color = QColor(0, 0, 0)
         self._update_bg_color_button()
@@ -306,6 +319,7 @@ class PreferencesDialog(QDialog):
             "recent_files_count": self._recent_files_spin.value(),
             "data_directory": self._data_dir_edit.text(),
             "export_directory": self._export_dir_edit.text(),
+            "prompt_for_hdu": self._prompt_hdu_check.isChecked(),
             "theme": self._theme_combo.currentText(),
             "background_color": self._bg_color.name(),
             "anti_aliasing": self._anti_alias_check.isChecked(),
@@ -345,6 +359,8 @@ class PreferencesDialog(QDialog):
             self._data_dir_edit.setText(prefs["data_directory"])
         if "export_directory" in prefs:
             self._export_dir_edit.setText(prefs["export_directory"])
+        if "prompt_for_hdu" in prefs:
+            self._prompt_hdu_check.setChecked(bool(prefs["prompt_for_hdu"]))
         if "theme" in prefs:
             self._theme_combo.setCurrentText(prefs["theme"])
         if "background_color" in prefs:

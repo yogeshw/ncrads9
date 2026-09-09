@@ -44,14 +44,14 @@ Author: Yogesh Wadadekar
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 from numpy.typing import NDArray
 from PyQt6.QtGui import QImage, QPixmap
 
 from ..colormaps.colormap import Colormap
-from ..core.fits_handler import FITSHandler
+from ..core.cube_handler import CubeHandler, is_cube
+from ..core.file_spec import parse as parse_file_spec
+from ..core.fits_handler import FITSHandler, HDUKind
 from ..core.wcs_handler import WCSHandler
 from ..frames.frame import Frame
 from ..frames.tile_layout import TileLayout
@@ -215,10 +215,18 @@ class DisplayPipeline:
 
     def load_fits(self, filepath: str) -> None:
         """
-        Load a FITS file into current frame.
+        Load a FITS file, or one extension and section of one, into the
+        current frame.
 
         Args:
-            filepath: Path to the FITS file.
+            filepath: A path, or a DS9 file specification such as
+                `foo.fits[SCI][100:200,*]` or `evt.fits[bin=detx,dety]`.
+                See `core/file_spec.py` for the grammar.
+
+        Raises:
+            FileSpecError: If the specification cannot be parsed.
+            FITSLoadError: If nothing in the file can be displayed, or the
+                named extension cannot be.
         """
         # Get current frame
         frame = self.frames.current_frame
@@ -233,18 +241,22 @@ class DisplayPipeline:
             except Exception:
                 pass
 
-        # Load FITS file. ImageData gathers the array, header, WCS and derived
-        # metadata (BITPIX, cached min/max) in one place; M4 extends this to
-        # extensions, cubes and mosaics.
+        # ImageData gathers the array, header, WCS and derived metadata
+        # (BITPIX, cached min/max) in one place; the specification says which
+        # extension and which subsection of it to gather.
+        spec = parse_file_spec(filepath)
         fits_handler = FITSHandler()
-        fits_handler.load(filepath)
-        image = fits_handler.load_image_data()
+        fits_handler.load(str(spec.path))
+        info = fits_handler.resolve_extension(spec.extension)
+        image = fits_handler.load_spec(spec)
         image_data = image.data
         header = image.header
         wcs_handler = WCSHandler(header)
 
         # Update frame
-        frame.filepath = Path(filepath)
+        frame.filepath = spec.path
+        frame.file_spec = str(spec) if spec.has_specification else None
+        frame.hdu_index = info.index
         frame.fits_handler = fits_handler
         frame.image = image
         if frame.frame_type == "rgb":
@@ -253,9 +265,18 @@ class DisplayPipeline:
             frame.rgb_source_frame_ids[channel] = None
             self.sync_rgb_scalar_view(frame)
         else:
+            # A cube is displayed one slice at a time; `frame.image` keeps
+            # the whole thing so the Cube dialog can step through it.
+            if is_cube(image_data):
+                frame.slice_index = 0
+                frame.axis_order = "123"
+                plane = CubeHandler(image_data, header).get_slice(0)
+                image_data = plane if plane is not None else image_data
             frame.image_data = image_data
             frame.original_image_data = image_data
-        frame.bin_factor = 1
+        # A section's block factor is DS9's display blocking, which the frame
+        # owns; M5 separates that from bin-table binning properly.
+        frame.bin_factor = spec.section.block if spec.section is not None else 1
         frame.header = header
         frame.wcs_handler = wcs_handler
         frame.colormap = self.window.current_colormap
@@ -271,7 +292,9 @@ class DisplayPipeline:
             self.viewer.reset_contrast_brightness()
 
         # Update window title
-        filename = Path(filepath).name
+        filename = spec.path.name
+        if spec.extension is not None:
+            filename += f"[{spec.extension}]"
         frame_info = f"Frame {self.frames.current_index + 1}/{self.frames.num_frames}"
         self.window.setWindowTitle(f"NCRADS9 - {filename} [{frame_info}]")
 
@@ -288,6 +311,11 @@ class DisplayPipeline:
 
         # Update temporary message
         stats_msg = f"Loaded: {shape[1]}x{shape[0]} pixels, {dtype}"
+        if is_cube(image.data):
+            depth = CubeHandler(image.data, header).depth()
+            stats_msg += f", slice 1 of {depth}"
+        if info.kind is not HDUKind.IMAGE:
+            stats_msg += f" from a {info.kind.value} HDU"
         if wcs_handler.is_valid:
             stats_msg += " (WCS available)"
         self.status(stats_msg, 3000)

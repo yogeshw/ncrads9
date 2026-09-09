@@ -45,6 +45,18 @@ class Frame:
 
     frame_id: int
     filepath: Path | None = None
+    #: The specification the frame was loaded from, e.g.
+    #: `evt.fits[EVENTS][bin=x,y]`. `filepath` is its path alone. Kept so the
+    #: title, the HDU chooser and `Frame -> Refresh` know which extension and
+    #: section are on screen.
+    file_spec: str | None = None
+    #: Which HDU of `filepath` is displayed, as an index into its HDU list.
+    hdu_index: int | None = None
+    #: For a data cube: which slice is on screen, counting from zero, and
+    #: which FITS axes are display x, y and the slice axis. DS9 writes the
+    #: order as three digits on its Cube dialog's Axis Order menu.
+    slice_index: int = 0
+    axis_order: str = "123"
     image_data: np.ndarray | None = None
     header: dict | None = None
     wcs_handler: object | None = None

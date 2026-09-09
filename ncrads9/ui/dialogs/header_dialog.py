@@ -36,6 +36,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ...core.fits_handler import HDUInfo
 from ...core.header_parser import header_to_lines, summarize_header
 
 
@@ -46,6 +47,9 @@ class HeaderDialog(QDialog):
         self,
         header_data: "fits.Header | dict[str, Any] | None" = None,
         parent: QDialog | None = None,
+        extensions: "list[HDUInfo] | None" = None,
+        handler: object | None = None,
+        index: int = 0,
     ) -> None:
         """Initialize the header dialog.
 
@@ -54,6 +58,10 @@ class HeaderDialog(QDialog):
                 A real `fits.Header` also gets a summary block and keeps its
                 card comments.
             parent: Parent widget.
+            extensions: Every HDU of the file, so the selector can offer
+                them. Omit for a single header with nothing to switch to.
+            handler: The open `FITSHandler` the headers are read from.
+            index: Which extension `header_data` came from, preselected.
         """
         # Pass None as parent to make dialog independent
         super().__init__(None)
@@ -70,6 +78,11 @@ class HeaderDialog(QDialog):
         self.setWindowTitle("FITS Header")
         self.setMinimumSize(700, 500)
         self._header_data = header_data or {}
+        self._extensions = extensions or []
+        self._handler = handler
+        self._index = index
+        #: Guards the selector while it is being filled.
+        self._filling = False
         self._setup_ui()
         self._populate_header()
 
@@ -79,9 +92,10 @@ class HeaderDialog(QDialog):
 
         # Extension selector
         ext_layout = QHBoxLayout()
-        ext_layout.addWidget(QLabel("Extension:"))
+        self._ext_label = QLabel("Extension:")
+        ext_layout.addWidget(self._ext_label)
         self._ext_combo = QComboBox()
-        self._ext_combo.addItem("Primary (0)")
+        self._fill_extensions()
         self._ext_combo.currentIndexChanged.connect(self._on_extension_changed)
         ext_layout.addWidget(self._ext_combo)
         ext_layout.addStretch()
@@ -140,13 +154,56 @@ class HeaderDialog(QDialog):
             lines = [*summary, "", "-" * 60, "", *lines]
         self._header_text.setText("\n".join(lines))
 
-    def _on_extension_changed(self, index: int) -> None:
-        """Handle extension selection change.
+    def _fill_extensions(self) -> None:
+        """List the file's HDUs in the selector.
+
+        With no extension list -- a caller that passed one header and nothing
+        else -- the selector holds that one entry and is disabled, rather than
+        offering a "Primary (0)" that might not be what is shown.
+        """
+        self._filling = True
+        try:
+            self._ext_combo.clear()
+            if not self._extensions:
+                self._ext_combo.addItem("Primary (0)")
+                self._ext_combo.setEnabled(False)
+                return
+
+            for info in self._extensions:
+                label = f"{info.name or '-'} ({info.index})"
+                if info.dimensions:
+                    label += f"  {info.dimensions}"
+                self._ext_combo.addItem(label, info.index)
+            self._ext_combo.setEnabled(len(self._extensions) > 1)
+
+            position = self._ext_combo.findData(self._index)
+            if position >= 0:
+                self._ext_combo.setCurrentIndex(position)
+        finally:
+            self._filling = False
+
+    def _on_extension_changed(self, position: int) -> None:
+        """Show the header of the extension the user picked.
 
         Args:
-            index: Selected extension index.
+            position: The selector's row, not the HDU index -- a file's HDU
+                numbers and the combo's rows coincide today but need not.
         """
-        # Placeholder for extension switching
+        if self._filling or position < 0 or self._handler is None:
+            return
+        index = self._ext_combo.itemData(position)
+        if index is None:
+            return
+
+        try:
+            self._header_data = self._handler.get_header(int(index))
+        except Exception as exc:
+            self._header_text.setText(f"Could not read extension {index}: {exc}")
+            return
+
+        self._index = int(index)
+        self._search_edit.clear()
+        self._populate_header()
 
     def _on_search(self, text: str) -> None:
         """Handle search text change.
