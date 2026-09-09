@@ -452,25 +452,37 @@ tests **533 -> 628**, coverage 48.3% -> 51.6%.
 
 ## M5 — Scale, colour, block/bin
 
-Depends on M1, M2.
+**Status: 13 of 21 done.** Scale is complete and at **31/31** shared labels with DS9; Color is at
+**25/25**; Block is now a display transform rather than an edit. Menu entries **371 -> 577**,
+overall menu parity **50% -> 58%**, tests **811 -> 943**, coverage 55.6% -> 57.1%.
 
-### Scale
-- [ ] **M5-1** (S) Add Power and SINH to the Scale menu (both algorithms already exist in
+The eight left are the bin-table group (M5-16 to M5-19, M5-21) and three colour items (M5-11 to
+M5-13). Nothing half-finished: each task below is either done and tested, or untouched.
+
+| Module | Lines | Owns |
+|---|---:|---|
+| `rendering/scale_limits.py` | 335 | DS9's limit modes, methods, scope and DATASEC |
+| `rendering/block.py` | 80 | DS9's Block, as a transform on a copy |
+| `colormaps/bundled.py` | 358 | DS9's 164 tables on DS9's ten cascades |
+| `colormaps/data/` | 164 files | the tables themselves, 1.2 MB |
+
+### Scale — complete
+- [x] **M5-1** (S) Add Power and SINH to the Scale menu (both algorithms already exist in
       `rendering/scale_algorithms.py`).
-- [ ] **M5-2** (M) Percentile clipping presets: 99.5, 99, 98, 97, 96, 95, 92.5, 90 %.
-- [ ] **M5-3** (S) ZMax limit mode.
-- [ ] **M5-4** (S) Log Exponent parameter.
-- [ ] **M5-5** (M) Scale scope Global / Local.
-- [ ] **M5-6** (M) Min/max method: Scan, Sample, DATAMIN/DATAMAX, IRAF-MIN/IRAF-MAX, plus the
+- [x] **M5-2** (M) Percentile clipping presets: 99.5, 99, 98, 97, 96, 95, 92.5, 90 %.
+- [x] **M5-3** (S) ZMax limit mode.
+- [x] **M5-4** (S) Log Exponent parameter.
+- [x] **M5-5** (M) Scale scope Global / Local.
+- [x] **M5-6** (M) Min/max method: Scan, Sample, DATAMIN/DATAMAX, IRAF-MIN/IRAF-MAX, plus the
       Sample Parameters dialog (sample increment).
-- [ ] **M5-7** (S) Use DATASEC toggle.
-- [ ] **M5-8** (M) ZScale Parameters dialog: contrast, number of samples, samples per line.
+- [x] **M5-7** (S) Use DATASEC toggle.
+- [x] **M5-8** (M) ZScale Parameters dialog: contrast, number of samples, samples per line.
 
 ### Colour
-- [ ] **M5-9** (M) Bundle DS9's 168 `.sao`/`.lut` colormaps under `ncrads9/colormaps/data/` and
+- [x] **M5-9** (M) Bundle DS9's 168 `.sao`/`.lut` colormaps under `ncrads9/colormaps/data/` and
       load them at startup through the existing `sao_parser`/`lut_parser`. Include them in package
-      data in `pyproject.toml`.
-- [ ] **M5-10** (M) Build the full category submenus: h5utils, Matplotlib Uniform / Sequential /
+      data in `pyproject.toml`. *164 of them: see the four exclusions below.*
+- [x] **M5-10** (M) Build the full category submenus: h5utils, Matplotlib Uniform / Sequential /
       Diverging / Cyclic, Cubehelix, Gist, Topographic, Scientific Colour Maps, Solar, User.
 - [ ] **M5-11** (L) Colour tags: create/edit/delete value-range highlights on the colorbar;
       the Colorbar pointer mode; load/save/delete tags per frame from the Colormap Parameters
@@ -480,19 +492,64 @@ Depends on M1, M2.
 - [ ] **M5-13** (S) Expose contrast/bias drag as an explicit Colorbar mode with a reset.
 
 ### Block vs Bin
-- [ ] **M5-14** (M) Make Block a **non-destructive display transform**: move it into the render
+- [x] **M5-14** (M) Make Block a **non-destructive display transform**: move it into the render
       pipeline instead of overwriting `frame.image_data` in `_set_bin()`. Add factors 64, 128, 256.
-- [ ] **M5-15** (S) Remove the `Bin` menu's block-averaging behaviour; keep the menu, repurpose
+- [x] **M5-15** (S) Remove the `Bin` menu's block-averaging behaviour; keep the menu, repurpose
       it below.
 - [ ] **M5-16** (L) FITS bin-table support: open a bin table, choose X/Y columns, bin function
       (average/sum), buffer size (128²…8192²), a third `depth` column, and a row filter
-      expression.
+      expression. *M4 implemented the plain two-dimensional count, with the image's WCS built from
+      the columns' own `TC*` cards, which is what makes an events table displayable at all. What
+      is left is the choice of function, the buffer size, the depth column and the filter.*
 - [ ] **M5-17** (M) Bin centring from `TDMIN/TDMAX`, `TLMIN/TLMAX`, `TALEN`, `AXLEN`, falling back
-      to the middle of the data space.
+      to the middle of the data space. *`TLMIN`/`TLMAX` is honoured; the other three are not.*
 - [ ] **M5-18** (S) Bin In / Bin Out / Bin Fit.
 - [ ] **M5-19** (M) Binning Parameters dialog.
-- [ ] **M5-20** (S) Fix `Frame → Match/Lock → Bin` and `→ Block` to mean the right things.
+- [x] **M5-20** (S) Fix `Frame → Match/Lock → Bin` and `→ Block` to mean the right things.
 - [ ] **M5-21** (S) Test with a real event list (add a small synthetic one to `sampleimages/`).
+
+### Where this deviated from the plan, and why
+
+* **`rendering/scale_limits.py` and `rendering/block.py` are new.** Neither was named in the plan.
+  Both are Qt-free, so every limit mode and every block factor is tested against known data
+  rather than through a window, and M8's XPA `scale` access point gets one object to read and
+  write.
+* **Three transfer functions were wrong, not missing.** M5-1 reads as "add Power and SINH", but
+  Power *was* `x**2` -- which is DS9's *Squared*, an entry NCRADS9 did not have -- and Sinh was
+  `sinh(x)/sinh(1)` against DS9's `sinh(3x)/10`. Read off `tksao/frame/colorscale.C` and now
+  matching DS9 exactly, which is what makes the two applications render an image alike.
+* **DS9 has one exponent, not two.** `scale(log)` drives both the log and the power functions, so
+  M5-4's Log Exponent is a single setting with a submenu of eight presets plus Other. DS9 offers
+  only a dialog there.
+* **The limit settings are per window, not per frame.** DS9 keeps them per frame and ties frames
+  with `Frame -> Lock -> Scale`; this keeps one set and caches the *computed* limits per frame in
+  `frame.z1`/`z2`, so switching frames still restores what you saw. Making the settings per-frame
+  is a Lock question and belongs with M9's remaining lock work.
+* **164 tables, not 168.** `viridis`, `inferno`, `magma` and `plasma` are shipped by DS9 as files
+  *and* exist as NCRADS9 built-ins under the same names; the same tables are on Matplotlib Uniform
+  as `mpl_viridis` and friends, which is what DS9's cascade calls them. One name resolving to two
+  sources is a bug waiting to happen. Six topographic tables DS9 ships but never menus are put on
+  Topographic, and `turbo`/`twilight` on Sequential and Cyclic by what they are. All recorded in
+  `colormaps/data/README.md`.
+* **Block converts coordinates at four places, not everywhere.** The viewers work in the units of
+  whatever array they were handed, so rather than thread a factor through the whole coordinate
+  path, the two mapping functions of the CPU viewer and the two of the region overlay multiply by
+  it, with the GL path's cursor and click signals doing the same.
+
+### Bugs found and fixed on the way
+
+* **Every one of DS9's 46 `.sao` colour tables would have loaded as a flat colour.** DS9 writes an
+  entire channel on one line -- two hundred-odd `(position,value)` pairs of it -- and the parser
+  stripped the punctuation, split on whitespace and took the first two numbers. One control point
+  per channel, so `np.interp` returned a constant. It did that without raising, which is what
+  PLAN.md §3.1 meant by code that gives a false impression of coverage.
+* **Eighteen cascade entries could not have been applied.** The menu registers colormap actions
+  under a lowercased key while eighteen of DS9's files are mixed-case (`mpl_Greys`,
+  `scm_batlowK`); lookups now ignore case at both ends.
+* **The Scale menu could not have had an effect even once it existed.** All three places the
+  display pipeline computed limits called `compute_zscale_limits` directly, bypassing any setting.
+* **`Frame -> Match -> Bin` copied the block factor**, which is neither what DS9's Bin means nor
+  what its Block means.
 
 ---
 
