@@ -192,11 +192,16 @@ def test_graph_toggles_show_the_cut_graphs(main_window):
     assert main_window.horizontal_graph.isHidden()
 
 
-def test_multi_colorbar_is_recorded_and_reported(main_window):
-    """Flagged as having no effect until M5 rather than silently ignored."""
+def test_multi_colorbar_reaches_the_state(main_window):
+    """It announced itself as deferred until M5-12 gave it an effect.
+
+    What it does now is tested in `test_color_tags.py`; this only checks that
+    the toggle reaches the state.
+    """
     main_window.menu_bar.action_view_multi_colorbar.setChecked(False)
     assert main_window.view_state.multi is False
-    assert "M5" in main_window.status_bar.currentMessage()
+    main_window.menu_bar.action_view_multi_colorbar.setChecked(True)
+    assert main_window.view_state.multi is True
 
 
 def test_info_field_toggles_cover_every_field(main_window):

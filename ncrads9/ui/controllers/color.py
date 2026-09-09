@@ -23,8 +23,9 @@ DS9's ten cascades, so a name resolves in one of three ways: a built-in from
 use, or a table the user loaded at runtime. `colormap()` is the one place
 that resolution happens.
 
-Still missing against DS9 (PLAN.md §5.8): colour tags, the Colorbar pointer
-mode, and the RGB/HSV/HLS colorbar variants.
+Colour tags are held per frame (`colormaps/color_tags.py`) and painted onto
+whatever table is in force, after inversion and before anything is drawn, so
+they follow a colormap change and a clip-limit change without moving.
 
 Author: Yogesh Wadadekar
 """
@@ -35,6 +36,12 @@ from PyQt6.QtWidgets import QFileDialog, QInputDialog
 
 from ...colormaps.builtin_maps import get_colormap
 from ...colormaps.bundled import load as load_bundled
+from ...colormaps.color_tags import (
+    DEFAULT_TAG_COLOR,
+    ColorTag,
+    ColorTagError,
+    ColorTagSet,
+)
 from ...colormaps.colormap import Colormap
 from ...colormaps.lut_parser import parse_lut_file, save_lut_file
 from ...colormaps.sao_parser import parse_sao_file
@@ -50,6 +57,13 @@ BUTTON_LABELS: dict[str, str] = {
     "cool": "Cool",
     "rainbow": "Rainbow",
 }
+
+#: Filter for the colour tag file dialogs.
+TAG_FILTER = "Color Tag Files (*.tag);;All Files (*)"
+
+#: How wide a new tag is, as a fraction of the colorbar, when the user
+#: clicks somewhere untagged.
+NEW_TAG_WIDTH = 0.05
 
 #: Font-size thresholds for the colorbar's Small/Medium/Large radio group.
 SMALL_FONT_MAX = 7
@@ -69,6 +83,11 @@ class ColorController(Controller):
         self.menu.action_load_user_colormap.triggered.connect(self.load_user_colormap)
         self.menu.action_save_user_colormap.triggered.connect(self.save_current_colormap)
         self.menu.action_colormap_params.triggered.connect(self.show_dialog)
+        self.menu.action_reset_colorbar.triggered.connect(self.reset_contrast_bias)
+
+        self.menu.action_load_color_tags.triggered.connect(self.load_tags)
+        self.menu.action_save_color_tags.triggered.connect(self.save_tags)
+        self.menu.action_delete_color_tags.triggered.connect(self.delete_tags)
 
         self.menu.action_colorbar.triggered.connect(self.set_colorbar_visible)
         self.menu.action_colorbar_horizontal.triggered.connect(
@@ -228,6 +247,170 @@ class ColorController(Controller):
         except Exception as exc:
             self.status(f"Error saving colormap: {exc}", 3000)
 
+    # -- colour tags ---------------------------------------------------------
+
+    def tags(self, frame=None) -> ColorTagSet:
+        """The current frame's colour tags, creating the set on first use.
+
+        Args:
+            frame: The frame to read. Defaults to the current one.
+
+        Returns:
+            Its tag set. An empty set with no frame, so every caller can
+            treat the result as a set rather than checking for None.
+        """
+        frame = frame if frame is not None else self.frame
+        if frame is None:
+            return ColorTagSet()
+        if not isinstance(getattr(frame, "color_tags", None), ColorTagSet):
+            frame.color_tags = ColorTagSet()
+        return frame.color_tags
+
+    def apply_tags(self, colormap: Colormap, frame=None) -> Colormap:
+        """Paint a frame's tags onto a colour table.
+
+        Args:
+            colormap: The table as the colormap and inversion left it.
+            frame: The frame whose tags to use. Defaults to the current one.
+
+        Returns:
+            A tagged copy, or `colormap` itself when the frame has no tags.
+        """
+        tags = self.tags(frame)
+        if not tags:
+            return colormap
+        return Colormap(f"{colormap.name}+tags", tags.apply(colormap.colors))
+
+    def add_tag(self, start: float, stop: float, color: str = DEFAULT_TAG_COLOR) -> None:
+        """Tag a stretch of the colorbar.
+
+        Args:
+            start: Where the tag begins, 0 at the bottom of the colorbar.
+            stop: Where it ends.
+            color: A colour name or `#rrggbb`.
+        """
+        if self.require_frame("No image to tag") is None:
+            return
+        try:
+            tag = ColorTag(start, stop, color)
+        except ColorTagError as exc:
+            self.status(str(exc), 3000)
+            return
+        self.tags().add(tag)
+        self.refresh_tags()
+        self.status(f"Tagged {tag.start:.3g}..{tag.stop:.3g} {tag.color}")
+
+    def edit_tag(self, index: int, start: float, stop: float, color: str) -> None:
+        """Change one tag."""
+        try:
+            self.tags().replace(index, ColorTag(start, stop, color))
+        except (IndexError, ColorTagError) as exc:
+            self.status(str(exc), 3000)
+            return
+        self.refresh_tags()
+
+    def delete_tag(self, index: int) -> None:
+        """Delete one tag."""
+        try:
+            self.tags().remove(index)
+        except IndexError:
+            self.status(f"No colour tag {index}", 3000)
+            return
+        self.refresh_tags()
+        self.status("Deleted colour tag")
+
+    def delete_tags(self) -> None:
+        """Delete every tag on the current frame (DS9's Delete Color Tag)."""
+        tags = self.tags()
+        if not tags:
+            self.status("No colour tags to delete")
+            return
+        count = len(tags)
+        tags.clear()
+        self.refresh_tags()
+        self.status(f"Deleted {count} colour tag{'s' if count != 1 else ''}")
+
+    def load_tags(self) -> None:
+        """Load a DS9 colour tag file onto the current frame."""
+        if self.require_frame("No image to tag") is None:
+            return
+        filepath, _ = QFileDialog.getOpenFileName(self.window, "Load Color Tags", "", TAG_FILTER)
+        if not filepath:
+            return
+        try:
+            loaded = ColorTagSet.load(filepath)
+        except (ColorTagError, OSError) as exc:
+            self.status(f"Error loading colour tags: {exc}", 5000)
+            return
+        frame = self.frame
+        if frame is not None:
+            frame.color_tags = loaded
+        self.refresh_tags()
+        self.status(f"Loaded {len(loaded)} colour tags from {filepath}", 3000)
+
+    def save_tags(self) -> None:
+        """Write the current frame's colour tags to a file."""
+        tags = self.tags()
+        if not tags:
+            self.status("No colour tags to save")
+            return
+        filepath, _ = QFileDialog.getSaveFileName(self.window, "Save Color Tags", "", TAG_FILTER)
+        if not filepath:
+            return
+        try:
+            tags.save(filepath)
+        except OSError as exc:
+            self.status(f"Error saving colour tags: {exc}", 5000)
+            return
+        self.status(f"Saved {len(tags)} colour tags to {filepath}", 3000)
+
+    def refresh_tags(self) -> None:
+        """Redraw after a tag change.
+
+        The colorbar is painted from the same table the image is, tags and
+        all, so redisplaying updates both and there is nothing to tell the
+        colorbar separately.
+        """
+        if self.window.image_data is not None:
+            self.refresh()
+
+    def on_colorbar_clicked(self, position: float) -> None:
+        """Handle a click on the colorbar in DS9's Colorbar edit mode.
+
+        Clicking an existing tag edits it; clicking anywhere else starts a
+        new one, a twentieth of the bar wide, which the dialog then adjusts.
+
+        Args:
+            position: 0 at the bottom of the colorbar, 1 at the top.
+        """
+        if self.window.edit_mode != "colorbar":
+            return
+        if self.require_frame("No image to tag") is None:
+            return
+
+        tags = self.tags()
+        index = tags.index_at(position)
+        if index is None:
+            half = NEW_TAG_WIDTH / 2.0
+            self.add_tag(position - half, position + half)
+            index = len(tags) - 1
+        self.show_tag_dialog(index)
+
+    def show_tag_dialog(self, index: int) -> None:
+        """Edit or delete one tag (DS9's ColorTagDialog)."""
+        tags = self.tags()
+        if not 0 <= index < len(tags):
+            return
+        from ..dialogs.color_tag_dialog import ColorTagDialog
+
+        dialog = ColorTagDialog(tags.tags[index], self.window)
+        outcome = dialog.exec()
+        if outcome == ColorTagDialog.DELETED:
+            self.delete_tag(index)
+        elif outcome:
+            edited = dialog.tag()
+            self.edit_tag(index, edited.start, edited.stop, edited.color)
+
     # -- contrast and bias ---------------------------------------------------
 
     def set_contrast_brightness(self, contrast: float, brightness: float) -> None:
@@ -239,6 +422,22 @@ class ColorController(Controller):
         inner = getattr(viewer, "image_viewer", None)
         if inner is not None and hasattr(inner, "set_contrast_brightness"):
             inner.set_contrast_brightness(contrast, brightness)
+
+    def reset_contrast_bias(self) -> None:
+        """Put contrast and bias back to neutral.
+
+        Dragging on the image adjusts them, with nothing to say what they are
+        or how to undo it. M5-13 gives that its own entry.
+        """
+        viewer = self.viewer
+        if hasattr(viewer, "reset_contrast_brightness"):
+            viewer.reset_contrast_brightness()
+        else:
+            self.set_contrast_brightness(1.0, 0.0)
+        self.window.frame_controller.persist_view_state()
+        if self.window.image_data is not None:
+            self.refresh()
+        self.status("Contrast and bias reset")
 
     def on_contrast_changed(self, contrast: float, brightness: float) -> None:
         """Handle a contrast/bias change made by dragging on the image."""

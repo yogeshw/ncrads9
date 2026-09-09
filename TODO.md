@@ -452,21 +452,22 @@ tests **533 -> 628**, coverage 48.3% -> 51.6%.
 
 ## M5 — Scale, colour, block/bin
 
-**Status: 13 of 21 done.** Scale is complete and at **31/31** shared labels with DS9; Color is at
-**25/25**; Block is now a display transform rather than an edit. Menu entries **371 -> 577**,
-overall menu parity **50% -> 58%**, tests **811 -> 943**, coverage 55.6% -> 57.1%.
-
-The eight left are the bin-table group (M5-16 to M5-19, M5-21) and three colour items (M5-11 to
-M5-13). Nothing half-finished: each task below is either done and tested, or untouched.
+**Status: complete.** Five DS9 menus are now at full label parity -- Scale **31/31**, Color
+**25/25**, Bin **22/22**, Edit **18/18**, Zoom **26/26** -- and Block is a display transform
+rather than an edit. Overall menu parity **50% -> 66%**, tests **811 -> 1086**, coverage
+55.6% -> 58.5%.
 
 | Module | Lines | Owns |
 |---|---:|---|
 | `rendering/scale_limits.py` | 335 | DS9's limit modes, methods, scope and DATASEC |
 | `rendering/block.py` | 80 | DS9's Block, as a transform on a copy |
+| `core/bin_table.py` | 407 | DS9's Bin: a table into an image |
 | `colormaps/bundled.py` | 358 | DS9's 164 tables on DS9's ten cascades |
+| `colormaps/color_tags.py` | 270 | colour tags, and DS9's tag file format |
+| `ui/controllers/bin.py` | 354 | the Bin menu and its Parameters dialog |
 | `colormaps/data/` | 164 files | the tables themselves, 1.2 MB |
 
-### Scale — complete
+### Scale
 - [x] **M5-1** (S) Add Power and SINH to the Scale menu (both algorithms already exist in
       `rendering/scale_algorithms.py`).
 - [x] **M5-2** (M) Percentile clipping presets: 99.5, 99, 98, 97, 96, 95, 92.5, 90 %.
@@ -481,60 +482,67 @@ M5-13). Nothing half-finished: each task below is either done and tested, or unt
 ### Colour
 - [x] **M5-9** (M) Bundle DS9's 168 `.sao`/`.lut` colormaps under `ncrads9/colormaps/data/` and
       load them at startup through the existing `sao_parser`/`lut_parser`. Include them in package
-      data in `pyproject.toml`. *164 of them: see the four exclusions below.*
+      data in `pyproject.toml`. *164 of them, lazily rather than at startup: see below.*
 - [x] **M5-10** (M) Build the full category submenus: h5utils, Matplotlib Uniform / Sequential /
       Diverging / Cyclic, Cubehelix, Gist, Topographic, Scientific Colour Maps, Solar, User.
-- [ ] **M5-11** (L) Colour tags: create/edit/delete value-range highlights on the colorbar;
+- [x] **M5-11** (L) Colour tags: create/edit/delete value-range highlights on the colorbar;
       the Colorbar pointer mode; load/save/delete tags per frame from the Colormap Parameters
       dialog.
-- [ ] **M5-12** (M) Multiple colorbars (one per tiled frame) and the RGB/HSV/HLS colorbar
+- [x] **M5-12** (M) Multiple colorbars (one per tiled frame) and the RGB/HSV/HLS colorbar
       variants.
-- [ ] **M5-13** (S) Expose contrast/bias drag as an explicit Colorbar mode with a reset.
+- [x] **M5-13** (S) Expose contrast/bias drag as an explicit Colorbar mode with a reset.
 
 ### Block vs Bin
 - [x] **M5-14** (M) Make Block a **non-destructive display transform**: move it into the render
       pipeline instead of overwriting `frame.image_data` in `_set_bin()`. Add factors 64, 128, 256.
 - [x] **M5-15** (S) Remove the `Bin` menu's block-averaging behaviour; keep the menu, repurpose
       it below.
-- [ ] **M5-16** (L) FITS bin-table support: open a bin table, choose X/Y columns, bin function
+- [x] **M5-16** (L) FITS bin-table support: open a bin table, choose X/Y columns, bin function
       (average/sum), buffer size (128²…8192²), a third `depth` column, and a row filter
-      expression. *M4 implemented the plain two-dimensional count, with the image's WCS built from
-      the columns' own `TC*` cards, which is what makes an events table displayable at all. What
-      is left is the choice of function, the buffer size, the depth column and the filter.*
-- [ ] **M5-17** (M) Bin centring from `TDMIN/TDMAX`, `TLMIN/TLMAX`, `TALEN`, `AXLEN`, falling back
-      to the middle of the data space. *`TLMIN`/`TLMAX` is honoured; the other three are not.*
-- [ ] **M5-18** (S) Bin In / Bin Out / Bin Fit.
-- [ ] **M5-19** (M) Binning Parameters dialog.
+      expression.
+- [x] **M5-17** (M) Bin centring from `TDMIN/TDMAX`, `TLMIN/TLMAX`, `TALEN`, `AXLEN`, falling back
+      to the middle of the data space.
+- [x] **M5-18** (S) Bin In / Bin Out / Bin Fit.
+- [x] **M5-19** (M) Binning Parameters dialog.
 - [x] **M5-20** (S) Fix `Frame → Match/Lock → Bin` and `→ Block` to mean the right things.
-- [ ] **M5-21** (S) Test with a real event list (add a small synthetic one to `sampleimages/`).
+- [x] **M5-21** (S) Test with a real event list (add a small synthetic one to `sampleimages/`).
 
 ### Where this deviated from the plan, and why
 
-* **`rendering/scale_limits.py` and `rendering/block.py` are new.** Neither was named in the plan.
-  Both are Qt-free, so every limit mode and every block factor is tested against known data
-  rather than through a window, and M8's XPA `scale` access point gets one object to read and
-  write.
 * **Three transfer functions were wrong, not missing.** M5-1 reads as "add Power and SINH", but
   Power *was* `x**2` -- which is DS9's *Squared*, an entry NCRADS9 did not have -- and Sinh was
   `sinh(x)/sinh(1)` against DS9's `sinh(3x)/10`. Read off `tksao/frame/colorscale.C` and now
   matching DS9 exactly, which is what makes the two applications render an image alike.
 * **DS9 has one exponent, not two.** `scale(log)` drives both the log and the power functions, so
-  M5-4's Log Exponent is a single setting with a submenu of eight presets plus Other. DS9 offers
-  only a dialog there.
+  M5-4's Log Exponent is a single setting, offered as a submenu of eight presets plus Other where
+  DS9 offers only a dialog.
 * **The limit settings are per window, not per frame.** DS9 keeps them per frame and ties frames
-  with `Frame -> Lock -> Scale`; this keeps one set and caches the *computed* limits per frame in
-  `frame.z1`/`z2`, so switching frames still restores what you saw. Making the settings per-frame
-  is a Lock question and belongs with M9's remaining lock work.
-* **164 tables, not 168.** `viridis`, `inferno`, `magma` and `plasma` are shipped by DS9 as files
-  *and* exist as NCRADS9 built-ins under the same names; the same tables are on Matplotlib Uniform
-  as `mpl_viridis` and friends, which is what DS9's cascade calls them. One name resolving to two
-  sources is a bug waiting to happen. Six topographic tables DS9 ships but never menus are put on
-  Topographic, and `turbo`/`twilight` on Sequential and Cyclic by what they are. All recorded in
-  `colormaps/data/README.md`.
+  with `Frame -> Lock -> Scale`; this keeps one set and caches the *computed* limits per frame, so
+  switching frames still restores what you saw. Per-frame settings are a Lock question, for M9.
+* **164 tables, not 168, and loaded lazily.** `viridis`, `inferno`, `magma` and `plasma` are
+  shipped by DS9 as files *and* exist as NCRADS9 built-ins under the same names; the same tables
+  are on Matplotlib Uniform as `mpl_viridis` and friends. One name resolving to two sources is a
+  bug waiting to happen. Six topographic tables DS9 ships but never menus go on Topographic, and
+  `turbo`/`twilight` on Sequential and Cyclic by what they are. Reading all 164 at startup costs
+  about a second for tables almost none of which will be looked at, so they are parsed on first
+  use. All recorded in `colormaps/data/README.md`.
 * **Block converts coordinates at four places, not everywhere.** The viewers work in the units of
   whatever array they were handed, so rather than thread a factor through the whole coordinate
   path, the two mapping functions of the CPU viewer and the two of the region overlay multiply by
   it, with the GL path's cursor and click signals doing the same.
+* **The Bin menu got a controller of its own.** It belonged to Analysis, where it block-averaged
+  the displayed image. A change to any Bin setting means re-binning the table the frame came from,
+  which has nothing to do with the Analysis menu.
+* **The Colour Tag dialog has a Delete button** where DS9's has only OK and Cancel: a tag created
+  by a stray click on the colorbar is otherwise awkward to be rid of, DS9's own Delete Color Tag
+  deleting all of them.
+* **Two readings of DS9's Bin documentation, both recorded in `core/bin_table.py`.** DS9 calls the
+  buffer size "the overall size of the image generated ... no relation to min and max values of
+  the columns", which read strictly would make a 512-unit detector come up as 1024x1024 with the
+  data in the middle; it is treated as a cap here, which is the reading under which "Bin to Fit
+  ... calculate[s] a bin block factor" means anything. And `BinSettings.depth` is recorded and
+  offered in the dialog but only two-dimensional binning is implemented -- DS9 can bin a table
+  into a cube.
 
 ### Bugs found and fixed on the way
 
@@ -548,6 +556,19 @@ M5-13). Nothing half-finished: each task below is either done and tested, or unt
   `scm_batlowK`); lookups now ignore case at both ends.
 * **The Scale menu could not have had an effect even once it existed.** All three places the
   display pipeline computed limits called `compute_zscale_limits` directly, bypassing any setting.
+* **Stepping a cube slice kept the previous slice's clip limits**, so a cube whose brightness
+  varies with channel went flat white or flat black.
+* **A coarse bin factor lost events off the top edge.** The grid was anchored on bin *centres*, so
+  a 1..64 column at a factor of four discarded everything above 63.
+* **A binned image's `CDELT` did not scale with the bin factor**, so its sky scale was wrong for
+  every factor but one.
+* **A filter given in a specification survived one load and no more**: it was folded in inside the
+  loader, so the next change from the Bin menu re-binned the whole table and dropped it.
+* **`&&` in a row filter raised a type error.** Python binds `&` tighter than `>`, so a bare
+  substitution turns `pha>50&&x<32` into `pha > (50 & x) < 32`. Each conjunct is parenthesised.
+* **A `#rrggbb` colour in a tag file was stripped as a comment.** Comments are now line-leading
+  only, with anything after the third field ignored, which lets a hex colour and a trailing
+  comment coexist.
 * **`Frame -> Match -> Bin` copied the block factor**, which is neither what DS9's Bin means nor
   what its Block means.
 

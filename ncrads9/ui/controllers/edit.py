@@ -64,6 +64,21 @@ PREFERENCE_DEFAULTS: dict[str, object] = {
 #: original it was copied from.
 PASTE_OFFSET = 10.0
 
+#: Pointer modes that are recorded but do nothing yet, and the milestone
+#: that gives each an effect. `none`, `region`, `crosshair` and `colorbar`
+#: are live.
+DEFERRED_MODES: dict[str, str] = {
+    "pan": "M9-3",
+    "zoom": "M9-3",
+    "rotate": "M9-3",
+    "crop": "M9-2",
+    "catalog": "M8-1",
+    "footprint": "M8-12",
+    "examine": "M9-3",
+    "3d": "M9-21",
+    "illustrate": "M9-6",
+}
+
 #: Where the applied theme's name is kept, so re-applying can be skipped.
 THEME_PROPERTY = "ncrads9_theme"
 
@@ -102,6 +117,49 @@ class EditController(Controller):
         self.menu.action_cut.triggered.connect(self.cut)
         self.menu.action_copy.triggered.connect(self.copy)
         self.menu.action_paste.triggered.connect(self.paste)
+
+        for name, action in self.menu.edit_mode_actions.items():
+            action.triggered.connect(lambda _checked=False, key=name: self.set_mode(key))
+
+    def sync(self) -> None:
+        """Tick the pointer mode in force."""
+        for name, action in self.menu.edit_mode_actions.items():
+            action.setChecked(name == self.window.edit_mode)
+
+    # -- pointer modes -------------------------------------------------------
+
+    def set_mode(self, mode: str) -> None:
+        """Set what a drag on the image does.
+
+        Args:
+            mode: One of `MenuBar.edit_mode_actions`' keys.
+        """
+        if mode not in self.menu.edit_mode_actions:
+            self.status(f"Unknown edit mode: {mode}", 3000)
+            return
+
+        self.window.edit_mode = mode
+        self.sync()
+
+        if mode == "region":
+            # Region mode is the drawing mode the Region menu already sets;
+            # leaving the shape alone means switching to Region mode keeps
+            # whatever shape was last chosen.
+            self.status("Edit mode: region")
+            return
+        if mode == "crosshair":
+            # The crosshair overlay is the Analysis menu's; this only turns
+            # it on, so Edit -> Crosshair and Analysis agree.
+            self.window._crosshair_enabled = True
+            self.refresh()
+            self.status("Edit mode: crosshair")
+            return
+
+        milestone = DEFERRED_MODES.get(mode)
+        if milestone is not None:
+            self.status(f"{mode.title()} mode arrives in {milestone}", 3000)
+            return
+        self.status(f"Edit mode: {mode}")
 
     # -- clipboard -----------------------------------------------------------
 

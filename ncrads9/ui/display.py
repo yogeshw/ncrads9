@@ -61,6 +61,20 @@ from ..rendering.block import block_image
 from ..rendering.rgb_compositor import compose_rgb
 from ..rendering.scale_algorithms import ScaleAlgorithm, apply_scale
 from .view_transform import transform_image_array
+from .widgets.colorbar_widget import ColorbarEntry
+
+#: The channels of a colour frame, in the order the colorbar shows them.
+RGB_CHANNEL_ORDER: tuple[str, str, str] = ("red", "green", "blue")
+
+#: A ramp per channel, so an RGB frame's three bars read as red, green and
+#: blue rather than as three identical greys.
+CHANNEL_RAMPS: dict[str, NDArray[np.floating]] = {
+    channel: np.stack(
+        [np.linspace(0.0, 1.0, 256) if index == position else np.zeros(256) for index in range(3)],
+        axis=1,
+    )
+    for position, channel in enumerate(RGB_CHANNEL_ORDER)
+}
 
 
 class DisplayPipeline:
@@ -512,10 +526,13 @@ class DisplayPipeline:
             cmap_data = cmap_data[::-1]  # Reverse the colormap
             cmap = Colormap(f"{self.window.current_colormap}_inverted", cmap_data)
 
-        # Update colorbar
-        self.window.colorbar_widget.set_colormap(
-            cmap.colors, adjusted_z1, adjusted_z2, self.window.current_colormap, self.window.invert_colormap
-        )
+        # Colour tags paint flat ranges over whatever table is in force, so
+        # they go on after inversion and before anything is drawn.
+        cmap = self.window.color.apply_tags(cmap, frame)
+
+        # Update the colorbar, which shows one bar per channel for a colour
+        # frame and one per tiled frame under View -> Multiple Colorbars.
+        self.update_colorbar(frame, cmap, adjusted_z1, adjusted_z2)
 
         if self.window.using_gpu_rendering:
 
@@ -607,13 +624,9 @@ class DisplayPipeline:
             active_data = np.mean(composite.astype(np.float32), axis=2)
 
         self.sync_rgb_scalar_view(frame)
-        self.window.colorbar_widget.set_colormap(
-            self.window.color.colormap("grey").colors,
-            0.0,
-            255.0,
-            "RGB Composite",
-            False,
-        )
+        # One bar per channel, each with that channel's own limits -- DS9's
+        # RGB, HSV and HLS colorbar variants.
+        self.update_colorbar(frame, self.window.color.colormap("grey"), 0.0, 255.0)
         display_rgb = np.ascontiguousarray(np.flipud(composite))
         self.apply_view_transform(frame)
 
@@ -693,6 +706,7 @@ class DisplayPipeline:
         if frame.invert_colormap:
             cmap_data = cmap.colors.copy()[::-1]
             cmap = Colormap(f"{frame.colormap}_inverted", cmap_data)
+        cmap = self.window.color.apply_tags(cmap, frame)
 
         scaled = apply_scale(image_data, frame.scale, vmin=adjusted_z1, vmax=adjusted_z2)
         return cmap.apply_normalized(scaled)
@@ -750,6 +764,20 @@ class DisplayPipeline:
             qimage = QImage(display_rgb.data, tiled_w, tiled_h, bytes_per_line, QImage.Format.Format_RGB888)
             self.viewer.set_image(QPixmap.fromImage(qimage))
 
+        # One bar per tiled frame under View -> Multiple Colorbars.
+        current = self.frames.current_frame
+        if current is not None:
+            try:
+                table = self.window.color.colormap(self.window.current_colormap)
+            except ValueError:
+                table = self.window.color.colormap("grey")
+            self.update_colorbar(
+                current,
+                table,
+                self.window.z1 if self.window.z1 is not None else 0.0,
+                self.window.z2 if self.window.z2 is not None else 1.0,
+            )
+
         if hasattr(self.viewer, "clear_regions"):
             self.viewer.clear_regions()
         if hasattr(self.viewer, "clear_contours"):
@@ -764,6 +792,78 @@ class DisplayPipeline:
         self.status_bar.update_image_info(tiled_w, tiled_h)
         self.status_bar.update_zoom(self.viewer.get_zoom())
         return True
+
+    def colorbar_entries(
+        self,
+        frame: Frame,
+        cmap: Colormap,
+        low: float,
+        high: float,
+    ) -> list[ColorbarEntry]:
+        """Which bars the colorbar should show.
+
+        DS9 shows several in two cases: an RGB, HSV or HLS frame gets one bar
+        per channel, and `View -> Multiple Colorbars` with frames tiled gets
+        one per tiled frame. Everything else gets one.
+
+        Args:
+            frame: The frame being displayed.
+            cmap: Its colour table, tags and inversion included.
+            low: The low clip limit in force.
+            high: The high clip limit.
+
+        Returns:
+            The bars, in the order to draw them.
+        """
+        if frame.frame_type in ("rgb", "hsv", "hls"):
+            entries = []
+            for channel in RGB_CHANNEL_ORDER:
+                if frame.rgb_channels.get(channel) is None:
+                    continue
+                _scale, z1, z2, _contrast, _brightness = self.channel_view_settings(frame, channel)
+                if z1 is None or z2 is None:
+                    z1, z2 = self.window.scale.compute_limits(frame.rgb_channels[channel], frame=frame)
+                entries.append(ColorbarEntry(colors=CHANNEL_RAMPS[channel], vmin=z1, vmax=z2, label=channel))
+            if entries:
+                return entries
+
+        if self.window._tile_mode_enabled and self.window.view_state.multi:
+            entries = []
+            for other in self.frames.frames:
+                if other.frame_id not in self.window._active_frame_ids:
+                    continue
+                try:
+                    table = self.window.color.colormap(other.colormap)
+                except ValueError:
+                    continue
+                table = self.window.color.apply_tags(table, other)
+                z1 = other.z1 if other.z1 is not None else low
+                z2 = other.z2 if other.z2 is not None else high
+                entries.append(ColorbarEntry(colors=table.colors, vmin=z1, vmax=z2, label=other.colormap))
+            if len(entries) > 1:
+                return entries
+
+        return [
+            ColorbarEntry(
+                colors=cmap.colors,
+                vmin=low,
+                vmax=high,
+                label=self.window.current_colormap,
+            )
+        ]
+
+    def update_colorbar(
+        self,
+        frame: Frame,
+        cmap: Colormap,
+        low: float,
+        high: float,
+    ) -> None:
+        """Hand the colorbar its bars."""
+        self.window.colorbar_widget.set_colorbars(
+            self.colorbar_entries(frame, cmap, low, high),
+            inverted=self.window.invert_colormap,
+        )
 
     def display_image_data(self, frame: Frame) -> NDArray[np.floating]:
         """Return frame data after the display-level transforms.

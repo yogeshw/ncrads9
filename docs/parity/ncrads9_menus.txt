@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 676 (598 excluding separators)
+# entries: 697 (616 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -61,6 +61,21 @@
 .edit|command|Cut
 .edit|command|Copy
 .edit|command|Paste
+.edit|separator|---
+.edit|separator|---
+.edit|radiobutton|None
+.edit|radiobutton|Region
+.edit|radiobutton|Crosshair
+.edit|radiobutton|Colorbar
+.edit|radiobutton|Pan
+.edit|radiobutton|Zoom
+.edit|radiobutton|Rotate
+.edit|radiobutton|Crop
+.edit|radiobutton|Catalog
+.edit|radiobutton|Footprint
+.edit|radiobutton|Examine
+.edit|radiobutton|3D
+.edit|radiobutton|Illustrate
 .edit|separator|---
 .edit|command|Preferences
 # View
@@ -595,7 +610,13 @@
 .color.colorbaroptions|command|Size
 .color.colorbaroptions|command|Number of Ticks
 .color|separator|---
+.color|cascade|Color Tags
+.color.colortags|command|Load Color Tag
+.color.colortags|command|Save Color Tag
+.color.colortags|command|Delete Color Tag
+.color|separator|---
 .color|command|Colormap Parameters
+.color|command|Reset Contrast/Bias
 # Region
 .region|command|None
 .region|separator|---

@@ -73,8 +73,10 @@ PANEL_ACTIONS: dict[str, str] = {
 }
 
 #: Flags that are recorded and reported but have nothing behind them yet,
-#: with the milestone that gives them an effect.
-UNIMPLEMENTED_PANELS: dict[str, str] = {"multi": "M5"}
+#: with the milestone that gives them an effect. Empty since M5-12 gave
+#: Multiple Colorbars its behaviour; kept because the mechanism is how a
+#: half-built toggle should announce itself.
+UNIMPLEMENTED_PANELS: dict[str, str] = {}
 
 
 class ViewController(Controller):

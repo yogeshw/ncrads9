@@ -146,7 +146,7 @@ of them and dropping colour, width, text, tags and every DS9 property in the pro
 and edits it directly, and `RegionRenderer` paints it. Round-tripping is covered by
 `tests/unit/test_region_roundtrip.py`.
 
-### 3.4 `Bin` and `Block` are the same code, and both are wrong — half fixed in M5
+### 3.4 `Bin` and `Block` are the same code, and both are wrong — fixed in M5
 
 > **M5 separated them.** Block is now a display transform: `rendering/block.py`
 > reduces a copy on its way to the screen and `frame.image_data` stays at full
@@ -154,10 +154,12 @@ and edits it directly, and `RegionRenderer` paints it. Round-tripping is covered
 > asserting each of those directly, since getting it wrong is silent. Factors
 > run to 256, and `Frame → Match/Lock → Bin` no longer means Block.
 >
-> The Bin half is not done. M4 gave events tables the plain two-dimensional
-> count, which is what makes them displayable; the bin function, buffer size,
-> depth column, row filter and Binning Parameters dialog are M5-16 to M5-19.
-> The finding below is what was there.
+> Bin is now DS9's Bin: `core/bin_table.py` turns a FITS table into an image
+> with the function, factor, buffer size, third column and row filter its
+> menu offers, centred by DS9's four-card search, and `ui/controllers/bin.py`
+> owns the menu — a controller of its own, since a change to any setting means
+> re-binning the table rather than touching the frame's pixels. The finding
+> below is what was there.
 
 `menu_bar.py` exposes a `Bin` menu (factors 1/2/4/8) and an `Analysis → Block` submenu
 (1/2/4/8/16/32). Both call `MainWindow._set_bin()` → `_rebin_image()`, a NumPy block-mean.
@@ -540,7 +542,7 @@ Extension model + HDU chooser; `file[ext][filter]` syntax; data cubes with the C
 mosaics (WCS, IRAF, WFPC2, segments); tile-compressed images; URL loading; real
 `Save`/`Save as`/`Save Image → FITS`.
 
-### M5 — Scale, colour, block/bin done properly (10 d) — **13 of 21 tasks**
+### M5 — Scale, colour, block/bin done properly (10 d) — **done**
 Percentile clipping presets and ZMax; scale scope global/local; min/max method scan/sample/
 DATAMIN/IRAF; ZScale parameter dialog; log exponent; Power and SINH in the menu.
 Ship DS9's 168 `.sao`/`.lut` colormaps with the full category submenus. Colour tags + Colorbar

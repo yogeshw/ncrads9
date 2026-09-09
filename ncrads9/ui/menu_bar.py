@@ -28,6 +28,23 @@ from ..colormaps.bundled import CATEGORIES, colormap_label
 from ..core.bin_table import BUFFER_SIZES, DEFAULT_BUFFER_SIZE
 from .layout.view_state import DEFAULT_INFO_FIELDS, WCS_SUFFIXES
 
+#: DS9's pointer modes, in the order its Edit menu lists them.
+EDIT_MODES: tuple[tuple[str, str], ...] = (
+    ("none", "&None"),
+    ("region", "&Region"),
+    ("crosshair", "Cross&hair"),
+    ("colorbar", "Color&bar"),
+    ("pan", "&Pan"),
+    ("zoom", "&Zoom"),
+    ("rotate", "Ro&tate"),
+    ("crop", "&Crop"),
+    ("catalog", "C&atalog"),
+    ("footprint", "&Footprint"),
+    ("examine", "&Examine"),
+    ("3d", "&3D"),
+    ("illustrate", "&Illustrate"),
+)
+
 #: The bin factors and buffer sizes the Bin menu offers, from the module
 #: that does the binning so the two cannot diverge.
 BIN_FACTORS: tuple[int, ...] = (1, 2, 4, 8, 16, 32, 64, 128, 256)
@@ -253,6 +270,25 @@ class MenuBar(QMenuBar):
         self.action_paste: QAction = QAction("&Paste", self)
         self.action_paste.setShortcut(QKeySequence.StandardKey.Paste)
         self.edit_menu.addAction(self.action_paste)
+
+        self.edit_menu.addSeparator()
+
+        self.edit_menu.addSeparator()
+
+        # DS9's pointer modes: what a drag on the image does. Only a few are
+        # live -- the rest are recorded with the milestone that implements
+        # them, in `ui/controllers/edit.py`.
+        mode_group = QActionGroup(self)
+        mode_group.setExclusive(True)
+        #: Pointer-mode name -> its action.
+        self.edit_mode_actions: dict[str, QAction] = {}
+        for name, label in EDIT_MODES:
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(name == "none")
+            mode_group.addAction(action)
+            self.edit_menu.addAction(action)
+            self.edit_mode_actions[name] = action
 
         self.edit_menu.addSeparator()
 
@@ -1144,8 +1180,23 @@ class MenuBar(QMenuBar):
         self.colorbar_submenu.addAction(self.action_colorbar_ticks)
 
         self.color_menu.addSeparator()
+
+        # DS9 keeps colour tags on the Colormap Parameters dialog's own
+        # menus; they are here as well so they can be reached without
+        # opening it.
+        self.color_tag_menu: QMenu = self.color_menu.addMenu("Color &Tags")
+        self.action_load_color_tags: QAction = QAction("&Load Color Tag...", self)
+        self.color_tag_menu.addAction(self.action_load_color_tags)
+        self.action_save_color_tags: QAction = QAction("&Save Color Tag...", self)
+        self.color_tag_menu.addAction(self.action_save_color_tags)
+        self.action_delete_color_tags: QAction = QAction("&Delete Color Tag", self)
+        self.color_tag_menu.addAction(self.action_delete_color_tags)
+
+        self.color_menu.addSeparator()
         self.action_colormap_params: QAction = QAction("Colormap &Parameters...", self)
         self.color_menu.addAction(self.action_colormap_params)
+        self.action_reset_colorbar: QAction = QAction("&Reset Contrast/Bias", self)
+        self.color_menu.addAction(self.action_reset_colorbar)
 
         self.action_cmap_gray = self.colormap_actions["grey"]
         self.action_cmap_heat = self.colormap_actions["heat"]

@@ -163,6 +163,8 @@ class MainWindow(QMainWindow):
         self._analysis_mask_mode = "disabled"
         self._analysis_mask_min: float | None = None
         self._analysis_mask_max: float | None = None
+        # DS9's pointer mode: what a drag on the image does.
+        self.edit_mode = "none"
         self._crosshair_enabled = False
         self._crosshair_color = QColor(255, 0, 0)
         self._crosshair_size = 24
@@ -434,6 +436,9 @@ class MainWindow(QMainWindow):
         self.button_bar.command.connect(self._on_button_bar_command)
 
         self.colorbar_widget = ColorbarWidget(self)
+        # Connected here rather than in the controller's `connect()`, which
+        # runs with the menu bar, before the panels exist.
+        self.colorbar_widget.clicked.connect(self.color.on_colorbar_clicked)
 
         self.panner_panel = PannerPanel(self)
         self.panner_panel.pan_to.connect(self.zoom.on_panner_pan)

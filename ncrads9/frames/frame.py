@@ -77,6 +77,10 @@ class Frame:
     colormap: str = "grey"
     scale: ScaleAlgorithm = ScaleAlgorithm.LINEAR
     invert_colormap: bool = False
+    #: DS9's colour tags: stretches of the colorbar painted a flat colour.
+    #: Held per frame, as DS9 holds them. `None` until the first tag, so an
+    #: untagged frame costs nothing.
+    color_tags: object | None = None
     z1: float | None = None
     z2: float | None = None
     zoom: float = 1.0

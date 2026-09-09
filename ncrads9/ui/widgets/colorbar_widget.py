@@ -15,14 +15,22 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
-Colorbar widget showing current colormap.
+Colorbar widget showing the current colour table, or several of them.
+
+DS9 shows more than one bar in two cases (`ds9/library/colorbar.tcl`): with
+`View -> Multiple Colorbars` on and frames tiled, one bar per tiled frame;
+and for an RGB, HSV or HLS frame, one bar per channel. Both are the same
+thing -- a list of bars rather than one -- so `set_colorbars` takes a list
+and `set_colormap` is the one-entry case.
 
 Author: Yogesh Wadadekar
 """
 
 
+from dataclasses import dataclass
+
 import numpy as np
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QImage, QPainter, QPixmap
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
@@ -36,9 +44,30 @@ VERTICAL_LABEL_ALLOWANCE = 44
 MIN_LONG_EDGE = 120
 MAX_LONG_EDGE = 16777215
 
+#: Gap between stacked bars, in pixels.
+BAR_GAP = 2
+
+#: How many bars are drawn at most, so a hundred tiled frames do not make a
+#: hundred unreadable slivers.
+MAX_BARS = 8
+
+
+@dataclass(frozen=True)
+class ColorbarEntry:
+    """One bar: its colour table, its limits and its label."""
+
+    colors: object
+    vmin: float = 0.0
+    vmax: float = 1.0
+    label: str = ""
+
 
 class ColorbarWidget(QWidget):
     """Widget displaying a colorbar with scale values."""
+
+    #: Emitted with a 0-to-1 position along the bar when it is clicked.
+    #: DS9's Colorbar edit mode turns that into a colour tag.
+    clicked: pyqtSignal = pyqtSignal(float)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         """
@@ -53,6 +82,9 @@ class ColorbarWidget(QWidget):
         self.vmax = 1.0
         self.colormap_name = "grey"
         self.inverted = False
+        #: Every bar to draw. One entry is the ordinary case; several come
+        #: from Multiple Colorbars or a colour frame's channels.
+        self._entries: list[ColorbarEntry] = []
         # DS9 lays the colorbar out horizontally under the canvas.
         self.orientation = "horizontal"
         self.show_numerics = True
@@ -76,6 +108,35 @@ class ColorbarWidget(QWidget):
         self.setLayout(layout)
         self._apply_size_constraints()
 
+    def mousePressEvent(self, event) -> None:
+        """Report where on the bar the user clicked, as a 0-to-1 position.
+
+        DS9's Colorbar edit mode uses this to create and edit colour tags.
+        The position is measured along the bar's long axis, from the low end
+        -- the left of a horizontal bar, the bottom of a vertical one.
+        """
+        if event is None:
+            super().mousePressEvent(event)
+            return
+
+        label = self.colorbar_label
+        origin = label.mapFrom(self, event.position().toPoint())
+        pixmap = label.pixmap()
+        if pixmap is None or pixmap.isNull():
+            super().mousePressEvent(event)
+            return
+
+        if self.orientation == "horizontal":
+            span = max(1, pixmap.width())
+            position = origin.x() / span
+        else:
+            span = max(1, pixmap.height())
+            # A vertical bar runs high at the top, so invert.
+            position = 1.0 - origin.y() / span
+
+        self.clicked.emit(max(0.0, min(float(position), 1.0)))
+        event.accept()
+
     def set_colormap(
         self, colormap_data: np.ndarray, vmin: float, vmax: float, name: str, inverted: bool = False
     ) -> None:
@@ -89,30 +150,65 @@ class ColorbarWidget(QWidget):
             name: Colormap name.
             inverted: Whether colormap is inverted.
         """
-        self.colormap_data = colormap_data
-        self.vmin = vmin
-        self.vmax = vmax
-        self.colormap_name = name
+        self.set_colorbars(
+            [ColorbarEntry(colors=colormap_data, vmin=vmin, vmax=vmax, label=name)],
+            inverted=inverted,
+        )
+
+    def set_colorbars(
+        self,
+        entries: "list[ColorbarEntry]",
+        inverted: bool = False,
+    ) -> None:
+        """Show one bar per entry, stacked across the bar's short axis.
+
+        DS9 draws several bars for Multiple Colorbars and for a colour
+        frame's three channels; both arrive here as a list.
+
+        Args:
+            entries: The bars, in the order they should be drawn. An empty
+                list clears the widget.
+            inverted: Whether the colormap is inverted, for the name label.
+        """
+        self._entries = list(entries)[:MAX_BARS]
+        first = self._entries[0] if self._entries else None
+
+        # The single-bar attributes stay meaningful, since XPA and the
+        # Colormap Parameters dialog read them.
+        self.colormap_data = None if first is None else first.colors
+        self.vmin = 0.0 if first is None else first.vmin
+        self.vmax = 1.0 if first is None else first.vmax
+        self.colormap_name = "" if first is None else first.label
         self.inverted = inverted
 
-        # Update name label
-        name_display = f"{name} (inv)" if inverted else name
-        self.name_label.setText(name_display)
-
-        # Create colorbar image with ticks
+        labels = " · ".join(entry.label for entry in self._entries if entry.label)
+        self.name_label.setText(f"{labels} (inv)" if inverted and labels else labels)
+        self._apply_size_constraints()
         self._update_colorbar()
 
+    @property
+    def bar_count(self) -> int:
+        """How many bars are being drawn."""
+        return max(1, len(self._entries))
+
+    @staticmethod
+    def _as_bytes(colors: np.ndarray) -> np.ndarray:
+        """A colour table as uint8, whatever it arrived as."""
+        array = np.asarray(colors)
+        if array.dtype in (np.float64, np.float32):
+            return (array * 255).astype(np.uint8)
+        return array.astype(np.uint8)
+
     def _update_colorbar(self) -> None:
-        """Update the colorbar display with ticks and labels."""
-        if self.colormap_data is None:
+        """Redraw every bar, with ticks and labels."""
+        if not self._entries:
+            self.colorbar_label.clear()
+            return
+        if len(self._entries) > 1:
+            self._draw_multiple()
             return
 
-        # Ensure colormap data is uint8 (0-255 range)
-        if self.colormap_data.dtype == np.float64 or self.colormap_data.dtype == np.float32:
-            # Convert from 0-1 to 0-255
-            cmap_uint8 = (self.colormap_data * 255).astype(np.uint8)
-        else:
-            cmap_uint8 = self.colormap_data.astype(np.uint8)
+        cmap_uint8 = self._as_bytes(self._entries[0].colors)
 
         if self.orientation == "horizontal":
             bar_height = max(14, self.bar_size)
@@ -248,6 +344,93 @@ class ColorbarWidget(QWidget):
         """Set numeric label font size."""
         self.label_font_size = max(6, int(size))
         self._update_colorbar()
+
+    def _draw_multiple(self) -> None:
+        """Draw several bars stacked across the widget's short axis.
+
+        Each gets its own strip and its own tick labels, since the frames or
+        channels they belong to have their own limits. The strips are thinner
+        than a single bar would be so the whole stack still fits the space
+        `_apply_size_constraints` asked for.
+        """
+        count = len(self._entries)
+        horizontal = self.orientation == "horizontal"
+        thickness = max(4, (self.bar_size - (count - 1) * BAR_GAP) // count)
+
+        if horizontal:
+            width = max(MIN_LONG_EDGE, self.colorbar_label.width() - 10)
+            height = count * thickness + (count - 1) * BAR_GAP
+            allowance = NUMERICS_ALLOWANCE if self.show_numerics else BAR_GAP
+            pixmap = QPixmap(width, height + allowance)
+        else:
+            height = max(MIN_LONG_EDGE, self.colorbar_label.height() - 4)
+            width = count * thickness + (count - 1) * BAR_GAP
+            allowance = VERTICAL_LABEL_ALLOWANCE if self.show_numerics else BAR_GAP
+            pixmap = QPixmap(width + allowance, height)
+        pixmap.fill(Qt.GlobalColor.transparent)
+
+        painter = QPainter(pixmap)
+        try:
+            for index, entry in enumerate(self._entries):
+                offset = index * (thickness + BAR_GAP)
+                self._draw_one(painter, entry, offset, thickness, width, height, horizontal)
+        finally:
+            painter.end()
+        self.colorbar_label.setPixmap(pixmap)
+
+    def _draw_one(
+        self,
+        painter: QPainter,
+        entry: "ColorbarEntry",
+        offset: int,
+        thickness: int,
+        width: int,
+        height: int,
+        horizontal: bool,
+    ) -> None:
+        """Draw one strip of a multi-bar colorbar, and its end labels."""
+        colors = self._as_bytes(entry.colors)
+        if colors.size == 0:
+            return
+
+        if horizontal:
+            strip = np.zeros((thickness, width, 3), dtype=np.uint8)
+            indices = np.linspace(0, len(colors) - 1, width).astype(int)
+            strip[:, :] = colors[indices][None, :, :]
+        else:
+            strip = np.zeros((height, thickness, 3), dtype=np.uint8)
+            indices = np.linspace(len(colors) - 1, 0, height).astype(int)
+            strip[:, :] = colors[indices][:, None, :]
+
+        rows, columns = strip.shape[:2]
+        image = QImage(
+            np.ascontiguousarray(strip).tobytes(),
+            columns,
+            rows,
+            columns * 3,
+            QImage.Format.Format_RGB888,
+        )
+        if horizontal:
+            painter.drawPixmap(0, offset, QPixmap.fromImage(image))
+        else:
+            painter.drawPixmap(offset, 0, QPixmap.fromImage(image))
+
+        painter.setFont(QFont("Arial", max(6, self.label_font_size - 1)))
+        if not self.show_numerics or thickness < painter.fontMetrics().height():
+            # Several thin strips leave no room for a number inside each; a
+            # label drawn anyway lands on its neighbour.
+            return
+
+        painter.setPen(Qt.GlobalColor.black)
+        low, high = f"{entry.vmin:.3g}", f"{entry.vmax:.3g}"
+        if horizontal:
+            baseline = offset + thickness - 2
+            painter.drawText(2, baseline, low)
+            painter.drawText(width - painter.fontMetrics().horizontalAdvance(high) - 2, baseline, high)
+        else:
+            left = width + 2
+            painter.drawText(left, height - 2, low)
+            painter.drawText(left, 10, high)
 
     def _apply_size_constraints(self) -> None:
         """Pin the thin dimension and let the long one stretch.
