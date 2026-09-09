@@ -72,9 +72,9 @@ harder to add. **Fix these before adding features.**
 
 ### 3.1 Two-thirds of the package is unreachable code
 
-> **M1 reduced this from 116 orphans to 71, and M3 to 60**, and
+> **M1 reduced this from 116 orphans to 71, M3 to 60, and M4 to 56**, and
 > `tests/unit/test_no_orphan_modules.py` now fails on any new one that is not
-> listed against the milestone that adopts it. The remaining 60 are inventoried in
+> listed against the milestone that adopts it. The remaining 56 are inventoried in
 > `docs/parity/skeletons.md`. The table below records the original finding.
 >
 > M3 adopted `ui/panels/info_panel.py`, `coordinates/physical_coords.py` and the
@@ -86,6 +86,13 @@ harder to add. **Fix these before adding features.**
 > thin wrapper over `SkyCoord` whose job M1's `CoordinateContext` took over.
 > Nothing imported any of the six, and M3's information panel — the milestone
 > that was meant to adopt the coordinate five — was finished without them.
+>
+> M4 adopted `core/cube_handler.py`, `ui/panels/cube_panel.py`,
+> `io/fits_writer.py` and `ui/dialogs/open_dialog.py` (the last rewritten as an
+> HDU chooser, its old contents being a second file-open dialog), and marked
+> two more for deletion: `io/fits_reader.py`, a strict subset of
+> `core/fits_handler.py`, and `ui/dialogs/save_dialog.py`, whose format combo
+> DS9's per-format `Save as` entries replace.
 
 An import-reachability analysis from `ncrads9.app` / `ncrads9.__main__` /
 `ncrads9.ui.main_window` found **116 of 191 modules were never imported by the running
@@ -159,7 +166,16 @@ In DS9 these are different features:
 pixel-index labels. DS9's grid is a WCS graticule (curved lines, tick marks, sexagesimal/custom
 numeric formats, axes, border, title, per-element colour/font), produced by the AST library.
 
-### 3.6 FITS loading is single-HDU only
+### 3.6 FITS loading is single-HDU only — fixed in M4
+
+> **M4 replaced the loader.** `core/fits_handler.py` now carries DS9's HDU
+> model — the algorithm from `ds9/doc/ref/file.html`, an `HDUInfo` per HDU and
+> the events/compressed/HEALPIX classification — and `core/file_spec.py`
+> parses DS9's whole bracket grammar, so an extension, an image or cube
+> subsection, a bin-table's columns and a row filter can all be named in the
+> path. Cubes, multiple-extension cubes and frames, the three mosaic
+> conventions, colour channels and URLs each have a loader. Save writes.
+> File-menu parity 6/59 → 29/59 labels. The finding below is what was there.
 
 `main_window.py:_load_fits_file()` always uses `fits_handler.get_data()` → HDU 0. There is no
 extension chooser, no cube handling, no bin-table handling, no mosaic handling, no compressed-image
@@ -507,7 +523,7 @@ layouts; the compass moved into the panner; themes wired to the Preferences sett
 alternate-WCS support (`WCSHandler(key=...)`) so the `Multiple WCS` rows carry real values.
 View-menu parity 3/27 → 26/27, total menu entries 287 → 337, orphans 71 → 60.
 
-### M4 — FITS coverage (12 d)
+### M4 — FITS coverage (12 d) — **done**
 Extension model + HDU chooser; `file[ext][filter]` syntax; data cubes with the Cube dialog
 (axis order, slice, interval, play) using `ui/panels/cube_panel.py`; multi-extension cube/frames;
 mosaics (WCS, IRAF, WFPC2, segments); tile-compressed images; URL loading; real
@@ -571,6 +587,15 @@ Kept as modern-UX improvements; documented so they are not mistaken for gaps:
   to DS9's ~25 topic panels.
 - **Astropy/AstroQuery** for WCS, coordinates and archive access instead of DS9's bundled
   AST/funtools/wcssubs.
+- **An extension chooser on Open** when a file has more than one displayable HDU. DS9 applies its
+  algorithm silently and takes the first, which for an instrument file with SCI, ERR and DQ is a
+  coin toss. The `prompt_for_hdu` preference restores DS9's behaviour.
+- **Mosaic resampling is nearest-neighbour**, so a mosaic is a display aid and conserves no flux.
+  DS9 resamples too; anyone wanting a photometric mosaic should use `reproject` or SWarp and load
+  the result.
+- **`Save` writes what is displayed**, not the array as it came off disk — the block, smooth or
+  cube slice on screen is what lands in the file, with the header's axis cards corrected to match
+  and an `NCSPEC` card recording the specification it was loaded from.
 
 ## 8. Explicit non-goals
 

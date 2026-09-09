@@ -1,14 +1,55 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 398 (337 excluding separators)
+# entries: 439 (371 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
 # File
 .file|command|Open
+.file|cascade|Open as
+.file.openas|command|Slice
+.file.openas|separator|---
+.file.openas|command|RGB Image
+.file.openas|command|RGB Cube
+.file.openas|command|HSV Image
+.file.openas|command|HSV Cube
+.file.openas|command|HLS Image
+.file.openas|command|HLS Cube
+.file.openas|separator|---
+.file.openas|command|Multiple Extension Cube
+.file.openas|command|Multiple Extension Frames
+.file.openas|separator|---
+.file.openas|command|Mosaic WCS
+.file.openas|command|Mosaic WCS Segment
+.file.openas|command|Mosaic IRAF
+.file.openas|command|Mosaic IRAF Segment
+.file.openas|command|Mosaic WFPC2
+.file.openas|separator|---
+.file.openas|command|URL
 .file|command|Save
 .file|command|Save As
+.file|cascade|Save as
+.file.saveas|command|Slice
+.file.saveas|separator|---
+.file.saveas|command|RGB Image
+.file.saveas|command|RGB Cube
+.file.saveas|command|HSV Image
+.file.saveas|command|HSV Cube
+.file.saveas|command|HLS Image
+.file.saveas|command|HLS Cube
+.file.saveas|separator|---
+.file.saveas|command|Multiple Extension Cube
+.file.saveas|separator|---
+.file.saveas|command|Mosaic WCS
+.file.saveas|command|Mosaic WCS Segment
 .file|separator|---
+.file|cascade|Save Image
+.file.saveimage|command|FITS
+.file.saveimage|command|EPS
+.file.saveimage|command|GIF
+.file.saveimage|command|TIFF
+.file.saveimage|command|JPEG
+.file.saveimage|command|PNG
 .file|command|Export
 .file|command|Print
 .file|separator|---

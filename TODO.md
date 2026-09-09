@@ -363,30 +363,90 @@ tests **533 -> 628**, coverage 48.3% -> 51.6%.
 
 ## M4 — FITS coverage
 
-Depends on M1.
+**Status: complete.** File-menu parity with DS9 **6/59 -> 29/59 labels**, total menu entries
+**337 -> 371**, orphan modules **60 -> 56**, tests **628 -> 811**, coverage 51.6% -> 55.6%.
 
-- [ ] **M4-1** (M) `core/fits_handler.py`: extension model — enumerate HDUs with type, name,
+| Module | Lines | Owns |
+|---|---:|---|
+| `core/file_spec.py` | 505 | DS9's `foo.fits[2][100:200,*,4]` grammar |
+| `core/fits_handler.py` | 669 | the HDU model, sections, events binning |
+| `core/mosaic.py` | 510 | the WCS, IRAF and WFPC2 conventions |
+| `core/fits_loaders.py` | 249 | one function per `Open as` entry |
+| `core/cube_handler.py` | 388 | slicing, in any of DS9's six axis orders |
+| `ui/panels/cube_panel.py` | 315 | DS9's Cube dialog (rewritten) |
+| `ui/dialogs/open_dialog.py` | 209 | the extension chooser (rewritten) |
+
+- [x] **M4-1** (M) `core/fits_handler.py`: extension model — enumerate HDUs with type, name,
       dimensions, and whether each is displayable.
-- [ ] **M4-2** (M) HDU chooser in `ui/dialogs/open_dialog.py` (currently orphaned — adopt it),
+- [x] **M4-2** (M) HDU chooser in `ui/dialogs/open_dialog.py` (currently orphaned — adopt it),
       shown when a file has more than one displayable HDU.
-- [ ] **M4-3** (M) Parse DS9/funtools file syntax: `file.fits[3]`, `file.fits[EVENTS]`,
+- [x] **M4-3** (M) Parse DS9/funtools file syntax: `file.fits[3]`, `file.fits[EVENTS]`,
       `file.fits[x>10&&y<20]`, `file.fits[bin=x,y]`.
-- [ ] **M4-4** (L) Data cubes: `core/cube_handler.py` for slice extraction and axis order; adopt
+- [x] **M4-4** (L) Data cubes: `core/cube_handler.py` for slice extraction and axis order; adopt
       `ui/panels/cube_panel.py` as the Cube dialog (slice slider, axis order, interval, play/stop,
       and the `Frame → Cube` entry).
-- [ ] **M4-5** (S) `File → Open as → Slice`.
-- [ ] **M4-6** (M) Multiple Extension Cube and Multiple Extension Frames loaders.
-- [ ] **M4-7** (L) Mosaic loaders: Mosaic WCS, Mosaic WCS Segment, Mosaic IRAF,
+- [x] **M4-5** (S) `File → Open as → Slice`.
+- [x] **M4-6** (M) Multiple Extension Cube and Multiple Extension Frames loaders.
+- [x] **M4-7** (L) Mosaic loaders: Mosaic WCS, Mosaic WCS Segment, Mosaic IRAF,
       Mosaic IRAF Segment, Mosaic WFPC2, Mosaic Image variants.
-- [ ] **M4-8** (S) Tile-compressed (`CompImageHDU`) images.
-- [ ] **M4-9** (S) URL loading (`File → Open as → URL`) with a progress indicator.
-- [ ] **M4-10** (M) Implement `save_file()` / `save_file_as()` — write the current frame's data +
+- [x] **M4-8** (S) Tile-compressed (`CompImageHDU`) images.
+- [~] **M4-9** (S) URL loading (`File → Open as → URL`) with a progress indicator.
+      *The download works, bounded by a 30-second timeout, with the status bar saying what is
+      happening. There is no progress bar: one needs the background-worker machinery of M8-13,
+      which the catalog and image-server queries will share. Recorded rather than left silent.*
+- [x] **M4-10** (M) Implement `save_file()` / `save_file_as()` — write the current frame's data +
       header + updated WCS to FITS.
-- [ ] **M4-11** (M) `File → Save Image → FITS` (rendered image as FITS) and the remaining
+- [x] **M4-11** (M) `File → Save Image → FITS` (rendered image as FITS) and the remaining
       `Save as` variants for the loaded frame type.
-- [ ] **M4-12** (S) Multi-extension header viewer: fix
+- [x] **M4-12** (S) Multi-extension header viewer: fix
       `ui/dialogs/header_dialog.py:134` extension switching.
-- [ ] **M4-13** (S) Tests: load each sample image via every path added above.
+- [x] **M4-13** (S) Tests: load each sample image via every path added above.
+
+### Where this deviated from the plan, and why
+
+* **`core/file_spec.py` and `core/fits_loaders.py` are new.** M4-3 said "parse ... syntax" without
+  saying where; keeping the grammar in its own Qt-free module means every one of DS9's documented
+  examples is a test, and the CLI, the Open dialog and M8's XPA `file` access point share one
+  parser. Likewise the `Open as` loaders are functions over an open file rather than controller
+  methods, so each is testable without a window.
+* **M4-2 says "adopt" the open dialog; it was rewritten.** What was there was a second file-open
+  dialog — a list of paths with a header preview, wrapping `QFileDialog.getOpenFileName`, never
+  constructed — and not an HDU chooser at all.
+* **The chooser is a divergence, and optional.** DS9 never asks. It also carries the two
+  "all extensions" choices, so M4-6's loaders are reachable from the place already listing them.
+* **M4-7's "Mosaic Image variants" are the same code paths.** DS9's distinction is whole-file
+  (`-mosaicimage`) versus several files (`-mosaic`); both assemble the extensions of what they are
+  given, so one loader per convention covers both, with the segment variants merging into the
+  mosaic already on screen.
+* **Events binning is the plain two-dimensional count.** `[bin=colx,coly]` works and gives the
+  image its WCS from the columns' own `TCRVL`/`TCRPX`/`TCDLT`/`TCTYP` cards. The Binning
+  Parameters dialog, block factors, row filters and binning a third column's *value* are M5,
+  where PLAN.md §3.4 puts bin-table work. A specification asking for those is accepted and its
+  extra parts ignored rather than refused.
+* **HEALPIX tables are recognised but not displayable.** `PIXTYPE = HEALPIX` is classified, so the
+  chooser and the error messages name it correctly; reprojecting one is M9.
+* **`WCSHandler` now reduces a cube's WCS to its celestial axes.** A frame shows one 2D slice, and
+  every readout passes an (x, y) pair, so a three-axis WCS raised from `pixel_to_world`.
+* **The centred-section tie-break is a choice.** DS9's `[dim@centre]` for an even width could go
+  either side and DS9's source does not say; `centre - width // 2` reproduces its one documented
+  example, `[256@512@512]` → 384:639.
+
+### Bugs found and fixed on the way
+
+* **Stepping a cube slice kept the previous slice's clip limits.** A cube whose brightness varies
+  with channel came out flat white or flat black as you stepped through it. DS9's default scale
+  scope is local, so the limits now follow the displayed slice.
+* **A `CompImageHDU` was classified with an empty shape** and so reported as not displayable:
+  astropy presents such an HDU as the image it decompresses to, with `NAXIS` rather than the
+  `ZNAXIS` the FITS convention writes.
+* **A WCS mosaic clipped the last row and column of every input.** The output canvas was sized
+  from the corner pixels' *centres* rather than their outer edges.
+* **Overlapping mosaic tiles left a hole**, because the fill condition was written to preserve
+  existing pixels and did the opposite.
+* **`refresh_info` opened files.** `MainWindow.fits_handler` re-opens a frame's file when it has a
+  path but no handler, and the information panel called it on every redisplay.
+* **`NCSPEC` truncated the extension away** on a long path, since a FITS card's value stops at 68
+  characters; it now records the bracket part alone.
 
 ---
 
