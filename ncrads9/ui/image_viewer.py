@@ -52,6 +52,8 @@ class ImageViewer(QLabel):
         # Image data
         self._pixmap: QPixmap | None = None
         self._source_pixmap: QPixmap | None = None
+        #: Image pixels per pixel of the shown array, under DS9's Block.
+        self._block_factor: int = 1
         self._transform_cache_key: tuple[int, float, bool, bool] | None = None
         self._zoom = 1.0
         self._rotation = 0.0
@@ -269,8 +271,22 @@ class ImageViewer(QLabel):
         """Convert a mouse event position to image pixel coordinates."""
         return self.map_widget_to_image_coords(event.position().x(), event.position().y())
 
+    def set_block_factor(self, factor: int) -> None:
+        """Say how many image pixels one pixel of the shown array holds.
+
+        The widget works in the units of whatever array it was handed, so
+        under DS9's Block the array it draws is smaller than the image behind
+        it. This is the one number that converts between the two, and it is
+        applied only where blocked units meet image units -- the two mapping
+        functions below.
+        """
+        self._block_factor = max(1, int(factor))
+
     def map_widget_to_image_coords(self, x: float, y: float) -> tuple[int, int] | None:
-        """Convert widget coordinates to source image coordinates."""
+        """Convert widget coordinates to source image coordinates.
+
+        The result is in *image* pixels, so a block factor is undone here.
+        """
         if self._source_pixmap is None or self.pixmap() is None:
             return None
 
@@ -283,14 +299,20 @@ class ImageViewer(QLabel):
         transform = self.get_view_transform()
         source_x, source_y = transform.display_to_source(display_x, display_y)
         if 0 <= source_x < self._source_pixmap.width() and 0 <= source_y < self._source_pixmap.height():
-            img_x = int(source_x)
-            img_y = int(self._source_pixmap.height() - 1 - source_y)
+            block = self._block_factor
+            img_x = int(source_x * block)
+            img_y = int((self._source_pixmap.height() - 1 - source_y) * block)
             return (img_x, img_y)
         return None
 
     def map_image_to_display_coords(self, x: float, y: float) -> tuple[float, float] | None:
-        """Convert source image coordinates (bottom-left origin) to display coordinates."""
+        """Convert image coordinates (bottom-left origin) to display coordinates.
+
+        The input is in *image* pixels, so a block factor is applied here.
+        """
         if self._source_pixmap is None:
             return None
-        source_top_y = self._source_pixmap.height() - 1 - float(y)
-        return self.get_view_transform().source_to_display(float(x), source_top_y)
+        block = self._block_factor
+        source_x = float(x) / block
+        source_top_y = self._source_pixmap.height() - 1 - float(y) / block
+        return self.get_view_transform().source_to_display(source_x, source_top_y)

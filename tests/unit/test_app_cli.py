@@ -138,7 +138,7 @@ def test_apply_startup_cli_applies_display_options(main_window: MainWindow, monk
         ["ncrads9", "image.fits", "-log", "-bin", "2", "-tile", "-invert", "-wcs", "fk4", "-degrees"],
     )
     assert main_window.current_scale == ScaleAlgorithm.LOG
-    assert main_window.frame_manager.current_frame.bin_factor == 2
+    assert main_window.frame_manager.current_frame.block_factor == 2
     assert main_window._tile_mode_enabled
     assert main_window.invert_colormap
     assert main_window.coord_context.sky.value == "fk4"

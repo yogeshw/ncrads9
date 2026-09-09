@@ -55,6 +55,7 @@ from ..core.fits_handler import FITSHandler, HDUKind
 from ..core.wcs_handler import WCSHandler
 from ..frames.frame import Frame
 from ..frames.tile_layout import TileLayout
+from ..rendering.block import block_image
 from ..rendering.rgb_compositor import compose_rgb
 from ..rendering.scale_algorithms import ScaleAlgorithm, apply_scale
 from .view_transform import transform_image_array
@@ -276,7 +277,7 @@ class DisplayPipeline:
             frame.original_image_data = image_data
         # A section's block factor is DS9's display blocking, which the frame
         # owns; M5 separates that from bin-table binning properly.
-        frame.bin_factor = spec.section.block if spec.section is not None else 1
+        frame.block_factor = spec.section.block if spec.section is not None else 1
         frame.header = header
         frame.wcs_handler = wcs_handler
         frame.colormap = self.window.current_colormap
@@ -319,6 +320,21 @@ class DisplayPipeline:
         if wcs_handler.is_valid:
             stats_msg += " (WCS available)"
         self.status(stats_msg, 3000)
+
+    def push_block_factor(self, frame: Frame) -> None:
+        """Tell the viewer how many image pixels one displayed pixel holds.
+
+        The viewer works entirely in the units of the array it was handed, so
+        with a block factor its widget-to-image mapping would come back in
+        blocked pixels. Telling it the factor is what keeps the coordinate
+        readout, the regions and the panner in image pixels whatever the
+        block is.
+        """
+        factor = max(1, int(getattr(frame, "block_factor", 1)))
+        for target in (self.viewer, getattr(self.viewer, "image_viewer", None)):
+            setter = getattr(target, "set_block_factor", None)
+            if setter is not None:
+                setter(factor)
 
     @staticmethod
     def downsample_for_preview(
@@ -451,6 +467,7 @@ class DisplayPipeline:
             return
 
         image_data = self.display_image_data(frame)
+        self.push_block_factor(frame)
         self.apply_view_transform(frame)
 
         # Compute scale limits using zscale (once, or when reset)
@@ -546,7 +563,7 @@ class DisplayPipeline:
 
         # Update zoom display
         self.status_bar.update_zoom(self.viewer.get_zoom())
-        self.window.analysis.sync_bin_menu(getattr(frame, "bin_factor", 1))
+        self.window.analysis.sync_bin_menu(getattr(frame, "block_factor", 1))
         self.window.region.show_frame_regions(frame)
         self.window.frame_controller.sync_view_state()
         if self.window._contour_settings is not None:
@@ -620,7 +637,7 @@ class DisplayPipeline:
 
         self.status_bar.update_image_info(composite.shape[1], composite.shape[0])
         self.status_bar.update_zoom(self.viewer.get_zoom())
-        self.window.analysis.sync_bin_menu(getattr(frame, "bin_factor", 1))
+        self.window.analysis.sync_bin_menu(getattr(frame, "block_factor", 1))
         self.window.region.show_frame_regions(frame)
         self.window.frame_controller.sync_view_state()
         if self.window._contour_settings is not None:
@@ -735,10 +752,17 @@ class DisplayPipeline:
         return True
 
     def display_image_data(self, frame: Frame) -> NDArray[np.floating]:
-        """Return frame data after display-level analysis transforms."""
+        """Return frame data after the display-level transforms.
+
+        In DS9's order: block, then smooth. Neither touches
+        `frame.image_data` -- both work on a copy on its way to the screen,
+        which is what makes Block a display transform rather than an edit
+        (PLAN.md §3.4).
+        """
         image_data = self.active_channel_data(frame) if frame.frame_type == "rgb" else frame.image_data
         if image_data is None:
             return np.array([], dtype=np.float32)
+        image_data = block_image(image_data, getattr(frame, "block_factor", 1))
         if self.window.menu_bar.action_smooth.isChecked():
             return self.window.analysis.apply_smoothing(image_data)
         return image_data

@@ -88,6 +88,9 @@ class RegionOverlay(QWidget):
         self.image_offset: tuple[float, float] = (0, 0)
         self.image_width: int = 0
         self.image_height: int = 0
+        #: Image pixels per pixel of the array being drawn, under DS9's
+        #: Block. Regions are stored in image pixels regardless.
+        self.block_factor: int = 1
         self.rotation: float = 0.0
         self.flip_x: bool = False
         self.flip_y: bool = False
@@ -166,7 +169,12 @@ class RegionOverlay(QWidget):
     # -- coordinates --------------------------------------------------------
 
     def _widget_to_image_coords(self, widget_point: QPointF) -> QPointF:
-        """Convert widget coordinates to image coordinates."""
+        """Convert widget coordinates to image coordinates.
+
+        A region is stored in image pixels, so DS9's Block is undone here --
+        otherwise a shape drawn under a block of four would be recorded a
+        quarter of the way into the image and move when the block changed.
+        """
         display_x = (widget_point.x() - self.image_offset[0]) / self.zoom
         display_y = (widget_point.y() - self.image_offset[1]) / self.zoom
         source_x, source_top_y = self._display_transform().display_to_source(display_x, display_y)
@@ -175,16 +183,23 @@ class RegionOverlay(QWidget):
         else:
             img_y = source_top_y
         img_x = source_x
-        return QPointF(img_x, img_y)
+        block = max(1, self.block_factor)
+        return QPointF(img_x * block, img_y * block)
 
     def _image_to_widget_coords(self, image_point: QPointF) -> QPointF:
-        """Convert image coordinates to widget coordinates."""
+        """Convert image coordinates to widget coordinates.
+
+        The inverse of `_widget_to_image_coords`, so Block is applied here.
+        """
+        block = max(1, self.block_factor)
+        source_x = image_point.x() / block
+        source_y = image_point.y() / block
         if self.image_height > 0:
-            source_top_y = self.image_height - 1 - image_point.y()
+            source_top_y = self.image_height - 1 - source_y
         else:
-            source_top_y = image_point.y()
+            source_top_y = source_y
         display_x, display_y = self._display_transform().source_to_display(
-            image_point.x(),
+            source_x,
             source_top_y,
         )
         widget_x = display_x * self.zoom + self.image_offset[0]

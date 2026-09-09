@@ -129,7 +129,7 @@ def test_loading_a_section(main_window, mef):
 
 def test_a_sections_block_factor_reaches_the_frame(main_window, mef):
     main_window.display.load_fits(f"{mef}[SCI][*,*,4]")
-    assert main_window.frame_manager.current_frame.bin_factor == 4
+    assert main_window.frame_manager.current_frame.block_factor == 4
 
 
 def test_the_default_extension_is_chosen_when_none_is_named(main_window, mef):

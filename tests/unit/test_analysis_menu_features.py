@@ -52,9 +52,15 @@ def test_block_factor_actions_update_frame(main_window: MainWindow):
     _load_test_image(main_window)
     frame = main_window.frame_manager.current_frame
     assert frame is not None
+    original = frame.image_data.copy()
+
     main_window.analysis.set_block_factor(4)
-    assert frame.bin_factor == 4
+    assert frame.block_factor == 4
     assert main_window.menu_bar.action_block_4.isChecked()
+    # Block is a display transform: the frame still holds the full image.
+    # It used to overwrite `image_data` with the reduced array.
+    assert frame.image_data.shape == original.shape
+    assert np.array_equal(frame.image_data, original)
 
 
 def test_smoothing_pipeline_updates_display_data(main_window: MainWindow):

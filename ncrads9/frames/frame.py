@@ -69,7 +69,11 @@ class Frame:
     image: ImageData | None = None
     regions: list = None
     original_image_data: np.ndarray | None = None
-    bin_factor: int = 1
+    #: DS9's Block: how many image pixels go into one displayed pixel. A
+    #: display transform, not a change to the data -- `image_data` stays at
+    #: full resolution and the render pipeline reduces a copy. Called
+    #: `bin_factor` before M5, which conflated it with bin-table binning.
+    block_factor: int = 1
     colormap: str = "grey"
     scale: ScaleAlgorithm = ScaleAlgorithm.LINEAR
     invert_colormap: bool = False

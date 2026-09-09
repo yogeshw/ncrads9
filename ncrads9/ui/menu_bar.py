@@ -27,6 +27,9 @@ from PyQt6.QtWidgets import QMenu, QMenuBar, QWidget
 from ..colormaps.bundled import CATEGORIES, colormap_label
 from .layout.view_state import DEFAULT_INFO_FIELDS, WCS_SUFFIXES
 
+#: The block factors the Block menu offers. DS9 goes to 256.
+BLOCK_FACTORS: tuple[int, ...] = (1, 2, 4, 8, 16, 32, 64, 128, 256)
+
 #: DS9's eight transfer functions, in the order its Scale menu lists them.
 SCALE_FUNCTIONS: tuple[tuple[str, str], ...] = (
     ("linear", "&Linear"),
@@ -1299,29 +1302,16 @@ class MenuBar(QMenuBar):
         self.analysis_block_menu.addSeparator()
         self.analysis_block_group = QActionGroup(self)
         self.analysis_block_group.setExclusive(True)
-        self.action_block_1: QAction = QAction("Block &1", self)
-        self.action_block_1.setCheckable(True)
-        self.action_block_1.setChecked(True)
-        self.action_block_2: QAction = QAction("Block &2", self)
-        self.action_block_2.setCheckable(True)
-        self.action_block_4: QAction = QAction("Block &4", self)
-        self.action_block_4.setCheckable(True)
-        self.action_block_8: QAction = QAction("Block &8", self)
-        self.action_block_8.setCheckable(True)
-        self.action_block_16: QAction = QAction("Block 1&6", self)
-        self.action_block_16.setCheckable(True)
-        self.action_block_32: QAction = QAction("Block 3&2", self)
-        self.action_block_32.setCheckable(True)
-        for action in (
-            self.action_block_1,
-            self.action_block_2,
-            self.action_block_4,
-            self.action_block_8,
-            self.action_block_16,
-            self.action_block_32,
-        ):
+        #: Block factor -> its action.
+        self.block_factor_actions: dict[int, QAction] = {}
+        for factor in BLOCK_FACTORS:
+            action = QAction(f"Block {factor}", self)
+            action.setCheckable(True)
+            action.setChecked(factor == 1)
             self.analysis_block_menu.addAction(action)
             self.analysis_block_group.addAction(action)
+            self.block_factor_actions[factor] = action
+            setattr(self, f"action_block_{factor}", action)
 
         self.action_block_params: QAction = QAction("Block Parameters...", self)
         self.analysis_menu.addAction(self.action_block_params)

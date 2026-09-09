@@ -76,11 +76,26 @@ class GLImageViewerWithRegions(QWidget):
 
         self.set_region_mode(RegionMode.NONE)
 
+    def set_block_factor(self, factor: int) -> None:
+        """Pass DS9's Block factor on to the region overlay and the readout.
+
+        The GL canvas reports positions in the units of the texture it was
+        given, which under a block is smaller than the image; multiplying
+        here is what keeps the coordinate readout and the regions in image
+        pixels. See `ui/image_viewer.py` for the same boundary on the CPU
+        path.
+        """
+        self._block_factor = max(1, int(factor))
+        self.region_overlay.block_factor = self._block_factor
+        self.region_overlay.update()
+
     def _on_cursor_moved(self, x: float, y: float, value: float) -> None:
-        self.mouse_moved.emit(int(x), int(y))
+        block = getattr(self, "_block_factor", 1)
+        self.mouse_moved.emit(int(x * block), int(y * block))
 
     def _on_mouse_clicked(self, x: float, y: float, button: int) -> None:
-        self.mouse_clicked.emit(int(x), int(y), button)
+        block = getattr(self, "_block_factor", 1)
+        self.mouse_clicked.emit(int(x * block), int(y * block), button)
 
     def set_tile_provider(
         self,

@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 651 (577 excluding separators)
+# entries: 654 (580 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -638,6 +638,9 @@
 .analysis.block|radiobutton|Block 8
 .analysis.block|radiobutton|Block 16
 .analysis.block|radiobutton|Block 32
+.analysis.block|radiobutton|Block 64
+.analysis.block|radiobutton|Block 128
+.analysis.block|radiobutton|Block 256
 .analysis|command|Block Parameters
 .analysis|separator|---
 .analysis|checkbutton|Smooth

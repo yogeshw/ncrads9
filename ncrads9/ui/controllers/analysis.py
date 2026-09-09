@@ -70,10 +70,14 @@ from ..dialogs.histogram_dialog import HistogramDialog
 from ..dialogs.pixel_table_dialog import PixelTableDialog
 from ..dialogs.smooth_dialog import SmoothDialog
 from ..dialogs.statistics_dialog import StatisticsDialog
+from ..menu_bar import BLOCK_FACTORS
 from .base import Controller
 
-#: Block and bin factors the menu offers.
-BLOCK_FACTORS: tuple[int, ...] = (1, 2, 4, 8, 16, 32)
+#: The block factors the menu offers, imported so the two cannot diverge.
+
+#: The Bin menu's factors. DS9's Bin turns a FITS table into an image; this
+#: menu block-averaged like Block until M5-15, and now says so rather than
+#: doing the wrong thing quietly. M5-16 gives it its real behaviour.
 BIN_FACTORS: tuple[int, ...] = (1, 2, 4, 8)
 
 
@@ -122,36 +126,37 @@ class AnalysisController(Controller):
             )
 
     def sync_block_menu(self, factor: int) -> None:
-        """Update Analysis->Block checkmarks based on current factor."""
-        self.menu.action_block_1.setChecked(factor == 1)
-        self.menu.action_block_2.setChecked(factor == 2)
-        self.menu.action_block_4.setChecked(factor == 4)
-        self.menu.action_block_8.setChecked(factor == 8)
-        self.menu.action_block_16.setChecked(factor == 16)
-        self.menu.action_block_32.setChecked(factor == 32)
+        """Tick the Block entry matching the current factor."""
+        for value in BLOCK_FACTORS:
+            getattr(self.menu, f"action_block_{value}").setChecked(value == factor)
 
     def set_block_factor(self, factor: int) -> None:
-        """Set block/bin factor from Analysis->Block menu."""
-        allowed = [1, 2, 4, 8, 16, 32]
-        nearest = min(allowed, key=lambda item: abs(item - factor))
-        self.set_bin(nearest)
+        """Set the display block factor from the Block menu.
+
+        Args:
+            factor: The wanted factor. Snapped to the nearest of
+                `BLOCK_FACTORS`, as DS9's menu offers only those.
+        """
+        nearest = min(BLOCK_FACTORS, key=lambda item: abs(item - factor))
+        self.set_block(nearest)
         self.log_command(f"block {nearest}")
 
     def block_in(self) -> None:
-        """Decrease block factor to next lower preset."""
-        frame = self.frames.current_frame
-        current = getattr(frame, "bin_factor", 1) if frame else 1
-        allowed = [1, 2, 4, 8, 16, 32]
-        idx = max(0, allowed.index(current) - 1) if current in allowed else 0
-        self.set_block_factor(allowed[idx])
+        """Halve the block factor, stopping at one."""
+        self.set_block_factor(self._step_block(-1))
 
     def block_out(self) -> None:
-        """Increase block factor to next higher preset."""
+        """Double the block factor, stopping at the largest preset."""
+        self.set_block_factor(self._step_block(1))
+
+    def _step_block(self, direction: int) -> int:
+        """The preset one step from the current factor."""
         frame = self.frames.current_frame
-        current = getattr(frame, "bin_factor", 1) if frame else 1
-        allowed = [1, 2, 4, 8, 16, 32]
-        idx = min(len(allowed) - 1, allowed.index(current) + 1) if current in allowed else 1
-        self.set_block_factor(allowed[idx])
+        current = getattr(frame, "block_factor", 1) if frame else 1
+        if current not in BLOCK_FACTORS:
+            current = min(BLOCK_FACTORS, key=lambda item: abs(item - current))
+        index = BLOCK_FACTORS.index(current) + direction
+        return BLOCK_FACTORS[max(0, min(len(BLOCK_FACTORS) - 1, index))]
 
     def block_fit(self) -> None:
         """Choose a block factor that roughly fits image into viewport."""
@@ -171,16 +176,21 @@ class AnalysisController(Controller):
         vw = max(1, viewport.width())
         vh = max(1, viewport.height())
         needed = max(width / vw, height / vh)
-        allowed = [1, 2, 4, 8, 16, 32]
-        factor = next((value for value in allowed if value >= needed), 32)
+        factor = next((value for value in BLOCK_FACTORS if value >= needed), BLOCK_FACTORS[-1])
         self.set_block_factor(factor)
 
     def show_block_dialog(self) -> None:
         """Show block-factor parameter dialog."""
         frame = self.frames.current_frame
-        current = getattr(frame, "bin_factor", 1) if frame else 1
+        current = getattr(frame, "block_factor", 1) if frame else 1
         value, ok = QInputDialog.getInt(
-            self.window, "Block Parameters", "Block factor:", int(current), 1, 32, 1
+            self.window,
+            "Block Parameters",
+            "Block factor:",
+            int(current),
+            BLOCK_FACTORS[0],
+            BLOCK_FACTORS[-1],
+            1,
         )
         if not ok:
             return
@@ -585,47 +595,53 @@ class AnalysisController(Controller):
         self.menu.action_bin_8.setChecked(factor == 8)
         self.sync_block_menu(factor)
 
-    def rebin(self, data: np.ndarray, factor: int) -> np.ndarray:
-        """Rebin image by an integer factor using block mean."""
-        if factor <= 1:
-            return data
+    def set_block(self, factor: int) -> None:
+        """Set the display block factor for the current frame.
 
-        height, width = data.shape[:2]
-        new_height = (height // factor) * factor
-        new_width = (width // factor) * factor
-        if new_height == 0 or new_width == 0:
-            return data
+        Block reduces how much data is *drawn*, not what the frame holds:
+        `frame.image_data` stays at full resolution and the render pipeline
+        reduces a copy on its way to the screen (`display.block_image`). That
+        is what DS9 means by Block, and PLAN.md §3.4 records why this used to
+        be wrong -- it overwrote `frame.image_data`, so a region drawn at
+        pixel 100 read back at pixel 25 under a block of four, the WCS was
+        never rescaled, and `Save` wrote the reduced array.
 
-        trimmed = data[:new_height, :new_width]
-        reshaped = trimmed.reshape(new_height // factor, factor, new_width // factor, factor)
-        return np.nanmean(reshaped, axis=(1, 3)).astype(np.float32)
-
-    def set_bin(self, factor: int) -> None:
-        """Set binning factor for the current frame."""
+        Args:
+            factor: Image pixels per displayed pixel, at least one.
+        """
         frame = self.frames.current_frame
         if not frame or not frame.has_data:
             self.status("No image loaded", 2000)
             return
 
-        if frame.original_image_data is None:
-            frame.original_image_data = frame.image_data
-
-        if factor == 1:
-            frame.image_data = frame.original_image_data
-        else:
-            frame.image_data = self.rebin(frame.original_image_data, factor)
-
-        frame.bin_factor = factor
-        self.window.current_bin = factor
+        frame.block_factor = max(1, int(factor))
+        self.window.current_bin = frame.block_factor
+        # Blocking averages pixels together, which narrows the distribution,
+        # so the limits are no longer the ones that were measured.
         self.window.z1 = None
         self.window.z2 = None
         frame.z1 = None
         frame.z2 = None
 
-        self.sync_bin_menu(factor)
+        if self.window.frame_controller.block_is_locked():
+            for other in self.frames.frames:
+                other.block_factor = frame.block_factor
+
+        self.sync_bin_menu(frame.block_factor)
         self.window.display.display()
-        self.status_bar.update_image_info(frame.image_data.shape[1], frame.image_data.shape[0])
-        self.status(f"Binning: {factor}x{factor}", 2000)
+        height, width = frame.image_data.shape[:2]
+        self.status_bar.update_image_info(width, height)
+        self.status(f"Block: {frame.block_factor}x{frame.block_factor}", 2000)
+
+    def set_bin(self, factor: int) -> None:
+        """Set the display block factor. Kept for XPA and the older callers.
+
+        DS9 distinguishes Bin, which turns a FITS table into an image, from
+        Block, which reduces an image for display. NCRADS9 had one operation
+        doing the second under the first's name; this is that name, now
+        forwarding. Real bin-table binning is M5-16.
+        """
+        self.set_block(factor)
 
     def show_statistics(self) -> None:
         """Show statistics dialog."""

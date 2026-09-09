@@ -180,7 +180,7 @@ class FrameController(Controller):
 
     def reset_view_defaults(self, frame: Frame) -> None:
         """Reset a frame's display state to defaults."""
-        frame.bin_factor = 1
+        frame.block_factor = 1
         frame.colormap = self.window._default_colormap
         frame.scale = ScaleAlgorithm.LINEAR
         frame.invert_colormap = False
@@ -983,10 +983,24 @@ class FrameController(Controller):
         self.status(f"Frame lock {scope}: {value}", 2000)
 
     def set_lock_flag(self, flag: str, enabled: bool) -> None:
-        """Set lock checkbox value."""
+        """Turn one Frame -> Lock flag on or off.
+
+        Most of these flags are recorded and not yet acted on; making every
+        one of them live is M9's remaining lock work. `block` is live as of
+        M5-20 -- changing the block factor with it on changes every frame's.
+        """
         self.window._frame_lock_flags[flag] = bool(enabled)
         state = "on" if enabled else "off"
         self.status(f"Frame lock {flag}: {state}", 2000)
+
+        if flag == "bin" and enabled:
+            self.status("Bin-table binning arrives in M5-16; see Lock Block", 3000)
+        elif flag == "block" and enabled:
+            self.match_block()
+
+    def block_is_locked(self) -> bool:
+        """Whether a block change should be copied to every frame."""
+        return bool(self.window._frame_lock_flags.get("block"))
 
     def select_tile_at(self, x: int, y: int) -> bool:
         """Select frame corresponding to a click on the tiled composite."""
@@ -1165,15 +1179,16 @@ class FrameController(Controller):
         self.status("Matched frames (WCS)", 2000)
 
     def match_bin(self) -> None:
-        """Match bin factors across frames."""
-        source = self.frames.current_frame
-        if not source:
+        """Copy the bin-table binning of this frame to the others.
+
+        DS9's Bin is the table-to-image conversion; nothing here does that
+        yet (M5-16), so this reports rather than copying the block factor,
+        which is what it used to do and which is what `match_block` is for.
+        """
+        if not self.frames.current_frame:
             self.status("No frame to match", 2000)
             return
-        for frame in self.frames.frames:
-            if frame is not source:
-                frame.bin_factor = source.bin_factor
-        self.status("Matched frames (bin)", 2000)
+        self.status("Bin-table binning arrives in M5-16; see Match Block", 3000)
 
     def match_axes_order(self) -> None:
         """Match cube axes order across frames."""
@@ -1216,8 +1231,16 @@ class FrameController(Controller):
         self.status("Matched frames (colorbar)", 2000)
 
     def match_block(self) -> None:
-        """Match block/bin factors across frames."""
-        self.match_bin()
+        """Copy this frame's display block factor to the others."""
+        source = self.frames.current_frame
+        if not source:
+            self.status("No frame to match", 2000)
+            return
+        for frame in self.frames.frames:
+            if frame is not source:
+                frame.block_factor = source.block_factor
+        self.window.display.display()
+        self.status(f"Matched frames (block {source.block_factor})", 2000)
 
     def match_smooth(self) -> None:
         """Match smoothing parameters across frames."""
