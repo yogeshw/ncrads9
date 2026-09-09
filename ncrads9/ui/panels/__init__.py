@@ -17,10 +17,14 @@
 """
 UI Panels package for ncrads9.
 
+`colorbar_panel.py` used to sit here as a second colorbar. The window shell
+hosts `ui/widgets/colorbar_widget.py`, which is the one with the orientation,
+numerics, font, size and tick controls behind it; the panel had none of them
+and nothing constructed it. Deleted in M3 rather than adopted.
+
 Author: Yogesh Wadadekar
 """
 
-from .colorbar_panel import ColorbarPanel
 from .cube_panel import CubePanel
 from .horizontal_graph import HorizontalGraph
 from .info_panel import InfoPanel
@@ -32,7 +36,6 @@ __all__ = [
     "MagnifierPanel",
     "PannerPanel",
     "InfoPanel",
-    "ColorbarPanel",
     "HorizontalGraph",
     "VerticalGraph",
     "CubePanel",

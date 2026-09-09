@@ -99,25 +99,11 @@ PENDING_ADOPTION: dict[str, str] = {
     "prism.line_id": "M9-9",
     "prism.prism_main": "M9-9",
     "prism.spectrum_plot": "M9-9",
-    # A second colorbar. The window shell hosts widgets/colorbar_widget.py,
-    # which is the one with the orientation, numerics, font, size and tick
-    # controls behind it; this panel has none of them. Delete, not adopt.
-    "ui.panels.colorbar_panel": "delete -- superseded by ui.widgets.colorbar_widget",
     "ui.panels.cube_panel": "M4-4",
     # M4 -- FITS coverage.
     "core.cube_handler": "M4-4",
     "ui.dialogs.open_dialog": "M4-2",
     "ui.dialogs.save_dialog": "M4-10",
-    # Per-system coordinate value objects, each a thin wrapper over SkyCoord.
-    # M1 replaced their job with CoordinateContext, and M3's information panel
-    # uses that plus PhysicalTransform and WCSHandler(key=...) -- so the
-    # milestone that was meant to adopt them has been finished without them.
-    # Nothing imports any of the five. Delete, not adopt.
-    "coordinates.ecliptic": "delete -- superseded by CoordinateContext",
-    "coordinates.fk4_fk5": "delete -- superseded by CoordinateContext",
-    "coordinates.galactic": "delete -- superseded by CoordinateContext",
-    "coordinates.image_coords": "delete -- superseded by CoordinateContext",
-    "coordinates.wcs_coords": "delete -- superseded by CoordinateContext",
     # Widgets with no host yet.
     "ui.dialogs.region_dialog": "M6-7",
     "ui.widgets.region_list": "M6-15",
@@ -259,12 +245,14 @@ def test_pending_modules_exist(module):
 def test_orphan_count_does_not_grow():
     """A ratchet on the headline number from PLAN.md §3.1.
 
-    M1 brought the orphan count down from 116 to 71, and M3 to 69 by
-    adopting the information panel and the physical-coordinate transform.
+    M1 brought the orphan count down from 116 to 71, and M3 to 60 -- by
+    adopting the information panel, the physical-coordinate transform and the
+    three themes, and by deleting six modules that M1's `CoordinateContext`
+    and `ui/widgets/colorbar_widget.py` had superseded.
     Raise this ceiling only
     when a milestone deliberately adds an unreachable module -- never to make
     a failing run pass.
     """
-    assert len(ORPHANS) <= 69, (
-        f"{len(ORPHANS)} orphan modules; the M3 baseline is 69. " "New unreachable code needs a reason."
+    assert len(ORPHANS) <= 60, (
+        f"{len(ORPHANS)} orphan modules; the M3 baseline is 60. " "New unreachable code needs a reason."
     )

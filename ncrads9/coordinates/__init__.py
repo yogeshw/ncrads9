@@ -17,31 +17,40 @@
 """
 Coordinate systems and transformations for NCRADS9.
 
+`CoordinateContext` is the single place a coordinate is transformed and
+formatted; `PhysicalTransform` reads a header's `LTV*`/`LTM*` mapping. The
+five per-system value objects that used to sit here -- `WCSCoords`,
+`ImageCoords` and the `fk4_fk5`, `galactic` and `ecliptic` function pairs --
+were each a thin wrapper over `astropy.coordinates.SkyCoord`, unreachable
+from the application since before M0 and superseded by `CoordinateContext` in
+M1. M3's information panel, which was the milestone meant to adopt them, was
+finished without any of them, so they were deleted rather than carried
+further. See TODO.md under M3 for the reasoning.
+
 Author: Yogesh Wadadekar
 """
 
-from .coord_system import CoordSystem, CoordSystemType
-from .ecliptic import ecliptic_to_equatorial, equatorial_to_ecliptic
-from .fk4_fk5 import convert_fk4_to_fk5, convert_fk5_to_fk4
-from .galactic import equatorial_to_galactic, galactic_to_equatorial
-from .image_coords import ImageCoords
-from .physical_coords import PhysicalCoords
+from .coord_system import (
+    CoordFrame,
+    CoordinateContext,
+    CoordSystem,
+    CoordSystemType,
+    SkyFormat,
+    SkyFrame,
+)
+from .physical_coords import PhysicalCoords, PhysicalTransform
 from .sexagesimal import degrees_to_dms, degrees_to_hms, parse_sexagesimal
-from .wcs_coords import WCSCoords
 
 __all__ = [
+    "CoordFrame",
     "CoordSystem",
     "CoordSystemType",
-    "ImageCoords",
+    "CoordinateContext",
     "PhysicalCoords",
-    "WCSCoords",
-    "convert_fk4_to_fk5",
-    "convert_fk5_to_fk4",
-    "equatorial_to_galactic",
-    "galactic_to_equatorial",
-    "equatorial_to_ecliptic",
-    "ecliptic_to_equatorial",
-    "degrees_to_hms",
+    "PhysicalTransform",
+    "SkyFormat",
+    "SkyFrame",
     "degrees_to_dms",
+    "degrees_to_hms",
     "parse_sexagesimal",
 ]
