@@ -299,7 +299,7 @@ def _load_rgb_channels_from_cli(main_window: MainWindow, channel_paths: dict[str
         ):
             pass
         else:
-            main_window._new_frame_with_type("base")
+            main_window.frame_controller.new_frame_of_type("base")
         main_window.file.open_file(filepath=filepath)
         frame = main_window.frame_manager.current_frame
         if frame is not None and frame.image_data is not None:
@@ -308,13 +308,13 @@ def _load_rgb_channels_from_cli(main_window: MainWindow, channel_paths: dict[str
     if not source_indices:
         return
 
-    main_window._new_frame_with_type("rgb")
+    main_window.frame_controller.new_frame_of_type("rgb")
     rgb_frame = main_window.frame_manager.current_frame
     if rgb_frame is None:
         return
     rgb_frame.rgb_current_channel = "red" if "red" in source_indices else next(iter(source_indices))
     main_window._apply_rgb_frame_channels_from_sources(rgb_frame, source_indices)
-    main_window._apply_frame_view_state(rgb_frame)
+    main_window.frame_controller.apply_view_state(rgb_frame)
     main_window._display_image()
 
 
@@ -350,19 +350,19 @@ def apply_startup_cli(main_window: MainWindow, argv: Sequence[str]) -> None:
                 rgb_requested = True
             continue
         if option == "single":
-            main_window._set_frame_display_mode("single")
+            main_window.frame_controller.set_display_mode("single")
             continue
         if option == "tile":
             enabled = True if not args else str(args[0]).lower() not in {"0", "off", "no", "false"}
-            main_window._tile_frames(enabled)
+            main_window.frame_controller.set_tile(enabled)
             continue
         if option == "blink":
             enabled = True if not args else str(args[0]).lower() not in {"0", "off", "no", "false"}
-            main_window._toggle_blink(enabled)
+            main_window.frame_controller.set_blink(enabled)
             continue
         if option == "fade":
             enabled = True if not args else str(args[0]).lower() not in {"0", "off", "no", "false"}
-            main_window._toggle_fade(enabled)
+            main_window.frame_controller.set_fade(enabled)
             continue
         if option in {
             "linear",
@@ -412,7 +412,7 @@ def apply_startup_cli(main_window: MainWindow, argv: Sequence[str]) -> None:
     if rgb_requested and rgb_channel_paths:
         _load_rgb_channels_from_cli(main_window, rgb_channel_paths)
     elif rgb_requested:
-        main_window._new_frame_with_type("rgb")
+        main_window.frame_controller.new_frame_of_type("rgb")
 
 
 def run_application(argv: list[str]) -> int:

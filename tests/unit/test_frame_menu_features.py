@@ -46,7 +46,7 @@ def _load_two_frames(window: MainWindow) -> None:
     frame2.original_image_data = frame2.image_data
 
     window.frame_manager.goto_frame(0)
-    window._update_frame_display()
+    window.frame_controller.update_display()
 
 
 def _make_test_wcs(width: int, height: int) -> WCSHandler:
@@ -62,13 +62,13 @@ def test_blink_menu_advances_frames(main_window: MainWindow):
     _load_two_frames(main_window)
     assert main_window.frame_manager.current_index == 0
 
-    main_window._toggle_blink(True)
+    main_window.frame_controller.set_blink(True)
     assert main_window._blink_timer.isActive()
 
-    main_window._update_blink()
+    main_window.frame_controller.advance_blink()
     assert main_window.frame_manager.current_index == 1
 
-    main_window._toggle_blink(False)
+    main_window.frame_controller.set_blink(False)
     assert not main_window._blink_timer.isActive()
 
 
@@ -89,21 +89,21 @@ def test_tile_menu_toggles_tiled_display(main_window: MainWindow):
     _load_two_frames(main_window)
     assert main_window.menu_bar.action_tile_frames.isCheckable()
 
-    main_window._tile_frames(True)
+    main_window.frame_controller.set_tile(True)
     assert main_window._tile_mode_enabled
 
     pixmap = main_window.image_viewer.pixmap()
     assert pixmap is not None
     assert pixmap.width() > 0 and pixmap.height() > 0
 
-    main_window._tile_frames(False)
+    main_window.frame_controller.set_tile(False)
     assert not main_window._tile_mode_enabled
 
 
 def test_delete_all_frames_resets_to_single_empty(main_window: MainWindow):
     _load_two_frames(main_window)
     assert main_window.frame_manager.num_frames == 2
-    main_window._delete_all_frames()
+    main_window.frame_controller.delete_all()
     assert main_window.frame_manager.num_frames == 1
     frame = main_window.frame_manager.current_frame
     assert frame is not None
@@ -118,24 +118,24 @@ def test_clear_and_reset_frame_actions(main_window: MainWindow):
     frame.colormap = "magma"
     frame.zoom = 3.0
     frame.contrast = 2.0
-    main_window._reset_frame()
+    main_window.frame_controller.reset_current()
     assert frame.colormap == "grey"
     assert frame.zoom == 1.0
     assert frame.contrast == 1.0
-    main_window._clear_frame()
+    main_window.frame_controller.clear_current()
     assert frame.image_data is None
     assert frame.original_image_data is None
 
 
 def test_show_hide_frames_controls_active_tiling(main_window: MainWindow):
     _load_two_frames(main_window)
-    main_window._hide_all_frames()
+    main_window.frame_controller.hide_all()
     assert len(main_window._active_frame_ids) == 1
-    main_window._tile_frames(True)
+    main_window.frame_controller.set_tile(True)
     assert main_window._tile_layout is not None
     assert main_window._tile_layout.count == 1
     assert len(main_window._tile_frame_indices) == 1
-    main_window._show_all_frames()
+    main_window.frame_controller.show_all()
     assert len(main_window._active_frame_ids) == 2
 
 
@@ -146,22 +146,22 @@ def test_move_frame_reorders_frame_stack(main_window: MainWindow):
     third.original_image_data = third.image_data
     before = [frame.frame_id for frame in main_window.frame_manager.frames]
     main_window.frame_manager.goto_frame(2)
-    main_window._move_frame_first()
+    main_window.frame_controller.move_first()
     after = [frame.frame_id for frame in main_window.frame_manager.frames]
     assert after[0] == before[2]
-    main_window._move_frame_last()
+    main_window.frame_controller.move_last()
     after_last = [frame.frame_id for frame in main_window.frame_manager.frames]
     assert after_last[-1] == before[2]
 
 
 def test_fade_mode_uses_timer(main_window: MainWindow):
     _load_two_frames(main_window)
-    main_window._set_fade_interval(2000)
-    main_window._toggle_fade(True)
+    main_window.frame_controller.set_fade_interval(2000)
+    main_window.frame_controller.set_fade(True)
     assert main_window._frame_display_mode == "fade"
     assert main_window._blink_timer.isActive()
     assert main_window._blink_timer.interval() == 2000
-    main_window._toggle_fade(False)
+    main_window.frame_controller.set_fade(False)
     assert main_window._frame_display_mode == "single"
 
 
@@ -169,7 +169,7 @@ def test_mouse_move_uses_bottom_left_origin(main_window: MainWindow):
     frame = main_window.frame_manager.current_frame
     frame.image_data = np.arange(100, dtype=np.float32).reshape(10, 10)
     frame.original_image_data = frame.image_data
-    main_window._update_frame_display()
+    main_window.frame_controller.update_display()
 
     main_window._on_mouse_moved(2, 0)
     assert main_window.status_bar.pixel_coord_label.text() == "X: 2 Y: 0"
@@ -181,7 +181,7 @@ def test_wcs_direction_arrows_default_and_toggle(main_window: MainWindow):
     frame.image_data = np.arange(100, dtype=np.float32).reshape(10, 10)
     frame.original_image_data = frame.image_data
     frame.wcs_handler = _make_test_wcs(10, 10)
-    main_window._update_frame_display()
+    main_window.frame_controller.update_display()
 
     overlay = main_window.image_viewer.contour_overlay
     assert overlay._show_direction_arrows is True
@@ -210,7 +210,7 @@ def test_tile_click_selects_frame_and_preserves_independent_settings(main_window
     frames[1].colormap = "viridis"
     main_window.frame_manager.goto_frame(0)
 
-    main_window._tile_frames(True)
+    main_window.frame_controller.set_tile(True)
     layout = main_window._tile_layout
     assert layout is not None
 
@@ -232,7 +232,7 @@ def test_panner_draws_viewport_rect_when_zoomed(main_window: MainWindow):
     frame = main_window.frame_manager.current_frame
     frame.image_data = np.zeros((1200, 1600), dtype=np.float32)
     frame.original_image_data = frame.image_data
-    main_window._update_frame_display()
+    main_window.frame_controller.update_display()
     main_window.zoom.zoom_actual()
     main_window.zoom.zoom_in()
 
@@ -259,7 +259,7 @@ def test_rgb_frame_composes_channels_from_source_frames(main_window: MainWindow)
     frame2.image_data = blue
     frame2.original_image_data = blue
 
-    main_window._new_frame_with_type("rgb")
+    main_window.frame_controller.new_frame_of_type("rgb")
     rgb_frame = main_window.frame_manager.current_frame
     assert rgb_frame is not None
     assert rgb_frame.frame_type == "rgb"
@@ -287,7 +287,7 @@ def test_load_fits_in_rgb_frame_updates_active_channel(main_window: MainWindow, 
     monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.load", _fake_load)
     monkeypatch.setattr("ncrads9.ui.main_window.FITSHandler.load_image_data", _fake_load_image_data)
 
-    main_window._new_frame_with_type("rgb")
+    main_window.frame_controller.new_frame_of_type("rgb")
     frame = main_window.frame_manager.current_frame
     assert frame is not None
     frame.rgb_current_channel = "green"
@@ -298,7 +298,7 @@ def test_load_fits_in_rgb_frame_updates_active_channel(main_window: MainWindow, 
 
 
 def test_rgb_channel_view_settings_persist_independently(main_window: MainWindow):
-    main_window._new_frame_with_type("rgb")
+    main_window.frame_controller.new_frame_of_type("rgb")
     frame = main_window.frame_manager.current_frame
     assert frame is not None
     frame.rgb_channels["red"] = np.arange(100, dtype=np.float32).reshape(10, 10)
@@ -310,14 +310,14 @@ def test_rgb_channel_view_settings_persist_independently(main_window: MainWindow
     main_window.z1 = 1.0
     main_window.z2 = 9.0
     main_window.image_viewer.image_viewer.set_contrast_brightness(2.0, 0.2)
-    main_window._persist_frame_view_state()
+    main_window.frame_controller.persist_view_state()
 
     frame.rgb_current_channel = "green"
     main_window.current_scale = ScaleAlgorithm.SQRT
     main_window.z1 = 0.0
     main_window.z2 = 6.0
     main_window.image_viewer.image_viewer.set_contrast_brightness(1.5, -0.1)
-    main_window._persist_frame_view_state()
+    main_window.frame_controller.persist_view_state()
 
     assert frame.rgb_channel_scale["red"] == ScaleAlgorithm.LOG
     assert frame.rgb_channel_scale["green"] == ScaleAlgorithm.SQRT
@@ -327,7 +327,7 @@ def test_rgb_channel_view_settings_persist_independently(main_window: MainWindow
     assert frame.rgb_channel_brightness["green"] == pytest.approx(-0.1)
 
     frame.rgb_current_channel = "red"
-    main_window._apply_frame_view_state(frame)
+    main_window.frame_controller.apply_view_state(frame)
     assert main_window.current_scale == ScaleAlgorithm.LOG
     assert main_window.z1 == pytest.approx(1.0)
     assert main_window.z2 == pytest.approx(9.0)
@@ -360,6 +360,6 @@ def test_load_fits_keeps_handler_alive_and_clear_closes_it(main_window: MainWind
     assert frame is not None
     assert frame.fits_handler is not None
 
-    main_window._clear_frame()
+    main_window.frame_controller.clear_current()
     assert close_calls["count"] == 1
     assert frame.fits_handler is None

@@ -94,7 +94,7 @@ class ScaleController(Controller):
             scale: The scaling algorithm to use.
         """
         self.window.current_scale = scale
-        self.window._persist_frame_view_state()
+        self.window.frame_controller.persist_view_state()
         self.sync()
 
         if scale in BUTTON_LABELS:
@@ -177,7 +177,7 @@ class ScaleController(Controller):
         self.window.color.set_contrast_brightness(contrast, brightness)
 
         self.refresh()
-        self.window._persist_frame_view_state()
+        self.window.frame_controller.persist_view_state()
         self.status(
             f"Scale: {scale_name}, Contrast: {contrast:.2f}, Brightness: {brightness:.2f}",
         )

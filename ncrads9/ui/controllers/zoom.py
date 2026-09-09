@@ -116,9 +116,9 @@ class ZoomController(Controller):
         """Set an explicit zoom level."""
         self.viewer.zoom_to(zoom)
         self.status_bar.update_zoom(self.viewer.get_zoom())
-        self.window._persist_frame_view_state()
+        self.window.frame_controller.persist_view_state()
         self.sync()
-        self.window._apply_locked_frame_view_state()
+        self.window.frame_controller.apply_locks()
         self.update_panner_rect()
         self.status(f"Zoom {self.viewer.get_zoom():.5g}", 1000)
 
@@ -138,9 +138,9 @@ class ZoomController(Controller):
         """Zoom so the whole image fits the viewport."""
         self.viewer.zoom_fit(self.window._effective_viewport_size())
         self.status_bar.update_zoom(self.viewer.get_zoom())
-        self.window._persist_frame_view_state()
+        self.window.frame_controller.persist_view_state()
         self.sync()
-        self.window._apply_locked_frame_view_state()
+        self.window.frame_controller.apply_locks()
         self.update_panner_rect()
         self.status("Zoom to fit", 1000)
 
@@ -166,7 +166,7 @@ class ZoomController(Controller):
 
         self.viewer.zoom_to(value)
         self.status_bar.update_zoom(value)
-        self.window._persist_frame_view_state()
+        self.window.frame_controller.persist_view_state()
         self.update_panner_rect()
         self.status(f"Zoom: {level}", 1000)
 
@@ -199,9 +199,9 @@ class ZoomController(Controller):
             return
         frame.flip_x, frame.flip_y = orientation_to_flags(orientation)
         self._reapply_transform(frame)
-        self.window._persist_frame_view_state()
+        self.window.frame_controller.persist_view_state()
         self.sync()
-        self.window._apply_locked_frame_view_state()
+        self.window.frame_controller.apply_locks()
         self.status(f"Orientation: {orientation}", 1500)
 
     def set_rotation(self, degrees: float) -> None:
@@ -211,9 +211,9 @@ class ZoomController(Controller):
             return
         frame.rotation = normalize_rotation(degrees)
         self._reapply_transform(frame)
-        self.window._persist_frame_view_state()
+        self.window.frame_controller.persist_view_state()
         self.sync()
-        self.window._apply_locked_frame_view_state()
+        self.window.frame_controller.apply_locks()
         self.status(f"Rotation: {frame.rotation:.2f} degrees", 1500)
 
     def set_align_wcs(self, enabled: bool) -> None:
@@ -223,7 +223,7 @@ class ZoomController(Controller):
             return
         frame.align_wcs = bool(enabled)
         self.menu.action_zoom_align.setChecked(frame.align_wcs)
-        self.window._apply_locked_frame_view_state()
+        self.window.frame_controller.apply_locks()
         self.status(f"WCS alignment: {'on' if frame.align_wcs else 'off'}", 1500)
 
     # -- pan -----------------------------------------------------------------
@@ -259,8 +259,8 @@ class ZoomController(Controller):
             horizontal.setValue(horizontal.maximum() // 2)
             vertical.setValue(vertical.maximum() // 2)
 
-        self.window._persist_frame_view_state()
-        self.window._apply_locked_frame_view_state()
+        self.window.frame_controller.persist_view_state()
+        self.window.frame_controller.apply_locks()
         self.update_panner_rect()
         self.status("Centered image", 1500)
 
@@ -283,7 +283,7 @@ class ZoomController(Controller):
             self.window.scroll_area.verticalScrollBar().setValue(int(y * zoom - viewport.height() / 2))
             self.status(f"Panned to ({x:.0f}, {y:.0f})", 1000)
 
-        self.window._persist_frame_view_state()
+        self.window.frame_controller.persist_view_state()
         self.update_panner_rect()
 
     def pan_by_pixels(self, dx: int, dy: int) -> None:
@@ -302,7 +302,7 @@ class ZoomController(Controller):
             # Scrollbars grow downward, image y grows upward.
             vertical.setValue(vertical.value() - dy * step)
 
-        self.window._persist_frame_view_state()
+        self.window.frame_controller.persist_view_state()
         self.update_panner_rect()
 
     def apply_frame_pan(self, frame) -> None:
@@ -377,8 +377,8 @@ class ZoomController(Controller):
         else:
             self._scroll_to_image_point(frame.crop_center_x, frame.crop_center_y, viewport)
 
-        self.window._persist_frame_view_state()
-        self.window._apply_locked_frame_view_state()
+        self.window.frame_controller.persist_view_state()
+        self.window.frame_controller.apply_locks()
         self.status("Crop parameters applied", 1500)
 
     def show_crop_dialog(self) -> None:
@@ -423,9 +423,9 @@ class ZoomController(Controller):
             self._scroll_to_image_point(pan_x, pan_y)
 
         self.refresh()
-        self.window._persist_frame_view_state()
+        self.window.frame_controller.persist_view_state()
         self.sync()
-        self.window._apply_locked_frame_view_state()
+        self.window.frame_controller.apply_locks()
         self.update_panner_rect()
         self.status("Pan/zoom/rotate updated", 1500)
 

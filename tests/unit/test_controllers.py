@@ -53,7 +53,7 @@ def _load_image(window, width=64, height=48):
     frame.original_image_data = image.copy()
     window.z1 = None
     window.z2 = None
-    window._update_frame_display()
+    window.frame_controller.update_display()
     return frame
 
 
@@ -140,7 +140,7 @@ class TestScaleController:
         assert frame.z1 != -999.0
 
     def test_rgb_limits_land_on_the_active_channel(self, main_window):
-        main_window._new_frame_with_type("rgb")
+        main_window.frame_controller.new_frame_of_type("rgb")
         frame = main_window.frame_manager.current_frame
         image = np.arange(64, dtype=np.float32).reshape(8, 8)
         frame.rgb_channels["green"] = image

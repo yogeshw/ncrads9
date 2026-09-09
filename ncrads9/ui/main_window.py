@@ -35,23 +35,13 @@ from numpy.typing import NDArray
 from PyQt6.QtCore import QSize, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QAction, QColor, QDesktopServices, QImage, QKeyEvent, QPixmap
 from PyQt6.QtWidgets import (
-    QButtonGroup,
-    QCheckBox,
     QColorDialog,
-    QComboBox,
     QDialog,
-    QDialogButtonBox,
     QDockWidget,
-    QDoubleSpinBox,
     QFileDialog,
-    QFormLayout,
-    QGridLayout,
-    QGroupBox,
     QHBoxLayout,
     QInputDialog,
-    QLabel,
     QMainWindow,
-    QRadioButton,
     QScrollArea,
     QVBoxLayout,
     QWidget,
@@ -89,6 +79,7 @@ from .controllers.base import Controller
 from .controllers.color import ColorController
 from .controllers.edit import EditController
 from .controllers.file import FileController
+from .controllers.frame import FrameController
 from .controllers.region import RegionController
 from .controllers.scale import ScaleController
 from .controllers.view import ViewController
@@ -111,7 +102,6 @@ from .panels.vertical_graph import VerticalGraph
 from .status_bar import StatusBar
 from .toolbar import MainToolbar
 from .view_transform import (
-    normalize_rotation,
     transform_image_array,
 )
 from .widgets.colorbar_widget import ColorbarWidget
@@ -146,6 +136,11 @@ class MainWindow(QMainWindow):
         self.config = config
         self.setWindowTitle("NCRADS9 - FITS Viewer")
         self.setMinimumSize(800, 600)
+
+        # Controllers only capture a reference to this window, so they can be
+        # built before the state they will later reach through it. Signals
+        # connected below need them to exist.
+        self._setup_controllers()
 
         # Initialize data storage
         self.frame_manager = FrameManager()
@@ -226,10 +221,9 @@ class MainWindow(QMainWindow):
         self._blink_controller = BlinkController(interval_ms=DEFAULT_BLINK_INTERVAL_MS)
         self._blink_timer = QTimer(self)
         self._blink_timer.setInterval(DEFAULT_BLINK_INTERVAL_MS)
-        self._blink_timer.timeout.connect(self._update_blink)
+        self._blink_timer.timeout.connect(self.frame_controller.advance_blink)
         self.samp_table_received.connect(self._handle_samp_table_message)
 
-        self._setup_controllers()
         self._setup_menu_bar()
         self._setup_toolbar()
         self._setup_central_widget()
@@ -238,7 +232,7 @@ class MainWindow(QMainWindow):
         self._init_samp_client()
         self._update_samp_menu_state()
         self.edit.apply_preferences(self.edit.preferences_dict(), persist=False, show_message=False)
-        self._refresh_frame_menu_items()
+        self.frame_controller.refresh_menu_items()
 
     @property
     def image_data(self):
@@ -394,6 +388,9 @@ class MainWindow(QMainWindow):
         why controllers hold a reference to the window.
         """
         self.color = ColorController(self)
+        # Named `frame_controller`: `self.frame` would shadow nothing on the
+        # window, but reads as a Frame everywhere else in the codebase.
+        self.frame_controller = FrameController(self)
         self.edit = EditController(self)
         self.file = FileController(self)
         self.region = RegionController(self)
@@ -406,6 +403,7 @@ class MainWindow(QMainWindow):
         self.controllers: tuple[Controller, ...] = (
             self.color,
             self.edit,
+            self.frame_controller,
             self.file,
             self.region,
             self.scale,
@@ -437,171 +435,7 @@ class MainWindow(QMainWindow):
         self.view.connect()
 
         # Frame menu
-        self.menu_bar.action_new_frame.triggered.connect(self._new_frame)
-        self.menu_bar.action_new_frame_rgb.triggered.connect(lambda: self._new_frame_with_type("rgb"))
-        self.menu_bar.action_new_frame_hsv.triggered.connect(lambda: self._new_frame_with_type("hsv"))
-        self.menu_bar.action_new_frame_hls.triggered.connect(lambda: self._new_frame_with_type("hls"))
-        self.menu_bar.action_new_frame_3d.triggered.connect(lambda: self._new_frame_with_type("3d"))
-        self.menu_bar.action_delete_frame.triggered.connect(self._delete_frame)
-        self.menu_bar.action_delete_all_frames.triggered.connect(self._delete_all_frames)
-        self.menu_bar.action_clear_frame.triggered.connect(self._clear_frame)
-        self.menu_bar.action_reset_frame.triggered.connect(self._reset_frame)
-        self.menu_bar.action_refresh_frame.triggered.connect(self._refresh_frame)
-        self.menu_bar.action_single_frame.triggered.connect(self._show_single_frame)
-        self.menu_bar.action_tile_frames.triggered.connect(self._tile_frames)
-        self.menu_bar.action_blink_frames.triggered.connect(self._toggle_blink)
-        self.menu_bar.action_fade_frames.triggered.connect(self._toggle_fade)
-        self.menu_bar.action_show_all_frames.triggered.connect(self._show_all_frames)
-        self.menu_bar.action_hide_all_frames.triggered.connect(self._hide_all_frames)
-        self.menu_bar.action_move_frame_first.triggered.connect(self._move_frame_first)
-        self.menu_bar.action_move_frame_back.triggered.connect(self._move_frame_back)
-        self.menu_bar.action_move_frame_forward.triggered.connect(self._move_frame_forward)
-        self.menu_bar.action_move_frame_last.triggered.connect(self._move_frame_last)
-        self.menu_bar.action_first_frame.triggered.connect(self._first_frame)
-        self.menu_bar.action_prev_frame.triggered.connect(self._prev_frame)
-        self.menu_bar.action_next_frame.triggered.connect(self._next_frame)
-        self.menu_bar.action_last_frame.triggered.connect(self._last_frame)
-        self.menu_bar.action_match_image.triggered.connect(self._match_frames_image)
-        self.menu_bar.action_match_wcs.triggered.connect(self._match_frames_wcs)
-        self.menu_bar.action_match_frame_physical.triggered.connect(self._match_frames_image)
-        self.menu_bar.action_match_frame_amplifier.triggered.connect(self._match_frames_image)
-        self.menu_bar.action_match_frame_detector.triggered.connect(self._match_frames_image)
-        self.menu_bar.action_match_crosshair_wcs.triggered.connect(self._match_frames_wcs)
-        self.menu_bar.action_match_crosshair_image.triggered.connect(self._match_frames_image)
-        self.menu_bar.action_match_crosshair_physical.triggered.connect(self._match_frames_image)
-        self.menu_bar.action_match_crosshair_amplifier.triggered.connect(self._match_frames_image)
-        self.menu_bar.action_match_crosshair_detector.triggered.connect(self._match_frames_image)
-        self.menu_bar.action_match_crop_wcs.triggered.connect(self._match_frames_wcs)
-        self.menu_bar.action_match_crop_image.triggered.connect(self._match_frames_image)
-        self.menu_bar.action_match_crop_physical.triggered.connect(self._match_frames_image)
-        self.menu_bar.action_match_crop_amplifier.triggered.connect(self._match_frames_image)
-        self.menu_bar.action_match_crop_detector.triggered.connect(self._match_frames_image)
-        self.menu_bar.action_match_slice_wcs.triggered.connect(self._match_frames_wcs)
-        self.menu_bar.action_match_slice_image.triggered.connect(self._match_frames_image)
-        self.menu_bar.action_match_bin.triggered.connect(self._match_frames_bin)
-        self.menu_bar.action_match_axes_order.triggered.connect(self._match_frames_axes_order)
-        self.menu_bar.action_match_scale.triggered.connect(self._match_frames_scale)
-        self.menu_bar.action_match_scale_limits.triggered.connect(self._match_frames_scale_limits)
-        self.menu_bar.action_match_colorbar.triggered.connect(self._match_frames_colorbar)
-        self.menu_bar.action_match_block.triggered.connect(self._match_frames_block)
-        self.menu_bar.action_match_smooth.triggered.connect(self._match_frames_smooth)
-        self.menu_bar.action_match_3d.triggered.connect(self._match_frames_3d)
-        self.menu_bar.action_lock_frame_none.triggered.connect(
-            lambda: self._set_frame_lock_scope("frame", "none")
-        )
-        self.menu_bar.action_lock_frame_wcs.triggered.connect(
-            lambda: self._set_frame_lock_scope("frame", "wcs")
-        )
-        self.menu_bar.action_lock_frame_image.triggered.connect(
-            lambda: self._set_frame_lock_scope("frame", "image")
-        )
-        self.menu_bar.action_lock_frame_physical.triggered.connect(
-            lambda: self._set_frame_lock_scope("frame", "physical")
-        )
-        self.menu_bar.action_lock_frame_amplifier.triggered.connect(
-            lambda: self._set_frame_lock_scope("frame", "amplifier")
-        )
-        self.menu_bar.action_lock_frame_detector.triggered.connect(
-            lambda: self._set_frame_lock_scope("frame", "detector")
-        )
-        self.menu_bar.action_lock_crosshair_none.triggered.connect(
-            lambda: self._set_frame_lock_scope("crosshair", "none")
-        )
-        self.menu_bar.action_lock_crosshair_wcs.triggered.connect(
-            lambda: self._set_frame_lock_scope("crosshair", "wcs")
-        )
-        self.menu_bar.action_lock_crosshair_image.triggered.connect(
-            lambda: self._set_frame_lock_scope("crosshair", "image")
-        )
-        self.menu_bar.action_lock_crosshair_physical.triggered.connect(
-            lambda: self._set_frame_lock_scope("crosshair", "physical")
-        )
-        self.menu_bar.action_lock_crosshair_amplifier.triggered.connect(
-            lambda: self._set_frame_lock_scope("crosshair", "amplifier")
-        )
-        self.menu_bar.action_lock_crosshair_detector.triggered.connect(
-            lambda: self._set_frame_lock_scope("crosshair", "detector")
-        )
-        self.menu_bar.action_lock_crop_none.triggered.connect(
-            lambda: self._set_frame_lock_scope("crop", "none")
-        )
-        self.menu_bar.action_lock_crop_wcs.triggered.connect(
-            lambda: self._set_frame_lock_scope("crop", "wcs")
-        )
-        self.menu_bar.action_lock_crop_image.triggered.connect(
-            lambda: self._set_frame_lock_scope("crop", "image")
-        )
-        self.menu_bar.action_lock_crop_physical.triggered.connect(
-            lambda: self._set_frame_lock_scope("crop", "physical")
-        )
-        self.menu_bar.action_lock_crop_amplifier.triggered.connect(
-            lambda: self._set_frame_lock_scope("crop", "amplifier")
-        )
-        self.menu_bar.action_lock_crop_detector.triggered.connect(
-            lambda: self._set_frame_lock_scope("crop", "detector")
-        )
-        self.menu_bar.action_lock_slice_none.triggered.connect(
-            lambda: self._set_frame_lock_scope("slice", "none")
-        )
-        self.menu_bar.action_lock_slice_wcs.triggered.connect(
-            lambda: self._set_frame_lock_scope("slice", "wcs")
-        )
-        self.menu_bar.action_lock_slice_image.triggered.connect(
-            lambda: self._set_frame_lock_scope("slice", "image")
-        )
-        self.menu_bar.action_lock_bin.triggered.connect(
-            lambda checked=False: self._set_frame_lock_flag("bin", self.menu_bar.action_lock_bin.isChecked())
-        )
-        self.menu_bar.action_lock_axes_order.triggered.connect(
-            lambda checked=False: self._set_frame_lock_flag(
-                "axes_order",
-                self.menu_bar.action_lock_axes_order.isChecked(),
-            )
-        )
-        self.menu_bar.action_lock_scale.triggered.connect(
-            lambda checked=False: self._set_frame_lock_flag(
-                "scale", self.menu_bar.action_lock_scale.isChecked()
-            )
-        )
-        self.menu_bar.action_lock_scale_limits.triggered.connect(
-            lambda checked=False: self._set_frame_lock_flag(
-                "scale_limits",
-                self.menu_bar.action_lock_scale_limits.isChecked(),
-            )
-        )
-        self.menu_bar.action_lock_colorbar.triggered.connect(
-            lambda checked=False: self._set_frame_lock_flag(
-                "colorbar",
-                self.menu_bar.action_lock_colorbar.isChecked(),
-            )
-        )
-        self.menu_bar.action_lock_block.triggered.connect(
-            lambda checked=False: self._set_frame_lock_flag(
-                "block", self.menu_bar.action_lock_block.isChecked()
-            )
-        )
-        self.menu_bar.action_lock_smooth.triggered.connect(
-            lambda checked=False: self._set_frame_lock_flag(
-                "smooth", self.menu_bar.action_lock_smooth.isChecked()
-            )
-        )
-        self.menu_bar.action_lock_3d.triggered.connect(
-            lambda checked=False: self._set_frame_lock_flag("3d", self.menu_bar.action_lock_3d.isChecked())
-        )
-        self.menu_bar.action_tile_mode_grid.triggered.connect(lambda: self._set_tile_arrangement_mode("grid"))
-        self.menu_bar.action_tile_mode_columns.triggered.connect(
-            lambda: self._set_tile_arrangement_mode("column")
-        )
-        self.menu_bar.action_tile_mode_rows.triggered.connect(lambda: self._set_tile_arrangement_mode("row"))
-        for interval, action in self.menu_bar.blink_interval_actions.items():
-            action.triggered.connect(lambda checked=False, ms=interval: self._set_blink_interval(ms))
-        for interval, action in self.menu_bar.fade_interval_actions.items():
-            action.triggered.connect(lambda checked=False, ms=interval: self._set_fade_interval(ms))
-        self.menu_bar.action_frame_cube_dialog.triggered.connect(lambda: self._show_frame_dialog("cube"))
-        self.menu_bar.action_frame_rgb_dialog.triggered.connect(lambda: self._show_frame_dialog("rgb"))
-        self.menu_bar.action_frame_hsv_dialog.triggered.connect(lambda: self._show_frame_dialog("hsv"))
-        self.menu_bar.action_frame_hls_dialog.triggered.connect(lambda: self._show_frame_dialog("hls"))
-        self.menu_bar.action_frame_3d_dialog.triggered.connect(lambda: self._show_frame_dialog("3d"))
+        self.frame_controller.connect()
 
         # Bin menu
         self.menu_bar.action_bin_1.triggered.connect(lambda: self._set_bin(1))
@@ -690,8 +524,8 @@ class MainWindow(QMainWindow):
         self.main_toolbar.action_zoom_1.triggered.connect(self.zoom.zoom_actual)
         self.main_toolbar.action_statistics.triggered.connect(self._show_statistics)
         self.main_toolbar.action_histogram.triggered.connect(self._show_histogram)
-        self.main_toolbar.action_prev_frame.triggered.connect(self._prev_frame)
-        self.main_toolbar.action_next_frame.triggered.connect(self._next_frame)
+        self.main_toolbar.action_prev_frame.triggered.connect(self.frame_controller.previous)
+        self.main_toolbar.action_next_frame.triggered.connect(self.frame_controller.next)
         self.main_toolbar.action_region_circle.triggered.connect(
             lambda: self.region.set_mode(RegionMode.CIRCLE)
         )
@@ -1103,7 +937,7 @@ class MainWindow(QMainWindow):
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
         self._update_bin_menu_checks(getattr(frame, "bin_factor", 1))
         self.region.show_frame_regions(frame)
-        self._sync_frame_view_state()
+        self.frame_controller.sync_view_state()
         if self._contour_settings is not None:
             self._update_contours()
         self.wcs.update_direction_arrows()
@@ -1176,7 +1010,7 @@ class MainWindow(QMainWindow):
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
         self._update_bin_menu_checks(getattr(frame, "bin_factor", 1))
         self.region.show_frame_regions(frame)
-        self._sync_frame_view_state()
+        self.frame_controller.sync_view_state()
         if self._contour_settings is not None:
             self._update_contours()
         self.wcs.update_direction_arrows()
@@ -1223,7 +1057,7 @@ class MainWindow(QMainWindow):
         """Render all loaded frames in a tiled grid."""
         rgb_frames: list[NDArray[np.uint8]] = []
         frame_indices: list[int] = []
-        active_indices = self._get_active_frame_indices()
+        active_indices = self.frame_controller.active_indices()
         for frame_index in active_indices:
             frame = self.frame_manager.frames[frame_index]
             rgb = self._render_frame_rgb(frame)
@@ -1633,7 +1467,7 @@ class MainWindow(QMainWindow):
                 x, y = self.wcs_handler.world_to_pixel(coord.ra.deg, coord.dec.deg)
                 if self.using_gpu_rendering and hasattr(self.image_viewer, "set_pan"):
                     self.image_viewer.set_pan(float(x), float(y))
-                    self._persist_frame_view_state()
+                    self.frame_controller.persist_view_state()
                     self.zoom.update_panner_rect()
                 else:
                     self.zoom.on_panner_pan(float(x), float(y))
@@ -1819,14 +1653,6 @@ class MainWindow(QMainWindow):
                 return size
         return QSize(self.DEFAULT_CANVAS_WIDTH, self.DEFAULT_CANVAS_HEIGHT)
 
-    def _apply_locked_frame_view_state(self) -> None:
-        """Propagate zoom/orientation/rotation according to frame lock scope."""
-        scope = self._frame_lock_scope.get("frame", "none")
-        if scope == "wcs":
-            self._match_frames_wcs()
-        elif scope != "none":
-            self._match_frames_image()
-
     def _on_mouse_moved(self, x: int, y: int) -> None:
         """Handle mouse movement over image."""
         if self.image_data is None:
@@ -1866,9 +1692,9 @@ class MainWindow(QMainWindow):
         """Handle image clicks (used for tiled frame selection)."""
         if not self._tile_mode_enabled or button != int(Qt.MouseButton.LeftButton.value):
             return
-        if self._select_tiled_frame(x, y):
+        if self.frame_controller.select_tile_at(x, y):
             self._display_tiled_frames()
-            self._update_frame_title()
+            self.frame_controller.update_title()
             self.statusBar().showMessage(
                 f"Selected frame {self.frame_manager.current_index + 1}",
                 1500,
@@ -1943,7 +1769,7 @@ class MainWindow(QMainWindow):
             with tempfile.NamedTemporaryFile(delete=False, suffix=".fits") as tmp:
                 tmp.write(data)
                 tmp_path = tmp.name
-            self._new_frame()
+            self.frame_controller.new_frame()
             self._load_fits_file(tmp_path)
             self.statusBar().showMessage("Loaded SIAP image into new frame", 3000)
         except Exception as e:
@@ -2254,7 +2080,7 @@ class MainWindow(QMainWindow):
 
         from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
         from matplotlib.figure import Figure
-        from PyQt6.QtWidgets import QDialog, QHBoxLayout, QPushButton, QVBoxLayout
+        from PyQt6.QtWidgets import QDialog, QPushButton
 
         dialog = QDialog(self)
         dialog.setWindowTitle("Radial Profile")
@@ -2489,918 +2315,6 @@ class MainWindow(QMainWindow):
         """Show keyboard shortcuts dialog."""
         dialog = KeyboardShortcutsDialog(self)
         dialog.exec()
-
-    def _reset_frame_view_defaults(self, frame: Frame) -> None:
-        """Reset a frame's display state to defaults."""
-        frame.bin_factor = 1
-        frame.colormap = self._default_colormap
-        frame.scale = ScaleAlgorithm.LINEAR
-        frame.invert_colormap = False
-        frame.z1 = None
-        frame.z2 = None
-        frame.zoom = 1.0
-        frame.pan_x = 0.0
-        frame.pan_y = 0.0
-        frame.rotation = 0.0
-        frame.flip_x = False
-        frame.flip_y = False
-        frame.align_wcs = False
-        frame.contrast = 1.0
-        frame.brightness = 0.0
-        frame.crop_center_x = None
-        frame.crop_center_y = None
-        frame.crop_width = None
-        frame.crop_height = None
-        frame.rgb_channel_scale = {
-            "red": ScaleAlgorithm.LINEAR,
-            "green": ScaleAlgorithm.LINEAR,
-            "blue": ScaleAlgorithm.LINEAR,
-        }
-        frame.rgb_channel_z1 = {"red": None, "green": None, "blue": None}
-        frame.rgb_channel_z2 = {"red": None, "green": None, "blue": None}
-        frame.rgb_channel_contrast = {"red": 1.0, "green": 1.0, "blue": 1.0}
-        frame.rgb_channel_brightness = {"red": 0.0, "green": 0.0, "blue": 0.0}
-
-    def _ensure_active_frames_valid(self) -> None:
-        """Ensure active frame IDs map to existing frames."""
-        valid_ids = {frame.frame_id for frame in self.frame_manager.frames}
-        self._active_frame_ids.update(valid_ids - self._known_frame_ids)
-        self._active_frame_ids.intersection_update(valid_ids)
-        self._known_frame_ids = set(valid_ids)
-        if not self._active_frame_ids and self.frame_manager.frames:
-            frame = self.frame_manager.current_frame or self.frame_manager.frames[0]
-            self._active_frame_ids.add(frame.frame_id)
-
-    def _get_active_frame_indices(self) -> list[int]:
-        """Return frame indices currently marked active."""
-        self._ensure_active_frames_valid()
-        return [
-            idx
-            for idx, frame in enumerate(self.frame_manager.frames)
-            if frame.frame_id in self._active_frame_ids
-        ]
-
-    def _refresh_frame_menu_items(self) -> None:
-        """Refresh dynamic frame menu items."""
-        self._ensure_active_frames_valid()
-        current_index = self.frame_manager.current_index
-
-        self.menu_bar.goto_frame_menu.clear()
-        for idx, _frame in enumerate(self.frame_manager.frames):
-            action = QAction(f"Frame {idx + 1}", self)
-            action.setCheckable(True)
-            action.setChecked(idx == current_index)
-            action.triggered.connect(lambda checked=False, i=idx: self._goto_frame_index(i))
-            self.menu_bar.goto_frame_menu.addAction(action)
-
-        self.menu_bar.show_hide_frames_menu.clear()
-        self.menu_bar.show_hide_frames_menu.addAction(self.menu_bar.action_show_all_frames)
-        self.menu_bar.show_hide_frames_menu.addAction(self.menu_bar.action_hide_all_frames)
-        self.menu_bar.show_hide_frames_menu.addSeparator()
-        for idx, frame in enumerate(self.frame_manager.frames):
-            action = QAction(f"Frame {idx + 1}", self)
-            action.setCheckable(True)
-            action.setChecked(frame.frame_id in self._active_frame_ids)
-            action.triggered.connect(lambda checked, fid=frame.frame_id: self._set_frame_active(fid, checked))
-            self.menu_bar.show_hide_frames_menu.addAction(action)
-
-    def _goto_frame_index(self, index: int) -> None:
-        """Switch to a specific frame index."""
-        if self.frame_manager.goto_frame(index):
-            self.z1 = None
-            self.z2 = None
-            if hasattr(self.image_viewer, "reset_contrast_brightness"):
-                self.image_viewer.reset_contrast_brightness()
-            self._update_frame_display()
-
-    def _new_frame_with_type(self, frame_type: str) -> None:
-        """Create a new frame of the requested DS9-style type."""
-        frame = self.frame_manager.new_frame(frame_type=frame_type)
-        self._known_frame_ids.add(frame.frame_id)
-        self._active_frame_ids.add(frame.frame_id)
-        self.z1 = None
-        self.z2 = None
-        if hasattr(self.image_viewer, "reset_contrast_brightness"):
-            self.image_viewer.reset_contrast_brightness()
-        self._update_frame_display()
-        self.statusBar().showMessage(
-            f"Created Frame {self.frame_manager.current_index + 1} ({frame_type})", 2000
-        )
-
-    def _new_frame(self) -> None:
-        """Create a new empty frame."""
-        self._new_frame_with_type("base")
-
-    def _delete_all_frames(self) -> None:
-        """Delete all frames and create one new empty frame."""
-        for existing in self.frame_manager.frames:
-            if existing.fits_handler is not None:
-                try:
-                    existing.fits_handler.close()
-                except Exception:
-                    pass
-        frame = self.frame_manager.reset_to_single_frame()
-        self._samp_catalog_sources.clear()
-        self._known_frame_ids = {frame.frame_id}
-        self._active_frame_ids = {frame.frame_id}
-        self._set_frame_display_mode("single")
-        self.statusBar().showMessage("Deleted all frames", 2000)
-
-    def _delete_frame(self) -> None:
-        """Delete current frame."""
-        current_frame = self.frame_manager.current_frame
-        current_frame_id = current_frame.frame_id if current_frame else None
-        if self.frame_manager.delete_frame():
-            if current_frame and current_frame.fits_handler is not None:
-                try:
-                    current_frame.fits_handler.close()
-                except Exception:
-                    pass
-            if current_frame_id is not None:
-                self._active_frame_ids.discard(current_frame_id)
-                self._samp_catalog_sources.pop(current_frame_id, None)
-            self._ensure_active_frames_valid()
-            if len(self._get_active_frame_indices()) <= 1 and self._frame_display_mode in {"blink", "fade"}:
-                self._set_frame_display_mode("single")
-            else:
-                self.z1 = None
-                self.z2 = None
-                if hasattr(self.image_viewer, "reset_contrast_brightness"):
-                    self.image_viewer.reset_contrast_brightness()
-                self._update_frame_display()
-            frame_info = f"Frame {self.frame_manager.current_index + 1}/{self.frame_manager.num_frames}"
-            self.statusBar().showMessage(f"Deleted frame, now at {frame_info}", 2000)
-        else:
-            self.statusBar().showMessage("Cannot delete last frame", 2000)
-
-    def _clear_frame(self) -> None:
-        """Clear data from current frame."""
-        frame = self.frame_manager.current_frame
-        if frame is None:
-            return
-        frame.filepath = None
-        if frame.fits_handler is not None:
-            try:
-                frame.fits_handler.close()
-            except Exception:
-                pass
-        frame.fits_handler = None
-        frame.image_data = None
-        frame.original_image_data = None
-        frame.rgb_channels = {"red": None, "green": None, "blue": None}
-        frame.rgb_source_frame_ids = {"red": None, "green": None, "blue": None}
-        frame.rgb_view = {"red": True, "green": True, "blue": True}
-        frame.rgb_current_channel = "red"
-        frame.header = None
-        frame.wcs_handler = None
-        frame.regions.clear()
-        self._samp_catalog_sources.pop(frame.frame_id, None)
-        self._reset_frame_view_defaults(frame)
-        self.z1 = None
-        self.z2 = None
-        if hasattr(self.image_viewer, "reset_contrast_brightness"):
-            self.image_viewer.reset_contrast_brightness()
-        self._update_frame_display()
-        self.statusBar().showMessage("Cleared current frame", 2000)
-
-    def _reset_frame(self) -> None:
-        """Reset display parameters for current frame."""
-        frame = self.frame_manager.current_frame
-        if frame is None:
-            return
-        self._reset_frame_view_defaults(frame)
-        self.z1 = None
-        self.z2 = None
-        if hasattr(self.image_viewer, "reset_contrast_brightness"):
-            self.image_viewer.reset_contrast_brightness()
-        self._update_frame_display()
-        self.statusBar().showMessage("Reset current frame", 2000)
-
-    def _refresh_frame(self) -> None:
-        """Refresh current frame display."""
-        self._update_frame_display()
-        self.statusBar().showMessage("Refreshed current frame", 2000)
-
-    def _move_frame_first(self) -> None:
-        """Move current frame to first position."""
-        current = self.frame_manager.current_index
-        if self.frame_manager.move_frame(current, 0):
-            self._update_frame_display()
-
-    def _move_frame_back(self) -> None:
-        """Move current frame one position backward."""
-        count = self.frame_manager.num_frames
-        current = self.frame_manager.current_index
-        target = count - 1 if current <= 0 else current - 1
-        if self.frame_manager.move_frame(current, target):
-            self._update_frame_display()
-
-    def _move_frame_forward(self) -> None:
-        """Move current frame one position forward."""
-        count = self.frame_manager.num_frames
-        current = self.frame_manager.current_index
-        target = 0 if current >= count - 1 else current + 1
-        if self.frame_manager.move_frame(current, target):
-            self._update_frame_display()
-
-    def _move_frame_last(self) -> None:
-        """Move current frame to last position."""
-        current = self.frame_manager.current_index
-        if self.frame_manager.move_frame(current, self.frame_manager.num_frames - 1):
-            self._update_frame_display()
-
-    def _set_frame_active(self, frame_id: int, active: bool) -> None:
-        """Set active visibility state for a frame."""
-        if active:
-            self._active_frame_ids.add(frame_id)
-        else:
-            if frame_id not in self._active_frame_ids:
-                return
-            if len(self._active_frame_ids) <= 1:
-                self.statusBar().showMessage("At least one frame must remain visible", 2000)
-                self._refresh_frame_menu_items()
-                return
-            self._active_frame_ids.remove(frame_id)
-        self._ensure_active_frames_valid()
-        current_frame = self.frame_manager.current_frame
-        if current_frame and current_frame.frame_id not in self._active_frame_ids:
-            active_indices = self._get_active_frame_indices()
-            if active_indices:
-                self.frame_manager.goto_frame(active_indices[0])
-        if len(self._get_active_frame_indices()) <= 1 and self._frame_display_mode in {"blink", "fade"}:
-            self._set_frame_display_mode("single")
-        else:
-            self._update_frame_display()
-
-    def _show_all_frames(self) -> None:
-        """Mark all frames active."""
-        self._active_frame_ids = {frame.frame_id for frame in self.frame_manager.frames}
-        self._update_frame_display()
-
-    def _hide_all_frames(self) -> None:
-        """Hide all but the current frame."""
-        current = self.frame_manager.current_frame
-        if current is None:
-            return
-        self._active_frame_ids = {current.frame_id}
-        if self._frame_display_mode in {"blink", "fade"}:
-            self._set_frame_display_mode("single")
-        else:
-            self._update_frame_display()
-
-    def _first_frame(self) -> None:
-        """Go to first active frame."""
-        active_indices = self._get_active_frame_indices()
-        if active_indices:
-            self._goto_frame_index(active_indices[0])
-
-    def _prev_frame(self) -> None:
-        """Go to previous active frame."""
-        active_indices = self._get_active_frame_indices()
-        if not active_indices:
-            return
-        current = self.frame_manager.current_index
-        if current not in active_indices:
-            self._goto_frame_index(active_indices[0])
-            return
-        pos = active_indices.index(current)
-        self._goto_frame_index(active_indices[(pos - 1) % len(active_indices)])
-
-    def _next_frame(self) -> None:
-        """Go to next active frame."""
-        active_indices = self._get_active_frame_indices()
-        if not active_indices:
-            return
-        current = self.frame_manager.current_index
-        if current not in active_indices:
-            self._goto_frame_index(active_indices[0])
-            return
-        pos = active_indices.index(current)
-        self._goto_frame_index(active_indices[(pos + 1) % len(active_indices)])
-
-    def _last_frame(self) -> None:
-        """Go to last active frame."""
-        active_indices = self._get_active_frame_indices()
-        if active_indices:
-            self._goto_frame_index(active_indices[-1])
-
-    def _update_frame_title(self) -> None:
-        """Update window title with current frame info."""
-        frame = self.frame_manager.current_frame
-        frame_info = f"Frame {self.frame_manager.current_index + 1}/{self.frame_manager.num_frames}"
-        if frame and frame.filepath:
-            self.setWindowTitle(f"NCRADS9 - {frame.filepath.name} [{frame_info}]")
-        else:
-            self.setWindowTitle(f"NCRADS9 [{frame_info}]")
-        self.statusBar().showMessage(frame_info, 2000)
-
-    def _update_frame_display(self) -> None:
-        """Update UI to reflect the current frame."""
-        self._ensure_active_frames_valid()
-        self._tile_mode_enabled = self._frame_display_mode == "tile"
-        if self._tile_mode_enabled:
-            if not self._display_tiled_frames():
-                self._set_frame_display_mode("single")
-                return
-            self._refresh_frame_menu_items()
-            self._update_frame_title()
-            return
-
-        frame = self.frame_manager.current_frame
-        self.region.show_frame_regions(frame)
-        if frame and frame.has_data:
-            self._apply_frame_view_state(frame)
-            self._display_image()
-            self._apply_frame_view_state(frame)
-            self.status_bar.update_image_info(frame.image_data.shape[1], frame.image_data.shape[0])
-            if self.using_gpu_rendering and hasattr(self.image_viewer, "gl_canvas"):
-                self.image_viewer.gl_canvas.reset_view()
-                if frame.zoom:
-                    self.image_viewer.zoom_to(frame.zoom)
-        else:
-            self.status_bar.update_image_info(None, None)
-            if hasattr(self.image_viewer, "set_direction_arrows"):
-                self.image_viewer.set_direction_arrows(None, None, False)
-            if hasattr(self, "panner_panel"):
-                self.panner_panel.set_view_rect(None)
-        self._refresh_frame_menu_items()
-        self._update_frame_title()
-
-    def _update_blink(self) -> None:
-        """Advance blink animation and refresh display."""
-        if self._frame_display_mode not in {"blink", "fade"}:
-            return
-        next_index = self._blink_controller.next_index(
-            self._get_active_frame_indices(),
-            self.frame_manager.current_index,
-        )
-        if next_index is None:
-            # Fewer than two frames left visible; nothing to blink between.
-            self._set_frame_display_mode("single")
-            return
-        self.frame_manager.goto_frame(next_index)
-        self._update_frame_display()
-
-    def _show_single_frame(self, checked: bool = False) -> None:
-        """Set display mode to single-frame."""
-        _ = checked
-        self._set_frame_display_mode("single")
-
-    def _set_frame_display_mode(self, mode: str) -> None:
-        """Set frame display mode and synchronize UI/timers."""
-        if mode not in {"single", "tile", "blink", "fade"}:
-            return
-        if mode in {"blink", "fade"} and len(self._get_active_frame_indices()) <= 1:
-            mode = "single"
-            self.statusBar().showMessage("Need at least two visible frames", 2000)
-
-        self._frame_display_mode = mode
-        self._tile_mode_enabled = mode == "tile"
-
-        self.menu_bar.action_single_frame.blockSignals(True)
-        self.menu_bar.action_tile_frames.blockSignals(True)
-        self.menu_bar.action_blink_frames.blockSignals(True)
-        self.menu_bar.action_fade_frames.blockSignals(True)
-        self.menu_bar.action_single_frame.setChecked(mode == "single")
-        self.menu_bar.action_tile_frames.setChecked(mode == "tile")
-        self.menu_bar.action_blink_frames.setChecked(mode == "blink")
-        self.menu_bar.action_fade_frames.setChecked(mode == "fade")
-        self.menu_bar.action_single_frame.blockSignals(False)
-        self.menu_bar.action_tile_frames.blockSignals(False)
-        self.menu_bar.action_blink_frames.blockSignals(False)
-        self.menu_bar.action_fade_frames.blockSignals(False)
-
-        if mode == "blink":
-            self._blink_timer.start(self._blink_timer.interval())
-            self.statusBar().showMessage("Blinking started", 2000)
-        elif mode == "fade":
-            self._blink_timer.start(self._fade_interval_ms)
-            self.statusBar().showMessage("Fade mode enabled", 2000)
-        else:
-            self._blink_timer.stop()
-            if mode == "tile":
-                self.statusBar().showMessage("Frame tiling enabled", 2000)
-            else:
-                self.statusBar().showMessage("Single frame mode", 2000)
-
-        if mode != "tile":
-            self._tile_layout = None
-        self._update_frame_display()
-
-    def _toggle_blink(self, checked: bool) -> None:
-        """Start/stop frame blinking."""
-        if checked:
-            self._set_frame_display_mode("blink")
-        elif self._frame_display_mode == "blink":
-            self._set_frame_display_mode("single")
-
-    def _toggle_fade(self, checked: bool) -> None:
-        """Start/stop frame fading."""
-        if checked:
-            self._set_frame_display_mode("fade")
-        elif self._frame_display_mode == "fade":
-            self._set_frame_display_mode("single")
-
-    def _tile_frames(self, checked: bool) -> None:
-        """Toggle tiled display of loaded frames."""
-        if checked:
-            self._set_frame_display_mode("tile")
-        elif self._frame_display_mode == "tile":
-            self._set_frame_display_mode("single")
-
-    def _set_tile_arrangement_mode(self, mode: str) -> None:
-        """Set tile arrangement mode."""
-        self._tile_arrangement_mode = mode
-        if self._frame_display_mode == "tile":
-            self._update_frame_display()
-
-    def _set_blink_interval(self, interval_ms: int) -> None:
-        """Set the blink step interval and restart the timer if blinking."""
-        self._blink_timer.setInterval(self._blink_controller.set_interval(interval_ms))
-        if self._frame_display_mode == "blink":
-            self._blink_timer.start(self._blink_timer.interval())
-
-    def _set_fade_interval(self, interval_ms: int) -> None:
-        """Set the fade step interval and restart the timer if fading."""
-        self._fade_interval_ms = max(1, int(interval_ms))
-        if self._frame_display_mode == "fade":
-            self._blink_timer.start(self._fade_interval_ms)
-
-    def _show_frame_dialog(self, frame_mode: str) -> None:
-        """Open frame mode dialog."""
-        if frame_mode == "rgb":
-            self._show_rgb_dialog()
-            return
-        self.statusBar().showMessage(f"{frame_mode.upper()} parameters dialog not yet implemented", 2000)
-
-    def _show_rgb_dialog(self) -> None:
-        """Show DS9-style RGB channel dialog."""
-        self._persist_frame_view_state()
-        frame = self.frame_manager.current_frame
-        if frame is None or frame.frame_type != "rgb":
-            self._new_frame_with_type("rgb")
-            frame = self.frame_manager.current_frame
-        if frame is None:
-            return
-
-        dialog = QDialog(None)
-        dialog.setWindowFlag(Qt.WindowType.Window, True)
-        dialog.setWindowTitle("RGB")
-        layout = QVBoxLayout(dialog)
-
-        channel_group = QGroupBox("Current Channel", dialog)
-        channel_layout = QHBoxLayout(channel_group)
-        button_group = QButtonGroup(channel_group)
-        radio_buttons: dict[str, QRadioButton] = {}
-        for channel in self._rgb_channel_names():
-            radio = QRadioButton(channel.capitalize(), channel_group)
-            radio.setChecked(frame.rgb_current_channel == channel)
-            button_group.addButton(radio)
-            channel_layout.addWidget(radio)
-            radio_buttons[channel] = radio
-        layout.addWidget(channel_group)
-
-        view_group = QGroupBox("View", dialog)
-        view_layout = QHBoxLayout(view_group)
-        view_checks: dict[str, QCheckBox] = {}
-        for channel in self._rgb_channel_names():
-            checkbox = QCheckBox(channel.capitalize(), view_group)
-            checkbox.setChecked(frame.rgb_view.get(channel, True))
-            view_layout.addWidget(checkbox)
-            view_checks[channel] = checkbox
-        layout.addWidget(view_group)
-
-        settings_group = QGroupBox("Per-Channel Display Settings", dialog)
-        settings_layout = QGridLayout(settings_group)
-        settings_layout.addWidget(QLabel("Channel"), 0, 0)
-        settings_layout.addWidget(QLabel("Scale"), 0, 1)
-        settings_layout.addWidget(QLabel("Auto"), 0, 2)
-        settings_layout.addWidget(QLabel("Min"), 0, 3)
-        settings_layout.addWidget(QLabel("Max"), 0, 4)
-        settings_layout.addWidget(QLabel("Contrast"), 0, 5)
-        settings_layout.addWidget(QLabel("Brightness"), 0, 6)
-
-        scale_choices: list[tuple[str, ScaleAlgorithm]] = [
-            ("Linear", ScaleAlgorithm.LINEAR),
-            ("Log", ScaleAlgorithm.LOG),
-            ("Sqrt", ScaleAlgorithm.SQRT),
-            ("Squared", ScaleAlgorithm.POWER),
-            ("Asinh", ScaleAlgorithm.ASINH),
-            ("HistEq", ScaleAlgorithm.HISTOGRAM_EQUALIZATION),
-        ]
-        channel_settings: dict[str, dict[str, object]] = {}
-        for row, channel in enumerate(self._rgb_channel_names(), start=1):
-            settings_layout.addWidget(QLabel(channel.capitalize()), row, 0)
-
-            scale_combo = QComboBox(settings_group)
-            for label, _scale in scale_choices:
-                scale_combo.addItem(label)
-            channel_scale = frame.rgb_channel_scale.get(channel, ScaleAlgorithm.LINEAR)
-            scale_index = next(
-                (idx for idx, (_, scale) in enumerate(scale_choices) if scale == channel_scale),
-                0,
-            )
-            scale_combo.setCurrentIndex(scale_index)
-            settings_layout.addWidget(scale_combo, row, 1)
-
-            auto_limits = QCheckBox(settings_group)
-            channel_z1 = frame.rgb_channel_z1.get(channel)
-            channel_z2 = frame.rgb_channel_z2.get(channel)
-            auto_limits.setChecked(channel_z1 is None or channel_z2 is None)
-            settings_layout.addWidget(auto_limits, row, 2)
-
-            min_spin = QDoubleSpinBox(settings_group)
-            min_spin.setDecimals(6)
-            min_spin.setRange(-1e30, 1e30)
-            min_spin.setValue(float(channel_z1) if channel_z1 is not None else 0.0)
-            settings_layout.addWidget(min_spin, row, 3)
-
-            max_spin = QDoubleSpinBox(settings_group)
-            max_spin.setDecimals(6)
-            max_spin.setRange(-1e30, 1e30)
-            max_spin.setValue(float(channel_z2) if channel_z2 is not None else 1.0)
-            settings_layout.addWidget(max_spin, row, 4)
-
-            contrast_spin = QDoubleSpinBox(settings_group)
-            contrast_spin.setDecimals(3)
-            contrast_spin.setRange(0.1, 10.0)
-            contrast_spin.setValue(float(frame.rgb_channel_contrast.get(channel, 1.0)))
-            settings_layout.addWidget(contrast_spin, row, 5)
-
-            brightness_spin = QDoubleSpinBox(settings_group)
-            brightness_spin.setDecimals(3)
-            brightness_spin.setRange(-1.0, 1.0)
-            brightness_spin.setSingleStep(0.05)
-            brightness_spin.setValue(float(frame.rgb_channel_brightness.get(channel, 0.0)))
-            settings_layout.addWidget(brightness_spin, row, 6)
-
-            min_spin.setEnabled(not auto_limits.isChecked())
-            max_spin.setEnabled(not auto_limits.isChecked())
-            auto_limits.toggled.connect(
-                lambda checked, lo=min_spin, hi=max_spin: (
-                    lo.setEnabled(not checked),
-                    hi.setEnabled(not checked),
-                )
-            )
-
-            channel_settings[channel] = {
-                "scale_combo": scale_combo,
-                "auto_limits": auto_limits,
-                "min_spin": min_spin,
-                "max_spin": max_spin,
-                "contrast_spin": contrast_spin,
-                "brightness_spin": brightness_spin,
-            }
-        layout.addWidget(settings_group)
-
-        source_group = QGroupBox("Assign Channels from Existing Frames", dialog)
-        source_layout = QFormLayout(source_group)
-        source_combos: dict[str, QComboBox] = {}
-        source_frames = [
-            (index, candidate)
-            for index, candidate in enumerate(self.frame_manager.frames)
-            if candidate.frame_id != frame.frame_id
-            and candidate.image_data is not None
-            and candidate.image_data.ndim == 2
-        ]
-        for channel in self._rgb_channel_names():
-            combo = QComboBox(source_group)
-            combo.addItem("Keep current data", "KEEP")
-            combo.addItem("None (clear)", "CLEAR")
-            for index, source_frame in source_frames:
-                label = f"Frame {index + 1}"
-                if source_frame.filepath:
-                    label += f" - {source_frame.filepath.name}"
-                combo.addItem(label, index)
-            source_id = frame.rgb_source_frame_ids.get(channel)
-            if source_id is not None:
-                for item_index in range(combo.count()):
-                    source_index = combo.itemData(item_index)
-                    if (
-                        isinstance(source_index, int)
-                        and source_index < len(self.frame_manager.frames)
-                        and self.frame_manager.frames[source_index].frame_id == source_id
-                    ):
-                        combo.setCurrentIndex(item_index)
-                        break
-            source_layout.addRow(channel.capitalize(), combo)
-            source_combos[channel] = combo
-        layout.addWidget(source_group)
-
-        def apply_changes() -> None:
-            for channel, radio in radio_buttons.items():
-                if radio.isChecked():
-                    frame.rgb_current_channel = channel
-                    break
-            for channel, checkbox in view_checks.items():
-                frame.rgb_view[channel] = checkbox.isChecked()
-
-            for channel, controls in channel_settings.items():
-                scale_combo = controls["scale_combo"]
-                auto_limits = controls["auto_limits"]
-                min_spin = controls["min_spin"]
-                max_spin = controls["max_spin"]
-                contrast_spin = controls["contrast_spin"]
-                brightness_spin = controls["brightness_spin"]
-
-                if isinstance(scale_combo, QComboBox):
-                    _, selected_scale = scale_choices[scale_combo.currentIndex()]
-                    frame.rgb_channel_scale[channel] = selected_scale
-                if isinstance(auto_limits, QCheckBox) and auto_limits.isChecked():
-                    frame.rgb_channel_z1[channel] = None
-                    frame.rgb_channel_z2[channel] = None
-                else:
-                    low = float(min_spin.value()) if isinstance(min_spin, QDoubleSpinBox) else 0.0
-                    high = float(max_spin.value()) if isinstance(max_spin, QDoubleSpinBox) else 1.0
-                    frame.rgb_channel_z1[channel] = min(low, high)
-                    frame.rgb_channel_z2[channel] = max(low, high)
-                frame.rgb_channel_contrast[channel] = (
-                    float(contrast_spin.value()) if isinstance(contrast_spin, QDoubleSpinBox) else 1.0
-                )
-                frame.rgb_channel_brightness[channel] = (
-                    float(brightness_spin.value()) if isinstance(brightness_spin, QDoubleSpinBox) else 0.0
-                )
-
-            updates: dict[str, int | None] = {}
-            for channel, combo in source_combos.items():
-                value = combo.currentData()
-                if value == "KEEP":
-                    continue
-                if value == "CLEAR":
-                    updates[channel] = None
-                elif isinstance(value, int):
-                    updates[channel] = value
-            if updates:
-                self._apply_rgb_frame_channels_from_sources(frame, updates)
-            else:
-                self._sync_rgb_scalar_view(frame)
-
-            self._sync_view_state_from_rgb_channel(frame)
-            self._apply_frame_view_state(frame)
-            self._display_image()
-            active = frame.rgb_current_channel.capitalize()
-            self.statusBar().showMessage(f"RGB updated (active channel: {active})", 2000)
-
-        def apply_and_close() -> None:
-            apply_changes()
-            dialog.accept()
-
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Apply
-            | QDialogButtonBox.StandardButton.Cancel,
-            Qt.Orientation.Horizontal,
-            dialog,
-        )
-        ok_button = buttons.button(QDialogButtonBox.StandardButton.Ok)
-        apply_button = buttons.button(QDialogButtonBox.StandardButton.Apply)
-        cancel_button = buttons.button(QDialogButtonBox.StandardButton.Cancel)
-        if ok_button is not None:
-            ok_button.clicked.connect(apply_and_close)
-        if apply_button is not None:
-            apply_button.clicked.connect(apply_changes)
-        if cancel_button is not None:
-            cancel_button.clicked.connect(dialog.reject)
-        layout.addWidget(buttons)
-        dialog.exec()
-
-    def _set_frame_lock_scope(self, scope: str, value: str) -> None:
-        """Set lock scope value."""
-        self._frame_lock_scope[scope] = value
-        self.statusBar().showMessage(f"Frame lock {scope}: {value}", 2000)
-
-    def _set_frame_lock_flag(self, flag: str, enabled: bool) -> None:
-        """Set lock checkbox value."""
-        self._frame_lock_flags[flag] = bool(enabled)
-        state = "on" if enabled else "off"
-        self.statusBar().showMessage(f"Frame lock {flag}: {state}", 2000)
-
-    def _select_tiled_frame(self, x: int, y: int) -> bool:
-        """Select frame corresponding to a click on the tiled composite."""
-        if self._tile_layout is None:
-            return False
-
-        tile_index = self._tile_layout.tile_at(x, y)
-        if tile_index is None or tile_index >= len(self._tile_frame_indices):
-            return False
-        frame_index = int(self._tile_frame_indices[tile_index])
-        if frame_index == self.frame_manager.current_index:
-            return False
-        self.frame_manager.goto_frame(frame_index)
-        self._apply_frame_view_state(self.frame_manager.current_frame)
-        return True
-
-    def _persist_frame_view_state(self) -> None:
-        """Persist display settings to the current frame."""
-        frame = self.frame_manager.current_frame
-        if not frame:
-            return
-        contrast, brightness = self.image_viewer.get_contrast_brightness()
-        if frame.frame_type == "rgb":
-            channel = frame.rgb_current_channel if frame.rgb_current_channel in frame.rgb_channels else "red"
-            frame.rgb_channel_scale[channel] = self.current_scale
-            frame.rgb_channel_z1[channel] = self.z1
-            frame.rgb_channel_z2[channel] = self.z2
-            frame.rgb_channel_contrast[channel] = contrast
-            frame.rgb_channel_brightness[channel] = brightness
-        frame.colormap = self.current_colormap
-        frame.scale = self.current_scale
-        frame.invert_colormap = self.invert_colormap
-        frame.z1 = self.z1
-        frame.z2 = self.z2
-        frame.zoom = self.image_viewer.get_zoom()
-        frame.contrast = contrast
-        frame.brightness = brightness
-        frame.rotation = normalize_rotation(frame.rotation)
-        if self.using_gpu_rendering and hasattr(self.image_viewer, "gl_canvas"):
-            frame.pan_x, frame.pan_y = self.image_viewer.gl_canvas.pan_offset
-        else:
-            pan_center = self._get_cpu_pan_center()
-            if pan_center is not None:
-                frame.pan_x, frame.pan_y = pan_center
-
-    def _apply_frame_view_state(self, frame: Frame) -> None:
-        """Apply stored display settings from the frame."""
-        self._apply_view_transform_to_viewer(frame)
-        self.current_colormap = self.color.normalize_name(frame.colormap)
-        self.invert_colormap = frame.invert_colormap
-        if frame.frame_type == "rgb":
-            self._sync_view_state_from_rgb_channel(frame)
-        else:
-            self.current_scale = frame.scale
-            self.z1 = frame.z1
-            self.z2 = frame.z2
-        self.color.sync()
-        self.menu_bar.action_invert_colormap.setChecked(self.invert_colormap)
-        self.menu_bar.action_scale_linear.setChecked(self.current_scale == ScaleAlgorithm.LINEAR)
-        self.menu_bar.action_scale_log.setChecked(self.current_scale == ScaleAlgorithm.LOG)
-        self.menu_bar.action_scale_sqrt.setChecked(self.current_scale == ScaleAlgorithm.SQRT)
-        self.menu_bar.action_scale_squared.setChecked(self.current_scale == ScaleAlgorithm.POWER)
-        self.menu_bar.action_scale_asinh.setChecked(self.current_scale == ScaleAlgorithm.ASINH)
-        self.menu_bar.action_scale_histeq.setChecked(
-            self.current_scale == ScaleAlgorithm.HISTOGRAM_EQUALIZATION
-        )
-        cmap_name_map = {
-            "grey": "Gray",
-            "heat": "Heat",
-            "cool": "Cool",
-            "rainbow": "Rainbow",
-        }
-        if self.current_colormap in cmap_name_map:
-            self.button_bar.set_colormap(cmap_name_map[self.current_colormap])
-        scale_name_map = {
-            ScaleAlgorithm.LINEAR: "Linear",
-            ScaleAlgorithm.LOG: "Log",
-            ScaleAlgorithm.SQRT: "Sqrt",
-            ScaleAlgorithm.POWER: "Squared",
-            ScaleAlgorithm.ASINH: "Asinh",
-            ScaleAlgorithm.HISTOGRAM_EQUALIZATION: "HistEq",
-        }
-        if self.current_scale in scale_name_map:
-            self.button_bar.set_scale(scale_name_map[self.current_scale])
-        if frame.frame_type != "rgb":
-            self.color.set_contrast_brightness(frame.contrast, frame.brightness)
-        if frame.zoom:
-            self.image_viewer.zoom_to(frame.zoom)
-        if self.using_gpu_rendering and hasattr(self.image_viewer, "set_pan"):
-            self.image_viewer.set_pan(frame.pan_x, frame.pan_y)
-        elif hasattr(self.image_viewer, "image_viewer"):
-            display_coords = self.image_viewer.image_viewer.map_image_to_display_coords(
-                frame.pan_x,
-                frame.pan_y,
-            )
-            if display_coords is not None:
-                viewport = self.scroll_area.viewport().size()
-                zoom = max(self.image_viewer.get_zoom(), 1e-6)
-                display_x, display_y = display_coords
-                self.scroll_area.horizontalScrollBar().setValue(int(display_x * zoom - viewport.width() / 2))
-                self.scroll_area.verticalScrollBar().setValue(int(display_y * zoom - viewport.height() / 2))
-        self.zoom.sync()
-
-    def _sync_frame_view_state(self) -> None:
-        """Persist current view state after rendering."""
-        self._persist_frame_view_state()
-
-    def _match_frames_image(self) -> None:
-        """Match all frames to current image view settings."""
-        source = self.frame_manager.current_frame
-        if not source:
-            self.statusBar().showMessage("No frame to match", 2000)
-            return
-        for frame in self.frame_manager.frames:
-            if frame is source:
-                continue
-            frame.colormap = source.colormap
-            frame.scale = source.scale
-            frame.invert_colormap = source.invert_colormap
-            frame.z1 = source.z1
-            frame.z2 = source.z2
-            frame.zoom = source.zoom
-            frame.pan_x = source.pan_x
-            frame.pan_y = source.pan_y
-            frame.rotation = source.rotation
-            frame.flip_x = source.flip_x
-            frame.flip_y = source.flip_y
-            frame.align_wcs = source.align_wcs
-            frame.contrast = source.contrast
-            frame.brightness = source.brightness
-        self.statusBar().showMessage("Matched frames (image)", 2000)
-
-    def _match_frames_wcs(self) -> None:
-        """Match all frames to current frame using WCS."""
-        source = self.frame_manager.current_frame
-        if not source or not source.wcs_handler or not source.wcs_handler.is_valid:
-            self.statusBar().showMessage("Current frame has no valid WCS", 2000)
-            return
-        if source.image_data is None:
-            self.statusBar().showMessage("Current frame has no image data", 2000)
-            return
-        cx = source.image_data.shape[1] / 2
-        cy = source.image_data.shape[0] / 2
-        ra, dec = source.wcs_handler.pixel_to_world(cx, cy)
-        for frame in self.frame_manager.frames:
-            if frame is source:
-                continue
-            if frame.wcs_handler and frame.wcs_handler.is_valid:
-                fx, fy = frame.wcs_handler.world_to_pixel(ra, dec)
-                frame.pan_x = float(fx)
-                frame.pan_y = float(fy)
-                frame.zoom = source.zoom
-                frame.rotation = source.rotation
-                frame.flip_x = source.flip_x
-                frame.flip_y = source.flip_y
-                frame.align_wcs = True
-                frame.colormap = source.colormap
-                frame.scale = source.scale
-                frame.invert_colormap = source.invert_colormap
-                frame.z1 = source.z1
-                frame.z2 = source.z2
-                frame.contrast = source.contrast
-                frame.brightness = source.brightness
-        self.statusBar().showMessage("Matched frames (WCS)", 2000)
-
-    def _match_frames_bin(self) -> None:
-        """Match bin factors across frames."""
-        source = self.frame_manager.current_frame
-        if not source:
-            self.statusBar().showMessage("No frame to match", 2000)
-            return
-        for frame in self.frame_manager.frames:
-            if frame is not source:
-                frame.bin_factor = source.bin_factor
-        self.statusBar().showMessage("Matched frames (bin)", 2000)
-
-    def _match_frames_axes_order(self) -> None:
-        """Match cube axes order across frames."""
-        self.statusBar().showMessage("Axes order matching is not yet implemented", 2000)
-
-    def _match_frames_scale(self) -> None:
-        """Match scale functions across frames."""
-        source = self.frame_manager.current_frame
-        if not source:
-            self.statusBar().showMessage("No frame to match", 2000)
-            return
-        for frame in self.frame_manager.frames:
-            if frame is not source:
-                frame.scale = source.scale
-        self.statusBar().showMessage("Matched frames (scale)", 2000)
-
-    def _match_frames_scale_limits(self) -> None:
-        """Match scale functions and limits across frames."""
-        source = self.frame_manager.current_frame
-        if not source:
-            self.statusBar().showMessage("No frame to match", 2000)
-            return
-        for frame in self.frame_manager.frames:
-            if frame is not source:
-                frame.scale = source.scale
-                frame.z1 = source.z1
-                frame.z2 = source.z2
-        self.statusBar().showMessage("Matched frames (scale and limits)", 2000)
-
-    def _match_frames_colorbar(self) -> None:
-        """Match colormap/colorbar choices across frames."""
-        source = self.frame_manager.current_frame
-        if not source:
-            self.statusBar().showMessage("No frame to match", 2000)
-            return
-        for frame in self.frame_manager.frames:
-            if frame is not source:
-                frame.colormap = source.colormap
-                frame.invert_colormap = source.invert_colormap
-        self.statusBar().showMessage("Matched frames (colorbar)", 2000)
-
-    def _match_frames_block(self) -> None:
-        """Match block/bin factors across frames."""
-        self._match_frames_bin()
-
-    def _match_frames_smooth(self) -> None:
-        """Match smoothing parameters across frames."""
-        self.statusBar().showMessage("Smoothing parameters are global in this build", 2000)
-
-    def _match_frames_3d(self) -> None:
-        """Match 3D parameters across frames."""
-        self.statusBar().showMessage("3D matching is not yet implemented", 2000)
 
     def closeEvent(self, event) -> None:
         """Disconnect SAMP client on close."""

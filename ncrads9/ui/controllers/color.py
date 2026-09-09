@@ -125,7 +125,7 @@ class ColorController(Controller):
             return
 
         self.window.current_colormap = cmap_name
-        self.window._persist_frame_view_state()
+        self.window.frame_controller.persist_view_state()
         self.sync()
 
         if cmap_name in BUTTON_LABELS:
@@ -145,7 +145,7 @@ class ColorController(Controller):
     def set_inverted(self, inverted: bool) -> None:
         """Invert or un-invert the colormap."""
         self.window.invert_colormap = inverted
-        self.window._persist_frame_view_state()
+        self.window.frame_controller.persist_view_state()
         if self.window.image_data is not None:
             self.refresh()
             self.status(f"Colormap {'inverted' if inverted else 'normal'}")
@@ -217,7 +217,7 @@ class ColorController(Controller):
     def on_contrast_changed(self, contrast: float, brightness: float) -> None:
         """Handle a contrast/bias change made by dragging on the image."""
         self.refresh()
-        self.window._persist_frame_view_state()
+        self.window.frame_controller.persist_view_state()
         self.status(f"Contrast: {contrast:.2f}, Brightness: {brightness:.2f}", 1000)
 
     # -- colorbar ------------------------------------------------------------

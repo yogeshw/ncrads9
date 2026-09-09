@@ -40,7 +40,7 @@ def _load_test_image(window: MainWindow, width: int = 256, height: int = 256) ->
     frame.original_image_data = image.copy()
     window.z1 = None
     window.z2 = None
-    window._update_frame_display()
+    window.frame_controller.update_display()
 
 
 def _make_test_wcs(width: int, height: int) -> WCSHandler:
@@ -99,7 +99,7 @@ def test_zoom_menu_state_tracks_frame_view(main_window: MainWindow):
     frame2.zoom = 2.0
     frame2.flip_y = True
     frame2.rotation = 180.0
-    main_window._goto_frame_index(1)
+    main_window.frame_controller.goto_index(1)
 
     assert main_window.menu_bar.zoom_preset_actions[2.0].isChecked()
     assert main_window.menu_bar.zoom_orientation_actions["y"].isChecked()
@@ -148,10 +148,10 @@ def test_frame_lock_matches_zoom_orientation_and_rotation(main_window: MainWindo
     other = main_window.frame_manager.new_frame()
     other.image_data = np.zeros((128, 128), dtype=np.float32)
     other.original_image_data = other.image_data.copy()
-    main_window._goto_frame_index(0)
+    main_window.frame_controller.goto_index(0)
     assert source is not None
 
-    main_window._set_frame_lock_scope("frame", "image")
+    main_window.frame_controller.set_lock_scope("frame", "image")
     main_window.zoom.set_zoom(8.0)
     main_window.zoom.set_orientation("xy")
     main_window.zoom.set_rotation(270)
@@ -185,7 +185,7 @@ def test_invert_updates_direction_arrows_without_full_rerender(main_window: Main
     frame = main_window.frame_manager.current_frame
     assert frame is not None
     frame.wcs_handler = _make_test_wcs(64, 64)
-    main_window._update_frame_display()
+    main_window.frame_controller.update_display()
 
     overlay = main_window.image_viewer.contour_overlay
     before_north = overlay._north_vector

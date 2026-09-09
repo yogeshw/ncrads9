@@ -90,6 +90,69 @@ class _DummyFrameManager:
         return None
 
 
+class _DummyFrameController:
+    """The slice of FrameController that XPA calls."""
+
+    def __init__(self, window):
+        self.window = window
+
+    @property
+    def _frames(self):
+        return self.window.frame_manager
+
+    def new_frame(self):
+        self._frames.frames.append(_DummyFrame())
+        self._frames.current_index = len(self._frames.frames) - 1
+
+    def new_frame_of_type(self, frame_type):
+        self.new_frame()
+
+    def delete_current(self):
+        if len(self._frames.frames) > 1:
+            self._frames.frames.pop(self._frames.current_index)
+            self._frames.current_index = max(0, self._frames.current_index - 1)
+
+    def delete_all(self):
+        del self._frames.frames[1:]
+        self._frames.current_index = 0
+
+    def clear_current(self):
+        return
+
+    def reset_current(self):
+        return
+
+    def refresh_current(self):
+        return
+
+    def first(self):
+        self._frames.current_index = 0
+
+    def previous(self):
+        self._frames.current_index = max(0, self._frames.current_index - 1)
+
+    def next(self):
+        self._frames.current_index = min(len(self._frames.frames) - 1, self._frames.current_index + 1)
+
+    def last(self):
+        self._frames.current_index = len(self._frames.frames) - 1
+
+    def update_display(self):
+        return
+
+    def set_tile(self, checked: bool):
+        self.window.menu_bar.action_tile_frames.setChecked(checked)
+
+    def set_blink(self, checked: bool):
+        self.window._blink_timer._active = checked
+
+    def match_image(self):
+        return
+
+    def match_wcs(self):
+        return
+
+
 class _DummyRegionController:
     """The slice of RegionController that XPA calls."""
 
@@ -186,6 +249,7 @@ class _DummyViewer:
         self._last_mouse_pos = (5, 6)
         # XPA reaches scale and WCS through the controllers as of M2, so the
         # fake exposes the same surface rather than the old flat methods.
+        self.frame_controller = _DummyFrameController(self)
         self.region = _DummyRegionController(self)
         self.file = _DummyFileController(self)
         self.color = _DummyColorController(self)
@@ -193,32 +257,6 @@ class _DummyViewer:
         self.wcs = _DummyWCSController(self)
         self._w = 800
         self._h = 600
-
-    def _new_frame(self):
-        self.frame_manager.frames.append(_DummyFrame())
-        self.frame_manager.current_index = len(self.frame_manager.frames) - 1
-
-    def _delete_frame(self):
-        if len(self.frame_manager.frames) > 1:
-            self.frame_manager.frames.pop(self.frame_manager.current_index)
-            self.frame_manager.current_index = max(0, self.frame_manager.current_index - 1)
-
-    def _first_frame(self):
-        self.frame_manager.current_index = 0
-
-    def _prev_frame(self):
-        self.frame_manager.current_index = max(0, self.frame_manager.current_index - 1)
-
-    def _next_frame(self):
-        self.frame_manager.current_index = min(
-            len(self.frame_manager.frames) - 1, self.frame_manager.current_index + 1
-        )
-
-    def _last_frame(self):
-        self.frame_manager.current_index = len(self.frame_manager.frames) - 1
-
-    def _update_frame_display(self):
-        return
 
     def _tile_frames(self, checked: bool):
         self.menu_bar.action_tile_frames.setChecked(checked)
@@ -265,7 +303,7 @@ class _DummyViewer:
 
 def test_frame_command_set_and_get():
     viewer = _DummyViewer()
-    viewer._new_frame()
+    viewer.frame_controller.new_frame()
     commands = XPACommands(viewer)
     set_response = commands.handle("frame", {"args": [2]})
     assert set_response["status"] == "ok"

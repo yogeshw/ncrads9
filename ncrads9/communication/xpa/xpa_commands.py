@@ -268,34 +268,34 @@ class XPACommands:
                 action = "set"
 
         if action == "new":
-            self.viewer._new_frame()
+            self.viewer.frame_controller.new_frame()
         elif action in {"rgb", "hsv", "hls", "3d"}:
-            if hasattr(self.viewer, "_new_frame_with_type"):
-                self.viewer._new_frame_with_type(action)
+            if hasattr(self.viewer.frame_controller, "new_frame_of_type"):
+                self.viewer.frame_controller.new_frame_of_type(action)
             else:
-                self.viewer._new_frame()
+                self.viewer.frame_controller.new_frame()
         elif action == "delete":
-            self.viewer._delete_frame()
+            self.viewer.frame_controller.delete_current()
         elif action in {"deleteall", "delete_all"}:
-            if hasattr(self.viewer, "_delete_all_frames"):
-                self.viewer._delete_all_frames()
+            if hasattr(self.viewer.frame_controller, "delete_all"):
+                self.viewer.frame_controller.delete_all()
         elif action == "clear":
-            if hasattr(self.viewer, "_clear_frame"):
-                self.viewer._clear_frame()
+            if hasattr(self.viewer.frame_controller, "clear_current"):
+                self.viewer.frame_controller.clear_current()
         elif action == "reset":
-            if hasattr(self.viewer, "_reset_frame"):
-                self.viewer._reset_frame()
+            if hasattr(self.viewer.frame_controller, "reset_current"):
+                self.viewer.frame_controller.reset_current()
         elif action == "refresh":
-            if hasattr(self.viewer, "_refresh_frame"):
-                self.viewer._refresh_frame()
+            if hasattr(self.viewer.frame_controller, "refresh_current"):
+                self.viewer.frame_controller.refresh_current()
         elif action == "first":
-            self.viewer._first_frame()
+            self.viewer.frame_controller.first()
         elif action in {"prev", "previous"}:
-            self.viewer._prev_frame()
+            self.viewer.frame_controller.previous()
         elif action == "next":
-            self.viewer._next_frame()
+            self.viewer.frame_controller.next()
         elif action == "last":
-            self.viewer._last_frame()
+            self.viewer.frame_controller.last()
         elif action == "set":
             if number is None:
                 return {"status": "error", "message": "Frame number required"}
@@ -303,7 +303,7 @@ class XPACommands:
             frame = self.viewer.frame_manager.goto_frame(index)
             if frame is None:
                 return {"status": "error", "message": f"Invalid frame: {number}"}
-            self.viewer._update_frame_display()
+            self.viewer.frame_controller.update_display()
         elif action == "get":
             return {
                 "status": "ok",
@@ -618,7 +618,7 @@ class XPACommands:
         enabled_bool = self._as_bool(enabled)
         if enabled_bool is not None:
             self.viewer.menu_bar.action_tile_frames.setChecked(enabled_bool)
-            self.viewer._tile_frames(enabled_bool)
+            self.viewer.frame_controller.set_tile(enabled_bool)
         return {
             "status": "ok",
             "result": "yes" if self.viewer.menu_bar.action_tile_frames.isChecked() else "no",
@@ -640,10 +640,10 @@ class XPACommands:
         action = str(params.get("action", self._first_arg(params, "get"))).lower()
         if action in {"start", "on"}:
             self.viewer.menu_bar.action_blink_frames.setChecked(True)
-            self.viewer._toggle_blink(True)
+            self.viewer.frame_controller.set_blink(True)
         elif action in {"stop", "off"}:
             self.viewer.menu_bar.action_blink_frames.setChecked(False)
-            self.viewer._toggle_blink(False)
+            self.viewer.frame_controller.set_blink(False)
         return {
             "status": "ok",
             "result": "yes" if self.viewer._blink_timer.isActive() else "no",
@@ -663,9 +663,9 @@ class XPACommands:
             return viewer_error
         match_type = str(params.get("type", self._first_arg(params, "wcs"))).lower()
         if match_type == "image":
-            self.viewer._match_frames_image()
+            self.viewer.frame_controller.match_image()
         else:
-            self.viewer._match_frames_wcs()
+            self.viewer.frame_controller.match_wcs()
             match_type = "wcs"
         return {"status": "ok", "result": f"Frames matched by {match_type}"}
 
