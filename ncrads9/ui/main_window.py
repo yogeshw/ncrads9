@@ -20,31 +20,20 @@ Main window for NCRADS9 application.
 Author: Yogesh Wadadekar
 """
 
-import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
-from urllib.parse import unquote, urlparse
 
-import astropy.units as u
 import numpy as np
-from astropy.coordinates import (
-    SkyCoord,
-)
-from astropy.table import Table
 from numpy.typing import NDArray
 from PyQt6.QtCore import QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QAction, QColor, QImage, QKeyEvent, QPixmap
 from PyQt6.QtWidgets import (
-    QColorDialog,
-    QDialog,
     QDockWidget,
-    QInputDialog,
     QMainWindow,
     QScrollArea,
     QWidget,
 )
 
-from ..catalogs.vizier import VizierCatalog
 from ..colormaps.colormap import Colormap
 from ..communication.samp import SAMPClient
 from ..coordinates.coord_system import CoordinateContext
@@ -58,12 +47,6 @@ from ..frames.blink_controller import (
 from ..frames.frame import Frame
 from ..frames.frame_manager import FrameManager
 from ..frames.tile_layout import TileLayout
-from ..image_servers.sia_client import SIAClient
-from ..regions.base_region import BaseRegion
-from ..regions.shapes.box import Box
-from ..regions.shapes.circle import Circle
-from ..regions.shapes.ellipse import Ellipse
-from ..regions.shapes.point import Point
 from ..rendering.rgb_compositor import compose_rgb
 from ..rendering.scale_algorithms import ScaleAlgorithm, apply_scale, compute_zscale_limits
 from ..utils.preferences import Preferences
@@ -77,11 +60,11 @@ from .controllers.frame import FrameController
 from .controllers.region import RegionController
 from .controllers.scale import ScaleController
 from .controllers.view import ViewController
+from .controllers.vo import VOController
 from .controllers.wcs import WCSController
 from .controllers.zoom import ZoomController
 from .dialogs.help_contents_dialog import HelpContentsDialog
 from .dialogs.keyboard_shortcuts_dialog import KeyboardShortcutsDialog
-from .dialogs.vo_query_dialog import VOQueryDialog
 from .menu_bar import MenuBar
 from .panels.horizontal_graph import HorizontalGraph
 from .panels.magnifier import MagnifierPanel
@@ -210,15 +193,15 @@ class MainWindow(QMainWindow):
         self._blink_timer = QTimer(self)
         self._blink_timer.setInterval(DEFAULT_BLINK_INTERVAL_MS)
         self._blink_timer.timeout.connect(self.frame_controller.advance_blink)
-        self.samp_table_received.connect(self._handle_samp_table_message)
+        self.samp_table_received.connect(self.vo.handle_samp_table)
 
         self._setup_menu_bar()
         self._setup_toolbar()
         self._setup_central_widget()
         self._setup_dock_widgets()
         self._setup_status_bar()
-        self._init_samp_client()
-        self._update_samp_menu_state()
+        self.vo.init_samp()
+        self.vo.sync_samp_menu()
         self.edit.apply_preferences(self.edit.preferences_dict(), persist=False, show_message=False)
         self.frame_controller.refresh_menu_items()
 
@@ -384,6 +367,7 @@ class MainWindow(QMainWindow):
         self.file = FileController(self)
         self.region = RegionController(self)
         self.view = ViewController(self)
+        self.vo = VOController(self)
         self.zoom = ZoomController(self)
         self.scale = ScaleController(self)
         self.wcs = WCSController(self)
@@ -398,6 +382,7 @@ class MainWindow(QMainWindow):
             self.region,
             self.scale,
             self.view,
+            self.vo,
             self.wcs,
             self.zoom,
         )
@@ -432,15 +417,8 @@ class MainWindow(QMainWindow):
         self.color.connect()
         self.region.connect()
 
-        # VO menu. Not a DS9 menu -- DS9 reaches these from Analysis
-        # (PLAN.md section 7). M8 folds them into the Analysis menu proper.
-        self.menu_bar.action_siap_2mass.triggered.connect(self._vo_siap_2mass)
-        self.menu_bar.action_catalog_vizier.triggered.connect(self._vo_catalog_vizier)
-        self.menu_bar.action_samp_connect.triggered.connect(self._samp_connect)
-        self.menu_bar.action_samp_disconnect.triggered.connect(self._samp_disconnect)
-        self.menu_bar.action_samp_marker_color.triggered.connect(self._samp_choose_marker_color)
-        self.menu_bar.action_samp_marker_shape.triggered.connect(self._samp_choose_marker_shape)
-        self.menu_bar.action_samp_marker_size.triggered.connect(self._samp_choose_marker_size)
+        # VO menu
+        self.vo.connect()
 
         # WCS menu
         self.wcs.connect()
@@ -448,12 +426,6 @@ class MainWindow(QMainWindow):
         # Analysis and Bin menus
         self.analysis.connect()
 
-        # Analysis entries still served by the window: the VO and catalog
-        # tools, and the FITS header viewer.
-        self.menu_bar.action_analysis_2mass.triggered.connect(self._vo_siap_2mass)
-        self.menu_bar.action_analysis_vizier.triggered.connect(self._vo_catalog_vizier)
-        self.menu_bar.action_catalog_tool.triggered.connect(self._vo_catalog_vizier)
-        self.menu_bar.action_virtual_observatory.triggered.connect(self._vo_catalog_vizier)
         self.menu_bar.action_fits_header.triggered.connect(self.file.show_header)
         self.menu_bar.action_plot_tool_line.triggered.connect(
             lambda: self.statusBar().showMessage("Plot Tool arrives in M7-15", 2000)
@@ -1203,303 +1175,6 @@ class MainWindow(QMainWindow):
         }
         if cmap_name in cmap_map:
             self.color.set_colormap(cmap_map[cmap_name])
-
-    def _vo_siap_2mass(self) -> None:
-        """Query 2MASS via SIAP and load image into new frame."""
-        ra, dec = self._get_query_coordinates()
-        dialog = VOQueryDialog(self, ra, dec, radius_deg=0.1, title="2MASS SIAP Query")
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        ra, dec, radius = dialog.values()
-
-        client = SIAClient(SIAClient.get_known_services()["2MASS"])
-        table = client.query(ra, dec, size=radius, format="image/fits")
-        if table is None or len(table) == 0:
-            self.statusBar().showMessage("No SIAP images found", 3000)
-            return
-
-        access_url = self._pick_siap_access_url(table)
-        if not access_url:
-            self.statusBar().showMessage("No SIAP access URL found", 3000)
-            return
-
-        try:
-            data = client.get_image(access_url)
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".fits") as tmp:
-                tmp.write(data)
-                tmp_path = tmp.name
-            self.frame_controller.new_frame()
-            self._load_fits_file(tmp_path)
-            self.statusBar().showMessage("Loaded SIAP image into new frame", 3000)
-        except Exception as e:
-            self.statusBar().showMessage(f"SIAP load error: {e}", 3000)
-
-    def _vo_catalog_vizier(self) -> None:
-        """Query VizieR and overlay catalog sources."""
-        ra, dec = self._get_query_coordinates()
-        dialog = VOQueryDialog(self, ra, dec, radius_deg=0.05, title="VizieR Catalog Query")
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        ra, dec, radius = dialog.values()
-
-        catalog = VizierCatalog(catalog="II/246/out")
-        coord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg, frame="icrs")
-        table = catalog.query_region(coord, radius=radius * u.deg)
-        if table is None or len(table) == 0:
-            self.statusBar().showMessage("No VizieR sources found", 3000)
-            return
-        coords = catalog.get_coordinates(table)
-        if not coords:
-            self.statusBar().showMessage("Catalog has no usable coordinates", 3000)
-            return
-        if not self.wcs_handler or not self.wcs_handler.is_valid:
-            self.statusBar().showMessage("Current frame has no WCS for overlay", 3000)
-            return
-
-        for coord in coords:
-            pixel = self.region.world_to_pixel(coord.ra.deg, coord.dec.deg)
-            if pixel is None:
-                continue
-            x, y = pixel
-            region = Point(center=(x, y), origin="vizier_catalog")
-            self.region.on_created(region)
-            self.image_viewer.add_region(region)
-
-        self.statusBar().showMessage(f"Overlayed {len(coords)} catalog sources", 3000)
-
-    def _init_samp_client(self) -> None:
-        """Initialize SAMP client and callbacks."""
-        self._samp_client = SAMPClient()
-        self._samp_client.register_callback("table.load.votable", self._on_samp_votable)
-        self._samp_client.register_callback("table.load.fits", self._on_samp_fits)
-
-    def _update_samp_menu_state(self) -> None:
-        """Update SAMP menu action enabled states."""
-        self.menu_bar.action_samp_connect.setEnabled(not self._samp_connected)
-        self.menu_bar.action_samp_disconnect.setEnabled(self._samp_connected)
-
-    def _samp_connect(self) -> None:
-        """Connect to a SAMP hub."""
-        if self._samp_client is None:
-            self._init_samp_client()
-        if self._samp_client is None:
-            self.statusBar().showMessage("SAMP client unavailable", 3000)
-            return
-        if self._samp_client.connect():
-            self._samp_connected = True
-            self.statusBar().showMessage("Connected to SAMP hub", 3000)
-        else:
-            self._samp_connected = False
-            self.statusBar().showMessage("Failed to connect to SAMP hub", 3000)
-        self._update_samp_menu_state()
-
-    def _samp_disconnect(self) -> None:
-        """Disconnect from SAMP hub."""
-        if self._samp_client is not None:
-            self._samp_client.disconnect()
-        self._samp_connected = False
-        self._update_samp_menu_state()
-        self.statusBar().showMessage("Disconnected from SAMP hub", 3000)
-
-    def _on_samp_votable(self, sender_id: str, params: dict) -> None:
-        """Queue incoming table.load.votable message on UI thread."""
-        self._queue_samp_table(params, "votable")
-
-    def _on_samp_fits(self, sender_id: str, params: dict) -> None:
-        """Queue incoming table.load.fits message on UI thread."""
-        self._queue_samp_table(params, "fits")
-
-    def _queue_samp_table(self, params: dict, table_format: str) -> None:
-        """Queue incoming SAMP table message for UI-thread handling."""
-        url = str(params.get("url", "")).strip()
-        if not url:
-            return
-        table_id = str(params.get("table-id") or params.get("name") or "samp-catalog")
-        self.samp_table_received.emit(url, table_id, table_format)
-
-    def _handle_samp_table_message(self, url: str, table_id: str, table_format: str) -> None:
-        """Handle incoming SAMP catalog message."""
-        frame = self.frame_manager.current_frame
-        if not frame or frame.image_data is None:
-            self.statusBar().showMessage("No image loaded for SAMP catalog overlay", 3000)
-            return
-        if not self.wcs_handler or not self.wcs_handler.is_valid:
-            self.statusBar().showMessage("Current frame has no WCS for SAMP catalog overlay", 3000)
-            return
-
-        table = self._read_samp_table(url, table_format)
-        if table is None or len(table) == 0:
-            self.statusBar().showMessage(f"Failed to load SAMP catalog: {table_id}", 3000)
-            return
-
-        coords = self._extract_catalog_coordinates(table)
-        if not coords:
-            self.statusBar().showMessage("SAMP catalog has no usable RA/Dec columns", 3000)
-            return
-
-        sources: list[tuple[float, float]] = []
-        for coord in coords:
-            pixel = self.region.world_to_pixel(coord.ra.deg, coord.dec.deg)
-            if pixel is not None:
-                sources.append(pixel)
-
-        if not sources:
-            self.statusBar().showMessage("No plottable sources in SAMP catalog", 3000)
-            return
-
-        self._samp_catalog_sources[frame.frame_id] = sources
-        self._rebuild_samp_regions_for_frame(frame)
-        self.region.show_frame_regions(frame)
-        self.statusBar().showMessage(f"Loaded SAMP catalog {table_id}: {len(sources)} sources", 4000)
-
-    def _read_samp_table(self, url: str, table_format: str) -> Table | None:
-        """Read SAMP table from URL/path."""
-        target = url
-        parsed = urlparse(url)
-        if parsed.scheme == "file":
-            target = unquote(parsed.path)
-
-        try:
-            return Table.read(target, format=table_format)
-        except Exception:
-            try:
-                return Table.read(target)
-            except Exception:
-                return None
-
-    def _extract_catalog_coordinates(self, table: Table) -> list[SkyCoord] | None:
-        """Extract ICRS coordinates from a table."""
-        ra_col: str | None = None
-        dec_col: str | None = None
-        for col in table.colnames:
-            col_lower = col.lower()
-            if col_lower in ("ra", "_ra", "raj2000", "ra_icrs", "ra_j2000"):
-                ra_col = col
-            elif col_lower in ("dec", "_dec", "dej2000", "de", "dec_icrs", "dec_j2000"):
-                dec_col = col
-        if ra_col is None or dec_col is None:
-            return None
-
-        coords: list[SkyCoord] = []
-        for row in table:
-            try:
-                coord = SkyCoord(
-                    ra=float(row[ra_col]),
-                    dec=float(row[dec_col]),
-                    unit=(u.deg, u.deg),
-                    frame="icrs",
-                )
-                coords.append(coord)
-            except Exception:
-                continue
-        return coords if coords else None
-
-    def _build_samp_marker_region(self, x: float, y: float) -> BaseRegion:
-        """Create a region marking a SAMP catalog source.
-
-        Tagged with origin="samp_catalog" so `_rebuild_samp_regions_for_frame`
-        can replace exactly these regions when the marker style changes,
-        without disturbing anything the user drew.
-        """
-        size = max(1.0, float(self._samp_marker_size))
-        shape = self._samp_marker_shape
-        common = {"color": self._samp_marker_color, "origin": "samp_catalog"}
-
-        if shape == "circle":
-            return Circle(center=(x, y), radius=size, **common)
-        if shape == "box":
-            return Box(center=(x, y), width_box=size * 2, height_box=size * 2, **common)
-        if shape == "ellipse":
-            return Ellipse(center=(x, y), semi_major=size, semi_minor=size, **common)
-        return Point(center=(x, y), size=int(round(size * 2)), **common)
-
-    def _rebuild_samp_regions_for_frame(self, frame: Frame) -> None:
-        """Rebuild SAMP regions for a frame from stored source positions."""
-        frame.regions = [
-            region for region in frame.regions if getattr(region, "origin", "user") != "samp_catalog"
-        ]
-        for x, y in self._samp_catalog_sources.get(frame.frame_id, []):
-            frame.regions.append(self._build_samp_marker_region(x, y))
-
-    def _refresh_samp_regions(self) -> None:
-        """Refresh SAMP catalog marker rendering with current style."""
-        for frame in self.frame_manager.frames:
-            if frame.frame_id in self._samp_catalog_sources:
-                self._rebuild_samp_regions_for_frame(frame)
-        self.region.show_frame_regions(self.frame_manager.current_frame)
-
-    def _samp_choose_marker_color(self) -> None:
-        """Change SAMP catalog marker color."""
-        color = QColorDialog.getColor(self._samp_marker_color, self, "SAMP Marker Color")
-        if not color.isValid():
-            return
-        self._samp_marker_color = color
-        self._refresh_samp_regions()
-        self.statusBar().showMessage("Updated SAMP marker color", 2000)
-
-    def _samp_choose_marker_shape(self) -> None:
-        """Change SAMP catalog marker shape."""
-        shape_map = {
-            "Point": "point",
-            "Circle": "circle",
-            "Box": "box",
-            "Ellipse": "ellipse",
-        }
-        labels = list(shape_map.keys())
-        current_label = next(
-            (label for label, value in shape_map.items() if value == self._samp_marker_shape), "Point"
-        )
-        current_index = labels.index(current_label)
-        selected, ok = QInputDialog.getItem(
-            self,
-            "SAMP Marker Shape",
-            "Shape:",
-            labels,
-            current_index,
-            False,
-        )
-        if not ok:
-            return
-        self._samp_marker_shape = shape_map[selected]
-        self._refresh_samp_regions()
-        self.statusBar().showMessage(f"SAMP marker shape: {selected}", 2000)
-
-    def _samp_choose_marker_size(self) -> None:
-        """Change SAMP catalog marker size."""
-        size, ok = QInputDialog.getDouble(
-            self,
-            "SAMP Marker Size",
-            "Size (pixels):",
-            float(self._samp_marker_size),
-            1.0,
-            100.0,
-            1,
-        )
-        if not ok:
-            return
-        self._samp_marker_size = float(size)
-        self._refresh_samp_regions()
-        self.statusBar().showMessage(f"SAMP marker size: {self._samp_marker_size:.1f}", 2000)
-
-    def _get_query_coordinates(self) -> tuple[float, float]:
-        """Get query coordinates from cursor WCS or image center."""
-        if self._last_mouse_pos is not None and self.wcs_handler and self.wcs_handler.is_valid:
-            x, y = self._last_mouse_pos
-            ra, dec = self.wcs_handler.pixel_to_world(x, y)
-            return ra, dec
-        if self.image_data is not None and self.wcs_handler and self.wcs_handler.is_valid:
-            cx = self.image_data.shape[1] / 2
-            cy = self.image_data.shape[0] / 2
-            ra, dec = self.wcs_handler.pixel_to_world(cx, cy)
-            return ra, dec
-        return (0.0, 0.0)
-
-    def _pick_siap_access_url(self, table: Table) -> str:
-        """Pick access URL from SIAP table."""
-        for col in ("access_url", "download", "url", "accessURL", "AccessURL"):
-            if col in table.colnames:
-                return str(table[col][0])
-        return ""
 
     def _show_help_contents(self) -> None:
         """Show help contents dialog."""

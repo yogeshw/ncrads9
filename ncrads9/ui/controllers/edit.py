@@ -23,17 +23,19 @@ illustrate -- of which NCRADS9 implements none and region. Those arrive with
 the features they drive: crosshair and examine in M9-1 and M9-4, colorbar mode
 in M5-13, crop in M9-2.
 
-Undo/redo and cut/copy/paste need the command stack in M9-24; until then the
-undo entries report that they do nothing rather than pretending otherwise, and
-cut/copy/paste are the three actions the dead-action guard tracks.
+Cut, copy and paste act on the selected region, which is what they do in DS9.
+Undo and redo need the command stack in M9-24; until then they report that
+they do nothing rather than pretending otherwise.
 
 Author: Yogesh Wadadekar
 """
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 
+from ...regions.base_region import BaseRegion
 from ...rendering.scale_algorithms import ScaleAlgorithm
 from ..dialogs.preferences_dialog import PreferencesDialog
 from .base import Controller
@@ -49,6 +51,10 @@ PREFERENCE_DEFAULTS: dict[str, object] = {
     "anti_aliasing": True,
 }
 
+#: Image pixels a pasted region is shifted by, so it does not hide the
+#: original it was copied from.
+PASTE_OFFSET = 10.0
+
 #: Preference name for a scale algorithm -> the algorithm.
 DEFAULT_SCALES: dict[str, ScaleAlgorithm] = {
     "Linear": ScaleAlgorithm.LINEAR,
@@ -62,11 +68,79 @@ DEFAULT_SCALES: dict[str, ScaleAlgorithm] = {
 class EditController(Controller):
     """Owns the Edit menu."""
 
+    def __init__(self, window) -> None:
+        super().__init__(window)
+        #: The region held by Cut or Copy, ready for Paste. One deep, as DS9's
+        #: is; a full clipboard history would need the M9-24 command stack.
+        self._clipboard: BaseRegion | None = None
+
     def connect(self) -> None:
         """Wire the Edit menu."""
         self.menu.action_preferences.triggered.connect(self.show_preferences)
         self.menu.action_undo.triggered.connect(lambda: self.status("Undo not implemented"))
         self.menu.action_redo.triggered.connect(lambda: self.status("Redo not implemented"))
+        self.menu.action_cut.triggered.connect(self.cut)
+        self.menu.action_copy.triggered.connect(self.copy)
+        self.menu.action_paste.triggered.connect(self.paste)
+
+    # -- clipboard -----------------------------------------------------------
+
+    @property
+    def clipboard(self) -> BaseRegion | None:
+        """The region waiting to be pasted, if any."""
+        return self._clipboard
+
+    def _selected_region(self) -> BaseRegion | None:
+        """The region the user has selected on the overlay, if any."""
+        overlay = getattr(self.viewer, "region_overlay", None)
+        return None if overlay is None else overlay.selected_region
+
+    def copy(self) -> None:
+        """Copy the selected region to the clipboard."""
+        region = self._selected_region()
+        if region is None:
+            self.status("No region selected")
+            return
+        self._clipboard = copy.deepcopy(region)
+        self._clipboard.selected = False
+        self.status(f"Copied {type(region).__name__.lower()} region")
+
+    def cut(self) -> None:
+        """Copy the selected region to the clipboard, then delete it."""
+        region = self._selected_region()
+        if region is None:
+            self.status("No region selected")
+            return
+        if not region.can_delete:
+            self.status("Region cannot be deleted")
+            return
+
+        self.copy()
+        frame = self.frame
+        if frame is not None and region in frame.regions:
+            frame.regions.remove(region)
+        self.window.region.show_frame_regions(frame)
+        self.status(f"Cut {type(region).__name__.lower()} region")
+
+    def paste(self) -> None:
+        """Add a copy of the clipboard region to the current frame.
+
+        Offset slightly so a paste on top of the original is visible rather
+        than hidden underneath it.
+        """
+        if self._clipboard is None:
+            self.status("Nothing to paste")
+            return
+        frame = self.frame
+        if frame is None:
+            self.status("No frame to paste into")
+            return
+
+        region = copy.deepcopy(self._clipboard)
+        region.move(PASTE_OFFSET, PASTE_OFFSET)
+        frame.regions.append(region)
+        self.window.region.show_frame_regions(frame)
+        self.status(f"Pasted {type(region).__name__.lower()} region")
 
     # -- preferences ---------------------------------------------------------
 

@@ -120,13 +120,17 @@ class TestDumpMenus:
         assert not [label for label in labels if "&" in label]
         assert not [label for label in labels if label.endswith("...")]
 
-    def test_connected_annotation_flags_dead_actions(self, qapp):
-        """The annotation is what keeps PLAN.md 3.8 honest."""
+    def test_no_menu_action_is_unconnected(self, qapp):
+        """Every menu entry must reach a handler. This keeps §3.8 honest.
+
+        The ceiling was 3 until M2-14 wired Cut, Copy and Paste; it is now
+        zero and must stay there. A new menu entry added without wiring fails
+        here, which is how M2 caught itself unwiring five whole menus while
+        moving a block of connect() calls around.
+        """
         lines = _load("dump_menus").collect(annotate=True)
         unconnected = [line for line in lines if line.endswith("|UNCONNECTED")]
-        # Cut/Copy/Paste are the known dead actions (TODO.md M2-14). If this
-        # grows, a new menu entry was added without wiring it up.
-        assert len(unconnected) <= 3, unconnected
+        assert unconnected == [], unconnected
 
 
 class TestSnapshots:

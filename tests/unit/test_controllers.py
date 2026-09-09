@@ -334,6 +334,106 @@ class TestRegionController:
         assert main_window.image_viewer.region_overlay.mode is RegionMode.NONE
 
 
+class TestEditController:
+    """The Edit menu: region cut, copy and paste."""
+
+    @staticmethod
+    def _select_first(main_window):
+        overlay = main_window.image_viewer.region_overlay
+        overlay.selected_region = overlay.regions[0]
+        overlay.regions[0].selected = True
+        return overlay.regions[0]
+
+    def _frame_with_region(self, main_window, **kwargs):
+        from ncrads9.regions.shapes.circle import Circle
+
+        _load_image(main_window, width=200, height=200)
+        frame = main_window.frame_manager.current_frame
+        frame.regions.append(Circle(center=(50.0, 60.0), radius=10.0, **kwargs))
+        main_window.region.show_frame_regions(frame)
+        return frame
+
+    def test_copy_with_nothing_selected_is_a_no_op(self, main_window):
+        self._frame_with_region(main_window)
+        main_window.edit.copy()
+        assert main_window.edit.clipboard is None
+
+    def test_copy_takes_a_snapshot_not_the_region(self, main_window):
+        """A later edit to the original must not follow into the clipboard."""
+        frame = self._frame_with_region(main_window)
+        original = self._select_first(main_window)
+
+        main_window.edit.copy()
+        original.center = (999.0, 999.0)
+
+        assert main_window.edit.clipboard is not original
+        assert main_window.edit.clipboard.center == (50.0, 60.0)
+        assert len(frame.regions) == 1
+
+    def test_cut_removes_the_region_and_keeps_a_copy(self, main_window):
+        frame = self._frame_with_region(main_window)
+        self._select_first(main_window)
+
+        main_window.edit.cut()
+
+        assert frame.regions == []
+        assert main_window.edit.clipboard is not None
+        assert main_window.edit.clipboard.center == (50.0, 60.0)
+
+    def test_cut_respects_the_delete_property(self, main_window):
+        frame = self._frame_with_region(main_window, can_delete=False)
+        self._select_first(main_window)
+
+        main_window.edit.cut()
+
+        assert len(frame.regions) == 1
+        assert main_window.edit.clipboard is None
+
+    def test_paste_with_an_empty_clipboard_is_a_no_op(self, main_window):
+        frame = self._frame_with_region(main_window)
+        main_window.edit.paste()
+        assert len(frame.regions) == 1
+
+    def test_paste_adds_an_offset_copy(self, main_window):
+        from ncrads9.ui.controllers.edit import PASTE_OFFSET
+
+        frame = self._frame_with_region(main_window)
+        self._select_first(main_window)
+        main_window.edit.copy()
+
+        main_window.edit.paste()
+
+        assert len(frame.regions) == 2
+        pasted = frame.regions[-1]
+        assert pasted is not main_window.edit.clipboard
+        assert pasted.center == pytest.approx((50.0 + PASTE_OFFSET, 60.0 + PASTE_OFFSET))
+
+    def test_paste_twice_gives_two_regions(self, main_window):
+        frame = self._frame_with_region(main_window)
+        self._select_first(main_window)
+        main_window.edit.copy()
+
+        main_window.edit.paste()
+        main_window.edit.paste()
+
+        assert len(frame.regions) == 3
+
+    def test_cut_then_paste_round_trips(self, main_window):
+        frame = self._frame_with_region(main_window)
+        self._select_first(main_window)
+
+        main_window.edit.cut()
+        main_window.edit.paste()
+
+        assert len(frame.regions) == 1
+        assert type(frame.regions[0]).__name__ == "Circle"
+
+    def test_preferences_dict_covers_every_default(self, main_window):
+        from ncrads9.ui.controllers.edit import PREFERENCE_DEFAULTS
+
+        assert set(main_window.edit.preferences_dict()) == set(PREFERENCE_DEFAULTS)
+
+
 class TestOneMethodPerAction:
     """Menu, XPA and CLI must all land on the controller, not on copies."""
 
