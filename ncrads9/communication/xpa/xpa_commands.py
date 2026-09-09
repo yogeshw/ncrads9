@@ -410,11 +410,11 @@ class XPACommands:
         }
 
         if mode in {"zscale"}:
-            self.viewer._reset_scale_limits()
+            self.viewer.scale.reset_limits()
         elif mode in {"minmax"}:
-            self.viewer._scale_minmax()
+            self.viewer.scale.set_minmax_limits()
         elif mode in mode_map:
-            self.viewer._set_scale(mode_map[mode])
+            self.viewer.scale.set_scale(mode_map[mode])
         elif limits is not None and isinstance(limits, (list, tuple)) and len(limits) == 2:
             self.viewer.z1 = float(limits[0])
             self.viewer.z2 = float(limits[1])
@@ -555,7 +555,7 @@ class XPACommands:
         action = str(params.get("action", self._first_arg(params, "get"))).lower()
         if action == "set":
             system = str(params.get("system", self._first_arg(params, "fk5"))).lower()
-            self.viewer._set_wcs_system(system)
+            self.viewer.wcs.set_sky_frame(system)
             return {"status": "ok", "result": system}
         return {"status": "ok", "result": self.viewer.coord_context.sky.value}
 

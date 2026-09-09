@@ -28,7 +28,6 @@ from urllib.parse import unquote, urlparse
 import astropy.units as u
 import numpy as np
 from astropy.coordinates import (
-    ICRS,
     SkyCoord,
 )
 from astropy.table import Table
@@ -91,6 +90,9 @@ from ..rendering.rgb_compositor import compose_rgb
 from ..rendering.scale_algorithms import ScaleAlgorithm, apply_scale, compute_zscale_limits
 from ..utils.preferences import Preferences
 from .button_bar import ButtonBar
+from .controllers.base import Controller
+from .controllers.scale import ScaleController
+from .controllers.wcs import WCSController
 from .dialogs.contour_dialog import ContourDialog
 from .dialogs.crop_parameters_dialog import CropParametersDialog
 from .dialogs.export_dialog import ExportDialog
@@ -101,7 +103,6 @@ from .dialogs.keyboard_shortcuts_dialog import KeyboardShortcutsDialog
 from .dialogs.pan_zoom_rotate_dialog import PanZoomRotateDialog
 from .dialogs.pixel_table_dialog import PixelTableDialog
 from .dialogs.preferences_dialog import PreferencesDialog
-from .dialogs.scale_dialog import ScaleDialog
 from .dialogs.smooth_dialog import SmoothDialog
 from .dialogs.statistics_dialog import StatisticsDialog
 from .dialogs.vo_query_dialog import VOQueryDialog
@@ -113,7 +114,6 @@ from .panels.vertical_graph import VerticalGraph
 from .status_bar import StatusBar
 from .toolbar import MainToolbar
 from .view_transform import (
-    DisplayTransform,
     flags_to_orientation,
     normalize_rotation,
     orientation_to_flags,
@@ -233,6 +233,7 @@ class MainWindow(QMainWindow):
         self._blink_timer.timeout.connect(self._update_blink)
         self.samp_table_received.connect(self._handle_samp_table_message)
 
+        self._setup_controllers()
         self._setup_menu_bar()
         self._setup_toolbar()
         self._setup_central_widget()
@@ -398,6 +399,24 @@ class MainWindow(QMainWindow):
         self.z1 = z1
         self.z2 = z2
         self._set_viewer_contrast_brightness(contrast, brightness)
+
+    def _setup_controllers(self) -> None:
+        """Create the per-menu controllers.
+
+        Runs before `_setup_menu_bar`, because that calls each controller's
+        `connect()` to wire its own actions. See `ui/controllers/base.py` for
+        why controllers hold a reference to the window.
+        """
+        self.scale = ScaleController(self)
+        self.wcs = WCSController(self)
+
+        #: Every controller, for broadcasting `sync()` on a frame change.
+        self.controllers: tuple[Controller, ...] = (self.scale, self.wcs)
+
+    def _sync_controllers(self) -> None:
+        """Bring every controller's menu state in step with the current frame."""
+        for controller in self.controllers:
+            controller.sync()
 
     def _setup_menu_bar(self) -> None:
         """Set up the menu bar."""
@@ -608,17 +627,7 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_bin_8.triggered.connect(lambda: self._set_bin(8))
 
         # Scale menu
-        self.menu_bar.action_scale_linear.triggered.connect(lambda: self._set_scale(ScaleAlgorithm.LINEAR))
-        self.menu_bar.action_scale_log.triggered.connect(lambda: self._set_scale(ScaleAlgorithm.LOG))
-        self.menu_bar.action_scale_sqrt.triggered.connect(lambda: self._set_scale(ScaleAlgorithm.SQRT))
-        self.menu_bar.action_scale_squared.triggered.connect(lambda: self._set_scale(ScaleAlgorithm.POWER))
-        self.menu_bar.action_scale_asinh.triggered.connect(lambda: self._set_scale(ScaleAlgorithm.ASINH))
-        self.menu_bar.action_scale_histeq.triggered.connect(
-            lambda: self._set_scale(ScaleAlgorithm.HISTOGRAM_EQUALIZATION)
-        )
-        self.menu_bar.action_scale_zscale.triggered.connect(self._reset_scale_limits)
-        self.menu_bar.action_scale_minmax.triggered.connect(self._scale_minmax)
-        self.menu_bar.action_scale_params.triggered.connect(self._show_scale_dialog)
+        self.scale.connect()
 
         # Color menu
         for cmap_name, action in self.menu_bar.colormap_actions.items():
@@ -680,14 +689,7 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_samp_marker_size.triggered.connect(self._samp_choose_marker_size)
 
         # WCS menu - connect all coordinate system options
-        self.menu_bar.action_wcs_fk5.triggered.connect(lambda: self._set_wcs_system("fk5"))
-        self.menu_bar.action_wcs_fk4.triggered.connect(lambda: self._set_wcs_system("fk4"))
-        self.menu_bar.action_wcs_icrs.triggered.connect(lambda: self._set_wcs_system("icrs"))
-        self.menu_bar.action_wcs_galactic.triggered.connect(lambda: self._set_wcs_system("galactic"))
-        self.menu_bar.action_wcs_ecliptic.triggered.connect(lambda: self._set_wcs_system("ecliptic"))
-        self.menu_bar.action_wcs_sexagesimal.triggered.connect(lambda: self._set_wcs_format("sexagesimal"))
-        self.menu_bar.action_wcs_degrees.triggered.connect(lambda: self._set_wcs_format("degrees"))
-        self.menu_bar.action_show_direction_arrows.triggered.connect(self._toggle_direction_arrows)
+        self.wcs.connect()
 
         # Analysis menu - connect all tools
         self.menu_bar.action_name_resolution.triggered.connect(self._resolve_object_name)
@@ -918,7 +920,7 @@ class MainWindow(QMainWindow):
             "Asinh": ScaleAlgorithm.ASINH,
         }
         if default_scale in scale_map:
-            self._set_scale(scale_map[default_scale])
+            self.scale.set_scale(scale_map[default_scale])
 
         default_colormap = self._normalize_colormap_name(str(prefs.get("default_colormap", "gray")))
         if default_colormap in self.menu_bar.colormap_actions:
@@ -1172,7 +1174,7 @@ class MainWindow(QMainWindow):
         self._apply_view_transform_to_viewer(frame)
         self._update_preview_panels(frame)
         self._update_panner_view_rect()
-        self._update_direction_arrows()
+        self.wcs.update_direction_arrows()
         if self._last_mouse_pos is not None:
             self._on_mouse_moved(*self._last_mouse_pos)
 
@@ -1292,7 +1294,7 @@ class MainWindow(QMainWindow):
         self._sync_frame_view_state()
         if self._contour_settings is not None:
             self._update_contours()
-        self._update_direction_arrows()
+        self.wcs.update_direction_arrows()
         self._refresh_analysis_overlays()
 
     def _display_rgb_frame(self, frame: Frame) -> bool:
@@ -1365,7 +1367,7 @@ class MainWindow(QMainWindow):
         self._sync_frame_view_state()
         if self._contour_settings is not None:
             self._update_contours()
-        self._update_direction_arrows()
+        self.wcs.update_direction_arrows()
         self._refresh_analysis_overlays()
         return True
 
@@ -1472,41 +1474,6 @@ class MainWindow(QMainWindow):
         self.status_bar.update_image_info(tiled_w, tiled_h)
         self.status_bar.update_zoom(self.image_viewer.get_zoom())
         return True
-
-    def _set_scale(self, scale: ScaleAlgorithm) -> None:
-        """
-        Set the image scaling algorithm.
-
-        Args:
-            scale: The scaling algorithm to use.
-        """
-        self.current_scale = scale
-        self._persist_frame_view_state()
-
-        # Update menu checkboxes
-        self.menu_bar.action_scale_linear.setChecked(scale == ScaleAlgorithm.LINEAR)
-        self.menu_bar.action_scale_log.setChecked(scale == ScaleAlgorithm.LOG)
-        self.menu_bar.action_scale_sqrt.setChecked(scale == ScaleAlgorithm.SQRT)
-        self.menu_bar.action_scale_squared.setChecked(scale == ScaleAlgorithm.POWER)
-        self.menu_bar.action_scale_asinh.setChecked(scale == ScaleAlgorithm.ASINH)
-        self.menu_bar.action_scale_histeq.setChecked(scale == ScaleAlgorithm.HISTOGRAM_EQUALIZATION)
-
-        # Update button bar
-        scale_name_map = {
-            ScaleAlgorithm.LINEAR: "Linear",
-            ScaleAlgorithm.LOG: "Log",
-            ScaleAlgorithm.SQRT: "Sqrt",
-            ScaleAlgorithm.POWER: "Squared",
-            ScaleAlgorithm.ASINH: "Asinh",
-            ScaleAlgorithm.HISTOGRAM_EQUALIZATION: "HistEq",
-        }
-        if scale in scale_name_map:
-            self.button_bar.set_scale(scale_name_map[scale])
-
-        # Redisplay with new scale
-        if self.image_data is not None:
-            self._display_image()
-            self.statusBar().showMessage(f"Scale: {scale.name}", 2000)
 
     @staticmethod
     def _normalize_colormap_name(name: str) -> str:
@@ -2514,7 +2481,7 @@ class MainWindow(QMainWindow):
 
         # Update WCS coordinates if available
         if self.wcs_handler and self.wcs_handler.is_valid:
-            self._update_wcs_display(x, y)
+            self.wcs.update_readout(x, y)
 
         # Update magnifier panel (DS9 style)
         if hasattr(self, "magnifier_panel"):
@@ -2681,7 +2648,7 @@ class MainWindow(QMainWindow):
             "HistEq": ScaleAlgorithm.HISTOGRAM_EQUALIZATION,
         }
         if scale_name in scale_map:
-            self._set_scale(scale_map[scale_name])
+            self.scale.set_scale(scale_map[scale_name])
 
     def _on_button_bar_colormap(self, cmap_name: str) -> None:
         """Handle colormap change from button bar."""
@@ -2721,50 +2688,6 @@ class MainWindow(QMainWindow):
     def _toggle_statusbar(self, checked: bool) -> None:
         """Toggle status bar visibility."""
         self.statusBar().setVisible(checked)
-
-    def _reset_scale_limits(self) -> None:
-        """Reset scale limits to ZScale auto-computed values."""
-        if self.image_data is not None:
-            self.z1 = None
-            self.z2 = None
-            frame = self.frame_manager.current_frame
-            if frame:
-                if frame.frame_type == "rgb":
-                    channel = (
-                        frame.rgb_current_channel
-                        if frame.rgb_current_channel in frame.rgb_channels
-                        else "red"
-                    )
-                    frame.rgb_channel_z1[channel] = None
-                    frame.rgb_channel_z2[channel] = None
-                else:
-                    frame.z1 = None
-                    frame.z2 = None
-            self.image_viewer.reset_contrast_brightness()
-            self._display_image()
-            self.statusBar().showMessage("Reset to ZScale limits", 2000)
-
-    def _scale_minmax(self) -> None:
-        """Set scale limits to data min/max."""
-        if self.image_data is not None:
-            self.z1 = float(np.nanmin(self.image_data))
-            self.z2 = float(np.nanmax(self.image_data))
-            frame = self.frame_manager.current_frame
-            if frame:
-                if frame.frame_type == "rgb":
-                    channel = (
-                        frame.rgb_current_channel
-                        if frame.rgb_current_channel in frame.rgb_channels
-                        else "red"
-                    )
-                    frame.rgb_channel_z1[channel] = self.z1
-                    frame.rgb_channel_z2[channel] = self.z2
-                else:
-                    frame.z1 = self.z1
-                    frame.z2 = self.z2
-            self.image_viewer.reset_contrast_brightness()
-            self._display_image()
-            self.statusBar().showMessage(f"MinMax: {self.z1:.4g} to {self.z2:.4g}", 2000)
 
     def _toggle_invert_colormap(self, checked: bool) -> None:
         """Toggle colormap inversion."""
@@ -3103,79 +3026,6 @@ class MainWindow(QMainWindow):
         except Exception:
             return None
 
-    def _set_wcs_system(self, system: str) -> None:
-        """Set WCS coordinate system."""
-        self.coord_context = self.coord_context.with_sky(system)
-        # Update menu checkmarks
-        self.menu_bar.action_wcs_fk5.setChecked(system == "fk5")
-        self.menu_bar.action_wcs_fk4.setChecked(system == "fk4")
-        self.menu_bar.action_wcs_icrs.setChecked(system == "icrs")
-        self.menu_bar.action_wcs_galactic.setChecked(system == "galactic")
-        self.menu_bar.action_wcs_ecliptic.setChecked(system == "ecliptic")
-        self.statusBar().showMessage(f"WCS system: {system.upper()}", 2000)
-        if self._last_mouse_pos is not None and self.wcs_handler and self.wcs_handler.is_valid:
-            self._update_wcs_display(*self._last_mouse_pos)
-        self._update_direction_arrows()
-
-    def _set_wcs_format(self, format_type: str) -> None:
-        """Set WCS format (sexagesimal or degrees)."""
-        self.coord_context = self.coord_context.with_format(format_type)
-        self.menu_bar.action_wcs_sexagesimal.setChecked(format_type == "sexagesimal")
-        self.menu_bar.action_wcs_degrees.setChecked(format_type == "degrees")
-        self.statusBar().showMessage(f"WCS format: {format_type}", 2000)
-        if self._last_mouse_pos is not None and self.wcs_handler and self.wcs_handler.is_valid:
-            self._update_wcs_display(*self._last_mouse_pos)
-
-    def _toggle_direction_arrows(self, checked: bool) -> None:
-        """Toggle WCS direction arrows overlay."""
-        self._show_direction_arrows = checked
-        self._update_direction_arrows()
-
-    def _update_direction_arrows(self) -> None:
-        """Update WCS direction arrows from current frame WCS."""
-        if not hasattr(self.image_viewer, "set_direction_arrows"):
-            return
-        if (
-            self._tile_mode_enabled
-            or not self._show_direction_arrows
-            or self.wcs_handler is None
-            or not self.wcs_handler.is_valid
-            or self.image_data is None
-        ):
-            self.image_viewer.set_direction_arrows(None, None, False)
-            return
-
-        h, w = self.image_data.shape[:2]
-        cx = (w - 1) / 2.0
-        cy = (h - 1) / 2.0
-
-        ra, dec = self.wcs_handler.pixel_to_world(cx, cy)
-        center = SkyCoord(ra=ra * u.deg, dec=dec * u.deg, frame=ICRS())
-        separation = 1.0 * u.arcmin
-        north = center.directional_offset_by(0.0 * u.deg, separation)
-        east = center.directional_offset_by(90.0 * u.deg, separation)
-        nx, ny = self.wcs_handler.world_to_pixel(north.ra.deg, north.dec.deg)
-        ex, ey = self.wcs_handler.world_to_pixel(east.ra.deg, east.dec.deg)
-        frame = self.frame_manager.current_frame
-        transform = DisplayTransform(
-            width=w,
-            height=h,
-            rotation=frame.rotation if frame is not None else 0.0,
-            flip_x=frame.flip_x if frame is not None else False,
-            flip_y=frame.flip_y if frame is not None else False,
-        )
-        north_vector = transform.source_vector_to_display(float(nx - cx), float(ny - cy))
-        east_vector = transform.source_vector_to_display(float(ex - cx), float(ey - cy))
-        self.image_viewer.set_direction_arrows(north_vector, east_vector, True)
-
-    def _update_wcs_display(self, x: int, y: int) -> None:
-        """Update the status bar WCS display for the given pixel position."""
-        if not self.wcs_handler or not self.wcs_handler.is_valid:
-            return
-
-        ra, dec = self.wcs_handler.pixel_to_world(x, y)
-        self.status_bar.update_wcs_coords(self.coord_context.describe_sky(ra, dec))
-
     def _show_statistics(self) -> None:
         """Show statistics dialog."""
         frame = self.frame_manager.current_frame
@@ -3238,55 +3088,6 @@ class MainWindow(QMainWindow):
         layout.addLayout(btn_row)
         dialog.exec()
         self._log_analysis_command("radial_profile")
-
-    def _show_scale_dialog(self) -> None:
-        """Show scale parameters dialog (DS9 style)."""
-        if self.image_data is None:
-            self.statusBar().showMessage("No image loaded", 2000)
-            return
-
-        dialog = ScaleDialog(self)
-        # Connect the signal BEFORE showing the dialog so Apply button works
-        dialog.scale_changed.connect(self._apply_scale_params)
-        dialog.exec()
-
-    def _apply_scale_params(self, params: dict) -> None:
-        """Apply scale parameters from the scale dialog."""
-        # Map dialog scale names to ScaleAlgorithm enum
-        scale_map = {
-            "Linear": ScaleAlgorithm.LINEAR,
-            "Log": ScaleAlgorithm.LOG,
-            "Power": ScaleAlgorithm.POWER,
-            "Sqrt": ScaleAlgorithm.SQRT,
-            "Squared": ScaleAlgorithm.POWER,
-            "Asinh": ScaleAlgorithm.ASINH,
-            "Sinh": ScaleAlgorithm.ASINH,  # Map to asinh for now
-            "Histogram Equalization": ScaleAlgorithm.HISTOGRAM_EQUALIZATION,
-        }
-
-        scale_name = params.get("scale_function", "Linear")
-        if scale_name in scale_map:
-            self.current_scale = scale_map[scale_name]
-
-        # Apply min/max limits if not auto
-        if not params.get("auto_limits", True):
-            self.z1 = params.get("min_value", self.z1)
-            self.z2 = params.get("max_value", self.z2)
-
-        # Apply contrast/bias adjustments
-        # Contrast slider: 0-100 → 0-2.0 (50 = 1.0 neutral)
-        contrast = params.get("contrast", 1.0)
-        # Bias slider: 0-100 → -1.0 to +1.0 (50 = 0.0 neutral)
-        bias_value = params.get("bias", 1.0)  # This is 0-2 range from slider/50
-        brightness = bias_value - 1.0  # Convert to -1 to +1 range
-        self._set_viewer_contrast_brightness(contrast, brightness)
-
-        # Redisplay image with new settings
-        self._display_image()
-        self._persist_frame_view_state()
-        self.statusBar().showMessage(
-            f"Scale: {scale_name}, Contrast: {contrast:.2f}, Brightness: {brightness:.2f}", 2000
-        )
 
     def _show_contours(self) -> None:
         """Show contour dialog and apply contours."""

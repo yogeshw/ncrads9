@@ -90,6 +90,32 @@ class _DummyFrameManager:
         return None
 
 
+class _DummyScaleController:
+    """The slice of ScaleController that XPA calls."""
+
+    def __init__(self, window):
+        self.window = window
+
+    def set_scale(self, scale: ScaleAlgorithm):
+        self.window.current_scale = scale
+
+    def reset_limits(self):
+        return
+
+    def set_minmax_limits(self):
+        return
+
+
+class _DummyWCSController:
+    """The slice of WCSController that XPA calls."""
+
+    def __init__(self, window):
+        self.window = window
+
+    def set_sky_frame(self, system: str):
+        self.window.coord_context = self.window.coord_context.with_sky(system)
+
+
 class _DummyViewer:
     def __init__(self) -> None:
         self.frame_manager = _DummyFrameManager()
@@ -112,6 +138,10 @@ class _DummyViewer:
         self.colorbar_orientation = "vertical"
         self.colorbar_numerics = True
         self._last_mouse_pos = (5, 6)
+        # XPA reaches scale and WCS through the controllers as of M2, so the
+        # fake exposes the same surface rather than the old flat methods.
+        self.scale = _DummyScaleController(self)
+        self.wcs = _DummyWCSController(self)
         self._w = 800
         self._h = 600
 
@@ -168,15 +198,6 @@ class _DummyViewer:
     def _set_colorbar_numerics(self, show: bool):
         self.colorbar_numerics = bool(show)
 
-    def _set_scale(self, scale: ScaleAlgorithm):
-        self.current_scale = scale
-
-    def _reset_scale_limits(self):
-        return
-
-    def _scale_minmax(self):
-        return
-
     def _display_image(self):
         return
 
@@ -187,9 +208,6 @@ class _DummyViewer:
 
     def _clear_regions(self):
         self.frame_manager.current_frame.regions.clear()
-
-    def _set_wcs_system(self, system: str):
-        self.coord_context = self.coord_context.with_sky(system)
 
     def _match_frames_image(self):
         return

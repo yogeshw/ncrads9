@@ -379,13 +379,13 @@ def apply_startup_cli(main_window: MainWindow, argv: Sequence[str]) -> None:
             xpa_commands.handle("scale", {"args": [option]})
             continue
         if option in {"fk5", "fk4", "icrs", "galactic", "ecliptic"}:
-            main_window._set_wcs_system(option)
+            main_window.wcs.set_sky_frame(option)
             continue
         if option in {"sexagesimal", "degrees"}:
-            main_window._set_wcs_format(option)
+            main_window.wcs.set_format(option)
             continue
         if option == "wcs" and args:
-            main_window._set_wcs_system(str(args[0]).lower())
+            main_window.wcs.set_sky_frame(str(args[0]).lower())
             continue
         if option == "bin" and args:
             try:

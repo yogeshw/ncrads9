@@ -98,6 +98,16 @@ def _kind(action: object) -> str:
     return "command"
 
 
+def _has_receiver(action: object) -> bool:
+    """True when anything is listening to this action.
+
+    Both signals have to be checked: a plain command connects `triggered`,
+    while a checkbox may legitimately connect only `toggled`. Looking at
+    `triggered` alone reported such an action as dead.
+    """
+    return bool(action.receivers(action.triggered) or action.receivers(action.toggled))
+
+
 def _walk(menu: object, path: str, lines: list[str], annotate: bool) -> None:
     """Depth-first walk of a QMenu, appending one line per entry."""
     from PyQt6.QtWidgets import QMenu
@@ -111,7 +121,7 @@ def _walk(menu: object, path: str, lines: list[str], annotate: bool) -> None:
 
         label = _clean(action.text())
         suffix = ""
-        if annotate and kind != "cascade" and not action.receivers(action.triggered):
+        if annotate and kind != "cascade" and not _has_receiver(action):
             suffix = "|UNCONNECTED"
         lines.append(f"{path}|{kind}|{label}{suffix}")
 
