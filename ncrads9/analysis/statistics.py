@@ -23,15 +23,15 @@ with support for region-based analysis.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Tuple, Dict
+
 import numpy as np
 from numpy.typing import NDArray
 
 
 def _apply_region_mask(
     data: NDArray[np.floating],
-    region: Optional[Tuple[slice, slice]] = None,
-    mask: Optional[NDArray[np.bool_]] = None,
+    region: tuple[slice, slice] | None = None,
+    mask: NDArray[np.bool_] | None = None,
 ) -> NDArray[np.floating]:
     """
     Apply region selection and mask to data.
@@ -63,8 +63,8 @@ def _apply_region_mask(
 
 def image_mean(
     data: NDArray[np.floating],
-    region: Optional[Tuple[slice, slice]] = None,
-    mask: Optional[NDArray[np.bool_]] = None,
+    region: tuple[slice, slice] | None = None,
+    mask: NDArray[np.bool_] | None = None,
     ignore_nan: bool = True,
 ) -> float:
     """
@@ -94,8 +94,8 @@ def image_mean(
 
 def image_median(
     data: NDArray[np.floating],
-    region: Optional[Tuple[slice, slice]] = None,
-    mask: Optional[NDArray[np.bool_]] = None,
+    region: tuple[slice, slice] | None = None,
+    mask: NDArray[np.bool_] | None = None,
     ignore_nan: bool = True,
 ) -> float:
     """
@@ -125,8 +125,8 @@ def image_median(
 
 def image_std(
     data: NDArray[np.floating],
-    region: Optional[Tuple[slice, slice]] = None,
-    mask: Optional[NDArray[np.bool_]] = None,
+    region: tuple[slice, slice] | None = None,
+    mask: NDArray[np.bool_] | None = None,
     ignore_nan: bool = True,
     ddof: int = 0,
 ) -> float:
@@ -159,8 +159,8 @@ def image_std(
 
 def image_min(
     data: NDArray[np.floating],
-    region: Optional[Tuple[slice, slice]] = None,
-    mask: Optional[NDArray[np.bool_]] = None,
+    region: tuple[slice, slice] | None = None,
+    mask: NDArray[np.bool_] | None = None,
     ignore_nan: bool = True,
 ) -> float:
     """
@@ -190,8 +190,8 @@ def image_min(
 
 def image_max(
     data: NDArray[np.floating],
-    region: Optional[Tuple[slice, slice]] = None,
-    mask: Optional[NDArray[np.bool_]] = None,
+    region: tuple[slice, slice] | None = None,
+    mask: NDArray[np.bool_] | None = None,
     ignore_nan: bool = True,
 ) -> float:
     """
@@ -221,10 +221,10 @@ def image_max(
 
 def image_stats(
     data: NDArray[np.floating],
-    region: Optional[Tuple[slice, slice]] = None,
-    mask: Optional[NDArray[np.bool_]] = None,
+    region: tuple[slice, slice] | None = None,
+    mask: NDArray[np.bool_] | None = None,
     ignore_nan: bool = True,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Calculate comprehensive statistics for image pixel values.
 

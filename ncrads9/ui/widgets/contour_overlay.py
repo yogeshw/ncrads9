@@ -18,12 +18,12 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, Sequence, Tuple
+from collections.abc import Sequence
 
 import numpy as np
 from numpy.typing import NDArray
-from PyQt6.QtCore import Qt, QPointF
-from PyQt6.QtGui import QPainter, QPen, QColor, QPolygonF, QFont
+from PyQt6.QtCore import QPointF, Qt
+from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
 from PyQt6.QtWidgets import QWidget
 
 from ..view_transform import DisplayTransform
@@ -36,10 +36,10 @@ class ContourOverlay(QWidget):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.setMouseTracking(False)
-        self._contours: List[List[NDArray[np.float64]]] = []
-        self._levels: List[float] = []
+        self._contours: list[list[NDArray[np.float64]]] = []
+        self._levels: list[float] = []
         self._zoom: float = 1.0
-        self._offset: Tuple[float, float] = (0.0, 0.0)
+        self._offset: tuple[float, float] = (0.0, 0.0)
         self._image_width: int = 0
         self._image_height: int = 0
         self._rotation: float = 0.0
@@ -50,8 +50,8 @@ class ContourOverlay(QWidget):
         self._line_style: Qt.PenStyle = Qt.PenStyle.SolidLine
         self._show_labels: bool = False
         self._show_direction_arrows: bool = True
-        self._north_vector: Optional[Tuple[float, float]] = None
-        self._east_vector: Optional[Tuple[float, float]] = None
+        self._north_vector: tuple[float, float] | None = None
+        self._east_vector: tuple[float, float] | None = None
         self._grid_visible: bool = False
         self._grid_spacing_x: int = 64
         self._grid_spacing_y: int = 64
@@ -62,14 +62,14 @@ class ContourOverlay(QWidget):
         self._crosshair_visible: bool = False
         self._crosshair_color: QColor = QColor(255, 0, 0)
         self._crosshair_size: int = 24
-        self._crosshair_position: Optional[Tuple[float, float]] = None
+        self._crosshair_position: tuple[float, float] | None = None
 
     def set_zoom(
         self,
         zoom: float,
-        offset: Tuple[float, float],
-        image_width: Optional[int] = None,
-        image_height: Optional[int] = None,
+        offset: tuple[float, float],
+        image_width: int | None = None,
+        image_height: int | None = None,
         rotation: float = 0.0,
         flip_x: bool = False,
         flip_y: bool = False,
@@ -97,7 +97,7 @@ class ContourOverlay(QWidget):
 
     def set_contours(
         self,
-        contours: List[List[NDArray[np.float64]]],
+        contours: list[list[NDArray[np.float64]]],
         levels: Sequence[float],
     ) -> None:
         """Set contour paths and levels."""
@@ -127,8 +127,8 @@ class ContourOverlay(QWidget):
 
     def set_direction_arrows(
         self,
-        north_vector: Optional[Tuple[float, float]],
-        east_vector: Optional[Tuple[float, float]],
+        north_vector: tuple[float, float] | None,
+        east_vector: tuple[float, float] | None,
         visible: bool,
     ) -> None:
         """Set direction arrow vectors and visibility."""
@@ -137,7 +137,7 @@ class ContourOverlay(QWidget):
         self._show_direction_arrows = visible
         self.update()
 
-    def set_grid(self, visible: bool, settings: Optional[dict] = None) -> None:
+    def set_grid(self, visible: bool, settings: dict | None = None) -> None:
         """Set pixel grid overlay visibility and style settings."""
         self._grid_visible = visible
         if settings is not None:
@@ -159,9 +159,9 @@ class ContourOverlay(QWidget):
     def set_crosshair(
         self,
         visible: bool,
-        position: Optional[Tuple[float, float]] = None,
-        color: Optional[QColor] = None,
-        size: Optional[int] = None,
+        position: tuple[float, float] | None = None,
+        color: QColor | None = None,
+        size: int | None = None,
     ) -> None:
         """Set crosshair overlay visibility/style and optional position."""
         self._crosshair_visible = visible
@@ -186,7 +186,7 @@ class ContourOverlay(QWidget):
         self,
         painter: QPainter,
         anchor: QPointF,
-        vector: Tuple[float, float],
+        vector: tuple[float, float],
         label: str,
     ) -> None:
         """Draw one direction arrow from a screen-space anchor."""

@@ -24,7 +24,7 @@ complex WCS projections that may not be fully supported by astropy.wcs.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional, Tuple, List, Any
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from astropy.wcs import WCS
@@ -42,14 +42,14 @@ except ImportError:
 class ASTWrapper:
     """Wrapper for Starlink AST library for complex WCS operations."""
 
-    def __init__(self, wcs: Optional[WCS] = None) -> None:
+    def __init__(self, wcs: WCS | None = None) -> None:
         """Initialize the AST wrapper.
 
         Args:
             wcs: Astropy WCS object to wrap.
         """
-        self._wcs: Optional[WCS] = wcs
-        self._frameset: Optional[Any] = None
+        self._wcs: WCS | None = wcs
+        self._frameset: Any | None = None
         self._available: bool = HAS_AST
 
     @property
@@ -58,7 +58,7 @@ class ASTWrapper:
         return self._available
 
     @property
-    def wcs(self) -> Optional[WCS]:
+    def wcs(self) -> WCS | None:
         """Get the current WCS object."""
         return self._wcs
 
@@ -79,10 +79,10 @@ class ASTWrapper:
 
     def transform(
         self,
-        x: List[float],
-        y: List[float],
+        x: list[float],
+        y: list[float],
         forward: bool = True,
-    ) -> Tuple[List[float], List[float]]:
+    ) -> tuple[list[float], list[float]]:
         """Transform coordinates using AST.
 
         Args:
@@ -104,7 +104,7 @@ class ASTWrapper:
         image_width: int,
         image_height: int,
         density: int = 10,
-    ) -> List[Tuple[List[float], List[float]]]:
+    ) -> list[tuple[list[float], list[float]]]:
         """Get grid lines using AST plotting.
 
         Args:
@@ -125,7 +125,7 @@ class ASTWrapper:
         self,
         image_width: int,
         image_height: int,
-    ) -> Optional[Tuple[float, float, float, float]]:
+    ) -> tuple[float, float, float, float] | None:
         """Get the sky boundary for the image.
 
         Args:

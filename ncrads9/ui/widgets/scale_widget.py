@@ -20,17 +20,16 @@ ScaleWidget - Widget for scale parameter input.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
     QComboBox,
     QDoubleSpinBox,
-    QLabel,
     QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QVBoxLayout,
+    QWidget,
 )
 
 
@@ -53,7 +52,7 @@ class ScaleWidget(QWidget):
 
     def __init__(
         self,
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         """
         Initialize the ScaleWidget.

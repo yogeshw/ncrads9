@@ -24,9 +24,10 @@ Author: Yogesh Wadadekar
 """
 
 import logging
-from pathlib import Path
-from typing import Any, Dict, Optional, Callable, List
+from collections.abc import Callable
 from enum import Enum
+from pathlib import Path
+from typing import Any
 
 from ...rendering.scale_algorithms import ScaleAlgorithm
 
@@ -50,15 +51,15 @@ class XPACommands:
         viewer: Reference to the main viewer application.
     """
 
-    def __init__(self, viewer: Optional[Any] = None) -> None:
+    def __init__(self, viewer: Any | None = None) -> None:
         """Initialize XPA command handlers.
 
         Args:
             viewer: Optional reference to the main viewer application.
         """
-        self.viewer: Optional[Any] = viewer
+        self.viewer: Any | None = viewer
         self._logger: logging.Logger = logging.getLogger(__name__)
-        self._command_handlers: Dict[str, Callable[..., Dict[str, Any]]] = {
+        self._command_handlers: dict[str, Callable[..., dict[str, Any]]] = {
             "file": self._handle_file,
             "fits": self._handle_fits,
             "frame": self._handle_frame,
@@ -93,7 +94,7 @@ class XPACommands:
         """
         self.viewer = viewer
 
-    def _args(self, params: Dict[str, Any]) -> List[Any]:
+    def _args(self, params: dict[str, Any]) -> list[Any]:
         args = params.get("args", [])
         if isinstance(args, list):
             return args
@@ -101,13 +102,13 @@ class XPACommands:
             return []
         return [args]
 
-    def _first_arg(self, params: Dict[str, Any], default: Any = None) -> Any:
+    def _first_arg(self, params: dict[str, Any], default: Any = None) -> Any:
         args = self._args(params)
         if args:
             return args[0]
         return params.get("value", default)
 
-    def _as_bool(self, value: Any) -> Optional[bool]:
+    def _as_bool(self, value: Any) -> bool | None:
         if isinstance(value, bool):
             return value
         if isinstance(value, (int, float)):
@@ -120,7 +121,7 @@ class XPACommands:
                 return False
         return None
 
-    def _require_viewer(self) -> Optional[Dict[str, Any]]:
+    def _require_viewer(self) -> dict[str, Any] | None:
         if self.viewer is None:
             return {"status": "error", "message": "Viewer not connected"}
         return None
@@ -128,8 +129,8 @@ class XPACommands:
     def handle(
         self,
         command: str,
-        params: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        params: dict[str, Any],
+    ) -> dict[str, Any]:
         """Handle an XPA command.
 
         Args:
@@ -154,7 +155,7 @@ class XPACommands:
             self._logger.error(f"Error handling command {command}: {e}")
             return {"status": "error", "message": str(e)}
 
-    def get_available_commands(self) -> List[str]:
+    def get_available_commands(self) -> list[str]:
         """Get list of available commands.
 
         Returns:
@@ -165,7 +166,7 @@ class XPACommands:
     def register_command(
         self,
         name: str,
-        handler: Callable[..., Dict[str, Any]],
+        handler: Callable[..., dict[str, Any]],
     ) -> None:
         """Register a custom command handler.
 
@@ -175,7 +176,7 @@ class XPACommands:
         """
         self._command_handlers[name.lower()] = handler
 
-    def _handle_file(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_file(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle file command for loading/saving files.
 
         Args:
@@ -210,7 +211,7 @@ class XPACommands:
             return {"status": "ok", "result": filename}
         return {"status": "error", "message": "Invalid file command"}
 
-    def _handle_fits(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_fits(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle FITS-specific commands.
 
         Args:
@@ -224,7 +225,7 @@ class XPACommands:
             params["action"] = "load"
         return self._handle_file(params)
 
-    def _handle_frame(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_frame(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle frame commands.
 
         Args:
@@ -316,7 +317,7 @@ class XPACommands:
             "result": str(self.viewer.frame_manager.current_index + 1),
         }
 
-    def _handle_zoom(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_zoom(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle zoom commands.
 
         Args:
@@ -352,7 +353,7 @@ class XPACommands:
             return {"status": "ok", "result": f"{self.viewer.image_viewer.get_zoom():.6g}"}
         return {"status": "ok", "result": f"{self.viewer.image_viewer.get_zoom():.6g}"}
 
-    def _handle_pan(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_pan(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle pan commands.
 
         Args:
@@ -377,7 +378,7 @@ class XPACommands:
             return {"status": "ok", "result": "0 0"}
         return {"status": "ok", "result": f"{frame.pan_x:.6g} {frame.pan_y:.6g}"}
 
-    def _handle_scale(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_scale(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle scale/contrast commands.
 
         Args:
@@ -425,7 +426,7 @@ class XPACommands:
 
         return {"status": "ok", "result": self.viewer.current_scale.name.lower()}
 
-    def _handle_cmap(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_cmap(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle colormap commands.
 
         Args:
@@ -452,7 +453,7 @@ class XPACommands:
             self.viewer._set_colormap(selected)
         return {"status": "ok", "result": self.viewer.current_colormap}
 
-    def _handle_colorbar(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_colorbar(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle colorbar commands.
 
         Args:
@@ -517,7 +518,7 @@ class XPACommands:
             result = "yes" if self.viewer.colorbar_dock.isVisible() else "no"
         return {"status": "ok", "result": result}
 
-    def _handle_regions(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_regions(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle region commands.
 
         Args:
@@ -538,7 +539,7 @@ class XPACommands:
         count = len(frame.regions) if frame else 0
         return {"status": "ok", "result": str(count)}
 
-    def _handle_wcs(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_wcs(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle WCS commands.
 
         Args:
@@ -558,7 +559,7 @@ class XPACommands:
             return {"status": "ok", "result": system}
         return {"status": "ok", "result": self.viewer.current_wcs_system}
 
-    def _handle_crosshair(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_crosshair(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle crosshair commands.
 
         Args:
@@ -569,7 +570,7 @@ class XPACommands:
         """
         return self._handle_cursor(params)
 
-    def _handle_cursor(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_cursor(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle cursor commands.
 
         Args:
@@ -586,7 +587,7 @@ class XPACommands:
         x, y = self.viewer._last_mouse_pos
         return {"status": "ok", "result": f"{x} {y}"}
 
-    def _handle_mode(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_mode(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle mode commands.
 
         Args:
@@ -600,7 +601,7 @@ class XPACommands:
             return {"status": "ok", "result": str(mode)}
         return {"status": "ok", "result": "none"}
 
-    def _handle_tile(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_tile(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle tile display commands.
 
         Args:
@@ -623,7 +624,7 @@ class XPACommands:
             "result": "yes" if self.viewer.menu_bar.action_tile_frames.isChecked() else "no",
         }
 
-    def _handle_blink(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_blink(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle blink commands.
 
         Args:
@@ -648,7 +649,7 @@ class XPACommands:
             "result": "yes" if self.viewer._blink_timer.isActive() else "no",
         }
 
-    def _handle_match(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_match(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle frame matching commands.
 
         Args:
@@ -668,7 +669,7 @@ class XPACommands:
             match_type = "wcs"
         return {"status": "ok", "result": f"Frames matched by {match_type}"}
 
-    def _handle_lock(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_lock(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle frame locking commands.
 
         Args:
@@ -683,7 +684,7 @@ class XPACommands:
             return {"status": "ok", "result": f"Lock set to {lock_type}"}
         return {"status": "ok", "result": "none"}
 
-    def _handle_width(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_width(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle window width commands.
 
         Args:
@@ -700,7 +701,7 @@ class XPACommands:
             self.viewer.resize(int(value), self.viewer.height())
         return {"status": "ok", "result": str(self.viewer.width())}
 
-    def _handle_height(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_height(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle window height commands.
 
         Args:
@@ -717,7 +718,7 @@ class XPACommands:
             self.viewer.resize(self.viewer.width(), int(value))
         return {"status": "ok", "result": str(self.viewer.height())}
 
-    def _handle_save(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_save(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle save commands.
 
         Args:
@@ -740,7 +741,7 @@ class XPACommands:
             return {"status": "error", "message": f"Failed to save {target}"}
         return {"status": "ok", "result": str(target)}
 
-    def _handle_exit(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_exit(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle exit/quit commands.
 
         Args:
@@ -754,7 +755,7 @@ class XPACommands:
         self._logger.info("Exit command received")
         return {"status": "ok", "result": "Exiting"}
 
-    def _handle_version(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_version(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle version command.
 
         Args:
@@ -765,7 +766,7 @@ class XPACommands:
         """
         return {"status": "ok", "result": "NCRADS9 0.1.0"}
 
-    def _handle_about(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _handle_about(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle about command.
 
         Args:

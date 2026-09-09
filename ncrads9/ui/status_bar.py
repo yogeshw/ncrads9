@@ -20,15 +20,14 @@ Status bar for NCRADS9 application.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Tuple
 
-from PyQt6.QtWidgets import QStatusBar, QLabel, QWidget
+from PyQt6.QtWidgets import QLabel, QStatusBar, QWidget
 
 
 class StatusBar(QStatusBar):
     """Status bar showing coordinates, pixel values, and image info."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """
         Initialize the status bar.
 
@@ -78,10 +77,10 @@ class StatusBar(QStatusBar):
 
     def update_wcs_coords(
         self,
-        ra: Optional[float] = None,
-        dec: Optional[float] = None,
+        ra: float | None = None,
+        dec: float | None = None,
         format_type: str = "sexagesimal",
-        labels: Tuple[str, str] = ("RA", "Dec"),
+        labels: tuple[str, str] = ("RA", "Dec"),
     ) -> None:
         """
         Update WCS coordinates display.
@@ -135,7 +134,7 @@ class StatusBar(QStatusBar):
         else:
             self.wcs_coord_label.setText("RA: --- Dec: ---")
 
-    def update_pixel_value(self, value: Optional[float] = None) -> None:
+    def update_pixel_value(self, value: float | None = None) -> None:
         """
         Update pixel value display.
 
@@ -149,9 +148,9 @@ class StatusBar(QStatusBar):
 
     def update_image_info(
         self,
-        width: Optional[int] = None,
-        height: Optional[int] = None,
-        bitpix: Optional[int] = None,
+        width: int | None = None,
+        height: int | None = None,
+        bitpix: int | None = None,
     ) -> None:
         """
         Update image info display.
@@ -199,11 +198,11 @@ class StatusBar(QStatusBar):
 
     def update_all(
         self,
-        pixel_coords: Optional[Tuple[int, int]] = None,
-        wcs_coords: Optional[Tuple[float, float]] = None,
-        value: Optional[float] = None,
+        pixel_coords: tuple[int, int] | None = None,
+        wcs_coords: tuple[float, float] | None = None,
+        value: float | None = None,
         wcs_format: str = "sexagesimal",
-        wcs_labels: Tuple[str, str] = ("RA", "Dec"),
+        wcs_labels: tuple[str, str] = ("RA", "Dec"),
     ) -> None:
         """
         Update all coordinate displays at once.

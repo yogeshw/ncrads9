@@ -21,9 +21,8 @@ SDSS (Sloan Digital Sky Survey) image cutout retrieval.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Literal
 from pathlib import Path
-
+from typing import Literal
 
 SDSSBand = Literal["u", "g", "r", "i", "z"]
 
@@ -50,8 +49,8 @@ class SDSSImage:
         dec: float,
         scale: float = 0.4,
         width: int = 512,
-        height: Optional[int] = None,
-        band: Optional[SDSSBand] = None,
+        height: int | None = None,
+        band: SDSSBand | None = None,
     ) -> bytes:
         """
         Retrieve an SDSS image cutout.
@@ -85,8 +84,8 @@ class SDSSImage:
         output_path: Path,
         scale: float = 0.4,
         width: int = 512,
-        height: Optional[int] = None,
-        band: Optional[SDSSBand] = None,
+        height: int | None = None,
+        band: SDSSBand | None = None,
     ) -> Path:
         """
         Retrieve and save an SDSS cutout to disk.
@@ -132,7 +131,7 @@ class SDSSImage:
         dec: float,
         scale: float = 0.4,
         width: int = 512,
-        height: Optional[int] = None,
+        height: int | None = None,
     ) -> bytes:
         """
         Retrieve a color JPEG cutout from SDSS.

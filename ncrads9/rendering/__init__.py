@@ -24,12 +24,12 @@ image display, including scaling algorithms, colormaps, and tile-based
 rendering for large images.
 """
 
-from .gl_canvas import GLCanvas
-from .scale_algorithms import ScaleAlgorithm, apply_scale
 from .colormap_engine import ColormapEngine
+from .gl_canvas import GLCanvas
+from .rgb_compositor import RGBCompositor
+from .scale_algorithms import ScaleAlgorithm, apply_scale
 from .texture_manager import TextureManager
 from .tile_renderer import TileRenderer
-from .rgb_compositor import RGBCompositor
 
 __all__ = [
     "GLCanvas",

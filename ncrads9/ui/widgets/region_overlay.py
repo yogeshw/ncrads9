@@ -20,13 +20,13 @@ Region overlay for drawing and displaying regions.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, List, Tuple
-from enum import Enum
-from PyQt6.QtCore import Qt, QPointF, QRectF, pyqtSignal
-from PyQt6.QtGui import QPainter, QPen, QColor, QPolygonF
-from PyQt6.QtWidgets import QWidget
-from dataclasses import dataclass, field
 import math
+from dataclasses import dataclass, field
+from enum import Enum
+
+from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QPainter, QPen, QPolygonF
+from PyQt6.QtWidgets import QWidget
 
 from ..view_transform import DisplayTransform
 
@@ -48,7 +48,7 @@ class Region:
     """Simple region representation."""
 
     mode: RegionMode
-    points: List[QPointF]  # Image coordinates
+    points: list[QPointF]  # Image coordinates
     color: QColor = field(default_factory=lambda: QColor(0, 255, 0))  # Green
     marker_size: float = 4.0
     source: str = "user"
@@ -120,17 +120,17 @@ class RegionOverlay(QWidget):
     region_created = pyqtSignal(object)  # Emits Region when complete
     region_selected = pyqtSignal(object)  # Emits Region when selected
 
-    def __init__(self, parent: Optional[QWidget] = None):
+    def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
         self.setMouseTracking(True)
 
         self.mode: RegionMode = RegionMode.NONE
-        self.regions: List[Region] = []
-        self.current_points: List[QPointF] = []
+        self.regions: list[Region] = []
+        self.current_points: list[QPointF] = []
         self.is_drawing: bool = False
         self.zoom: float = 1.0
-        self.image_offset: Tuple[float, float] = (0, 0)
+        self.image_offset: tuple[float, float] = (0, 0)
         self.image_width: int = 0
         self.image_height: int = 0
         self.rotation: float = 0.0
@@ -138,8 +138,8 @@ class RegionOverlay(QWidget):
         self.flip_y: bool = False
 
         # For moving/editing
-        self.selected_region: Optional[Region] = None
-        self.drag_start: Optional[QPointF] = None
+        self.selected_region: Region | None = None
+        self.drag_start: QPointF | None = None
 
     def set_mode(self, mode: RegionMode) -> None:
         """Set region drawing mode."""
@@ -151,9 +151,9 @@ class RegionOverlay(QWidget):
     def set_zoom(
         self,
         zoom: float,
-        offset: Tuple[float, float],
-        image_width: Optional[int] = None,
-        image_height: Optional[int] = None,
+        offset: tuple[float, float],
+        image_width: int | None = None,
+        image_height: int | None = None,
         rotation: float = 0.0,
         flip_x: bool = False,
         flip_y: bool = False,

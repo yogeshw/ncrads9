@@ -21,7 +21,6 @@ Digital Sky Survey (DSS) image retrieval.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
 from pathlib import Path
 
 
@@ -47,7 +46,7 @@ class DSSServer:
         ra: float,
         dec: float,
         width: float = 10.0,
-        height: Optional[float] = None,
+        height: float | None = None,
     ) -> bytes:
         """
         Retrieve a DSS image cutout.
@@ -76,7 +75,7 @@ class DSSServer:
         dec: float,
         output_path: Path,
         width: float = 10.0,
-        height: Optional[float] = None,
+        height: float | None = None,
     ) -> Path:
         """
         Retrieve and save a DSS image to disk.

@@ -21,30 +21,31 @@ Catalog table widget for displaying query results.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Any, Callable, Dict
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
-from astropy.table import Table
-from astropy.coordinates import SkyCoord
 import astropy.units as u
+from astropy.coordinates import SkyCoord
+from astropy.table import Table
 
 try:
+    from PyQt6.QtCore import Qt, pyqtSignal
+    from PyQt6.QtGui import QAction
     from PyQt6.QtWidgets import (
-        QTableWidget,
-        QTableWidgetItem,
-        QHeaderView,
         QAbstractItemView,
-        QMenu,
-        QAction,
-        QWidget,
-        QVBoxLayout,
+        QComboBox,
         QHBoxLayout,
-        QPushButton,
+        QHeaderView,
         QLabel,
         QLineEdit,
-        QComboBox,
+        QMenu,
+        QPushButton,
+        QTableWidget,
+        QTableWidgetItem,
+        QVBoxLayout,
+        QWidget,
     )
-    from PyQt6.QtCore import Qt, pyqtSignal
 
     HAS_QT = True
 except ImportError:
@@ -58,10 +59,10 @@ class ColumnConfig:
     """Configuration for a table column."""
 
     name: str
-    display_name: Optional[str] = None
+    display_name: str | None = None
     width: int = 100
     visible: bool = True
-    format_func: Optional[Callable[[Any], str]] = None
+    format_func: Callable[[Any], str] | None = None
 
 
 class CatalogTable(QWidget if HAS_QT else object):
@@ -74,8 +75,8 @@ class CatalogTable(QWidget if HAS_QT else object):
 
     def __init__(
         self,
-        parent: Optional[Any] = None,
-        table: Optional[Table] = None,
+        parent: Any | None = None,
+        table: Table | None = None,
     ) -> None:
         """
         Initialize catalog table widget.
@@ -92,11 +93,11 @@ class CatalogTable(QWidget if HAS_QT else object):
 
         super().__init__(parent)
 
-        self._table: Optional[Table] = None
-        self._column_configs: Dict[str, ColumnConfig] = {}
+        self._table: Table | None = None
+        self._column_configs: dict[str, ColumnConfig] = {}
         self._selected_row: int = -1
         self._sort_column: int = -1
-        self._sort_order: Qt.SortOrder = Qt.AscendingOrder
+        self._sort_order: Qt.SortOrder = Qt.SortOrder.AscendingOrder
 
         self._setup_ui()
 
@@ -136,10 +137,10 @@ class CatalogTable(QWidget if HAS_QT else object):
         # Table widget
         self._table_widget = QTableWidget()
         self._table_widget.setAlternatingRowColors(True)
-        self._table_widget.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self._table_widget.setSelectionMode(QAbstractItemView.SingleSelection)
+        self._table_widget.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._table_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self._table_widget.setSortingEnabled(True)
-        self._table_widget.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._table_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
 
         self._table_widget.itemSelectionChanged.connect(self._on_selection_changed)
         self._table_widget.itemDoubleClicked.connect(self._on_double_click)
@@ -182,11 +183,11 @@ class CatalogTable(QWidget if HAS_QT else object):
                 value = row[col_name]
                 display_value = self._format_value(col_name, value)
                 item = QTableWidgetItem(display_value)
-                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self._table_widget.setItem(row_idx, col_idx, item)
 
         self._table_widget.setSortingEnabled(True)
-        self._table_widget.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self._table_widget.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
 
     def _format_value(self, column: str, value: Any) -> str:
         """Format a cell value for display."""
@@ -310,13 +311,13 @@ class CatalogTable(QWidget if HAS_QT else object):
             if coord is not None:
                 self.coord_selected.emit(coord)
 
-    def _get_row_coordinate(self, row: int) -> Optional[SkyCoord]:
+    def _get_row_coordinate(self, row: int) -> SkyCoord | None:
         """Get coordinate for a table row."""
         if self._table is None:
             return None
 
-        ra_col: Optional[str] = None
-        dec_col: Optional[str] = None
+        ra_col: str | None = None
+        dec_col: str | None = None
 
         for col in self._table.colnames:
             col_lower = col.lower()
@@ -339,7 +340,7 @@ class CatalogTable(QWidget if HAS_QT else object):
         """Return the currently selected row index."""
         return self._selected_row
 
-    def get_selected_data(self) -> Optional[Dict[str, Any]]:
+    def get_selected_data(self) -> dict[str, Any] | None:
         """Return data from the selected row as a dictionary."""
         if self._table is None or self._selected_row < 0:
             return None
@@ -350,7 +351,7 @@ class CatalogTable(QWidget if HAS_QT else object):
         """Set configuration for a column."""
         self._column_configs[column] = config
 
-    def get_table(self) -> Optional[Table]:
+    def get_table(self) -> Table | None:
         """Return the underlying astropy Table."""
         return self._table
 

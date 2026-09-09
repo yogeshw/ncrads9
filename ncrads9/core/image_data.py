@@ -24,7 +24,7 @@ Author: Yogesh Wadadekar
 """
 
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, Tuple
+from typing import Any
 
 import numpy as np
 from astropy.io import fits
@@ -66,9 +66,9 @@ class ImageData:
 
     def __init__(
         self,
-        data: Optional[NDArray[np.floating]] = None,
-        header: Optional[fits.Header] = None,
-        wcs: Optional[WCS] = None,
+        data: NDArray[np.floating] | None = None,
+        header: fits.Header | None = None,
+        wcs: WCS | None = None,
     ) -> None:
         """Initialize ImageData.
 
@@ -77,10 +77,10 @@ class ImageData:
             header: The FITS header.
             wcs: The WCS object.
         """
-        self._data: Optional[NDArray[np.floating]] = data
-        self._header: Optional[fits.Header] = header
-        self._wcs: Optional[WCS] = wcs
-        self._statistics: Optional[ImageStatistics] = None
+        self._data: NDArray[np.floating] | None = data
+        self._header: fits.Header | None = header
+        self._wcs: WCS | None = wcs
+        self._statistics: ImageStatistics | None = None
 
         if wcs is None and header is not None:
             try:
@@ -89,7 +89,7 @@ class ImageData:
                 self._wcs = None
 
     @property
-    def data(self) -> Optional[NDArray[np.floating]]:
+    def data(self) -> NDArray[np.floating] | None:
         """Get the image data array."""
         return self._data
 
@@ -100,7 +100,7 @@ class ImageData:
         self._statistics = None
 
     @property
-    def header(self) -> Optional[fits.Header]:
+    def header(self) -> fits.Header | None:
         """Get the FITS header."""
         return self._header
 
@@ -110,7 +110,7 @@ class ImageData:
         self._header = value
 
     @property
-    def wcs(self) -> Optional[WCS]:
+    def wcs(self) -> WCS | None:
         """Get the WCS object."""
         return self._wcs
 
@@ -120,14 +120,14 @@ class ImageData:
         self._wcs = value
 
     @property
-    def shape(self) -> Optional[Tuple[int, ...]]:
+    def shape(self) -> tuple[int, ...] | None:
         """Get the shape of the data array."""
         if self._data is not None:
             return self._data.shape
         return None
 
     @property
-    def statistics(self) -> Optional[ImageStatistics]:
+    def statistics(self) -> ImageStatistics | None:
         """Get computed image statistics."""
         if self._statistics is None and self._data is not None:
             self._compute_statistics()
@@ -150,7 +150,7 @@ class ImageData:
             median=float(np.median(valid_data)),
         )
 
-    def get_cutout(self, center: Tuple[int, int], size: Tuple[int, int]) -> Optional[NDArray[np.floating]]:
+    def get_cutout(self, center: tuple[int, int], size: tuple[int, int]) -> NDArray[np.floating] | None:
         """Extract a cutout from the image.
 
         Args:
@@ -172,13 +172,13 @@ class ImageData:
 
         return self._data[y0:y1, x0:x1]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert image data to dictionary representation.
 
         Returns:
             Dictionary containing image metadata.
         """
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "shape": self.shape,
             "has_wcs": self._wcs is not None,
             "has_header": self._header is not None,

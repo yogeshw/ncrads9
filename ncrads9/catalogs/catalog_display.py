@@ -21,13 +21,13 @@ Catalog overlay display for DS9 visualization.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
+import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.table import Table
-import astropy.units as u
 
 
 class MarkerShape(Enum):
@@ -52,7 +52,7 @@ class MarkerStyle:
     width: int = 1
     font: str = "helvetica 10 normal"
     show_label: bool = False
-    label_column: Optional[str] = None
+    label_column: str | None = None
 
 
 @dataclass
@@ -61,7 +61,7 @@ class CatalogOverlay:
 
     name: str
     table: Table
-    coords: List[SkyCoord]
+    coords: list[SkyCoord]
     style: MarkerStyle = field(default_factory=MarkerStyle)
     visible: bool = True
 
@@ -79,15 +79,15 @@ class CatalogDisplay:
             DS9 connection instance.
         """
         self.ds9: Any = ds9_instance
-        self._overlays: Dict[str, CatalogOverlay] = {}
+        self._overlays: dict[str, CatalogOverlay] = {}
         self._default_style: MarkerStyle = MarkerStyle()
 
     def add_overlay(
         self,
         name: str,
         table: Table,
-        coords: Optional[List[SkyCoord]] = None,
-        style: Optional[MarkerStyle] = None,
+        coords: list[SkyCoord] | None = None,
+        style: MarkerStyle | None = None,
     ) -> bool:
         """
         Add a catalog overlay.
@@ -158,7 +158,7 @@ class CatalogDisplay:
         if name in self._overlays:
             self._overlays[name].style = style
 
-    def render(self, overlay_name: Optional[str] = None) -> str:
+    def render(self, overlay_name: str | None = None) -> str:
         """
         Render overlays as DS9 region format.
 
@@ -172,7 +172,7 @@ class CatalogDisplay:
         str
             DS9 region format string.
         """
-        regions: List[str] = []
+        regions: list[str] = []
         regions.append("# Region file format: DS9 version 4.1")
         regions.append("global color=green dashlist=8 3 width=1")
         regions.append("fk5")
@@ -236,10 +236,10 @@ class CatalogDisplay:
 
         return region + props
 
-    def _extract_coordinates(self, table: Table) -> Optional[List[SkyCoord]]:
+    def _extract_coordinates(self, table: Table) -> list[SkyCoord] | None:
         """Extract coordinates from table."""
-        ra_col: Optional[str] = None
-        dec_col: Optional[str] = None
+        ra_col: str | None = None
+        dec_col: str | None = None
 
         for col in table.colnames:
             col_lower = col.lower()
@@ -258,7 +258,7 @@ class CatalogDisplay:
         if ra_col is None or dec_col is None:
             return None
 
-        coords: List[SkyCoord] = []
+        coords: list[SkyCoord] = []
         for row in table:
             try:
                 coord = SkyCoord(
@@ -273,7 +273,7 @@ class CatalogDisplay:
 
         return coords if coords else None
 
-    def send_to_ds9(self, overlay_name: Optional[str] = None) -> bool:
+    def send_to_ds9(self, overlay_name: str | None = None) -> bool:
         """
         Send regions to DS9.
 
@@ -311,11 +311,11 @@ class CatalogDisplay:
             print(f"Error clearing DS9 regions: {e}")
             return False
 
-    def get_overlay_names(self) -> List[str]:
+    def get_overlay_names(self) -> list[str]:
         """Return list of overlay names."""
         return list(self._overlays.keys())
 
-    def get_overlay(self, name: str) -> Optional[CatalogOverlay]:
+    def get_overlay(self, name: str) -> CatalogOverlay | None:
         """Get overlay by name."""
         return self._overlays.get(name)
 

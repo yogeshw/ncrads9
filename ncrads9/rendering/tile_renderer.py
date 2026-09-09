@@ -24,12 +24,11 @@ into tiles that can be individually loaded, cached, and rendered
 based on the current viewport.
 """
 
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Callable, Iterator, List, Optional
 
 import numpy as np
 from numpy.typing import NDArray
-
 from OpenGL import GL
 
 from .texture_manager import TextureManager
@@ -94,8 +93,8 @@ class TileRenderer:
 
         self._image_width: int = 0
         self._image_height: int = 0
-        self._tiles: List[List[Tile]] = []
-        self._data_provider: Optional[Callable[[int, int, int, int], NDArray]] = None
+        self._tiles: list[list[Tile]] = []
+        self._data_provider: Callable[[int, int, int, int], NDArray] | None = None
 
     @property
     def tile_size(self) -> int:
@@ -170,7 +169,7 @@ class TileRenderer:
                 row.append(tile)
             self._tiles.append(row)
 
-    def get_visible_tiles(self, viewport: Viewport) -> List[Tile]:
+    def get_visible_tiles(self, viewport: Viewport) -> list[Tile]:
         """
         Get tiles visible in the current viewport.
 
@@ -202,7 +201,7 @@ class TileRenderer:
 
         return visible
 
-    def get_prefetch_tiles(self, viewport: Viewport) -> List[Tile]:
+    def get_prefetch_tiles(self, viewport: Viewport) -> list[Tile]:
         """
         Get tiles to prefetch around the viewport.
 

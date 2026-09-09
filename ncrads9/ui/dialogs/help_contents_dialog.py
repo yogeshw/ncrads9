@@ -20,16 +20,16 @@ Help contents dialog.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
+
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QDialog,
-    QVBoxLayout,
     QHBoxLayout,
     QPushButton,
     QTextBrowser,
+    QVBoxLayout,
     QWidget,
 )
-from PyQt6.QtCore import Qt
 
 
 class HelpContentsDialog(QDialog):
@@ -144,7 +144,7 @@ class HelpContentsDialog(QDialog):
     </html>
     """
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """
         Initialize the help contents dialog.
 

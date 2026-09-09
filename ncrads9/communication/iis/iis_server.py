@@ -23,14 +23,15 @@ in NCRADS9, maintaining compatibility with traditional IRAF workflows.
 Author: Yogesh Wadadekar
 """
 
+import logging
 import os
 import socket
 import struct
 import threading
-import logging
-from typing import Callable, Dict, Optional
-from enum import IntEnum
+from collections.abc import Callable
 from dataclasses import dataclass
+from enum import IntEnum
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -63,7 +64,7 @@ class IISFrame:
     number: int
     width: int
     height: int
-    data: Optional[NDArray[np.uint8]] = None
+    data: NDArray[np.uint8] | None = None
     wcs: str = ""
 
 
@@ -109,16 +110,16 @@ class IISServer:
         self.socket_port: int = socket_port
         self.running: bool = False
 
-        self._socket: Optional[socket.socket] = None
-        self._fifo_in_fd: Optional[int] = None
-        self._fifo_out_fd: Optional[int] = None
-        self._thread: Optional[threading.Thread] = None
+        self._socket: socket.socket | None = None
+        self._fifo_in_fd: int | None = None
+        self._fifo_out_fd: int | None = None
+        self._thread: threading.Thread | None = None
         self._logger: logging.Logger = logging.getLogger(__name__)
 
-        self._frames: Dict[int, IISFrame] = {}
+        self._frames: dict[int, IISFrame] = {}
         self._current_frame: int = 1
-        self._cursor_callback: Optional[Callable[[float, float, int], None]] = None
-        self._image_callback: Optional[Callable[[int, NDArray[np.uint8]], None]] = None
+        self._cursor_callback: Callable[[float, float, int], None] | None = None
+        self._image_callback: Callable[[int, NDArray[np.uint8]], None] | None = None
 
         # Initialize frames
         for i in range(1, self.MAX_FRAMES + 1):
@@ -275,7 +276,7 @@ class IISServer:
                 )
                 client_thread.start()
 
-            except socket.timeout:
+            except TimeoutError:
                 continue
             except OSError:
                 if self.running:
@@ -328,7 +329,7 @@ class IISServer:
 
                 self._process_command(header, client)
 
-        except socket.timeout:
+        except TimeoutError:
             pass
         except Exception as e:
             self._logger.error(f"Error handling IIS client: {e}")
@@ -521,7 +522,7 @@ class IISServer:
         # Send frame buffer configuration
         self._logger.debug("IIS setup command received")
 
-    def get_frame(self, frame: int) -> Optional[IISFrame]:
+    def get_frame(self, frame: int) -> IISFrame | None:
         """Get a frame buffer.
 
         Args:

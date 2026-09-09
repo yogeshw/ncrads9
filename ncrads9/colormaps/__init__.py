@@ -18,11 +18,11 @@
 
 """Colormaps package for ncrads9."""
 
-from .colormap import Colormap
 from .builtin_maps import BUILTIN_COLORMAPS, get_builtin_colormap
+from .colorbar_widget import ColorbarWidget
+from .colormap import Colormap
 from .lut_parser import parse_lut_file
 from .sao_parser import parse_sao_file
-from .colorbar_widget import ColorbarWidget
 
 __all__ = [
     "Colormap",

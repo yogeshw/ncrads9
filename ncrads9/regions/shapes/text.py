@@ -20,7 +20,7 @@ Text region shape.
 Author: Yogesh Wadadekar
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from ..base_region import BaseRegion
 
@@ -36,7 +36,7 @@ class Text(BaseRegion):
         color: str = "green",
         width: int = 1,
         font: str = "helvetica 10 normal roman",
-        tags: Optional[list[str]] = None,
+        tags: list[str] | None = None,
     ) -> None:
         """
         Initialize a text region.

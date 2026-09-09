@@ -20,7 +20,8 @@ Composite region shape containing multiple regions.
 Author: Yogesh Wadadekar
 """
 
-from typing import Any, Iterator, Optional
+from collections.abc import Iterator
+from typing import Any
 
 from ..base_region import BaseRegion
 
@@ -30,12 +31,12 @@ class Composite(BaseRegion):
 
     def __init__(
         self,
-        regions: Optional[list[BaseRegion]] = None,
+        regions: list[BaseRegion] | None = None,
         color: str = "green",
         width: int = 1,
         font: str = "helvetica 10 normal roman",
         text: str = "",
-        tags: Optional[list[str]] = None,
+        tags: list[str] | None = None,
     ) -> None:
         """
         Initialize a composite region.

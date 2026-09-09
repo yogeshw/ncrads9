@@ -22,7 +22,7 @@ Provides Gaussian, boxcar, and tophat smoothing operations.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Tuple, Union
+
 import numpy as np
 from numpy.typing import NDArray
 from scipy import ndimage
@@ -30,7 +30,7 @@ from scipy import ndimage
 
 def gaussian_smooth(
     data: NDArray[np.floating],
-    sigma: Union[float, Tuple[float, float]],
+    sigma: float | tuple[float, float],
     mode: str = "constant",
     cval: float = 0.0,
     truncate: float = 4.0,
@@ -61,7 +61,7 @@ def gaussian_smooth(
 
 def boxcar_smooth(
     data: NDArray[np.floating],
-    size: Union[int, Tuple[int, int]],
+    size: int | tuple[int, int],
     mode: str = "constant",
     cval: float = 0.0,
 ) -> NDArray[np.floating]:
@@ -149,7 +149,7 @@ def adaptive_smooth(
     data: NDArray[np.floating],
     sigma_min: float = 1.0,
     sigma_max: float = 5.0,
-    threshold: Optional[float] = None,
+    threshold: float | None = None,
 ) -> NDArray[np.floating]:
     """
     Apply adaptive smoothing based on local signal strength.

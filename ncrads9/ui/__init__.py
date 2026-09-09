@@ -20,11 +20,11 @@ UI package for NCRADS9.
 Author: Yogesh Wadadekar
 """
 
+from .button_bar import ButtonBar
 from .main_window import MainWindow
 from .menu_bar import MenuBar
-from .toolbar import MainToolbar
-from .button_bar import ButtonBar
 from .status_bar import StatusBar
+from .toolbar import MainToolbar
 
 __all__ = [
     "MainWindow",

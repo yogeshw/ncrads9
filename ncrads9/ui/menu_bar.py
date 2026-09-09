@@ -20,16 +20,15 @@ Menu bar for NCRADS9 application.
 Author: Yogesh Wadadekar
 """
 
-from typing import Dict, Optional
 
 from PyQt6.QtGui import QAction, QActionGroup, QKeySequence
-from PyQt6.QtWidgets import QMenuBar, QMenu, QWidget
+from PyQt6.QtWidgets import QMenu, QMenuBar, QWidget
 
 
 class MenuBar(QMenuBar):
     """Menu bar with DS9-style menus."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """
         Initialize the menu bar.
 
@@ -462,7 +461,7 @@ class MenuBar(QMenuBar):
 
         self.blink_interval_group = QActionGroup(self)
         self.blink_interval_group.setExclusive(True)
-        self.blink_interval_actions: Dict[int, QAction] = {}
+        self.blink_interval_actions: dict[int, QAction] = {}
         for label, ms in (
             (".125 Seconds", 125),
             (".25 Seconds", 250),
@@ -484,7 +483,7 @@ class MenuBar(QMenuBar):
 
         self.fade_interval_group = QActionGroup(self)
         self.fade_interval_group.setExclusive(True)
-        self.fade_interval_actions: Dict[int, QAction] = {}
+        self.fade_interval_actions: dict[int, QAction] = {}
         for label, ms in (
             ("1 Second", 1000),
             ("2 Seconds", 2000),
@@ -548,7 +547,7 @@ class MenuBar(QMenuBar):
         self.zoom_menu.addSeparator()
         self.zoom_preset_group = QActionGroup(self)
         self.zoom_preset_group.setExclusive(True)
-        self.zoom_preset_actions: Dict[float, QAction] = {}
+        self.zoom_preset_actions: dict[float, QAction] = {}
         zoom_presets = [
             ("Zoom 1/32", 0.03125),
             ("Zoom 1/16", 0.0625),
@@ -578,7 +577,7 @@ class MenuBar(QMenuBar):
         self.action_zoom_orient_x = QAction("Invert &X", self)
         self.action_zoom_orient_y = QAction("Invert &Y", self)
         self.action_zoom_orient_xy = QAction("Invert X&Y", self)
-        self.zoom_orientation_actions: Dict[str, QAction] = {
+        self.zoom_orientation_actions: dict[str, QAction] = {
             "none": self.action_zoom_orient_none,
             "x": self.action_zoom_orient_x,
             "y": self.action_zoom_orient_y,
@@ -593,7 +592,7 @@ class MenuBar(QMenuBar):
         self.zoom_menu.addSeparator()
         self.zoom_rotation_group = QActionGroup(self)
         self.zoom_rotation_group.setExclusive(True)
-        self.zoom_rotation_actions: Dict[int, QAction] = {}
+        self.zoom_rotation_actions: dict[int, QAction] = {}
         for degrees in (0, 90, 180, 270):
             action = QAction(f"{degrees} Degrees", self)
             action.setCheckable(True)
@@ -659,7 +658,7 @@ class MenuBar(QMenuBar):
         self.color_menu: QMenu = self.addMenu("&Color")
         self.colormap_action_group = QActionGroup(self)
         self.colormap_action_group.setExclusive(True)
-        self.colormap_actions: Dict[str, QAction] = {}
+        self.colormap_actions: dict[str, QAction] = {}
 
         default_maps = [
             ("Gray", "grey"),
@@ -686,7 +685,7 @@ class MenuBar(QMenuBar):
 
         self.color_menu.addSeparator()
 
-        self.colormap_submenus: Dict[str, QMenu] = {}
+        self.colormap_submenus: dict[str, QMenu] = {}
         category_maps = {
             "Matplotlib Uniform": [
                 ("Viridis", "viridis"),

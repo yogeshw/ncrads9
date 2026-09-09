@@ -20,8 +20,8 @@ Region manager for handling collections of regions.
 Author: Yogesh Wadadekar
 """
 
+from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Callable, Iterator, Optional
 
 from .base_region import BaseRegion
 from .region_parser import RegionParser
@@ -68,7 +68,7 @@ class RegionManager:
         self._notify_change()
         return len(self._regions) - 1
 
-    def remove_region(self, index: int) -> Optional[BaseRegion]:
+    def remove_region(self, index: int) -> BaseRegion | None:
         """
         Remove a region by index.
 
@@ -87,7 +87,7 @@ class RegionManager:
             return region
         return None
 
-    def get_region(self, index: int) -> Optional[BaseRegion]:
+    def get_region(self, index: int) -> BaseRegion | None:
         """
         Get a region by index.
 
@@ -181,7 +181,7 @@ class RegionManager:
         """
         return sorted(self._selected_indices)
 
-    def find_region_at(self, x: float, y: float) -> Optional[int]:
+    def find_region_at(self, x: float, y: float) -> int | None:
         """
         Find a region containing the given point.
 

@@ -22,20 +22,20 @@ This package provides analysis tools for astronomical image processing.
 Author: Yogesh Wadadekar
 """
 
+from .centroid import calculate_centroid, calculate_centroid_iterative
+from .contour import ContourGenerator
+from .histogram import Histogram
+from .pixel_table import PixelTable
+from .radial_profile import RadialProfile
+from .smooth import boxcar_smooth, gaussian_smooth, tophat_smooth
 from .statistics import (
+    image_max,
     image_mean,
     image_median,
-    image_std,
     image_min,
-    image_max,
     image_stats,
+    image_std,
 )
-from .histogram import Histogram
-from .radial_profile import RadialProfile
-from .contour import ContourGenerator
-from .smooth import gaussian_smooth, boxcar_smooth, tophat_smooth
-from .centroid import calculate_centroid, calculate_centroid_iterative
-from .pixel_table import PixelTable
 
 __all__ = [
     "image_mean",

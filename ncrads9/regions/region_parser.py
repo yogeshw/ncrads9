@@ -30,16 +30,15 @@ Author: Yogesh Wadadekar
 import re
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 from .base_region import BaseRegion
+from .shapes.annulus import Annulus
+from .shapes.box import Box
 from .shapes.circle import Circle
 from .shapes.ellipse import Ellipse
-from .shapes.box import Box
-from .shapes.point import Point
 from .shapes.line import Line
+from .shapes.point import Point
 from .shapes.polygon import Polygon
-from .shapes.annulus import Annulus
 from .shapes.text import Text
 
 
@@ -114,7 +113,7 @@ class RegionParser:
         if not filepath.exists():
             raise FileNotFoundError(f"Region file not found: {filepath}")
 
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, encoding="utf-8") as f:
             content = f.read()
 
         return self.parse_string(content)
@@ -226,7 +225,7 @@ class RegionParser:
         except ValueError:
             pass
 
-    def _parse_region_line(self, line: str) -> Optional[BaseRegion]:
+    def _parse_region_line(self, line: str) -> BaseRegion | None:
         """
         Parse a single region line.
 
@@ -278,7 +277,7 @@ class RegionParser:
 
         return params
 
-    def _parse_comment_properties(self, comment: Optional[str]) -> dict[str, str]:
+    def _parse_comment_properties(self, comment: str | None) -> dict[str, str]:
         """Parse properties from a comment string."""
         properties: dict[str, str] = {}
         if not comment:
@@ -311,7 +310,7 @@ class RegionParser:
         params: list[str],
         properties: dict[str, str],
         include: bool,
-    ) -> Optional[BaseRegion]:
+    ) -> BaseRegion | None:
         """
         Create a region object from parsed data.
 

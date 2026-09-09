@@ -21,7 +21,7 @@ Author: Yogesh Wadadekar
 """
 
 import math
-from typing import Any, Optional
+from typing import Any
 
 from ..base_region import BaseRegion
 
@@ -37,7 +37,7 @@ class Ruler(BaseRegion):
         width: int = 1,
         font: str = "helvetica 10 normal roman",
         text: str = "",
-        tags: Optional[list[str]] = None,
+        tags: list[str] | None = None,
     ) -> None:
         """
         Initialize a ruler region.

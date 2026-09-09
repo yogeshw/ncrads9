@@ -61,7 +61,7 @@ class Preferences:
             return
 
         try:
-            with open(self._prefs_path, "r", encoding="utf-8") as f:
+            with open(self._prefs_path, encoding="utf-8") as f:
                 loaded = json.load(f)
                 self._prefs.update(loaded)
         except (json.JSONDecodeError, OSError):

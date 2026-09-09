@@ -21,13 +21,13 @@ SkyBot (Sky Body Tracker) query interface for solar system objects.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Any
 from datetime import datetime, timezone
+from typing import Any
 
+import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.table import Table
 from astropy.time import Time
-import astropy.units as u
 from astroquery.imcce import Skybot
 
 from .catalog_base import CatalogBase
@@ -63,9 +63,9 @@ class SkybotCatalog(CatalogBase):
         self,
         coord: SkyCoord,
         radius: u.Quantity,
-        epoch: Optional[Time] = None,
+        epoch: Time | None = None,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Query SkyBot for solar system objects within a region.
 
@@ -120,7 +120,7 @@ class SkybotCatalog(CatalogBase):
         self,
         name: str,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Query SkyBot by object name.
 

@@ -20,7 +20,7 @@ Contour generation for astronomical images using scipy.
 Author: Yogesh Wadadekar
 """
 
-from typing import List, Optional, Tuple
+
 import numpy as np
 from numpy.typing import NDArray
 from scipy import ndimage
@@ -50,23 +50,23 @@ class ContourGenerator:
     def __init__(
         self,
         data: NDArray[np.floating],
-        smooth: Optional[float] = None,
+        smooth: float | None = None,
     ) -> None:
         if smooth is not None and smooth > 0:
             self.data = ndimage.gaussian_filter(data, sigma=smooth)
         else:
             self.data = data.copy()
 
-        self.levels: List[float] = []
-        self.contours: List[List[NDArray[np.floating]]] = []
+        self.levels: list[float] = []
+        self.contours: list[list[NDArray[np.floating]]] = []
 
     def generate_levels(
         self,
         n_levels: int = 10,
-        vmin: Optional[float] = None,
-        vmax: Optional[float] = None,
+        vmin: float | None = None,
+        vmax: float | None = None,
         log_scale: bool = False,
-    ) -> List[float]:
+    ) -> list[float]:
         """
         Generate contour levels.
 
@@ -102,10 +102,10 @@ class ContourGenerator:
 
     def generate_sigma_levels(
         self,
-        sigmas: List[float],
-        base_level: Optional[float] = None,
-        rms: Optional[float] = None,
-    ) -> List[float]:
+        sigmas: list[float],
+        base_level: float | None = None,
+        rms: float | None = None,
+    ) -> list[float]:
         """
         Generate contour levels based on sigma values.
 
@@ -135,8 +135,8 @@ class ContourGenerator:
 
     def find_contours(
         self,
-        levels: Optional[List[float]] = None,
-    ) -> List[List[NDArray[np.floating]]]:
+        levels: list[float] | None = None,
+    ) -> list[list[NDArray[np.floating]]]:
         """
         Find contour paths at specified levels.
 
@@ -167,8 +167,8 @@ class ContourGenerator:
 
     def find_contours_scipy(
         self,
-        levels: Optional[List[float]] = None,
-    ) -> List[List[Tuple[NDArray[np.floating], NDArray[np.floating]]]]:
+        levels: list[float] | None = None,
+    ) -> list[list[tuple[NDArray[np.floating], NDArray[np.floating]]]]:
         """
         Find contour paths using scipy's binary dilation method.
 
@@ -203,7 +203,7 @@ class ContourGenerator:
     def get_contour_at_level(
         self,
         level: float,
-    ) -> List[NDArray[np.floating]]:
+    ) -> list[NDArray[np.floating]]:
         """
         Get contour paths at a specific level.
 

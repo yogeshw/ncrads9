@@ -21,7 +21,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -34,8 +34,8 @@ class ChannelSettings:
     """Settings for an individual RGB channel."""
 
     visible: bool = True
-    scale_min: Optional[float] = None
-    scale_max: Optional[float] = None
+    scale_min: float | None = None
+    scale_max: float | None = None
     bias: float = 0.5
     contrast: float = 1.0
 
@@ -52,13 +52,13 @@ class RGBFrame:
         """
         self._frame_id = frame_id
         self._name = name or f"RGB Frame {frame_id}"
-        self._red_frame: Optional[Frame] = None
-        self._green_frame: Optional[Frame] = None
-        self._blue_frame: Optional[Frame] = None
+        self._red_frame: Frame | None = None
+        self._green_frame: Frame | None = None
+        self._blue_frame: Frame | None = None
         self._red_settings = ChannelSettings()
         self._green_settings = ChannelSettings()
         self._blue_settings = ChannelSettings()
-        self._composite: Optional[NDArray[np.uint8]] = None
+        self._composite: NDArray[np.uint8] | None = None
 
     @property
     def frame_id(self) -> int:
@@ -76,34 +76,34 @@ class RGBFrame:
         self._name = value
 
     @property
-    def red_frame(self) -> Optional[Frame]:
+    def red_frame(self) -> Frame | None:
         """Return the red channel frame."""
         return self._red_frame
 
     @red_frame.setter
-    def red_frame(self, frame: Optional[Frame]) -> None:
+    def red_frame(self, frame: Frame | None) -> None:
         """Set the red channel frame."""
         self._red_frame = frame
         self._composite = None
 
     @property
-    def green_frame(self) -> Optional[Frame]:
+    def green_frame(self) -> Frame | None:
         """Return the green channel frame."""
         return self._green_frame
 
     @green_frame.setter
-    def green_frame(self, frame: Optional[Frame]) -> None:
+    def green_frame(self, frame: Frame | None) -> None:
         """Set the green channel frame."""
         self._green_frame = frame
         self._composite = None
 
     @property
-    def blue_frame(self) -> Optional[Frame]:
+    def blue_frame(self) -> Frame | None:
         """Return the blue channel frame."""
         return self._blue_frame
 
     @blue_frame.setter
-    def blue_frame(self, frame: Optional[Frame]) -> None:
+    def blue_frame(self, frame: Frame | None) -> None:
         """Set the blue channel frame."""
         self._blue_frame = frame
         self._composite = None
@@ -123,7 +123,7 @@ class RGBFrame:
         """Return the blue channel settings."""
         return self._blue_settings
 
-    def set_channel(self, channel: str, frame: Optional[Frame]) -> None:
+    def set_channel(self, channel: str, frame: Frame | None) -> None:
         """Set a channel frame.
 
         Args:
@@ -140,7 +140,7 @@ class RGBFrame:
         else:
             raise ValueError(f"Unknown channel: {channel}")
 
-    def get_channel(self, channel: str) -> Optional[Frame]:
+    def get_channel(self, channel: str) -> Frame | None:
         """Get a channel frame.
 
         Args:
@@ -207,14 +207,14 @@ class RGBFrame:
 
         return normalized
 
-    def compose(self) -> Optional[NDArray[np.uint8]]:
+    def compose(self) -> NDArray[np.uint8] | None:
         """Compose the RGB image from the channel frames.
 
         Returns:
             RGB image as uint8 array with shape (height, width, 3), or None.
         """
         # Determine output shape from available frames
-        shape: Optional[tuple[int, ...]] = None
+        shape: tuple[int, ...] | None = None
         for frame in [self._red_frame, self._green_frame, self._blue_frame]:
             if frame is not None and frame.image_data is not None:
                 shape = frame.image_data.shape[:2]
@@ -242,7 +242,7 @@ class RGBFrame:
         return self._composite
 
     @property
-    def composite(self) -> Optional[NDArray[np.uint8]]:
+    def composite(self) -> NDArray[np.uint8] | None:
         """Return the cached composite image, composing if necessary."""
         if self._composite is None:
             return self.compose()

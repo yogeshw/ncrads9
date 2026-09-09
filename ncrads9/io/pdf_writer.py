@@ -21,7 +21,7 @@ Author: Yogesh Wadadekar
 """
 
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -31,7 +31,7 @@ from PIL import Image
 class PDFWriter:
     """Writer for PDF files."""
 
-    def __init__(self, filepath: Union[str, Path]) -> None:
+    def __init__(self, filepath: str | Path) -> None:
         """
         Initialize PDF writer.
 
@@ -74,8 +74,8 @@ class PDFWriter:
     def write(
         self,
         dpi: int = 300,
-        title: Optional[str] = None,
-        author: Optional[str] = None,
+        title: str | None = None,
+        author: str | None = None,
     ) -> None:
         """
         Write the PDF to disk.

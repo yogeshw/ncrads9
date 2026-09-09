@@ -22,10 +22,10 @@ Provides memory-mapped file handling for efficient access to large FITS files.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Dict, Any, Union
-from pathlib import Path
-import weakref
 import hashlib
+import weakref
+from pathlib import Path
+from typing import Any, Optional
 
 import numpy as np
 from astropy.io import fits
@@ -68,7 +68,7 @@ class DataCache:
 
         self._max_cache_size: int = max_cache_size
         self._use_memmap: bool = use_memmap
-        self._cache: Dict[str, weakref.ref] = {}
+        self._cache: dict[str, weakref.ref] = {}
         self._access_order: list = []
         self._initialized: bool = True
 
@@ -93,7 +93,7 @@ class DataCache:
         """Set memory mapping setting."""
         self._use_memmap = value
 
-    def _get_cache_key(self, filepath: Union[str, Path], ext: int = 0) -> str:
+    def _get_cache_key(self, filepath: str | Path, ext: int = 0) -> str:
         """Generate a cache key for a file and extension.
 
         Args:
@@ -108,9 +108,9 @@ class DataCache:
 
     def get(
         self,
-        filepath: Union[str, Path],
+        filepath: str | Path,
         ext: int = 0,
-    ) -> Optional[NDArray[np.floating]]:
+    ) -> NDArray[np.floating] | None:
         """Get data from cache or load from file.
 
         Args:
@@ -141,9 +141,9 @@ class DataCache:
 
     def _load_data(
         self,
-        filepath: Union[str, Path],
+        filepath: str | Path,
         ext: int = 0,
-    ) -> Optional[NDArray[np.floating]]:
+    ) -> NDArray[np.floating] | None:
         """Load data from a FITS file.
 
         Args:
@@ -203,7 +203,7 @@ class DataCache:
         self._cache.clear()
         self._access_order.clear()
 
-    def remove(self, filepath: Union[str, Path], ext: int = 0) -> bool:
+    def remove(self, filepath: str | Path, ext: int = 0) -> bool:
         """Remove a specific file from cache.
 
         Args:
@@ -221,7 +221,7 @@ class DataCache:
             return True
         return False
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get cache statistics.
 
         Returns:

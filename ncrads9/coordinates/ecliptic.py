@@ -20,16 +20,15 @@ Ecliptic coordinate transformations.
 Author: Yogesh Wadadekar
 """
 
-from typing import Tuple, Optional
 
-from astropy.coordinates import SkyCoord, GeocentricMeanEcliptic, BarycentricMeanEcliptic
 import astropy.units as u
+from astropy.coordinates import BarycentricMeanEcliptic, GeocentricMeanEcliptic, SkyCoord
 from astropy.time import Time
 
 
 def equatorial_to_ecliptic(
-    ra: float, dec: float, frame: str = "icrs", equinox: Optional[float] = None, barycentric: bool = False
-) -> Tuple[float, float]:
+    ra: float, dec: float, frame: str = "icrs", equinox: float | None = None, barycentric: bool = False
+) -> tuple[float, float]:
     """
     Convert equatorial coordinates to ecliptic coordinates.
 
@@ -59,8 +58,8 @@ def equatorial_to_ecliptic(
 
 
 def ecliptic_to_equatorial(
-    lon: float, lat: float, frame: str = "icrs", equinox: Optional[float] = None, barycentric: bool = False
-) -> Tuple[float, float]:
+    lon: float, lat: float, frame: str = "icrs", equinox: float | None = None, barycentric: bool = False
+) -> tuple[float, float]:
     """
     Convert ecliptic coordinates to equatorial coordinates.
 

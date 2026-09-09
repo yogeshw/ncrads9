@@ -21,11 +21,11 @@ NED (NASA/IPAC Extragalactic Database) query interface.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Any
+from typing import Any
 
+import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.table import Table
-import astropy.units as u
 from astroquery.ipac.ned import Ned
 
 from .catalog_base import CatalogBase
@@ -47,7 +47,7 @@ class NEDCatalog(CatalogBase):
         radius: u.Quantity,
         equinox: str = "J2000.0",
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Query NED for objects within a region.
 
@@ -87,7 +87,7 @@ class NEDCatalog(CatalogBase):
         self,
         name: str,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Query NED by object name.
 
@@ -117,7 +117,7 @@ class NEDCatalog(CatalogBase):
         self,
         refcode: str,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Query NED by reference code.
 
@@ -147,7 +147,7 @@ class NEDCatalog(CatalogBase):
         self,
         name: str,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Get image metadata for an object.
 
@@ -173,7 +173,7 @@ class NEDCatalog(CatalogBase):
         self,
         name: str,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Get spectra metadata for an object.
 
@@ -199,7 +199,7 @@ class NEDCatalog(CatalogBase):
         self,
         name: str,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Get photometry data for an object.
 
@@ -225,7 +225,7 @@ class NEDCatalog(CatalogBase):
         self,
         name: str,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Get redshift measurements for an object.
 

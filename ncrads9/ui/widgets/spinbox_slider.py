@@ -20,15 +20,14 @@ SpinboxSlider Widget - Combined spinbox and slider control.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QWidget,
-    QHBoxLayout,
-    QSlider,
     QDoubleSpinBox,
+    QHBoxLayout,
     QLabel,
+    QSlider,
+    QWidget,
 )
 
 
@@ -44,7 +43,7 @@ class SpinboxSlider(QWidget):
         maximum: float = 100.0,
         value: float = 0.0,
         decimals: int = 2,
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         """
         Initialize the SpinboxSlider widget.

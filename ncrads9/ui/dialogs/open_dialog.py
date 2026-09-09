@@ -21,21 +21,20 @@ Author: Yogesh Wadadekar
 """
 
 from pathlib import Path
-from typing import Optional
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
     QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
     QLabel,
-    QPushButton,
     QListWidget,
     QListWidgetItem,
+    QPushButton,
     QSplitter,
-    QGroupBox,
     QTextEdit,
+    QVBoxLayout,
 )
 
 
@@ -44,7 +43,7 @@ class OpenDialog(QDialog):
 
     file_selected = pyqtSignal(str)
 
-    def __init__(self, parent: Optional[QDialog] = None) -> None:
+    def __init__(self, parent: QDialog | None = None) -> None:
         """Initialize the open dialog.
 
         Args:
@@ -53,7 +52,7 @@ class OpenDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Open FITS File")
         self.setMinimumSize(800, 600)
-        self._selected_file: Optional[str] = None
+        self._selected_file: str | None = None
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -167,7 +166,7 @@ class OpenDialog(QDialog):
             self.file_selected.emit(self._selected_file)
             self.accept()
 
-    def get_selected_file(self) -> Optional[str]:
+    def get_selected_file(self) -> str | None:
         """Get the selected file path.
 
         Returns:

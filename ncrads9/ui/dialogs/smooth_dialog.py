@@ -20,20 +20,19 @@ Smoothing parameters dialog.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QGroupBox,
-    QFormLayout,
-    QComboBox,
-    QDoubleSpinBox,
     QCheckBox,
+    QComboBox,
+    QDialog,
+    QDoubleSpinBox,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
     QLabel,
+    QPushButton,
+    QVBoxLayout,
 )
 
 
@@ -42,7 +41,7 @@ class SmoothDialog(QDialog):
 
     smoothing_changed = pyqtSignal(dict)
 
-    def __init__(self, parent: Optional[QDialog] = None) -> None:
+    def __init__(self, parent: QDialog | None = None) -> None:
         """Initialize the smooth dialog.
 
         Args:

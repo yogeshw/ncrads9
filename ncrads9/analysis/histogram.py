@@ -20,7 +20,7 @@ Histogram calculation and display for astronomical images.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Tuple, Union
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -55,9 +55,9 @@ class Histogram:
     def __init__(
         self,
         data: NDArray[np.floating],
-        bins: Union[int, NDArray[np.floating]] = 256,
-        range: Optional[Tuple[float, float]] = None,
-        mask: Optional[NDArray[np.bool_]] = None,
+        bins: int | NDArray[np.floating] = 256,
+        range: tuple[float, float] | None = None,
+        mask: NDArray[np.bool_] | None = None,
         ignore_nan: bool = True,
     ) -> None:
         self._data = data
@@ -118,8 +118,8 @@ class Histogram:
 
     def rebin(
         self,
-        bins: Union[int, NDArray[np.floating]],
-        range: Optional[Tuple[float, float]] = None,
+        bins: int | NDArray[np.floating],
+        range: tuple[float, float] | None = None,
     ) -> "Histogram":
         """
         Recompute histogram with new binning.
@@ -144,7 +144,7 @@ class Histogram:
             ignore_nan=self._ignore_nan,
         )
 
-    def to_log(self) -> Tuple[NDArray[np.floating], NDArray[np.floating]]:
+    def to_log(self) -> tuple[NDArray[np.floating], NDArray[np.floating]]:
         """
         Get log-scaled histogram counts.
 
@@ -156,7 +156,7 @@ class Histogram:
         log_counts = np.log10(self.counts.astype(float) + 1)
         return self.bin_centers, log_counts
 
-    def cumulative(self) -> Tuple[NDArray[np.floating], NDArray[np.floating]]:
+    def cumulative(self) -> tuple[NDArray[np.floating], NDArray[np.floating]]:
         """
         Get cumulative histogram.
 
@@ -168,7 +168,7 @@ class Histogram:
         cumsum = np.cumsum(self.counts)
         return self.bin_centers, cumsum.astype(float)
 
-    def normalized(self) -> Tuple[NDArray[np.floating], NDArray[np.floating]]:
+    def normalized(self) -> tuple[NDArray[np.floating], NDArray[np.floating]]:
         """
         Get normalized histogram (probability density).
 

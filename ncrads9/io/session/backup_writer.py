@@ -22,7 +22,7 @@ Author: Yogesh Wadadekar
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 
 class BackupWriter:
@@ -30,7 +30,7 @@ class BackupWriter:
 
     VERSION: str = "1.0"
 
-    def __init__(self, filepath: Union[str, Path]) -> None:
+    def __init__(self, filepath: str | Path) -> None:
         """
         Initialize backup writer.
 
@@ -54,8 +54,8 @@ class BackupWriter:
     def add_frame(
         self,
         frame_id: str,
-        file_path: Optional[str] = None,
-        options: Optional[dict[str, Any]] = None,
+        file_path: str | None = None,
+        options: dict[str, Any] | None = None,
     ) -> None:
         """
         Add a frame definition.
@@ -79,8 +79,8 @@ class BackupWriter:
     def add_region(
         self,
         region_type: str,
-        coords: list[Union[int, float, str]],
-        properties: Optional[dict[str, Any]] = None,
+        coords: list[int | float | str],
+        properties: dict[str, Any] | None = None,
     ) -> None:
         """
         Add a region definition.
@@ -111,7 +111,7 @@ class BackupWriter:
     def add_scale(
         self,
         scale_type: str,
-        params: Optional[list[Any]] = None,
+        params: list[Any] | None = None,
     ) -> None:
         """
         Add scale setting.

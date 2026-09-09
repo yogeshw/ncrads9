@@ -20,24 +20,24 @@ Contour settings dialog.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Any
 
 from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QGroupBox,
-    QFormLayout,
-    QLineEdit,
-    QComboBox,
-    QSpinBox,
-    QDoubleSpinBox,
     QCheckBox,
     QColorDialog,
+    QComboBox,
+    QDialog,
+    QDoubleSpinBox,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLineEdit,
+    QPushButton,
+    QSpinBox,
+    QVBoxLayout,
 )
-from PyQt6.QtGui import QColor
 
 
 class ContourDialog(QDialog):
@@ -46,7 +46,7 @@ class ContourDialog(QDialog):
     contours_changed = pyqtSignal(dict)
     contours_export_requested = pyqtSignal(dict)
 
-    def __init__(self, parent: Optional[QDialog] = None) -> None:
+    def __init__(self, parent: QDialog | None = None) -> None:
         """Initialize the contour dialog.
 
         Args:
@@ -218,7 +218,7 @@ class ContourDialog(QDialog):
             "show_labels": self._labels_check.isChecked(),
         }
 
-    def _parse_custom_levels(self) -> List[float]:
+    def _parse_custom_levels(self) -> list[float]:
         """Parse custom levels from text input.
 
         Returns:
@@ -232,7 +232,7 @@ class ContourDialog(QDialog):
         except ValueError:
             return []
 
-    def _parse_sigma_levels(self) -> List[float]:
+    def _parse_sigma_levels(self) -> list[float]:
         text = self._sigma_levels_edit.text()
         if not text:
             return []
@@ -254,7 +254,7 @@ class ContourDialog(QDialog):
         """Request contour export."""
         self.contours_export_requested.emit(self._get_settings())
 
-    def load_settings(self, settings: Dict[str, Any]) -> None:
+    def load_settings(self, settings: dict[str, Any]) -> None:
         """Load settings into the dialog."""
         if "method" in settings:
             self._method_combo.setCurrentText(settings["method"])

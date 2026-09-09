@@ -22,8 +22,8 @@ Provides DS9-compatible XPA server implementation for external tool communicatio
 Author: Yogesh Wadadekar
 """
 
-from .xpa_server import XPAServer
 from .xpa_commands import XPACommands
 from .xpa_protocol import XPAProtocol
+from .xpa_server import XPAServer
 
 __all__ = ["XPAServer", "XPACommands", "XPAProtocol"]

@@ -23,7 +23,7 @@ Author: Yogesh Wadadekar
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 
 class SessionManager:
@@ -31,7 +31,7 @@ class SessionManager:
 
     VERSION: str = "1.0"
 
-    def __init__(self, session_dir: Optional[Union[str, Path]] = None) -> None:
+    def __init__(self, session_dir: str | Path | None = None) -> None:
         """
         Initialize session manager.
 
@@ -46,7 +46,7 @@ class SessionManager:
         self.session_dir.mkdir(parents=True, exist_ok=True)
         self._current_session: dict[str, Any] = {}
 
-    def new_session(self, name: Optional[str] = None) -> str:
+    def new_session(self, name: str | None = None) -> str:
         """
         Create a new session.
 
@@ -72,8 +72,8 @@ class SessionManager:
 
     def save_session(
         self,
-        session_id: Optional[str] = None,
-        state: Optional[dict[str, Any]] = None,
+        session_id: str | None = None,
+        state: dict[str, Any] | None = None,
     ) -> Path:
         """
         Save the current session to disk.
@@ -114,7 +114,7 @@ class SessionManager:
         """
         session_path = self.session_dir / f"{session_id}.json"
 
-        with open(session_path, "r") as f:
+        with open(session_path) as f:
             self._current_session = json.load(f)
 
         return self._current_session
@@ -140,7 +140,7 @@ class SessionManager:
         sessions = []
         for session_file in self.session_dir.glob("*.json"):
             try:
-                with open(session_file, "r") as f:
+                with open(session_file) as f:
                     data = json.load(f)
                     sessions.append(
                         {
@@ -200,7 +200,7 @@ class SessionManager:
         with open(self.get_autosave_path(), "w") as f:
             json.dump(autosave_data, f)
 
-    def load_autosave(self) -> Optional[dict[str, Any]]:
+    def load_autosave(self) -> dict[str, Any] | None:
         """
         Load autosave if available.
 
@@ -209,7 +209,7 @@ class SessionManager:
         """
         autosave_path = self.get_autosave_path()
         if autosave_path.exists():
-            with open(autosave_path, "r") as f:
+            with open(autosave_path) as f:
                 data = json.load(f)
                 return data.get("state")
         return None

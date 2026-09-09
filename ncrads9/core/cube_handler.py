@@ -22,7 +22,6 @@ Provides functionality for handling 3D data cubes (e.g., spectral cubes).
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Tuple
 
 import numpy as np
 from astropy.io import fits
@@ -44,8 +43,8 @@ class CubeHandler:
 
     def __init__(
         self,
-        data: Optional[NDArray[np.floating]] = None,
-        header: Optional[fits.Header] = None,
+        data: NDArray[np.floating] | None = None,
+        header: fits.Header | None = None,
     ) -> None:
         """Initialize CubeHandler.
 
@@ -53,9 +52,9 @@ class CubeHandler:
             data: The 3D data cube array.
             header: The FITS header.
         """
-        self._data: Optional[NDArray[np.floating]] = data
-        self._header: Optional[fits.Header] = header
-        self._wcs: Optional[WCS] = None
+        self._data: NDArray[np.floating] | None = data
+        self._header: fits.Header | None = header
+        self._wcs: WCS | None = None
 
         if header is not None:
             try:
@@ -71,22 +70,22 @@ class CubeHandler:
             raise ValueError(f"Expected 3D cube, got {self._data.ndim}D array")
 
     @property
-    def data(self) -> Optional[NDArray[np.floating]]:
+    def data(self) -> NDArray[np.floating] | None:
         """Get the data cube array."""
         return self._data
 
     @property
-    def header(self) -> Optional[fits.Header]:
+    def header(self) -> fits.Header | None:
         """Get the FITS header."""
         return self._header
 
     @property
-    def wcs(self) -> Optional[WCS]:
+    def wcs(self) -> WCS | None:
         """Get the WCS object."""
         return self._wcs
 
     @property
-    def shape(self) -> Optional[Tuple[int, int, int]]:
+    def shape(self) -> tuple[int, int, int] | None:
         """Get the shape of the cube (nz, ny, nx)."""
         if self._data is not None:
             nz, ny, nx = self._data.shape
@@ -94,13 +93,13 @@ class CubeHandler:
         return None
 
     @property
-    def n_channels(self) -> Optional[int]:
+    def n_channels(self) -> int | None:
         """Get the number of spectral channels."""
         if self._data is not None:
             return self._data.shape[0]
         return None
 
-    def get_slice(self, channel: int) -> Optional[NDArray[np.floating]]:
+    def get_slice(self, channel: int) -> NDArray[np.floating] | None:
         """Get a 2D slice at a specific channel.
 
         Args:
@@ -115,7 +114,7 @@ class CubeHandler:
             raise IndexError(f"Channel {channel} out of range")
         return self._data[channel, :, :]
 
-    def get_spectrum(self, x: int, y: int) -> Optional[NDArray[np.floating]]:
+    def get_spectrum(self, x: int, y: int) -> NDArray[np.floating] | None:
         """Get the spectrum at a specific pixel position.
 
         Args:
@@ -129,7 +128,7 @@ class CubeHandler:
             return None
         return self._data[:, y, x]
 
-    def moment0(self) -> Optional[NDArray[np.floating]]:
+    def moment0(self) -> NDArray[np.floating] | None:
         """Compute the zeroth moment (integrated intensity) map.
 
         Returns:
@@ -139,7 +138,7 @@ class CubeHandler:
             return None
         return np.nansum(self._data, axis=0)
 
-    def moment1(self) -> Optional[NDArray[np.floating]]:
+    def moment1(self) -> NDArray[np.floating] | None:
         """Compute the first moment (velocity field) map.
 
         Returns:
@@ -157,7 +156,7 @@ class CubeHandler:
             m1 = np.nansum(weights * channels[:, np.newaxis, np.newaxis], axis=0) / total
         return m1
 
-    def moment2(self) -> Optional[NDArray[np.floating]]:
+    def moment2(self) -> NDArray[np.floating] | None:
         """Compute the second moment (velocity dispersion) map.
 
         Returns:
@@ -183,10 +182,10 @@ class CubeHandler:
 
     def collapse(
         self,
-        start_channel: Optional[int] = None,
-        end_channel: Optional[int] = None,
+        start_channel: int | None = None,
+        end_channel: int | None = None,
         method: str = "sum",
-    ) -> Optional[NDArray[np.floating]]:
+    ) -> NDArray[np.floating] | None:
         """Collapse the cube along the spectral axis.
 
         Args:
@@ -213,7 +212,7 @@ class CubeHandler:
         else:
             raise ValueError(f"Unknown collapse method: {method}")
 
-    def get_channel_wcs(self, channel: int) -> Optional[WCS]:
+    def get_channel_wcs(self, channel: int) -> WCS | None:
         """Get a 2D WCS for a specific channel slice.
 
         Args:

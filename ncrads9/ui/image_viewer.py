@@ -20,10 +20,9 @@ Interactive image viewer widget with DS9-style mouse controls.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
 
-from PyQt6.QtCore import Qt, QPoint, QSize, pyqtSignal
-from PyQt6.QtGui import QPixmap, QTransform, QWheelEvent, QMouseEvent
+from PyQt6.QtCore import QPoint, QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QMouseEvent, QPixmap, QTransform, QWheelEvent
 from PyQt6.QtWidgets import QLabel
 
 from .view_transform import DisplayTransform, normalize_rotation
@@ -51,9 +50,9 @@ class ImageViewer(QLabel):
         self.setMinimumSize(100, 100)
 
         # Image data
-        self._pixmap: Optional[QPixmap] = None
-        self._source_pixmap: Optional[QPixmap] = None
-        self._transform_cache_key: Optional[tuple[int, float, bool, bool]] = None
+        self._pixmap: QPixmap | None = None
+        self._source_pixmap: QPixmap | None = None
+        self._transform_cache_key: tuple[int, float, bool, bool] | None = None
         self._zoom = 1.0
         self._rotation = 0.0
         self._flip_x = False
@@ -266,11 +265,11 @@ class ImageViewer(QLabel):
 
         event.accept()
 
-    def _event_to_image_coords(self, event: QMouseEvent) -> Optional[tuple[int, int]]:
+    def _event_to_image_coords(self, event: QMouseEvent) -> tuple[int, int] | None:
         """Convert a mouse event position to image pixel coordinates."""
         return self.map_widget_to_image_coords(event.position().x(), event.position().y())
 
-    def map_widget_to_image_coords(self, x: float, y: float) -> Optional[tuple[int, int]]:
+    def map_widget_to_image_coords(self, x: float, y: float) -> tuple[int, int] | None:
         """Convert widget coordinates to source image coordinates."""
         if self._source_pixmap is None or self.pixmap() is None:
             return None
@@ -289,7 +288,7 @@ class ImageViewer(QLabel):
             return (img_x, img_y)
         return None
 
-    def map_image_to_display_coords(self, x: float, y: float) -> Optional[tuple[float, float]]:
+    def map_image_to_display_coords(self, x: float, y: float) -> tuple[float, float] | None:
         """Convert source image coordinates (bottom-left origin) to display coordinates."""
         if self._source_pixmap is None:
             return None

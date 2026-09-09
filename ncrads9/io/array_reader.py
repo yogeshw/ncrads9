@@ -21,7 +21,7 @@ Author: Yogesh Wadadekar
 """
 
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 from numpy.typing import DTypeLike, NDArray
@@ -30,7 +30,7 @@ from numpy.typing import DTypeLike, NDArray
 class ArrayReader:
     """Reader for raw binary array files."""
 
-    def __init__(self, filepath: Union[str, Path]) -> None:
+    def __init__(self, filepath: str | Path) -> None:
         """
         Initialize array reader.
 
@@ -42,7 +42,7 @@ class ArrayReader:
     def read(
         self,
         dtype: DTypeLike = np.float32,
-        shape: Optional[tuple[int, ...]] = None,
+        shape: tuple[int, ...] | None = None,
         offset: int = 0,
         order: str = "C",
     ) -> NDArray[Any]:
@@ -68,7 +68,7 @@ class ArrayReader:
     def read_memmap(
         self,
         dtype: DTypeLike = np.float32,
-        shape: Optional[tuple[int, ...]] = None,
+        shape: tuple[int, ...] | None = None,
         offset: int = 0,
         mode: str = "r",
     ) -> NDArray[Any]:

@@ -20,13 +20,14 @@ Image viewer with integrated region overlay.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
-from PyQt6.QtCore import Qt, pyqtSignal, QSize
-from PyQt6.QtGui import QPixmap, QWheelEvent, QMouseEvent
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QScrollArea
+
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QMouseEvent, QPixmap, QWheelEvent
+from PyQt6.QtWidgets import QScrollArea, QVBoxLayout, QWidget
+
 from ..image_viewer import ImageViewer
-from .region_overlay import RegionOverlay, RegionMode, Region
 from .contour_overlay import ContourOverlay
+from .region_overlay import Region, RegionMode, RegionOverlay
 
 
 class ImageViewerWithRegions(QWidget):
@@ -102,23 +103,23 @@ class ImageViewerWithRegions(QWidget):
 
     def set_direction_arrows(
         self,
-        north_vector: Optional[tuple[float, float]],
-        east_vector: Optional[tuple[float, float]],
+        north_vector: tuple[float, float] | None,
+        east_vector: tuple[float, float] | None,
         visible: bool,
     ) -> None:
         """Set WCS direction arrow vectors/visibility."""
         self.contour_overlay.set_direction_arrows(north_vector, east_vector, visible)
 
-    def set_grid(self, visible: bool, settings: Optional[dict] = None) -> None:
+    def set_grid(self, visible: bool, settings: dict | None = None) -> None:
         """Set coordinate grid overlay visibility/settings."""
         self.contour_overlay.set_grid(visible, settings)
 
     def set_crosshair(
         self,
         visible: bool,
-        position: Optional[tuple[float, float]] = None,
+        position: tuple[float, float] | None = None,
         color=None,
-        size: Optional[int] = None,
+        size: int | None = None,
     ) -> None:
         """Set crosshair overlay visibility/style."""
         self.contour_overlay.set_crosshair(visible, position=position, color=color, size=size)
@@ -180,7 +181,7 @@ class ImageViewerWithRegions(QWidget):
         """Reset contrast/brightness."""
         self.image_viewer.reset_contrast_brightness()
 
-    def pixmap(self) -> Optional[QPixmap]:
+    def pixmap(self) -> QPixmap | None:
         """Get current pixmap."""
         return self.image_viewer.pixmap()
 

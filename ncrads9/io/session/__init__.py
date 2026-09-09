@@ -22,9 +22,9 @@ Provides session save/restore and backup functionality.
 Author: Yogesh Wadadekar
 """
 
-from .session_manager import SessionManager
 from .backup_reader import BackupReader
 from .backup_writer import BackupWriter
+from .session_manager import SessionManager
 
 __all__ = [
     "SessionManager",

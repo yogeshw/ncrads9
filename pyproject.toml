@@ -68,6 +68,8 @@ select = [
     "RUF",    # ruff-specific
     "DTZ",    # naive datetimes
     "SIM",    # simplifications that change no behaviour
+    "UP",     # pyupgrade: modern syntax (enabled in M1-0b)
+    "I",      # isort: import ordering (enabled in M1-0b)
     "PLR1730", "PLR0402",
 ]
 ignore = [

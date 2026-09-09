@@ -23,10 +23,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Optional, List, Tuple
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from astropy.wcs import WCS
+
     from .grid_config import GridConfig
 
 
@@ -63,8 +64,8 @@ class GridLabels:
 
     def __init__(
         self,
-        wcs: Optional[WCS] = None,
-        config: Optional[GridConfig] = None,
+        wcs: WCS | None = None,
+        config: GridConfig | None = None,
     ) -> None:
         """Initialize the grid labels manager.
 
@@ -72,13 +73,13 @@ class GridLabels:
             wcs: World Coordinate System object for coordinate transformations.
             config: Grid configuration settings.
         """
-        self._wcs: Optional[WCS] = wcs
-        self._config: Optional[GridConfig] = config
-        self._labels: List[Label] = []
+        self._wcs: WCS | None = wcs
+        self._config: GridConfig | None = config
+        self._labels: list[Label] = []
         self._format: CoordinateFormat = CoordinateFormat.HMS_DMS
 
     @property
-    def wcs(self) -> Optional[WCS]:
+    def wcs(self) -> WCS | None:
         """Get the current WCS object."""
         return self._wcs
 
@@ -101,7 +102,7 @@ class GridLabels:
         self,
         image_width: int,
         image_height: int,
-    ) -> List[Label]:
+    ) -> list[Label]:
         """Compute labels for grid lines.
 
         Args:
@@ -122,7 +123,7 @@ class GridLabels:
         self,
         ra: float,
         dec: float,
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """Format RA/Dec coordinates according to current format.
 
         Args:

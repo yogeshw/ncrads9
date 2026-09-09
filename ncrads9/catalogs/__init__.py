@@ -22,15 +22,15 @@ Author: Yogesh Wadadekar
 """
 
 from .catalog_base import CatalogBase
-from .vizier import VizierCatalog
-from .simbad import SimbadCatalog
-from .ned import NEDCatalog
-from .skybot import SkybotCatalog
-from .sdss import SDSSCatalog
-from .twomass import TwoMASSCatalog
 from .catalog_display import CatalogDisplay
 from .catalog_table import CatalogTable
 from .cone_search import ConeSearch
+from .ned import NEDCatalog
+from .sdss import SDSSCatalog
+from .simbad import SimbadCatalog
+from .skybot import SkybotCatalog
+from .twomass import TwoMASSCatalog
+from .vizier import VizierCatalog
 
 __all__ = [
     "CatalogBase",

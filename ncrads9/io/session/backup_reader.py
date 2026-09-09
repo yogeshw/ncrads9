@@ -21,13 +21,13 @@ Author: Yogesh Wadadekar
 """
 
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 
 class BackupReader:
     """Reader for DS9 backup files."""
 
-    def __init__(self, filepath: Union[str, Path]) -> None:
+    def __init__(self, filepath: str | Path) -> None:
         """
         Initialize backup reader.
 
@@ -45,7 +45,7 @@ class BackupReader:
         Returns:
             Parsed backup data.
         """
-        with open(self.filepath, "r") as f:
+        with open(self.filepath) as f:
             self._content = f.read()
 
         self._parse()
@@ -63,7 +63,7 @@ class BackupReader:
         }
 
         lines = self._content.split("\n")
-        current_section: Optional[str] = None
+        current_section: str | None = None
 
         for line in lines:
             line = line.strip()

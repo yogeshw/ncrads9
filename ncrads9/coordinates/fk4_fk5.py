@@ -20,16 +20,15 @@ FK4/FK5 coordinate frame transformations.
 Author: Yogesh Wadadekar
 """
 
-from typing import Tuple, Optional
 
-from astropy.coordinates import SkyCoord, FK4, FK5
 import astropy.units as u
+from astropy.coordinates import FK4, FK5, SkyCoord
 from astropy.time import Time
 
 
 def convert_fk4_to_fk5(
-    ra: float, dec: float, equinox: Optional[float] = None, epoch: Optional[float] = None
-) -> Tuple[float, float]:
+    ra: float, dec: float, equinox: float | None = None, epoch: float | None = None
+) -> tuple[float, float]:
     """
     Convert FK4 coordinates to FK5.
 
@@ -57,8 +56,8 @@ def convert_fk4_to_fk5(
 
 
 def convert_fk5_to_fk4(
-    ra: float, dec: float, equinox: Optional[float] = None, epoch: Optional[float] = None
-) -> Tuple[float, float]:
+    ra: float, dec: float, equinox: float | None = None, epoch: float | None = None
+) -> tuple[float, float]:
     """
     Convert FK5 coordinates to FK4.
 
@@ -87,7 +86,7 @@ def convert_fk5_to_fk4(
     return (fk4_coord.ra.deg, fk4_coord.dec.deg)
 
 
-def precess_fk5(ra: float, dec: float, from_equinox: float, to_equinox: float) -> Tuple[float, float]:
+def precess_fk5(ra: float, dec: float, from_equinox: float, to_equinox: float) -> tuple[float, float]:
     """
     Precess FK5 coordinates between equinoxes.
 
@@ -109,7 +108,7 @@ def precess_fk5(ra: float, dec: float, from_equinox: float, to_equinox: float) -
     return (precessed.ra.deg, precessed.dec.deg)
 
 
-def precess_fk4(ra: float, dec: float, from_equinox: float, to_equinox: float) -> Tuple[float, float]:
+def precess_fk4(ra: float, dec: float, from_equinox: float, to_equinox: float) -> tuple[float, float]:
     """
     Precess FK4 coordinates between equinoxes.
 

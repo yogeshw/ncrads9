@@ -21,7 +21,6 @@ Author: Yogesh Wadadekar
 """
 
 import re
-from typing import Tuple
 
 
 def degrees_to_hms(degrees: float, precision: int = 2) -> str:
@@ -89,7 +88,7 @@ def degrees_to_dms(degrees: float, precision: int = 2) -> str:
     return f"{sign}{deg:02d}:{minutes:02d}:{seconds:0{precision + 3}.{precision}f}"
 
 
-def parse_sexagesimal(value: str) -> Tuple[float, str]:
+def parse_sexagesimal(value: str) -> tuple[float, str]:
     """
     Parse a sexagesimal coordinate string.
 

@@ -20,14 +20,13 @@ VO query dialog for SIAP and catalog queries.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Tuple
 
 from PyQt6.QtWidgets import (
     QDialog,
-    QVBoxLayout,
-    QFormLayout,
-    QDoubleSpinBox,
     QDialogButtonBox,
+    QDoubleSpinBox,
+    QFormLayout,
+    QVBoxLayout,
 )
 
 from ..widgets.coordinate_entry import CoordinateEntry
@@ -38,9 +37,9 @@ class VOQueryDialog(QDialog):
 
     def __init__(
         self,
-        parent: Optional[QDialog] = None,
-        ra: Optional[float] = None,
-        dec: Optional[float] = None,
+        parent: QDialog | None = None,
+        ra: float | None = None,
+        dec: float | None = None,
         radius_deg: float = 0.1,
         title: str = "VO Query",
     ) -> None:
@@ -51,8 +50,8 @@ class VOQueryDialog(QDialog):
 
     def _setup_ui(
         self,
-        ra: Optional[float],
-        dec: Optional[float],
+        ra: float | None,
+        dec: float | None,
         radius_deg: float,
     ) -> None:
         layout = QVBoxLayout(self)
@@ -79,7 +78,7 @@ class VOQueryDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-    def values(self) -> Tuple[float, float, float]:
+    def values(self) -> tuple[float, float, float]:
         """Return (ra, dec, radius_deg)."""
         ra, dec = self._coord_entry.coordinates()
         radius = self._radius_spin.value()

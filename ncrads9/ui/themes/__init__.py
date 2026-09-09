@@ -20,8 +20,8 @@ UI Themes Package
 Author: Yogesh Wadadekar
 """
 
-from .default import DefaultTheme
 from .dark import DarkTheme
+from .default import DefaultTheme
 from .native import NativeTheme
 
 __all__ = [

@@ -25,9 +25,9 @@ This package provides communication protocols for interoperability:
 Author: Yogesh Wadadekar
 """
 
-from .xpa import XPAServer, XPACommands
-from .samp import SAMPClient, SAMPHandlers, SAMPHub
 from .iis import IISServer
+from .samp import SAMPClient, SAMPHandlers, SAMPHub
+from .xpa import XPACommands, XPAServer
 
 __all__ = [
     "XPAServer",

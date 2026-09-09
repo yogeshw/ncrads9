@@ -20,7 +20,8 @@ Pixel table for examining pixel values in astronomical images.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Tuple, List, Dict, Any
+from typing import Any
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -47,11 +48,11 @@ class PixelTable:
     def __init__(
         self,
         data: NDArray[np.floating],
-        wcs: Optional[Any] = None,
+        wcs: Any | None = None,
     ) -> None:
         self.data = data
         self.wcs = wcs
-        self.shape: Tuple[int, int] = data.shape
+        self.shape: tuple[int, int] = data.shape
 
     def get_pixel(
         self,
@@ -116,8 +117,8 @@ class PixelTable:
     def get_row(
         self,
         y: int,
-        x_start: Optional[int] = None,
-        x_end: Optional[int] = None,
+        x_start: int | None = None,
+        x_end: int | None = None,
     ) -> NDArray[np.floating]:
         """
         Get pixel values along a row.
@@ -145,8 +146,8 @@ class PixelTable:
     def get_column(
         self,
         x: int,
-        y_start: Optional[int] = None,
-        y_end: Optional[int] = None,
+        y_start: int | None = None,
+        y_end: int | None = None,
     ) -> NDArray[np.floating]:
         """
         Get pixel values along a column.
@@ -220,7 +221,7 @@ class PixelTable:
         x_center: int,
         y_center: int,
         size: int = 5,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Convert pixel region to list of dictionaries.
 
@@ -261,7 +262,7 @@ class PixelTable:
         x_center: int,
         y_center: int,
         size: int = 5,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Find min and max values in a region.
 
@@ -301,7 +302,7 @@ class PixelTable:
         self,
         x: int,
         y: int,
-    ) -> Optional[Tuple[float, float]]:
+    ) -> tuple[float, float] | None:
         """
         Convert pixel coordinates to world coordinates.
 
@@ -331,8 +332,8 @@ class PixelTable:
         y1: int,
         x2: int,
         y2: int,
-        num_points: Optional[int] = None,
-    ) -> Tuple[NDArray[np.floating], NDArray[np.floating]]:
+        num_points: int | None = None,
+    ) -> tuple[NDArray[np.floating], NDArray[np.floating]]:
         """
         Sample pixel values along a line.
 

@@ -19,8 +19,8 @@
 Author: Yogesh Wadadekar
 """
 
+from .line_id import LineIdentifier, SpectralLine
 from .prism_main import PrismWindow
 from .spectrum_plot import SpectrumPlot
-from .line_id import LineIdentifier, SpectralLine
 
 __all__ = ["PrismWindow", "SpectrumPlot", "LineIdentifier", "SpectralLine"]

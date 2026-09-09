@@ -23,10 +23,11 @@ from __future__ import annotations
 
 from io import StringIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+
     from .page_setup import PageSetup
 
 
@@ -35,21 +36,21 @@ class PostScriptGenerator:
 
     def __init__(
         self,
-        page_setup: Optional[PageSetup] = None,
+        page_setup: PageSetup | None = None,
     ) -> None:
         """Initialize the PostScript generator.
 
         Args:
             page_setup: Page setup configuration.
         """
-        self._page_setup: Optional[PageSetup] = page_setup
+        self._page_setup: PageSetup | None = page_setup
         self._buffer: StringIO = StringIO()
         self._title: str = "ncrads9 Output"
         self._creator: str = "ncrads9"
         self._color_mode: str = "rgb"  # rgb, grayscale, cmyk
 
     @property
-    def page_setup(self) -> Optional[PageSetup]:
+    def page_setup(self) -> PageSetup | None:
         """Get the current page setup."""
         return self._page_setup
 
@@ -204,7 +205,7 @@ class PostScriptGenerator:
             with open(filename, "w") as f:
                 f.write(self._buffer.getvalue())
             return True
-        except IOError:
+        except OSError:
             return False
 
     def get_content(self) -> str:

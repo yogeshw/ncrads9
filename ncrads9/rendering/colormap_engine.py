@@ -23,7 +23,6 @@ Provides colormap management and application with support for standard
 astronomical colormaps and custom colormap definitions.
 """
 
-from typing import Dict, List, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
@@ -42,7 +41,7 @@ class ColormapEngine:
     """
 
     # Standard astronomical colormaps
-    BUILTIN_COLORMAPS: List[str] = [
+    BUILTIN_COLORMAPS: list[str] = [
         "gray",
         "heat",
         "rainbow",
@@ -69,7 +68,7 @@ class ColormapEngine:
         self._lut_size: int = lut_size
         self._current_colormap: str = colormap
         self._inverted: bool = False
-        self._custom_colormaps: Dict[str, NDArray[np.uint8]] = {}
+        self._custom_colormaps: dict[str, NDArray[np.uint8]] = {}
         self._lut: NDArray[np.uint8] = np.zeros((lut_size, 4), dtype=np.uint8)
         self._build_lut()
 
@@ -96,7 +95,7 @@ class ColormapEngine:
         self._build_lut()
 
     @property
-    def available_colormaps(self) -> List[str]:
+    def available_colormaps(self) -> list[str]:
         """Get list of available colormap names."""
         return self.BUILTIN_COLORMAPS + list(self._custom_colormaps.keys())
 
@@ -210,7 +209,7 @@ class ColormapEngine:
         return lut
 
     @staticmethod
-    def _hsv_to_rgb(h: float, s: float, v: float) -> Tuple[float, float, float]:
+    def _hsv_to_rgb(h: float, s: float, v: float) -> tuple[float, float, float]:
         """
         Convert HSV to RGB color.
 

@@ -21,7 +21,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -33,8 +33,8 @@ class FrameSettings:
 
     colormap: str = "gray"
     scale: str = "linear"
-    scale_min: Optional[float] = None
-    scale_max: Optional[float] = None
+    scale_min: float | None = None
+    scale_max: float | None = None
     zoom: float = 1.0
     pan_x: float = 0.0
     pan_y: float = 0.0
@@ -62,7 +62,7 @@ class Frame:
         self,
         frame_id: int,
         name: str = "",
-        image_data: Optional[NDArray[np.floating[Any]]] = None,
+        image_data: NDArray[np.floating[Any]] | None = None,
     ) -> None:
         """Initialize a Frame.
 
@@ -77,7 +77,7 @@ class Frame:
         self._settings = FrameSettings()
         self._regions: list[Region] = []
         self._header: dict[str, Any] = {}
-        self._wcs: Optional[Any] = None
+        self._wcs: Any | None = None
         self._modified: bool = False
 
     @property
@@ -96,12 +96,12 @@ class Frame:
         self._name = value
 
     @property
-    def image_data(self) -> Optional[NDArray[np.floating[Any]]]:
+    def image_data(self) -> NDArray[np.floating[Any]] | None:
         """Return the image data."""
         return self._image_data
 
     @image_data.setter
-    def image_data(self, value: Optional[NDArray[np.floating[Any]]]) -> None:
+    def image_data(self, value: NDArray[np.floating[Any]] | None) -> None:
         """Set the image data."""
         self._image_data = value
         self._modified = True
@@ -127,7 +127,7 @@ class Frame:
         self._header = value
 
     @property
-    def wcs(self) -> Optional[Any]:
+    def wcs(self) -> Any | None:
         """Return the WCS object."""
         return self._wcs
 
@@ -137,7 +137,7 @@ class Frame:
         self._wcs = value
 
     @property
-    def shape(self) -> Optional[tuple[int, ...]]:
+    def shape(self) -> tuple[int, ...] | None:
         """Return the shape of the image data."""
         if self._image_data is not None:
             return self._image_data.shape

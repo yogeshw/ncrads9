@@ -20,13 +20,12 @@ World Coordinate System (WCS) coordinate handling.
 Author: Yogesh Wadadekar
 """
 
-from typing import Tuple, Optional
 
-from astropy.coordinates import SkyCoord
 import astropy.units as u
+from astropy.coordinates import SkyCoord
 
 from .coord_system import CoordSystem, CoordSystemType
-from .sexagesimal import degrees_to_hms, degrees_to_dms
+from .sexagesimal import degrees_to_dms, degrees_to_hms
 
 
 class WCSCoords(CoordSystem):
@@ -71,7 +70,7 @@ class WCSCoords(CoordSystem):
         """Return the underlying astropy SkyCoord object."""
         return self._skycoord
 
-    def get_coordinates(self) -> Tuple[float, float]:
+    def get_coordinates(self) -> tuple[float, float]:
         """
         Get the WCS coordinates as a tuple.
 
@@ -90,7 +89,7 @@ class WCSCoords(CoordSystem):
         """
         self._skycoord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg, frame=self._frame)
 
-    def to_string(self, precision: Optional[int] = None) -> str:
+    def to_string(self, precision: int | None = None) -> str:
         """
         Convert WCS coordinates to a string representation in degrees.
 

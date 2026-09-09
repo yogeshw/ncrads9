@@ -20,7 +20,6 @@ Region renderer for Qt-based drawing.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QFont, QPainter, QPen
@@ -51,7 +50,7 @@ class RegionRenderer:
 
     def __init__(
         self,
-        region_manager: Optional[RegionManager] = None,
+        region_manager: RegionManager | None = None,
         scale: float = 1.0,
         offset: tuple[float, float] = (0.0, 0.0),
     ) -> None:
@@ -173,7 +172,7 @@ class RegionRenderer:
         self,
         painter: QPainter,
         regions: list[BaseRegion],
-        selected_indices: Optional[set[int]] = None,
+        selected_indices: set[int] | None = None,
     ) -> None:
         """
         Render a list of regions.

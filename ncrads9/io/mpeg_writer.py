@@ -21,8 +21,9 @@ Author: Yogesh Wadadekar
 """
 
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Optional, Sequence, Union
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -31,7 +32,7 @@ from numpy.typing import NDArray
 class MPEGWriter:
     """Writer for MPEG video files using ffmpeg."""
 
-    def __init__(self, filepath: Union[str, Path]) -> None:
+    def __init__(self, filepath: str | Path) -> None:
         """
         Initialize MPEG writer.
 
@@ -40,8 +41,8 @@ class MPEGWriter:
         """
         self.filepath = Path(filepath)
         self._frames: list[NDArray[Any]] = []
-        self._width: Optional[int] = None
-        self._height: Optional[int] = None
+        self._width: int | None = None
+        self._height: int | None = None
 
     def add_frame(
         self,

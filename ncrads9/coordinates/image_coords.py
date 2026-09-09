@@ -20,7 +20,6 @@ Image (pixel) coordinate system.
 Author: Yogesh Wadadekar
 """
 
-from typing import Tuple, Optional
 
 from .coord_system import CoordSystem, CoordSystemType
 
@@ -60,7 +59,7 @@ class ImageCoords(CoordSystem):
         """Set the y pixel coordinate."""
         self._y = value
 
-    def get_coordinates(self) -> Tuple[float, float]:
+    def get_coordinates(self) -> tuple[float, float]:
         """
         Get the pixel coordinates as a tuple.
 
@@ -80,7 +79,7 @@ class ImageCoords(CoordSystem):
         self._x = x
         self._y = y
 
-    def to_string(self, precision: Optional[int] = None) -> str:
+    def to_string(self, precision: int | None = None) -> str:
         """
         Convert pixel coordinates to a string representation.
 
@@ -94,7 +93,7 @@ class ImageCoords(CoordSystem):
             return f"{self._x:.{precision}f}, {self._y:.{precision}f}"
         return f"{self._x}, {self._y}"
 
-    def to_zero_based(self) -> Tuple[float, float]:
+    def to_zero_based(self) -> tuple[float, float]:
         """
         Convert to zero-based pixel coordinates.
 

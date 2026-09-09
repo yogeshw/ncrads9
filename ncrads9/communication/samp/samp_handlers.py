@@ -24,7 +24,8 @@ Author: Yogesh Wadadekar
 """
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 from urllib.parse import urlparse
 
 
@@ -38,15 +39,15 @@ class SAMPHandlers:
         viewer: Reference to the main viewer application.
     """
 
-    def __init__(self, viewer: Optional[Any] = None) -> None:
+    def __init__(self, viewer: Any | None = None) -> None:
         """Initialize SAMP handlers.
 
         Args:
             viewer: Optional reference to the main viewer application.
         """
-        self.viewer: Optional[Any] = viewer
+        self.viewer: Any | None = viewer
         self._logger: logging.Logger = logging.getLogger(__name__)
-        self._handlers: Dict[str, Callable[..., Optional[Dict[str, Any]]]] = {
+        self._handlers: dict[str, Callable[..., dict[str, Any] | None]] = {
             "image.load.fits": self._handle_image_load_fits,
             "table.load.fits": self._handle_table_load_fits,
             "table.load.votable": self._handle_table_load_votable,
@@ -57,7 +58,7 @@ class SAMPHandlers:
             "samp.hub.event.register": self._handle_hub_register,
             "samp.hub.event.unregister": self._handle_hub_unregister,
         }
-        self._event_callbacks: Dict[str, List[Callable[..., None]]] = {}
+        self._event_callbacks: dict[str, list[Callable[..., None]]] = {}
 
     def set_viewer(self, viewer: Any) -> None:
         """Set the viewer reference.
@@ -71,8 +72,8 @@ class SAMPHandlers:
         self,
         mtype: str,
         sender_id: str,
-        params: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+        params: dict[str, Any],
+    ) -> dict[str, Any] | None:
         """Handle a SAMP message.
 
         Args:
@@ -99,7 +100,7 @@ class SAMPHandlers:
     def register_handler(
         self,
         mtype: str,
-        handler: Callable[..., Optional[Dict[str, Any]]],
+        handler: Callable[..., dict[str, Any] | None],
     ) -> None:
         """Register a custom message handler.
 
@@ -142,8 +143,8 @@ class SAMPHandlers:
     def _handle_image_load_fits(
         self,
         sender_id: str,
-        params: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+        params: dict[str, Any],
+    ) -> dict[str, Any] | None:
         """Handle image.load.fits message.
 
         Args:
@@ -174,8 +175,8 @@ class SAMPHandlers:
     def _handle_table_load_fits(
         self,
         sender_id: str,
-        params: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+        params: dict[str, Any],
+    ) -> dict[str, Any] | None:
         """Handle table.load.fits message.
 
         Args:
@@ -204,8 +205,8 @@ class SAMPHandlers:
     def _handle_table_load_votable(
         self,
         sender_id: str,
-        params: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+        params: dict[str, Any],
+    ) -> dict[str, Any] | None:
         """Handle table.load.votable message.
 
         Args:
@@ -234,8 +235,8 @@ class SAMPHandlers:
     def _handle_coord_point_at_sky(
         self,
         sender_id: str,
-        params: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+        params: dict[str, Any],
+    ) -> dict[str, Any] | None:
         """Handle coord.pointAt.sky message.
 
         Args:
@@ -262,8 +263,8 @@ class SAMPHandlers:
     def _handle_table_highlight_row(
         self,
         sender_id: str,
-        params: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+        params: dict[str, Any],
+    ) -> dict[str, Any] | None:
         """Handle table.highlight.row message.
 
         Args:
@@ -290,8 +291,8 @@ class SAMPHandlers:
     def _handle_table_select_row_list(
         self,
         sender_id: str,
-        params: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+        params: dict[str, Any],
+    ) -> dict[str, Any] | None:
         """Handle table.select.rowList message.
 
         Args:
@@ -319,8 +320,8 @@ class SAMPHandlers:
     def _handle_hub_shutdown(
         self,
         sender_id: str,
-        params: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+        params: dict[str, Any],
+    ) -> dict[str, Any] | None:
         """Handle samp.hub.event.shutdown message.
 
         Args:
@@ -337,8 +338,8 @@ class SAMPHandlers:
     def _handle_hub_register(
         self,
         sender_id: str,
-        params: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+        params: dict[str, Any],
+    ) -> dict[str, Any] | None:
         """Handle samp.hub.event.register message.
 
         Args:
@@ -356,8 +357,8 @@ class SAMPHandlers:
     def _handle_hub_unregister(
         self,
         sender_id: str,
-        params: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+        params: dict[str, Any],
+    ) -> dict[str, Any] | None:
         """Handle samp.hub.event.unregister message.
 
         Args:
@@ -390,7 +391,7 @@ class SAMPHandlers:
         else:
             return url
 
-    def get_supported_mtypes(self) -> List[str]:
+    def get_supported_mtypes(self) -> list[str]:
         """Get list of supported message types.
 
         Returns:

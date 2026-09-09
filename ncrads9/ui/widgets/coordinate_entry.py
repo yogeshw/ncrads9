@@ -21,16 +21,15 @@ Author: Yogesh Wadadekar
 """
 
 import re
-from typing import Optional, Tuple
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
-    QWidget,
-    QHBoxLayout,
-    QVBoxLayout,
-    QLineEdit,
-    QLabel,
     QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
 
@@ -41,7 +40,7 @@ class CoordinateEntry(QWidget):
 
     def __init__(
         self,
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         """
         Initialize the CoordinateEntry widget.
@@ -113,7 +112,7 @@ class CoordinateEntry(QWidget):
             self._ra_entry.setPlaceholderText("degrees")
             self._dec_entry.setPlaceholderText("degrees")
 
-    def _parse_ra(self, text: str) -> Optional[float]:
+    def _parse_ra(self, text: str) -> float | None:
         """Parse RA from text."""
         text = text.strip()
         if not text:
@@ -124,7 +123,7 @@ class CoordinateEntry(QWidget):
         else:  # Decimal
             return float(text)
 
-    def _parse_dec(self, text: str) -> Optional[float]:
+    def _parse_dec(self, text: str) -> float | None:
         """Parse Dec from text."""
         text = text.strip()
         if not text:
@@ -155,7 +154,7 @@ class CoordinateEntry(QWidget):
 
         return degrees
 
-    def coordinates(self) -> Tuple[float, float]:
+    def coordinates(self) -> tuple[float, float]:
         """Get the current coordinates as (RA, Dec) in degrees."""
         return (self._ra, self._dec)
 

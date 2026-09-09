@@ -21,9 +21,9 @@ Simple Image Access (SIA) protocol client for Virtual Observatory services.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Any
-from pathlib import Path
 from io import BytesIO
+from pathlib import Path
+from typing import Any
 
 import requests
 from astropy.io.votable import parse_single_table
@@ -49,8 +49,8 @@ class SIAClient:
         ra: float,
         dec: float,
         size: Any = 0.1,
-        format: Optional[str] = None,
-    ) -> Optional[Table]:
+        format: str | None = None,
+    ) -> Table | None:
         """
         Query the SIA service for images.
 
@@ -85,9 +85,9 @@ class SIAClient:
         ra: float,
         dec: float,
         width: float,
-        height: Optional[float] = None,
-        format: Optional[str] = None,
-    ) -> Optional[Table]:
+        height: float | None = None,
+        format: str | None = None,
+    ) -> Table | None:
         """
         Query the SIA service for images in a rectangular region.
 
@@ -176,7 +176,7 @@ class SIAClient:
         except requests.RequestException:
             return False
 
-    def _parse_votable(self, content: bytes) -> Optional[Table]:
+    def _parse_votable(self, content: bytes) -> Table | None:
         """Parse a VOTable response into a Table."""
         try:
             table = parse_single_table(BytesIO(content)).to_table()

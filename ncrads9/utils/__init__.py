@@ -21,10 +21,10 @@ Author: Yogesh Wadadekar
 """
 
 from .config import Config
-from .preferences import Preferences
 from .logger import setup_logging
+from .math_utils import apply_scaling, compute_histogram, normalize_image
+from .preferences import Preferences
 from .resources import ResourceLoader
-from .math_utils import normalize_image, compute_histogram, apply_scaling
 from .threading import BackgroundTask, TaskRunner
 
 __all__ = [

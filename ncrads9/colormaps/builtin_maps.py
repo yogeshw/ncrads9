@@ -18,7 +18,7 @@
 
 """DS9 builtin colormaps for ncrads9."""
 
-from typing import Dict, List, Optional
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -330,7 +330,7 @@ def _generate_magma(n: int = 256) -> NDArray[np.floating]:
 
 
 # Dictionary of colormap generator functions
-_COLORMAP_GENERATORS: Dict[str, callable] = {
+_COLORMAP_GENERATORS: dict[str, callable] = {
     "grey": _generate_grey,
     "gray": _generate_grey,
     "heat": _generate_heat,
@@ -357,10 +357,10 @@ _COLORMAP_GENERATORS: Dict[str, callable] = {
 }
 
 # List of all builtin colormap names
-BUILTIN_COLORMAPS: List[str] = list(_COLORMAP_GENERATORS.keys())
+BUILTIN_COLORMAPS: list[str] = list(_COLORMAP_GENERATORS.keys())
 
 
-def get_builtin_colormap(name: str, n_colors: int = 256) -> Optional[Colormap]:
+def get_builtin_colormap(name: str, n_colors: int = 256) -> Colormap | None:
     """Get a builtin colormap by name.
 
     Args:
@@ -378,7 +378,7 @@ def get_builtin_colormap(name: str, n_colors: int = 256) -> Optional[Colormap]:
     return None
 
 
-def list_builtin_colormaps() -> List[str]:
+def list_builtin_colormaps() -> list[str]:
     """Return list of available builtin colormap names.
 
     Returns:

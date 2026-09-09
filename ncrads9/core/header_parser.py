@@ -22,12 +22,12 @@ Provides functions for parsing and extracting information from FITS headers.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Any
 
 from astropy.io import fits
 
 
-def parse_header(header: fits.Header) -> Dict[str, Any]:
+def parse_header(header: fits.Header) -> dict[str, Any]:
     """Parse a FITS header and extract key information.
 
     Args:
@@ -36,7 +36,7 @@ def parse_header(header: fits.Header) -> Dict[str, Any]:
     Returns:
         Dictionary containing parsed header information.
     """
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "dimensions": _get_dimensions(header),
         "data_type": header.get("BITPIX"),
         "object": header.get("OBJECT"),
@@ -50,7 +50,7 @@ def parse_header(header: fits.Header) -> Dict[str, Any]:
     return result
 
 
-def _get_dimensions(header: fits.Header) -> Optional[List[int]]:
+def _get_dimensions(header: fits.Header) -> list[int] | None:
     """Extract image dimensions from header.
 
     Args:
@@ -86,9 +86,9 @@ def _has_wcs(header: fits.Header) -> bool:
 
 def extract_keywords(
     header: fits.Header,
-    keywords: List[str],
+    keywords: list[str],
     default: Any = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Extract specific keywords from a header.
 
     Args:
@@ -105,7 +105,7 @@ def extract_keywords(
     return result
 
 
-def get_wcs_keywords(header: fits.Header) -> Dict[str, Any]:
+def get_wcs_keywords(header: fits.Header) -> dict[str, Any]:
     """Extract WCS-related keywords from header.
 
     Args:
@@ -145,7 +145,7 @@ def get_wcs_keywords(header: fits.Header) -> Dict[str, Any]:
     return extract_keywords(header, wcs_keys)
 
 
-def get_observation_info(header: fits.Header) -> Dict[str, Any]:
+def get_observation_info(header: fits.Header) -> dict[str, Any]:
     """Extract observation metadata from header.
 
     Args:
@@ -173,7 +173,7 @@ def get_observation_info(header: fits.Header) -> Dict[str, Any]:
     return extract_keywords(header, obs_keys)
 
 
-def header_to_dict(header: fits.Header) -> Dict[str, Any]:
+def header_to_dict(header: fits.Header) -> dict[str, Any]:
     """Convert entire header to dictionary.
 
     Args:
@@ -189,7 +189,7 @@ def header_to_dict(header: fits.Header) -> Dict[str, Any]:
     return result
 
 
-def get_comments(header: fits.Header) -> List[str]:
+def get_comments(header: fits.Header) -> list[str]:
     """Extract COMMENT cards from header.
 
     Args:
@@ -201,7 +201,7 @@ def get_comments(header: fits.Header) -> List[str]:
     return list(header.get("COMMENT", []))
 
 
-def get_history(header: fits.Header) -> List[str]:
+def get_history(header: fits.Header) -> list[str]:
     """Extract HISTORY cards from header.
 
     Args:

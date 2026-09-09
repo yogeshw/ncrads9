@@ -21,7 +21,7 @@ Author: Yogesh Wadadekar
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 
 class BaseRegion(ABC):
@@ -34,7 +34,7 @@ class BaseRegion(ABC):
         width: int = 1,
         font: str = "helvetica 10 normal roman",
         text: str = "",
-        tags: Optional[list[str]] = None,
+        tags: list[str] | None = None,
     ) -> None:
         """
         Initialize a base region.

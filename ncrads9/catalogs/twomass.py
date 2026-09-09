@@ -21,11 +21,11 @@
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, List, Any
+from typing import Any
 
+import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.table import Table
-import astropy.units as u
 from astroquery.vizier import Vizier
 
 from .catalog_base import CatalogBase
@@ -41,7 +41,7 @@ class TwoMASSCatalog(CatalogBase):
     CATALOG_XSC: str = "VII/233/xsc"
 
     # Default columns for PSC
-    DEFAULT_PSC_COLUMNS: List[str] = [
+    DEFAULT_PSC_COLUMNS: list[str] = [
         "RAJ2000",
         "DEJ2000",
         "2MASS",
@@ -55,7 +55,7 @@ class TwoMASSCatalog(CatalogBase):
     ]
 
     # Default columns for XSC
-    DEFAULT_XSC_COLUMNS: List[str] = [
+    DEFAULT_XSC_COLUMNS: list[str] = [
         "RAJ2000",
         "DEJ2000",
         "2MASX",
@@ -71,7 +71,7 @@ class TwoMASSCatalog(CatalogBase):
     def __init__(
         self,
         catalog_type: str = "psc",
-        columns: Optional[List[str]] = None,
+        columns: list[str] | None = None,
         row_limit: int = -1,
     ) -> None:
         """
@@ -96,12 +96,12 @@ class TwoMASSCatalog(CatalogBase):
 
         if self.catalog_type == "xsc":
             self._catalog: str = self.CATALOG_XSC
-            self._default_columns: List[str] = self.DEFAULT_XSC_COLUMNS
+            self._default_columns: list[str] = self.DEFAULT_XSC_COLUMNS
         else:
             self._catalog = self.CATALOG_PSC
             self._default_columns = self.DEFAULT_PSC_COLUMNS
 
-        self.columns: List[str] = columns or self._default_columns
+        self.columns: list[str] = columns or self._default_columns
         self._vizier: Vizier = self._create_vizier()
 
     def _create_vizier(self) -> Vizier:
@@ -117,7 +117,7 @@ class TwoMASSCatalog(CatalogBase):
         coord: SkyCoord,
         radius: u.Quantity,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Query 2MASS for objects within a region.
 
@@ -159,7 +159,7 @@ class TwoMASSCatalog(CatalogBase):
         name: str,
         radius: u.Quantity = 1 * u.arcmin,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Query 2MASS by object name.
 
@@ -189,7 +189,7 @@ class TwoMASSCatalog(CatalogBase):
     def query_constraints(
         self,
         **constraints: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Query 2MASS with magnitude or other constraints.
 
@@ -239,7 +239,7 @@ class TwoMASSCatalog(CatalogBase):
         self.columns = self._default_columns
         self._vizier = self._create_vizier()
 
-    def set_columns(self, columns: List[str]) -> None:
+    def set_columns(self, columns: list[str]) -> None:
         """Set the columns to retrieve."""
         self.columns = columns
         self._vizier = self._create_vizier()
@@ -249,7 +249,7 @@ class TwoMASSCatalog(CatalogBase):
         self.row_limit = limit
         self._vizier = self._create_vizier()
 
-    def get_jh_color(self, table: Table) -> Optional[List[float]]:
+    def get_jh_color(self, table: Table) -> list[float] | None:
         """
         Calculate J-H color from table.
 
@@ -272,7 +272,7 @@ class TwoMASSCatalog(CatalogBase):
             if row["Jmag"] is not None and row["Hmag"] is not None
         ]
 
-    def get_hk_color(self, table: Table) -> Optional[List[float]]:
+    def get_hk_color(self, table: Table) -> list[float] | None:
         """
         Calculate H-K color from table.
 

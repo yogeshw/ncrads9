@@ -23,18 +23,17 @@ Provides a QOpenGLWidget-based canvas with zoom, pan, and image rendering
 capabilities optimized for astronomical data visualization.
 """
 
-from typing import Optional, Tuple, Callable
+from collections.abc import Callable
 
 import numpy as np
 from numpy.typing import NDArray
-from PyQt6.QtCore import Qt, QPointF, QSize, pyqtSignal
-from PyQt6.QtGui import QMouseEvent, QWheelEvent, QKeyEvent
+from OpenGL import GL
+from PyQt6.QtCore import QPointF, QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QKeyEvent, QMouseEvent, QWheelEvent
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 
-from OpenGL import GL
-
-from .tile_renderer import TileRenderer, Viewport
 from .texture_manager import TextureManager
+from .tile_renderer import TileRenderer, Viewport
 
 
 class GLCanvas(QOpenGLWidget):
@@ -52,7 +51,7 @@ class GLCanvas(QOpenGLWidget):
     cursor_moved = pyqtSignal(float, float, float)  # x, y, value
     mouse_clicked = pyqtSignal(float, float, int)  # x, y, button value
 
-    def __init__(self, parent: Optional[object] = None) -> None:
+    def __init__(self, parent: object | None = None) -> None:
         """
         Initialize the GLCanvas.
 
@@ -63,17 +62,17 @@ class GLCanvas(QOpenGLWidget):
         self._zoom: float = 1.0
         self._pan_x: float = 0.0
         self._pan_y: float = 0.0
-        self._last_mouse_pos: Optional[QPointF] = None
-        self._image_data: Optional[NDArray[np.float32]] = None
-        self._texture_id: Optional[int] = None
+        self._last_mouse_pos: QPointF | None = None
+        self._image_data: NDArray[np.float32] | None = None
+        self._texture_id: int | None = None
         self._min_zoom: float = 0.1
         self._max_zoom: float = 100.0
         self._image_width: int = 0
         self._image_height: int = 0
         self._texture_manager = TextureManager()
         self._tile_renderer = TileRenderer(self._texture_manager)
-        self._tile_provider: Optional[Callable[[int, int, int, int], NDArray[np.uint8]]] = None
-        self._bg_color: Tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
+        self._tile_provider: Callable[[int, int, int, int], NDArray[np.uint8]] | None = None
+        self._bg_color: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
 
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -91,12 +90,12 @@ class GLCanvas(QOpenGLWidget):
         self.update()
 
     @property
-    def pan_offset(self) -> Tuple[float, float]:
+    def pan_offset(self) -> tuple[float, float]:
         """Get current pan offset (x, y)."""
         return (self._pan_x, self._pan_y)
 
     @property
-    def image_size(self) -> Tuple[int, int]:
+    def image_size(self) -> tuple[int, int]:
         """Get current image size (width, height)."""
         return (self._image_width, self._image_height)
 
@@ -145,7 +144,7 @@ class GLCanvas(QOpenGLWidget):
         """Update GPU texture cache size in MB."""
         self._texture_manager.max_cache_size = int(cache_size_mb) * 1024 * 1024
 
-    def set_background_color(self, color: Tuple[float, float, float, float]) -> None:
+    def set_background_color(self, color: tuple[float, float, float, float]) -> None:
         """Set GL background color (RGBA in 0-1 range)."""
         self._bg_color = color
         if self.context() is not None:
@@ -163,7 +162,7 @@ class GLCanvas(QOpenGLWidget):
         self.pan_changed.emit(self._pan_x, self._pan_y)
         self.update()
 
-    def zoom_to_fit(self, viewport_size: Optional[QSize] = None) -> None:
+    def zoom_to_fit(self, viewport_size: QSize | None = None) -> None:
         """Adjust zoom to fit the entire image in view.
 
         Args:
@@ -190,7 +189,7 @@ class GLCanvas(QOpenGLWidget):
         self.pan_changed.emit(self._pan_x, self._pan_y)
         self.update()
 
-    def screen_to_image(self, screen_x: float, screen_y: float) -> Tuple[float, float]:
+    def screen_to_image(self, screen_x: float, screen_y: float) -> tuple[float, float]:
         """
         Convert screen coordinates to image coordinates.
 
@@ -207,7 +206,7 @@ class GLCanvas(QOpenGLWidget):
         img_y = (center_y - screen_y) / self._zoom + self._pan_y
         return (img_x, img_y)
 
-    def image_to_screen(self, img_x: float, img_y: float) -> Tuple[float, float]:
+    def image_to_screen(self, img_x: float, img_y: float) -> tuple[float, float]:
         """
         Convert image coordinates to screen coordinates.
 

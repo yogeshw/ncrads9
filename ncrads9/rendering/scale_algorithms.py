@@ -24,7 +24,6 @@ the visibility of faint features while preserving bright source detail.
 """
 
 from enum import Enum, auto
-from typing import Optional, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
@@ -46,8 +45,8 @@ class ScaleAlgorithm(Enum):
 def apply_scale(
     data: NDArray[np.float32],
     algorithm: ScaleAlgorithm,
-    vmin: Optional[float] = None,
-    vmax: Optional[float] = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
     **kwargs,
 ) -> NDArray[np.float32]:
     """
@@ -303,7 +302,7 @@ def compute_zscale_limits(
     contrast: float = 0.25,
     num_samples: int = 1000,
     num_iterations: int = 5,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """
     Compute zscale display limits.
 

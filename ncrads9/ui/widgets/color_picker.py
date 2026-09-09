@@ -20,16 +20,15 @@ ColorPicker Widget - Color selection widget.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
-    QWidget,
-    QHBoxLayout,
-    QPushButton,
-    QLabel,
     QColorDialog,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QWidget,
 )
 
 
@@ -41,8 +40,8 @@ class ColorPicker(QWidget):
     def __init__(
         self,
         label: str = "",
-        color: Optional[QColor] = None,
-        parent: Optional[QWidget] = None,
+        color: QColor | None = None,
+        parent: QWidget | None = None,
     ) -> None:
         """
         Initialize the ColorPicker widget.

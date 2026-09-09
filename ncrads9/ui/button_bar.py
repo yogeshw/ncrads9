@@ -20,15 +20,14 @@ DS9-style button bar for NCRADS9 application.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QButtonGroup,
     QGroupBox,
     QPushButton,
-    QButtonGroup,
+    QVBoxLayout,
+    QWidget,
 )
 
 
@@ -41,7 +40,7 @@ class ButtonBar(QWidget):
     colormap_changed: pyqtSignal = pyqtSignal(str)
     region_mode_changed: pyqtSignal = pyqtSignal(str)
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """
         Initialize the button bar.
 

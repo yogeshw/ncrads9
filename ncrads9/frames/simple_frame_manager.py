@@ -20,10 +20,10 @@ Simple frame management for multiple images.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, List, Dict
 from dataclasses import dataclass
-import numpy as np
 from pathlib import Path
+
+import numpy as np
 
 from ..rendering.scale_algorithms import ScaleAlgorithm
 
@@ -33,19 +33,19 @@ class Frame:
     """Container for a single frame (image + metadata)."""
 
     frame_id: int
-    filepath: Optional[Path] = None
-    image_data: Optional[np.ndarray] = None
-    header: Optional[dict] = None
-    wcs_handler: Optional[object] = None
-    fits_handler: Optional[object] = None
-    regions: List = None
-    original_image_data: Optional[np.ndarray] = None
+    filepath: Path | None = None
+    image_data: np.ndarray | None = None
+    header: dict | None = None
+    wcs_handler: object | None = None
+    fits_handler: object | None = None
+    regions: list = None
+    original_image_data: np.ndarray | None = None
     bin_factor: int = 1
     colormap: str = "grey"
     scale: ScaleAlgorithm = ScaleAlgorithm.LINEAR
     invert_colormap: bool = False
-    z1: Optional[float] = None
-    z2: Optional[float] = None
+    z1: float | None = None
+    z2: float | None = None
     zoom: float = 1.0
     pan_x: float = 0.0
     pan_y: float = 0.0
@@ -55,20 +55,20 @@ class Frame:
     align_wcs: bool = False
     contrast: float = 1.0
     brightness: float = 0.0
-    crop_center_x: Optional[float] = None
-    crop_center_y: Optional[float] = None
-    crop_width: Optional[float] = None
-    crop_height: Optional[float] = None
+    crop_center_x: float | None = None
+    crop_center_y: float | None = None
+    crop_width: float | None = None
+    crop_height: float | None = None
     frame_type: str = "base"
-    rgb_channels: Dict[str, Optional[np.ndarray]] = None
-    rgb_view: Dict[str, bool] = None
-    rgb_source_frame_ids: Dict[str, Optional[int]] = None
+    rgb_channels: dict[str, np.ndarray | None] = None
+    rgb_view: dict[str, bool] = None
+    rgb_source_frame_ids: dict[str, int | None] = None
     rgb_current_channel: str = "red"
-    rgb_channel_scale: Dict[str, ScaleAlgorithm] = None
-    rgb_channel_z1: Dict[str, Optional[float]] = None
-    rgb_channel_z2: Dict[str, Optional[float]] = None
-    rgb_channel_contrast: Dict[str, float] = None
-    rgb_channel_brightness: Dict[str, float] = None
+    rgb_channel_scale: dict[str, ScaleAlgorithm] = None
+    rgb_channel_z1: dict[str, float | None] = None
+    rgb_channel_z2: dict[str, float | None] = None
+    rgb_channel_contrast: dict[str, float] = None
+    rgb_channel_brightness: dict[str, float] = None
 
     def __post_init__(self):
         if self.regions is None:
@@ -111,7 +111,7 @@ class FrameManager:
     """Manages multiple image frames."""
 
     def __init__(self):
-        self._frames: List[Frame] = []
+        self._frames: list[Frame] = []
         self._current_index: int = -1
         self._next_id: int = 1
 
@@ -119,7 +119,7 @@ class FrameManager:
         self.new_frame()
 
     @property
-    def current_frame(self) -> Optional[Frame]:
+    def current_frame(self) -> Frame | None:
         """Get current active frame."""
         if 0 <= self._current_index < len(self._frames):
             return self._frames[self._current_index]
@@ -136,7 +136,7 @@ class FrameManager:
         return len(self._frames)
 
     @property
-    def frames(self) -> List[Frame]:
+    def frames(self) -> list[Frame]:
         """Get list of frames."""
         return self._frames
 
@@ -148,7 +148,7 @@ class FrameManager:
         self._next_id += 1
         return frame
 
-    def delete_frame(self, index: Optional[int] = None) -> bool:
+    def delete_frame(self, index: int | None = None) -> bool:
         """
         Delete a frame.
 
@@ -174,42 +174,42 @@ class FrameManager:
             return True
         return False
 
-    def next_frame(self) -> Optional[Frame]:
+    def next_frame(self) -> Frame | None:
         """Go to next frame."""
         if len(self._frames) > 0:
             self._current_index = (self._current_index + 1) % len(self._frames)
             return self.current_frame
         return None
 
-    def prev_frame(self) -> Optional[Frame]:
+    def prev_frame(self) -> Frame | None:
         """Go to previous frame."""
         if len(self._frames) > 0:
             self._current_index = (self._current_index - 1) % len(self._frames)
             return self.current_frame
         return None
 
-    def first_frame(self) -> Optional[Frame]:
+    def first_frame(self) -> Frame | None:
         """Go to first frame."""
         if len(self._frames) > 0:
             self._current_index = 0
             return self.current_frame
         return None
 
-    def last_frame(self) -> Optional[Frame]:
+    def last_frame(self) -> Frame | None:
         """Go to last frame."""
         if len(self._frames) > 0:
             self._current_index = len(self._frames) - 1
             return self.current_frame
         return None
 
-    def goto_frame(self, index: int) -> Optional[Frame]:
+    def goto_frame(self, index: int) -> Frame | None:
         """Go to specific frame by index."""
         if 0 <= index < len(self._frames):
             self._current_index = index
             return self.current_frame
         return None
 
-    def get_frame_list(self) -> List[str]:
+    def get_frame_list(self) -> list[str]:
         """Get list of frame descriptions."""
         return [f"{i+1}: {frame.filename}" for i, frame in enumerate(self._frames)]
 

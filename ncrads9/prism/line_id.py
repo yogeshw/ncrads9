@@ -22,7 +22,6 @@ Author: Yogesh Wadadekar
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 
 @dataclass
@@ -44,7 +43,7 @@ class SpectralLine:
 
 
 # Common spectral lines database
-COMMON_LINES: List[SpectralLine] = [
+COMMON_LINES: list[SpectralLine] = [
     SpectralLine("Lyman-alpha", 1215.67, "H", "I", "2-1"),
     SpectralLine("C IV", 1549.06, "C", "IV", ""),
     SpectralLine("Mg II", 2798.75, "Mg", "II", ""),
@@ -67,14 +66,14 @@ class LineIdentifier:
 
     def __init__(
         self,
-        line_database: Optional[List[SpectralLine]] = None,
+        line_database: list[SpectralLine] | None = None,
     ) -> None:
         """Initialize the line identifier.
 
         Args:
             line_database: Custom line database, or use COMMON_LINES.
         """
-        self._database: List[SpectralLine] = line_database or COMMON_LINES.copy()
+        self._database: list[SpectralLine] = line_database or COMMON_LINES.copy()
         self._redshift: float = 0.0
         self._tolerance: float = 5.0  # Angstroms
 
@@ -146,7 +145,7 @@ class LineIdentifier:
     def identify(
         self,
         observed_wavelength: float,
-    ) -> List[Tuple[SpectralLine, float]]:
+    ) -> list[tuple[SpectralLine, float]]:
         """Identify possible lines at an observed wavelength.
 
         Args:
@@ -155,7 +154,7 @@ class LineIdentifier:
         Returns:
             List of (line, offset) tuples sorted by offset.
         """
-        matches: List[Tuple[SpectralLine, float]] = []
+        matches: list[tuple[SpectralLine, float]] = []
 
         for line in self._database:
             expected = self.observed_wavelength(line.wavelength)
@@ -170,7 +169,7 @@ class LineIdentifier:
         self,
         wavelength_min: float,
         wavelength_max: float,
-    ) -> List[Tuple[SpectralLine, float]]:
+    ) -> list[tuple[SpectralLine, float]]:
         """Find all lines expected in a wavelength range.
 
         Args:
@@ -180,7 +179,7 @@ class LineIdentifier:
         Returns:
             List of (line, observed_wavelength) tuples.
         """
-        result: List[Tuple[SpectralLine, float]] = []
+        result: list[tuple[SpectralLine, float]] = []
 
         for line in self._database:
             obs_wave = self.observed_wavelength(line.wavelength)

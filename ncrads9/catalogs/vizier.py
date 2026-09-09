@@ -21,11 +21,11 @@ VizieR catalog query interface.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, List, Any
+from typing import Any
 
+import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.table import Table, vstack
-import astropy.units as u
 from astroquery.vizier import Vizier
 
 from .catalog_base import CatalogBase
@@ -36,8 +36,8 @@ class VizierCatalog(CatalogBase):
 
     def __init__(
         self,
-        catalog: Optional[str] = None,
-        columns: Optional[List[str]] = None,
+        catalog: str | None = None,
+        columns: list[str] | None = None,
         row_limit: int = -1,
     ) -> None:
         """
@@ -53,8 +53,8 @@ class VizierCatalog(CatalogBase):
             Maximum number of rows to return. -1 for unlimited.
         """
         super().__init__(name="VizieR", description="VizieR catalog service")
-        self.catalog: Optional[str] = catalog
-        self.columns: Optional[List[str]] = columns
+        self.catalog: str | None = catalog
+        self.columns: list[str] | None = columns
         self.row_limit: int = row_limit
         self._vizier: Vizier = self._create_vizier()
 
@@ -72,9 +72,9 @@ class VizierCatalog(CatalogBase):
         self,
         coord: SkyCoord,
         radius: u.Quantity,
-        catalog: Optional[str] = None,
+        catalog: str | None = None,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Query VizieR for objects within a region.
 
@@ -129,9 +129,9 @@ class VizierCatalog(CatalogBase):
     def query_object(
         self,
         name: str,
-        catalog: Optional[str] = None,
+        catalog: str | None = None,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Query VizieR by object name.
 
@@ -176,7 +176,7 @@ class VizierCatalog(CatalogBase):
             self._last_result = None
             return None
 
-    def find_catalogs(self, keywords: str) -> Optional[Table]:
+    def find_catalogs(self, keywords: str) -> Table | None:
         """
         Find VizieR catalogs matching keywords.
 
@@ -207,7 +207,7 @@ class VizierCatalog(CatalogBase):
         self.catalog = catalog
         self._vizier = self._create_vizier()
 
-    def set_columns(self, columns: List[str]) -> None:
+    def set_columns(self, columns: list[str]) -> None:
         """Set the columns to retrieve."""
         self.columns = columns
         self._vizier = self._create_vizier()

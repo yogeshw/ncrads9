@@ -21,7 +21,7 @@ Author: Yogesh Wadadekar
 """
 
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -31,7 +31,7 @@ from PIL import Image
 class TIFFWriter:
     """Writer for TIFF image files."""
 
-    def __init__(self, filepath: Union[str, Path]) -> None:
+    def __init__(self, filepath: str | Path) -> None:
         """
         Initialize TIFF writer.
 
@@ -45,7 +45,7 @@ class TIFFWriter:
         data: NDArray[Any],
         normalize: bool = False,
         compression: str = "none",
-        dpi: Optional[tuple[int, int]] = None,
+        dpi: tuple[int, int] | None = None,
     ) -> None:
         """
         Write image data to TIFF file.

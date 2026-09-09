@@ -19,9 +19,9 @@
 Author: Yogesh Wadadekar
 """
 
-from .print_engine import PrintEngine
+from .page_setup import Orientation, PageSetup, PaperSize
 from .postscript import PostScriptGenerator
-from .page_setup import PageSetup, PaperSize, Orientation
+from .print_engine import PrintEngine
 
 __all__ = [
     "PrintEngine",

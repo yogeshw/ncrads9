@@ -22,7 +22,6 @@ Author: Yogesh Wadadekar
 
 from abc import ABC, abstractmethod
 from enum import Enum, auto
-from typing import Tuple, Optional
 
 
 class CoordSystemType(Enum):
@@ -51,7 +50,7 @@ class CoordSystem(ABC):
         return self._coord_type
 
     @abstractmethod
-    def get_coordinates(self) -> Tuple[float, float]:
+    def get_coordinates(self) -> tuple[float, float]:
         """
         Get the coordinates as a tuple.
 
@@ -70,7 +69,7 @@ class CoordSystem(ABC):
         """
 
     @abstractmethod
-    def to_string(self, precision: Optional[int] = None) -> str:
+    def to_string(self, precision: int | None = None) -> str:
         """
         Convert coordinates to a string representation.
 

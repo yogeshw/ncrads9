@@ -21,9 +21,9 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Callable, Optional
 
 from .frame import Frame
 from .frame_manager import FrameManager
@@ -53,7 +53,7 @@ class BlinkSettings:
     mode: BlinkMode = BlinkMode.FORWARD
     loop: bool = True
     start_frame: int = 0
-    end_frame: Optional[int] = None
+    end_frame: int | None = None
 
 
 class BlinkController:
@@ -128,7 +128,7 @@ class BlinkController:
         """
         self._settings.loop = loop
 
-    def set_frame_range(self, start: Optional[int] = None, end: Optional[int] = None) -> None:
+    def set_frame_range(self, start: int | None = None, end: int | None = None) -> None:
         """Set the frame range for blinking.
 
         Args:
@@ -261,7 +261,7 @@ class BlinkController:
 
         return True
 
-    def next_frame(self) -> Optional[Frame]:
+    def next_frame(self) -> Frame | None:
         """Manually advance to the next frame.
 
         Returns:
@@ -275,7 +275,7 @@ class BlinkController:
         self._frame_manager.set_active_frame(frame_id)
         return self._frame_manager.get_frame(frame_id)
 
-    def previous_frame(self) -> Optional[Frame]:
+    def previous_frame(self) -> Frame | None:
         """Manually go to the previous frame.
 
         Returns:
@@ -289,7 +289,7 @@ class BlinkController:
         self._frame_manager.set_active_frame(frame_id)
         return self._frame_manager.get_frame(frame_id)
 
-    def goto_frame(self, index: int) -> Optional[Frame]:
+    def goto_frame(self, index: int) -> Frame | None:
         """Go to a specific frame in the blink sequence.
 
         Args:

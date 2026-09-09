@@ -21,7 +21,7 @@ Author: Yogesh Wadadekar
 """
 
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 from astropy.io import fits
 from numpy.typing import NDArray
@@ -30,7 +30,7 @@ from numpy.typing import NDArray
 class FITSReader:
     """Reader for FITS (Flexible Image Transport System) files."""
 
-    def __init__(self, filepath: Union[str, Path]) -> None:
+    def __init__(self, filepath: str | Path) -> None:
         """
         Initialize FITS reader.
 
@@ -38,7 +38,7 @@ class FITSReader:
             filepath: Path to the FITS file.
         """
         self.filepath = Path(filepath)
-        self._hdu_list: Optional[fits.HDUList] = None
+        self._hdu_list: fits.HDUList | None = None
 
     def open(self) -> None:
         """Open the FITS file."""

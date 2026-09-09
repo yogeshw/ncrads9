@@ -21,13 +21,13 @@ Virtual Observatory cone search implementation.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, List, Any
-import requests
+from typing import Any
 
-from astropy.coordinates import SkyCoord
-from astropy.table import Table
-from astropy.io.votable import parse_single_table
 import astropy.units as u
+import requests
+from astropy.coordinates import SkyCoord
+from astropy.io.votable import parse_single_table
+from astropy.table import Table
 
 from .catalog_base import CatalogBase
 
@@ -45,8 +45,8 @@ class ConeSearch(CatalogBase):
 
     def __init__(
         self,
-        url: Optional[str] = None,
-        service_name: Optional[str] = None,
+        url: str | None = None,
+        service_name: str | None = None,
         timeout: int = 60,
     ) -> None:
         """
@@ -80,9 +80,9 @@ class ConeSearch(CatalogBase):
         self,
         coord: SkyCoord,
         radius: u.Quantity,
-        catalog: Optional[str] = None,
+        catalog: str | None = None,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Perform a cone search query.
 
@@ -143,7 +143,7 @@ class ConeSearch(CatalogBase):
         name: str,
         radius: u.Quantity = 1 * u.arcmin,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Query by object name.
 
@@ -169,7 +169,7 @@ class ConeSearch(CatalogBase):
             self._last_result = None
             return None
 
-    def _parse_votable(self, content: bytes) -> Optional[Table]:
+    def _parse_votable(self, content: bytes) -> Table | None:
         """
         Parse VOTable from response content.
 
@@ -194,10 +194,10 @@ class ConeSearch(CatalogBase):
 
     def search_multiple(
         self,
-        coords: List[SkyCoord],
+        coords: list[SkyCoord],
         radius: u.Quantity,
         **kwargs: Any,
-    ) -> List[Optional[Table]]:
+    ) -> list[Table | None]:
         """
         Perform cone search for multiple positions.
 
@@ -215,7 +215,7 @@ class ConeSearch(CatalogBase):
         list of Table or None
             Results for each coordinate.
         """
-        results: List[Optional[Table]] = []
+        results: list[Table | None] = []
         for coord in coords:
             result = self.query_region(coord, radius=radius, **kwargs)
             results.append(result)
@@ -251,7 +251,7 @@ class ConeSearch(CatalogBase):
         self.timeout = timeout
 
     @staticmethod
-    def list_known_services() -> List[str]:
+    def list_known_services() -> list[str]:
         """Return list of known service names."""
         return list(ConeSearch.KNOWN_SERVICES.keys())
 

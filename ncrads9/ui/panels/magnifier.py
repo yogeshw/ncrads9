@@ -20,26 +20,25 @@ Magnifier panel showing magnified view around cursor position.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
 
 import numpy as np
 from numpy.typing import NDArray
-from PyQt6.QtCore import Qt, QPointF
-from PyQt6.QtGui import QImage, QPixmap, QPainter, QPen, QColor
+from PyQt6.QtCore import QPointF, Qt
+from PyQt6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QDockWidget,
-    QWidget,
-    QVBoxLayout,
+    QHBoxLayout,
     QLabel,
     QSpinBox,
-    QHBoxLayout,
+    QVBoxLayout,
+    QWidget,
 )
 
 
 class MagnifierPanel(QDockWidget):
     """Dockable panel showing magnified view around cursor position."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """
         Initialize the magnifier panel.
 
@@ -51,9 +50,9 @@ class MagnifierPanel(QDockWidget):
 
         self._zoom_factor: int = 4
         self._region_size: int = 64
-        self._current_image: Optional[NDArray[np.float64]] = None
-        self._source_image_size: Optional[tuple[int, int]] = None
-        self._cursor_pos: Optional[QPointF] = None
+        self._current_image: NDArray[np.float64] | None = None
+        self._source_image_size: tuple[int, int] | None = None
+        self._cursor_pos: QPointF | None = None
 
         self._setup_ui()
 
@@ -91,7 +90,7 @@ class MagnifierPanel(QDockWidget):
     def set_image(
         self,
         image: NDArray[np.float64],
-        source_size: Optional[tuple[int, int]] = None,
+        source_size: tuple[int, int] | None = None,
     ) -> None:
         """
         Set the image data for magnification.

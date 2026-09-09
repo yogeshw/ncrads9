@@ -22,7 +22,7 @@ Author: Yogesh Wadadekar
 
 import gzip
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -44,7 +44,7 @@ class NRRDReader:
         "double": np.dtype("float64"),
     }
 
-    def __init__(self, filepath: Union[str, Path]) -> None:
+    def __init__(self, filepath: str | Path) -> None:
         """
         Initialize NRRD reader.
 
@@ -116,7 +116,7 @@ class NRRDReader:
         sizes_str = self._header.get("sizes", "")
         return tuple(int(s) for s in sizes_str.split())
 
-    def get_spacing(self) -> Optional[tuple[float, ...]]:
+    def get_spacing(self) -> tuple[float, ...] | None:
         """
         Get voxel spacing if available.
 

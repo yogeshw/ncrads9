@@ -20,11 +20,11 @@ UI Widgets Package
 Author: Yogesh Wadadekar
 """
 
-from .spinbox_slider import SpinboxSlider
 from .color_picker import ColorPicker
 from .coordinate_entry import CoordinateEntry
-from .scale_widget import ScaleWidget
 from .region_list import RegionList
+from .scale_widget import ScaleWidget
+from .spinbox_slider import SpinboxSlider
 
 __all__ = [
     "SpinboxSlider",

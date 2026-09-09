@@ -18,12 +18,11 @@
 
 """Interactive colorbar widget for ncrads9."""
 
-from typing import Optional, Tuple
-import numpy as np
 
+import numpy as np
+from PyQt6.QtCore import QRect, Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QFont, QImage, QPainter, QPen
 from PyQt6.QtWidgets import QWidget
-from PyQt6.QtGui import QPainter, QImage, QColor, QPen, QFont
-from PyQt6.QtCore import Qt, pyqtSignal, QRect
 
 from .colormap import Colormap
 
@@ -43,8 +42,8 @@ class ColorbarWidget(QWidget):
 
     def __init__(
         self,
-        parent: Optional[QWidget] = None,
-        colormap: Optional[Colormap] = None,
+        parent: QWidget | None = None,
+        colormap: Colormap | None = None,
         orientation: str = "horizontal",
     ) -> None:
         """Initialize the ColorbarWidget.
@@ -56,14 +55,14 @@ class ColorbarWidget(QWidget):
         """
         super().__init__(parent)
 
-        self._colormap: Optional[Colormap] = colormap
+        self._colormap: Colormap | None = colormap
         self._orientation: str = orientation
         self._vmin: float = 0.0
         self._vmax: float = 1.0
         self._show_labels: bool = True
         self._label_format: str = "{:.2g}"
         self._num_ticks: int = 5
-        self._colorbar_image: Optional[QImage] = None
+        self._colorbar_image: QImage | None = None
 
         self._setup_ui()
         self._update_colorbar_image()
@@ -86,7 +85,7 @@ class ColorbarWidget(QWidget):
         self.update()
         self.colormap_changed.emit(colormap)
 
-    def get_colormap(self) -> Optional[Colormap]:
+    def get_colormap(self) -> Colormap | None:
         """Get the current colormap.
 
         Returns:
@@ -106,7 +105,7 @@ class ColorbarWidget(QWidget):
         self.update()
         self.range_changed.emit(vmin, vmax)
 
-    def get_range(self) -> Tuple[float, float]:
+    def get_range(self) -> tuple[float, float]:
         """Get the current value range.
 
         Returns:

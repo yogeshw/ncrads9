@@ -26,7 +26,7 @@ Author: Yogesh Wadadekar
 
 import logging
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 try:
     from astropy.samp import SAMPHubServer
@@ -58,8 +58,8 @@ class SAMPHub:
         self.port: int = port
         self.running: bool = False
 
-        self._hub: Optional[Any] = None
-        self._thread: Optional[threading.Thread] = None
+        self._hub: Any | None = None
+        self._thread: threading.Thread | None = None
         self._logger: logging.Logger = logging.getLogger(__name__)
 
         if not ASTROPY_SAMP_AVAILABLE:
@@ -142,7 +142,7 @@ class SAMPHub:
         """
         return self.running
 
-    def get_registered_clients(self) -> List[Dict[str, str]]:
+    def get_registered_clients(self) -> list[dict[str, str]]:
         """Get list of registered clients.
 
         Returns:
@@ -181,7 +181,7 @@ class SAMPHub:
             return False
 
     @staticmethod
-    def find_hub() -> Optional[str]:
+    def find_hub() -> str | None:
         """Find an existing SAMP hub.
 
         Returns:

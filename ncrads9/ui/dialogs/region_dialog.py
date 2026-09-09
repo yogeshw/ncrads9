@@ -20,26 +20,26 @@ Region properties dialog.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Dict, Any
+from typing import Any
 
 from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QGroupBox,
-    QFormLayout,
-    QComboBox,
-    QDoubleSpinBox,
     QCheckBox,
-    QLineEdit,
     QColorDialog,
+    QComboBox,
+    QDialog,
+    QDoubleSpinBox,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLineEdit,
+    QPushButton,
     QSpinBox,
     QTabWidget,
+    QVBoxLayout,
     QWidget,
 )
-from PyQt6.QtGui import QColor
 
 
 class RegionDialog(QDialog):
@@ -47,9 +47,7 @@ class RegionDialog(QDialog):
 
     region_changed = pyqtSignal(dict)
 
-    def __init__(
-        self, region_data: Optional[Dict[str, Any]] = None, parent: Optional[QDialog] = None
-    ) -> None:
+    def __init__(self, region_data: dict[str, Any] | None = None, parent: QDialog | None = None) -> None:
         """Initialize the region dialog.
 
         Args:

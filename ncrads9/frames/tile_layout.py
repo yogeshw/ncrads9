@@ -22,7 +22,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Optional
 
 from .frame import Frame
 
@@ -67,7 +66,7 @@ class TileLayout:
         self._rows = max(1, rows)
         self._cols = max(1, cols)
         self._gap = gap
-        self._tiles: dict[tuple[int, int], Optional[Frame]] = {}
+        self._tiles: dict[tuple[int, int], Frame | None] = {}
         self._canvas_width: float = 800.0
         self._canvas_height: float = 600.0
         self._mode = TileMode.GRID
@@ -170,7 +169,7 @@ class TileLayout:
         """
         self._resize_grid(max(1, rows), max(1, cols))
 
-    def get_tile(self, row: int, col: int) -> Optional[Frame]:
+    def get_tile(self, row: int, col: int) -> Frame | None:
         """Get the frame at a tile position.
 
         Args:
@@ -182,7 +181,7 @@ class TileLayout:
         """
         return self._tiles.get((row, col))
 
-    def set_tile(self, row: int, col: int, frame: Optional[Frame]) -> bool:
+    def set_tile(self, row: int, col: int, frame: Frame | None) -> bool:
         """Set a frame at a tile position.
 
         Args:
@@ -215,7 +214,7 @@ class TileLayout:
         for key in self._tiles:
             self._tiles[key] = None
 
-    def get_tile_position(self, row: int, col: int) -> Optional[TilePosition]:
+    def get_tile_position(self, row: int, col: int) -> TilePosition | None:
         """Calculate the position and size of a tile.
 
         Args:
@@ -262,7 +261,7 @@ class TileLayout:
                     positions.append(pos)
         return positions
 
-    def find_tile_at(self, x: float, y: float) -> Optional[tuple[int, int]]:
+    def find_tile_at(self, x: float, y: float) -> tuple[int, int] | None:
         """Find which tile contains a point.
 
         Args:

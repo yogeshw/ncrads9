@@ -21,7 +21,6 @@ Author: Yogesh Wadadekar
 """
 
 import sys
-from typing import Optional
 
 from PyQt6.QtWidgets import QApplication, QStyleFactory
 
@@ -78,7 +77,7 @@ class NativeTheme:
         return available_styles[0] if available_styles else "Fusion"
 
     @classmethod
-    def apply(cls, app: Optional[QApplication] = None) -> None:
+    def apply(cls, app: QApplication | None = None) -> None:
         """
         Apply the native theme to the application.
 

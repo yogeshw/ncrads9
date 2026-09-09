@@ -21,12 +21,14 @@ Author: Yogesh Wadadekar
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, List, Callable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+
     from .page_setup import PageSetup
 
 
@@ -45,20 +47,20 @@ class PrintEngine:
 
     def __init__(
         self,
-        page_setup: Optional[PageSetup] = None,
+        page_setup: PageSetup | None = None,
     ) -> None:
         """Initialize the print engine.
 
         Args:
             page_setup: Page setup configuration.
         """
-        self._page_setup: Optional[PageSetup] = page_setup
+        self._page_setup: PageSetup | None = page_setup
         self._dpi: int = 300
         self._output_format: OutputFormat = OutputFormat.PDF
-        self._progress_callback: Optional[Callable[[float], None]] = None
+        self._progress_callback: Callable[[float], None] | None = None
 
     @property
-    def page_setup(self) -> Optional[PageSetup]:
+    def page_setup(self) -> PageSetup | None:
         """Get the current page setup."""
         return self._page_setup
 
@@ -89,7 +91,7 @@ class PrintEngine:
 
     def set_progress_callback(
         self,
-        callback: Optional[Callable[[float], None]],
+        callback: Callable[[float], None] | None,
     ) -> None:
         """Set a callback for progress updates.
 
@@ -102,7 +104,7 @@ class PrintEngine:
         self,
         image: NDArray,
         output_path: str | Path,
-        title: Optional[str] = None,
+        title: str | None = None,
     ) -> bool:
         """Render an image to file.
 
@@ -128,7 +130,7 @@ class PrintEngine:
     def render_to_printer(
         self,
         image: NDArray,
-        printer_name: Optional[str] = None,
+        printer_name: str | None = None,
     ) -> bool:
         """Send image directly to a printer.
 
@@ -142,7 +144,7 @@ class PrintEngine:
         # TODO: Implement direct printing
         return False
 
-    def get_available_printers(self) -> List[str]:
+    def get_available_printers(self) -> list[str]:
         """Get list of available printers.
 
         Returns:

@@ -20,24 +20,24 @@ Statistics dialog for image analysis.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
+
 import numpy as np
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QDialog,
-    QVBoxLayout,
     QHBoxLayout,
     QLabel,
-    QTextEdit,
     QPushButton,
+    QTextEdit,
+    QVBoxLayout,
     QWidget,
 )
-from PyQt6.QtCore import Qt
 
 
 class StatisticsDialog(QDialog):
     """Dialog showing image statistics."""
 
-    def __init__(self, image_data: np.ndarray, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, image_data: np.ndarray, parent: QWidget | None = None) -> None:
         """
         Initialize the statistics dialog.
 

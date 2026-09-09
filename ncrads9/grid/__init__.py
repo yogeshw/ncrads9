@@ -19,9 +19,9 @@
 Author: Yogesh Wadadekar
 """
 
-from .grid_renderer import GridRenderer
-from .grid_labels import GridLabels
-from .grid_config import GridConfig
 from .ast_wrapper import ASTWrapper
+from .grid_config import GridConfig
+from .grid_labels import GridLabels
+from .grid_renderer import GridRenderer
 
 __all__ = ["GridRenderer", "GridLabels", "GridConfig", "ASTWrapper"]

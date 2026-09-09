@@ -22,9 +22,8 @@ Provides functionality for loading and managing FITS files using astropy.
 Author: Yogesh Wadadekar
 """
 
-from types import TracebackType
-from typing import Optional, Union, List, Tuple
 from pathlib import Path
+from types import TracebackType
 
 import numpy as np
 from astropy.io import fits
@@ -42,19 +41,19 @@ class FITSHandler:
         hdu_list: The HDU list from the opened FITS file.
     """
 
-    def __init__(self, filepath: Optional[Union[str, Path]] = None) -> None:
+    def __init__(self, filepath: str | Path | None = None) -> None:
         """Initialize FITSHandler.
 
         Args:
             filepath: Optional path to a FITS file to load.
         """
-        self.filepath: Optional[Path] = Path(filepath) if filepath else None
-        self.hdu_list: Optional[fits.HDUList] = None
+        self.filepath: Path | None = Path(filepath) if filepath else None
+        self.hdu_list: fits.HDUList | None = None
 
         if self.filepath is not None:
             self.load(self.filepath)
 
-    def load(self, filepath: Union[str, Path], memmap: bool = True) -> fits.HDUList:
+    def load(self, filepath: str | Path, memmap: bool = True) -> fits.HDUList:
         """Load a FITS file.
 
         Args:
@@ -77,7 +76,7 @@ class FITSHandler:
         )
         return self.hdu_list
 
-    def get_extension(self, ext: Union[int, str] = 0) -> fits.hdu.base.ExtensionHDU:
+    def get_extension(self, ext: int | str = 0) -> fits.hdu.base.ExtensionHDU:
         """Get a specific extension from the FITS file.
 
         Args:
@@ -93,7 +92,7 @@ class FITSHandler:
             raise ValueError("No FITS file loaded")
         return self.hdu_list[ext]
 
-    def get_data(self, ext: Union[int, str] = 0) -> NDArray[np.floating]:
+    def get_data(self, ext: int | str = 0) -> NDArray[np.floating]:
         """Get data array from a specific extension.
 
         Args:
@@ -106,7 +105,7 @@ class FITSHandler:
             raise ValueError("No FITS file loaded")
         return self.hdu_list[ext].data
 
-    def get_header(self, ext: Union[int, str] = 0) -> fits.Header:
+    def get_header(self, ext: int | str = 0) -> fits.Header:
         """Get header from a specific extension.
 
         Args:
@@ -119,7 +118,7 @@ class FITSHandler:
             raise ValueError("No FITS file loaded")
         return self.hdu_list[ext].header
 
-    def list_extensions(self) -> List[Tuple[int, str, str]]:
+    def list_extensions(self) -> list[tuple[int, str, str]]:
         """List all extensions in the FITS file.
 
         Returns:

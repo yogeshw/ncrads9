@@ -24,7 +24,6 @@ composite images, commonly used in astronomical visualization.
 """
 
 from enum import Enum, auto
-from typing import Optional, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
@@ -59,15 +58,15 @@ class RGBCompositor:
             color_space: Color space for compositing (default RGB).
         """
         self._color_space: ColorSpace = color_space
-        self._red_frame: Optional[NDArray[np.float32]] = None
-        self._green_frame: Optional[NDArray[np.float32]] = None
-        self._blue_frame: Optional[NDArray[np.float32]] = None
+        self._red_frame: NDArray[np.float32] | None = None
+        self._green_frame: NDArray[np.float32] | None = None
+        self._blue_frame: NDArray[np.float32] | None = None
         self._red_scale: ScaleAlgorithm = ScaleAlgorithm.LINEAR
         self._green_scale: ScaleAlgorithm = ScaleAlgorithm.LINEAR
         self._blue_scale: ScaleAlgorithm = ScaleAlgorithm.LINEAR
-        self._red_limits: Tuple[float, float] = (0.0, 1.0)
-        self._green_limits: Tuple[float, float] = (0.0, 1.0)
-        self._blue_limits: Tuple[float, float] = (0.0, 1.0)
+        self._red_limits: tuple[float, float] = (0.0, 1.0)
+        self._green_limits: tuple[float, float] = (0.0, 1.0)
+        self._blue_limits: tuple[float, float] = (0.0, 1.0)
 
     @property
     def color_space(self) -> ColorSpace:
@@ -83,8 +82,8 @@ class RGBCompositor:
         self,
         data: NDArray[np.float32],
         scale: ScaleAlgorithm = ScaleAlgorithm.LINEAR,
-        vmin: Optional[float] = None,
-        vmax: Optional[float] = None,
+        vmin: float | None = None,
+        vmax: float | None = None,
     ) -> None:
         """
         Set the red channel frame.
@@ -105,8 +104,8 @@ class RGBCompositor:
         self,
         data: NDArray[np.float32],
         scale: ScaleAlgorithm = ScaleAlgorithm.LINEAR,
-        vmin: Optional[float] = None,
-        vmax: Optional[float] = None,
+        vmin: float | None = None,
+        vmax: float | None = None,
     ) -> None:
         """
         Set the green channel frame.
@@ -127,8 +126,8 @@ class RGBCompositor:
         self,
         data: NDArray[np.float32],
         scale: ScaleAlgorithm = ScaleAlgorithm.LINEAR,
-        vmin: Optional[float] = None,
-        vmax: Optional[float] = None,
+        vmin: float | None = None,
+        vmax: float | None = None,
     ) -> None:
         """
         Set the blue channel frame.
@@ -190,10 +189,10 @@ class RGBCompositor:
 
     def _scale_channel(
         self,
-        data: Optional[NDArray[np.float32]],
+        data: NDArray[np.float32] | None,
         scale: ScaleAlgorithm,
-        limits: Tuple[float, float],
-        shape: Tuple[int, ...],
+        limits: tuple[float, float],
+        shape: tuple[int, ...],
     ) -> NDArray[np.float32]:
         """Scale a single channel or return zeros if None."""
         if data is None:
@@ -273,7 +272,7 @@ class RGBCompositor:
         return result
 
     @staticmethod
-    def _hls_to_rgb(h: float, l: float, s: float) -> Tuple[float, float, float]:
+    def _hls_to_rgb(h: float, l: float, s: float) -> tuple[float, float, float]:
         """
         Convert HLS to RGB.
 
@@ -311,7 +310,7 @@ class RGBCompositor:
         return (r, g, b)
 
     @staticmethod
-    def _hsv_to_rgb(h: float, s: float, v: float) -> Tuple[float, float, float]:
+    def _hsv_to_rgb(h: float, s: float, v: float) -> tuple[float, float, float]:
         """
         Convert HSV to RGB.
 

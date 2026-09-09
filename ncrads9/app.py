@@ -22,16 +22,16 @@ This module initializes the Qt application and main window.
 Author: Yogesh Wadadekar
 """
 
-from dataclasses import dataclass
-from typing import List, Sequence
 import logging
 import sys
 import tempfile
 import webbrowser
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
-from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication
 
 from ncrads9 import __version__
 from ncrads9.communication.xpa import XPAServer
@@ -47,7 +47,7 @@ class CLIItem:
 
     kind: str  # "file" | "option"
     name: str
-    args: List[str]
+    args: list[str]
 
 
 #: Flags that print usage to the terminal, as is conventional.
@@ -211,7 +211,7 @@ def open_cli_help_in_browser() -> Path:
     return help_path
 
 
-def parse_cli_sequence(args: Sequence[str]) -> List[CLIItem]:
+def parse_cli_sequence(args: Sequence[str]) -> list[CLIItem]:
     """Parse DS9-style startup arguments into an ordered sequence."""
 
     def _is_option_token(token: str) -> bool:
@@ -247,13 +247,13 @@ def parse_cli_sequence(args: Sequence[str]) -> List[CLIItem]:
     }
     two_arg_options = {"pan"}
 
-    items: List[CLIItem] = []
+    items: list[CLIItem] = []
     i = 0
     while i < len(args):
         token = str(args[i])
         if _is_option_token(token):
             option = token.lstrip("-").lower()
-            option_args: List[str] = []
+            option_args: list[str] = []
             i += 1
             if option in optional_bool_options:
                 if i < len(args):
@@ -415,7 +415,7 @@ def apply_startup_cli(main_window: MainWindow, argv: Sequence[str]) -> None:
         main_window._new_frame_with_type("rgb")
 
 
-def run_application(argv: List[str]) -> int:
+def run_application(argv: list[str]) -> int:
     """
     Initialize and run the NCRADS9 application.
 

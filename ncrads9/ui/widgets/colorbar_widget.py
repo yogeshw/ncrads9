@@ -20,17 +20,17 @@ Colorbar widget showing current colormap.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
+
 import numpy as np
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QImage, QPixmap, QPainter, QFont
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel
+from PyQt6.QtGui import QFont, QImage, QPainter, QPixmap
+from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 
 class ColorbarWidget(QWidget):
     """Widget displaying a colorbar with scale values."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """
         Initialize the colorbar widget.
 

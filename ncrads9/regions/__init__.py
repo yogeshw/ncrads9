@@ -24,11 +24,11 @@ Author: Yogesh Wadadekar
 """
 
 from .base_region import BaseRegion
-from .region_parser import RegionParser
-from .region_writer import RegionWriter
-from .region_manager import RegionManager
-from .region_renderer import RegionRenderer
 from .group_manager import GroupManager
+from .region_manager import RegionManager
+from .region_parser import RegionParser
+from .region_renderer import RegionRenderer
+from .region_writer import RegionWriter
 
 __all__ = [
     "BaseRegion",

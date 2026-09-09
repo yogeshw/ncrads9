@@ -20,18 +20,18 @@ Dialog modules for NCRADS9.
 Author: Yogesh Wadadekar
 """
 
-from .open_dialog import OpenDialog
-from .save_dialog import SaveDialog
-from .header_dialog import HeaderDialog
-from .contour_dialog import ContourDialog
-from .grid_dialog import GridDialog
-from .smooth_dialog import SmoothDialog
-from .scale_dialog import ScaleDialog
 from .colormap_dialog import ColormapDialog
-from .region_dialog import RegionDialog
-from .preferences_dialog import PreferencesDialog
+from .contour_dialog import ContourDialog
 from .crop_parameters_dialog import CropParametersDialog
+from .grid_dialog import GridDialog
+from .header_dialog import HeaderDialog
+from .open_dialog import OpenDialog
 from .pan_zoom_rotate_dialog import PanZoomRotateDialog
+from .preferences_dialog import PreferencesDialog
+from .region_dialog import RegionDialog
+from .save_dialog import SaveDialog
+from .scale_dialog import ScaleDialog
+from .smooth_dialog import SmoothDialog
 
 __all__ = [
     "OpenDialog",

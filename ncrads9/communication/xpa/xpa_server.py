@@ -23,17 +23,18 @@ using the standard DS9 XPA protocol.
 Author: Yogesh Wadadekar
 """
 
-import logging
-import socket
-import threading
-import os
 import getpass
+import logging
+import os
+import socket
 import subprocess
+import threading
 import time
-from typing import Optional, Callable, Dict, Any, Tuple
+from collections.abc import Callable
+from typing import Any
 
-from .xpa_protocol import XPAProtocol
 from .xpa_commands import XPACommands
+from .xpa_protocol import XPAProtocol
 
 
 class XPAServer:
@@ -58,7 +59,7 @@ class XPAServer:
         name: str = DEFAULT_NAME,
         host: str = DEFAULT_HOST,
         port: int = DEFAULT_PORT,
-        viewer: Optional[Any] = None,
+        viewer: Any | None = None,
     ) -> None:
         """Initialize the XPA server.
 
@@ -72,18 +73,18 @@ class XPAServer:
         self.port: int = port
         self.running: bool = False
 
-        self._socket: Optional[socket.socket] = None
-        self._thread: Optional[threading.Thread] = None
+        self._socket: socket.socket | None = None
+        self._thread: threading.Thread | None = None
         self._protocol: XPAProtocol = XPAProtocol()
         self._commands: XPACommands = XPACommands(viewer)
         self._logger: logging.Logger = logging.getLogger(__name__)
-        self._handlers: Dict[str, Callable[..., Any]] = {}
-        self._pending_requests: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        self._handlers: dict[str, Callable[..., Any]] = {}
+        self._pending_requests: dict[tuple[str, str], dict[str, Any]] = {}
         self._pending_lock = threading.Lock()
         self._next_pending_id = 1
-        self._xpans_socket: Optional[socket.socket] = None
+        self._xpans_socket: socket.socket | None = None
         self._xpans_stream = None
-        self._xpans_process: Optional[subprocess.Popen] = None
+        self._xpans_process: subprocess.Popen | None = None
 
     def register_handler(self, command: str, handler: Callable[..., Any]) -> None:
         """Register a command handler.
@@ -175,7 +176,7 @@ class XPAServer:
                 )
                 client_thread.start()
 
-            except socket.timeout:
+            except TimeoutError:
                 continue
             except OSError:
                 if self.running:
@@ -185,7 +186,7 @@ class XPAServer:
     def _handle_client(
         self,
         client_socket: socket.socket,
-        address: Tuple[str, int],
+        address: tuple[str, int],
     ) -> None:
         """Handle a client connection.
 
@@ -202,7 +203,7 @@ class XPAServer:
                 response_data = self._process_wire_request(request)
                 client_socket.sendall(response_data)
 
-        except socket.timeout:
+        except TimeoutError:
             self._logger.warning(f"Client {address} timed out")
         except OSError as e:
             self._logger.error(f"Error handling client {address}: {e}")
@@ -218,7 +219,7 @@ class XPAServer:
         while True:
             try:
                 chunk = client_socket.recv(4096)
-            except socket.timeout:
+            except TimeoutError:
                 break
             if not chunk:
                 break
@@ -227,7 +228,7 @@ class XPAServer:
                 client_socket.settimeout(0.05)
         return b"".join(chunks)
 
-    def _process_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
+    def _process_request(self, request: dict[str, Any]) -> dict[str, Any]:
         """Process an XPA request.
 
         Args:
@@ -256,7 +257,7 @@ class XPAServer:
         else:
             return self._commands.handle(command, params)
 
-    def _process_wire_request(self, request: Dict[str, Any]) -> bytes:
+    def _process_wire_request(self, request: dict[str, Any]) -> bytes:
         """Process a parsed request and return wire-level bytes."""
         command = str(request.get("command", "")).lower()
         params = request.get("params", {})
@@ -272,7 +273,7 @@ class XPAServer:
         response = self._process_request(request)
         return self._protocol.format_response(response)
 
-    def _start_xpa_transaction(self, request: Dict[str, Any]) -> bytes:
+    def _start_xpa_transaction(self, request: dict[str, Any]) -> bytes:
         """Start a two-step XPA transaction for xpaset/xpaget clients."""
         params = request.get("params", {})
         xpa_id = str(params.get("xpa_id", "x0"))
@@ -284,9 +285,9 @@ class XPAServer:
         return (
             f"{xpa_id} XPA$DATA connect {pending_key} {pending_fd} "
             f"(NCRADS9:{self.name} {self.host}:{self.port})\n"
-        ).encode("utf-8")
+        ).encode()
 
-    def _handle_xpadata(self, request: Dict[str, Any]) -> bytes:
+    def _handle_xpadata(self, request: dict[str, Any]) -> bytes:
         """Handle second-stage XPA data channel request."""
         params = request.get("params", {})
         args = params.get("args", []) if isinstance(params.get("args"), list) else []
@@ -307,10 +308,10 @@ class XPAServer:
             result = response.get("result", "")
             msg_type = str(pending.get("msg_type", "xpaset"))
             if msg_type == "xpaset":
-                return f"{xpa_id} XPA$OK\n".encode("utf-8")
-            return f"{result}\n".encode("utf-8")
+                return f"{xpa_id} XPA$OK\n".encode()
+            return f"{result}\n".encode()
         message = str(response.get("message", "Unknown error"))
-        return f"{xpa_id} XPA$ERROR {message}\n".encode("utf-8")
+        return f"{xpa_id} XPA$ERROR {message}\n".encode()
 
     def _register_with_xpans(self) -> None:
         """Register this access point with xpans if available."""

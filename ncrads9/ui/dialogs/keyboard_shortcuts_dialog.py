@@ -20,17 +20,17 @@ Keyboard shortcuts help dialog.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
+
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QDialog,
-    QVBoxLayout,
     QHBoxLayout,
+    QLabel,
     QPushButton,
     QTextEdit,
-    QLabel,
+    QVBoxLayout,
     QWidget,
 )
-from PyQt6.QtCore import Qt
 
 
 class KeyboardShortcutsDialog(QDialog):
@@ -57,7 +57,7 @@ class KeyboardShortcutsDialog(QDialog):
         ],
     }
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """
         Initialize the keyboard shortcuts dialog.
 

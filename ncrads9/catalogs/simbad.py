@@ -21,11 +21,11 @@ SIMBAD catalog query interface.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, List, Any
+from typing import Any
 
+import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.table import Table
-import astropy.units as u
 from astroquery.simbad import Simbad
 
 from .catalog_base import CatalogBase
@@ -36,7 +36,7 @@ class SimbadCatalog(CatalogBase):
 
     def __init__(
         self,
-        votable_fields: Optional[List[str]] = None,
+        votable_fields: list[str] | None = None,
         row_limit: int = 0,
     ) -> None:
         """
@@ -53,7 +53,7 @@ class SimbadCatalog(CatalogBase):
             name="SIMBAD",
             description="SIMBAD astronomical database",
         )
-        self.votable_fields: Optional[List[str]] = votable_fields
+        self.votable_fields: list[str] | None = votable_fields
         self.row_limit: int = row_limit
         self._simbad: Simbad = self._create_simbad()
 
@@ -73,7 +73,7 @@ class SimbadCatalog(CatalogBase):
         coord: SkyCoord,
         radius: u.Quantity,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Query SIMBAD for objects within a region.
 
@@ -110,7 +110,7 @@ class SimbadCatalog(CatalogBase):
         self,
         name: str,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Query SIMBAD by object name.
 
@@ -136,7 +136,7 @@ class SimbadCatalog(CatalogBase):
             self._last_result = None
             return None
 
-    def query_objectids(self, name: str) -> Optional[Table]:
+    def query_objectids(self, name: str) -> Table | None:
         """
         Query all identifiers for an object.
 
@@ -160,7 +160,7 @@ class SimbadCatalog(CatalogBase):
         self,
         bibcode: str,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Query objects associated with a bibcode.
 
@@ -190,7 +190,7 @@ class SimbadCatalog(CatalogBase):
         self,
         criteria: str,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Query SIMBAD using criteria string.
 

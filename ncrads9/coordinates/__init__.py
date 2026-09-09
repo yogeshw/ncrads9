@@ -21,13 +21,13 @@ Author: Yogesh Wadadekar
 """
 
 from .coord_system import CoordSystem, CoordSystemType
-from .image_coords import ImageCoords
-from .physical_coords import PhysicalCoords
-from .wcs_coords import WCSCoords
+from .ecliptic import ecliptic_to_equatorial, equatorial_to_ecliptic
 from .fk4_fk5 import convert_fk4_to_fk5, convert_fk5_to_fk4
 from .galactic import equatorial_to_galactic, galactic_to_equatorial
-from .ecliptic import equatorial_to_ecliptic, ecliptic_to_equatorial
-from .sexagesimal import degrees_to_hms, degrees_to_dms, parse_sexagesimal
+from .image_coords import ImageCoords
+from .physical_coords import PhysicalCoords
+from .sexagesimal import degrees_to_dms, degrees_to_hms, parse_sexagesimal
+from .wcs_coords import WCSCoords
 
 __all__ = [
     "CoordSystem",

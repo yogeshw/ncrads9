@@ -20,22 +20,22 @@ Cube panel for data cube slice navigation.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Any
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
+    QComboBox,
     QDockWidget,
-    QWidget,
-    QVBoxLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
+    QPushButton,
     QSlider,
     QSpinBox,
-    QGroupBox,
-    QComboBox,
-    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 
@@ -46,7 +46,7 @@ class CubePanel(QDockWidget):
     axis_changed = pyqtSignal(int)
     animation_requested = pyqtSignal(bool)
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """
         Initialize the cube panel.
 
@@ -56,11 +56,11 @@ class CubePanel(QDockWidget):
         super().__init__("Data Cube", parent)
         self.setObjectName("CubePanel")
 
-        self._cube: Optional[NDArray[np.float64]] = None
+        self._cube: NDArray[np.float64] | None = None
         self._current_slice: int = 0
         self._slice_axis: int = 0
         self._n_slices: int = 1
-        self._wcs: Optional[Any] = None
+        self._wcs: Any | None = None
         self._is_animating: bool = False
 
         self._setup_ui()
@@ -337,7 +337,7 @@ class CubePanel(QDockWidget):
         """
         return self._speed_spinbox.value()
 
-    def get_current_slice_data(self) -> Optional[NDArray[np.float64]]:
+    def get_current_slice_data(self) -> NDArray[np.float64] | None:
         """
         Get the current slice data.
 

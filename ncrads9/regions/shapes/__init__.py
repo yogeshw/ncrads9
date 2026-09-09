@@ -23,22 +23,22 @@ such as circles, boxes, ellipses, polygons, etc.
 Author: Yogesh Wadadekar
 """
 
-from .circle import Circle
-from .ellipse import Ellipse
-from .box import Box
-from .polygon import Polygon
 from .annulus import Annulus
-from .ellipse_annulus import EllipseAnnulus
+from .box import Box
 from .box_annulus import BoxAnnulus
+from .circle import Circle
+from .compass import Compass
+from .composite import Composite
+from .ellipse import Ellipse
+from .ellipse_annulus import EllipseAnnulus
+from .line import Line
 from .panda import Panda
 from .point import Point
-from .line import Line
-from .vector import Vector
-from .text import Text
-from .ruler import Ruler
-from .compass import Compass
+from .polygon import Polygon
 from .projection import Projection
-from .composite import Composite
+from .ruler import Ruler
+from .text import Text
+from .vector import Vector
 
 __all__: list[str] = [
     "Circle",

@@ -20,22 +20,20 @@ Scale parameters dialog.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
     QDialog,
-    QVBoxLayout,
+    QDoubleSpinBox,
+    QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QPushButton,
-    QGroupBox,
-    QFormLayout,
-    QComboBox,
-    QDoubleSpinBox,
-    QCheckBox,
     QSlider,
+    QVBoxLayout,
 )
-from PyQt6.QtCore import Qt
 
 
 class ScaleDialog(QDialog):
@@ -43,7 +41,7 @@ class ScaleDialog(QDialog):
 
     scale_changed = pyqtSignal(dict)
 
-    def __init__(self, parent: Optional[QDialog] = None) -> None:
+    def __init__(self, parent: QDialog | None = None) -> None:
         """Initialize the scale dialog.
 
         Args:

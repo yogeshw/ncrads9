@@ -6,8 +6,8 @@ from astropy.wcs import WCS
 from PyQt6.QtCore import QSize
 from PyQt6.QtWidgets import QApplication, QWidget
 
-from ncrads9.ui.main_window import MainWindow
 from ncrads9.core.wcs_handler import WCSHandler
+from ncrads9.ui.main_window import MainWindow
 from ncrads9.utils.preferences import Preferences
 
 

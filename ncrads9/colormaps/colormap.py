@@ -18,7 +18,7 @@
 
 """Colormap base class for ncrads9."""
 
-from typing import List, Tuple, Optional, Union
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -36,7 +36,7 @@ class Colormap:
     def __init__(
         self,
         name: str,
-        colors: Union[List[Tuple[float, float, float]], NDArray[np.floating]],
+        colors: list[tuple[float, float, float]] | NDArray[np.floating],
     ) -> None:
         """Initialize a Colormap.
 
@@ -62,8 +62,8 @@ class Colormap:
     def apply(
         self,
         data: NDArray[np.floating],
-        vmin: Optional[float] = None,
-        vmax: Optional[float] = None,
+        vmin: float | None = None,
+        vmax: float | None = None,
     ) -> NDArray[np.uint8]:
         """Apply the colormap to data.
 

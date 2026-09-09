@@ -20,28 +20,27 @@ Horizontal graph panel showing pixel values along a horizontal line.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
 
 import numpy as np
 from numpy.typing import NDArray
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPainter, QPen, QColor, QPainterPath
+from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import (
     QDockWidget,
-    QWidget,
-    QVBoxLayout,
     QLabel,
+    QVBoxLayout,
+    QWidget,
 )
 
 
 class HorizontalGraphWidget(QWidget):
     """Widget for displaying horizontal pixel profile graph."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """Initialize the graph widget."""
         super().__init__(parent)
-        self._data: Optional[NDArray[np.float64]] = None
-        self._cursor_x: Optional[int] = None
+        self._data: NDArray[np.float64] | None = None
+        self._cursor_x: int | None = None
         self.setMinimumSize(200, 100)
 
     def set_data(self, data: NDArray[np.float64], cursor_x: int) -> None:
@@ -56,7 +55,7 @@ class HorizontalGraphWidget(QWidget):
         self._cursor_x = cursor_x
         self.update()
 
-    def paintEvent(self, event: Optional[object]) -> None:
+    def paintEvent(self, event: object | None) -> None:
         """Paint the graph."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -114,7 +113,7 @@ class HorizontalGraphWidget(QWidget):
 class HorizontalGraph(QDockWidget):
     """Dockable panel showing pixel values along horizontal line."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """
         Initialize the horizontal graph panel.
 
@@ -124,7 +123,7 @@ class HorizontalGraph(QDockWidget):
         super().__init__("Horizontal Profile", parent)
         self.setObjectName("HorizontalGraph")
 
-        self._current_image: Optional[NDArray[np.float64]] = None
+        self._current_image: NDArray[np.float64] | None = None
         self._current_y: int = 0
 
         self._setup_ui()

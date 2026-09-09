@@ -21,10 +21,11 @@ Author: Yogesh Wadadekar
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional, Tuple, List
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from astropy.wcs import WCS
+
     from .grid_config import GridConfig
 
 
@@ -33,8 +34,8 @@ class GridRenderer:
 
     def __init__(
         self,
-        wcs: Optional[WCS] = None,
-        config: Optional[GridConfig] = None,
+        wcs: WCS | None = None,
+        config: GridConfig | None = None,
     ) -> None:
         """Initialize the grid renderer.
 
@@ -42,12 +43,12 @@ class GridRenderer:
             wcs: World Coordinate System object for coordinate transformations.
             config: Grid configuration settings.
         """
-        self._wcs: Optional[WCS] = wcs
-        self._config: Optional[GridConfig] = config
-        self._grid_lines: List[Tuple[List[float], List[float]]] = []
+        self._wcs: WCS | None = wcs
+        self._config: GridConfig | None = config
+        self._grid_lines: list[tuple[list[float], list[float]]] = []
 
     @property
-    def wcs(self) -> Optional[WCS]:
+    def wcs(self) -> WCS | None:
         """Get the current WCS object."""
         return self._wcs
 
@@ -57,7 +58,7 @@ class GridRenderer:
         self._wcs = value
 
     @property
-    def config(self) -> Optional[GridConfig]:
+    def config(self) -> GridConfig | None:
         """Get the current grid configuration."""
         return self._config
 
@@ -70,7 +71,7 @@ class GridRenderer:
         self,
         image_width: int,
         image_height: int,
-    ) -> List[Tuple[List[float], List[float]]]:
+    ) -> list[tuple[list[float], list[float]]]:
         """Compute grid lines for the given image dimensions.
 
         Args:

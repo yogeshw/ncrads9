@@ -20,28 +20,26 @@ FITS header viewer dialog.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Dict, Any
+from typing import Any
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
+    QComboBox,
     QDialog,
-    QVBoxLayout,
     QHBoxLayout,
+    QLabel,
+    QLineEdit,
     QPushButton,
     QTextEdit,
-    QLineEdit,
-    QLabel,
-    QComboBox,
+    QVBoxLayout,
 )
 
 
 class HeaderDialog(QDialog):
     """Dialog for viewing and searching FITS headers."""
 
-    def __init__(
-        self, header_data: Optional[Dict[str, Any]] = None, parent: Optional[QDialog] = None
-    ) -> None:
+    def __init__(self, header_data: dict[str, Any] | None = None, parent: QDialog | None = None) -> None:
         """Initialize the header dialog.
 
         Args:
@@ -176,7 +174,7 @@ class HeaderDialog(QDialog):
             with open(file_path, "w") as f:
                 f.write(self._header_text.toPlainText())
 
-    def set_header_data(self, header_data: Dict[str, Any]) -> None:
+    def set_header_data(self, header_data: dict[str, Any]) -> None:
         """Set the header data to display.
 
         Args:

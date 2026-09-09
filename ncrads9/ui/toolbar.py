@@ -20,7 +20,6 @@ Main toolbar for NCRADS9 application.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
 
 from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import QToolBar, QWidget
@@ -29,7 +28,7 @@ from PyQt6.QtWidgets import QToolBar, QWidget
 class MainToolbar(QToolBar):
     """Main toolbar with common actions."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """
         Initialize the main toolbar.
 

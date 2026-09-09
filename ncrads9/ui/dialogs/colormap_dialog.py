@@ -20,24 +20,23 @@ Colormap selection dialog.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, List
 
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QImage, QPixmap
 from PyQt6.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QGroupBox,
-    QFormLayout,
-    QComboBox,
     QCheckBox,
+    QComboBox,
+    QDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
     QListWidget,
     QListWidgetItem,
-    QLabel,
+    QPushButton,
     QSlider,
+    QVBoxLayout,
 )
-from PyQt6.QtGui import QPixmap, QImage, QColor
 
 from ...colormaps.builtin_maps import list_builtin_colormaps
 
@@ -48,11 +47,11 @@ class ColormapDialog(QDialog):
     colormap_changed = pyqtSignal(dict)
 
     # Standard astronomical colormaps
-    COLORMAPS: List[str] = list(
+    COLORMAPS: list[str] = list(
         dict.fromkeys("gray" if cmap == "grey" else cmap for cmap in list_builtin_colormaps())
     )
 
-    def __init__(self, parent: Optional[QDialog] = None) -> None:
+    def __init__(self, parent: QDialog | None = None) -> None:
         """Initialize the colormap dialog.
 
         Args:

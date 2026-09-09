@@ -21,7 +21,7 @@ Author: Yogesh Wadadekar
 """
 
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -31,7 +31,7 @@ from PIL import Image
 class EPSWriter:
     """Writer for Encapsulated PostScript (EPS) files."""
 
-    def __init__(self, filepath: Union[str, Path]) -> None:
+    def __init__(self, filepath: str | Path) -> None:
         """
         Initialize EPS writer.
 
@@ -45,7 +45,7 @@ class EPSWriter:
         data: NDArray[Any],
         normalize: bool = True,
         dpi: int = 300,
-        title: Optional[str] = None,
+        title: str | None = None,
     ) -> None:
         """
         Write image data to EPS file.

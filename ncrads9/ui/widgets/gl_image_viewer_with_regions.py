@@ -18,18 +18,18 @@
 OpenGL image viewer widget with region overlay support.
 """
 
-from typing import Optional, Callable
+from collections.abc import Callable
 
 import numpy as np
 from numpy.typing import NDArray
-from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QObject, QSize
+from PyQt6.QtCore import QEvent, QObject, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QColor
-from PyQt6.QtWidgets import QWidget, QVBoxLayout
+from PyQt6.QtWidgets import QVBoxLayout, QWidget
 
 from ...rendering.gl_canvas import GLCanvas
-from .region_overlay import RegionOverlay, RegionMode, Region
-from .contour_overlay import ContourOverlay
 from ..view_transform import DisplayTransform
+from .contour_overlay import ContourOverlay
+from .region_overlay import Region, RegionMode, RegionOverlay
 
 
 class GLImageViewerWithRegions(QWidget):
@@ -41,7 +41,7 @@ class GLImageViewerWithRegions(QWidget):
     region_created = pyqtSignal(object)
     region_selected = pyqtSignal(object)
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setMouseTracking(True)
 
@@ -117,23 +117,23 @@ class GLImageViewerWithRegions(QWidget):
 
     def set_direction_arrows(
         self,
-        north_vector: Optional[tuple[float, float]],
-        east_vector: Optional[tuple[float, float]],
+        north_vector: tuple[float, float] | None,
+        east_vector: tuple[float, float] | None,
         visible: bool,
     ) -> None:
         """Set WCS direction arrow vectors/visibility."""
         self.contour_overlay.set_direction_arrows(north_vector, east_vector, visible)
 
-    def set_grid(self, visible: bool, settings: Optional[dict] = None) -> None:
+    def set_grid(self, visible: bool, settings: dict | None = None) -> None:
         """Set coordinate grid overlay visibility/settings."""
         self.contour_overlay.set_grid(visible, settings)
 
     def set_crosshair(
         self,
         visible: bool,
-        position: Optional[tuple[float, float]] = None,
-        color: Optional[QColor] = None,
-        size: Optional[int] = None,
+        position: tuple[float, float] | None = None,
+        color: QColor | None = None,
+        size: int | None = None,
     ) -> None:
         """Set crosshair overlay visibility/style."""
         self.contour_overlay.set_crosshair(visible, position=position, color=color, size=size)
@@ -153,7 +153,7 @@ class GLImageViewerWithRegions(QWidget):
     def zoom_to(self, zoom: float) -> None:
         self.gl_canvas.zoom = zoom
 
-    def zoom_fit(self, viewport_size: Optional[QSize] = None) -> None:
+    def zoom_fit(self, viewport_size: QSize | None = None) -> None:
         """Zoom to fit the given viewport (not this widget's own size)."""
         self.gl_canvas.zoom_to_fit(viewport_size)
 

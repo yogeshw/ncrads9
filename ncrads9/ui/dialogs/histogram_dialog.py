@@ -20,25 +20,25 @@ Histogram dialog for image analysis.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
+
 import numpy as np
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QDialog,
-    QVBoxLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QVBoxLayout,
     QWidget,
 )
-from PyQt6.QtCore import Qt
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
-from matplotlib.figure import Figure
 
 
 class HistogramDialog(QDialog):
     """Dialog showing image histogram."""
 
-    def __init__(self, image_data: np.ndarray, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, image_data: np.ndarray, parent: QWidget | None = None) -> None:
         """
         Initialize the histogram dialog.
 

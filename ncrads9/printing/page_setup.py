@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple, Dict, Any
+from typing import Any
 
 
 class PaperSize(Enum):
@@ -45,7 +45,7 @@ class Orientation(Enum):
 
 
 # Paper dimensions in inches (width, height)
-PAPER_DIMENSIONS: Dict[PaperSize, Tuple[float, float]] = {
+PAPER_DIMENSIONS: dict[PaperSize, tuple[float, float]] = {
     PaperSize.LETTER: (8.5, 11.0),
     PaperSize.LEGAL: (8.5, 14.0),
     PaperSize.A4: (8.27, 11.69),
@@ -115,7 +115,7 @@ class PageSetup:
         """Get the paper height in PostScript points."""
         return self.paper_height * 72.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary representation.
 
         Returns:
@@ -133,7 +133,7 @@ class PageSetup:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> PageSetup:
+    def from_dict(cls, data: dict[str, Any]) -> PageSetup:
         """Create from dictionary representation.
 
         Args:

@@ -20,8 +20,8 @@ Group manager for region grouping functionality.
 Author: Yogesh Wadadekar
 """
 
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
-from typing import Callable, Iterator, Optional
 
 from .base_region import BaseRegion
 from .region_manager import RegionManager
@@ -46,7 +46,7 @@ class RegionGroup:
 class GroupManager:
     """Manager for region groups."""
 
-    def __init__(self, region_manager: Optional[RegionManager] = None) -> None:
+    def __init__(self, region_manager: RegionManager | None = None) -> None:
         """
         Initialize the group manager.
 
@@ -173,7 +173,7 @@ class GroupManager:
         self._notify_change()
         return True
 
-    def get_group(self, name: str) -> Optional[RegionGroup]:
+    def get_group(self, name: str) -> RegionGroup | None:
         """
         Get a group by name.
 

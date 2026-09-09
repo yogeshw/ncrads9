@@ -21,11 +21,11 @@ SDSS (Sloan Digital Sky Survey) catalog query interface.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, List, Any
+from typing import Any
 
+import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.table import Table
-import astropy.units as u
 from astroquery.sdss import SDSS
 
 from .catalog_base import CatalogBase
@@ -35,7 +35,7 @@ class SDSSCatalog(CatalogBase):
     """SDSS catalog query class using astroquery.sdss."""
 
     # Default photometric columns
-    DEFAULT_PHOTO_FIELDS: List[str] = [
+    DEFAULT_PHOTO_FIELDS: list[str] = [
         "ra",
         "dec",
         "objid",
@@ -53,7 +53,7 @@ class SDSSCatalog(CatalogBase):
     ]
 
     # Default spectroscopic columns
-    DEFAULT_SPEC_FIELDS: List[str] = [
+    DEFAULT_SPEC_FIELDS: list[str] = [
         "ra",
         "dec",
         "objid",
@@ -68,8 +68,8 @@ class SDSSCatalog(CatalogBase):
     def __init__(
         self,
         data_release: int = 18,
-        photoobj_fields: Optional[List[str]] = None,
-        specobj_fields: Optional[List[str]] = None,
+        photoobj_fields: list[str] | None = None,
+        specobj_fields: list[str] | None = None,
     ) -> None:
         """
         Initialize SDSS catalog query.
@@ -88,8 +88,8 @@ class SDSSCatalog(CatalogBase):
             description="Sloan Digital Sky Survey",
         )
         self.data_release: int = data_release
-        self.photoobj_fields: List[str] = photoobj_fields or self.DEFAULT_PHOTO_FIELDS
-        self.specobj_fields: List[str] = specobj_fields or self.DEFAULT_SPEC_FIELDS
+        self.photoobj_fields: list[str] = photoobj_fields or self.DEFAULT_PHOTO_FIELDS
+        self.specobj_fields: list[str] = specobj_fields or self.DEFAULT_SPEC_FIELDS
 
     def query_region(
         self,
@@ -97,7 +97,7 @@ class SDSSCatalog(CatalogBase):
         radius: u.Quantity,
         spectro: bool = False,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Query SDSS for objects within a region.
 
@@ -140,7 +140,7 @@ class SDSSCatalog(CatalogBase):
         self,
         name: str,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Query SDSS by object name.
 
@@ -170,7 +170,7 @@ class SDSSCatalog(CatalogBase):
         self,
         sql: str,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Execute SQL query on SDSS database.
 
@@ -206,7 +206,7 @@ class SDSSCatalog(CatalogBase):
         radius: u.Quantity = 2 * u.arcsec,
         spectro: bool = False,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Cross-match coordinates with SDSS.
 
@@ -248,7 +248,7 @@ class SDSSCatalog(CatalogBase):
         self,
         matches: Table,
         **kwargs: Any,
-    ) -> Optional[List[Any]]:
+    ) -> list[Any] | None:
         """
         Download spectra for matched objects.
 
@@ -279,7 +279,7 @@ class SDSSCatalog(CatalogBase):
         matches: Table,
         band: str = "r",
         **kwargs: Any,
-    ) -> Optional[List[Any]]:
+    ) -> list[Any] | None:
         """
         Download images for matched objects.
 

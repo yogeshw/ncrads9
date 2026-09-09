@@ -24,11 +24,9 @@ for OpenGL textures used in image display.
 """
 
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
-
 from OpenGL import GL
 
 
@@ -68,7 +66,7 @@ class TextureManager:
         """
         self._max_cache_size: int = max_cache_size
         self._current_cache_size: int = 0
-        self._textures: Dict[str, TextureInfo] = {}
+        self._textures: dict[str, TextureInfo] = {}
         self._lru_order: list[str] = []
         self._gl_context_valid: bool = False
 
@@ -161,7 +159,7 @@ class TextureManager:
         self,
         key: str,
         data: NDArray[np.float32],
-        offset: Tuple[int, int] = (0, 0),
+        offset: tuple[int, int] = (0, 0),
     ) -> None:
         """
         Update an existing texture with new data.
@@ -181,7 +179,7 @@ class TextureManager:
         self._update_gl_texture(info.texture_id, data, offset)
         self._touch(key)
 
-    def get_texture(self, key: str) -> Optional[int]:
+    def get_texture(self, key: str) -> int | None:
         """
         Get texture ID by key.
 
@@ -196,7 +194,7 @@ class TextureManager:
             return self._textures[key].texture_id
         return None
 
-    def get_texture_info(self, key: str) -> Optional[TextureInfo]:
+    def get_texture_info(self, key: str) -> TextureInfo | None:
         """
         Get texture information.
 
@@ -333,7 +331,7 @@ class TextureManager:
         self,
         texture_id: int,
         data: NDArray[np.float32],
-        offset: Tuple[int, int],
+        offset: tuple[int, int],
     ) -> None:
         """
         Update OpenGL texture (placeholder for actual implementation).

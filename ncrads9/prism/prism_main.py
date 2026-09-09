@@ -21,8 +21,9 @@ Author: Yogesh Wadadekar
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional, List, Callable
+from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -31,19 +32,19 @@ if TYPE_CHECKING:
 class PrismWindow:
     """Main window for spectral analysis and visualization."""
 
-    def __init__(self, parent: Optional[object] = None) -> None:
+    def __init__(self, parent: object | None = None) -> None:
         """Initialize the Prism spectral analysis window.
 
         Args:
             parent: Parent widget or window.
         """
-        self._parent: Optional[object] = parent
-        self._wavelength: Optional[NDArray] = None
-        self._flux: Optional[NDArray] = None
-        self._error: Optional[NDArray] = None
-        self._filename: Optional[Path] = None
+        self._parent: object | None = parent
+        self._wavelength: NDArray | None = None
+        self._flux: NDArray | None = None
+        self._error: NDArray | None = None
+        self._filename: Path | None = None
         self._title: str = "Prism - Spectral Analysis"
-        self._callbacks: List[Callable[[], None]] = []
+        self._callbacks: list[Callable[[], None]] = []
 
     @property
     def title(self) -> str:
@@ -56,24 +57,24 @@ class PrismWindow:
         self._title = value
 
     @property
-    def wavelength(self) -> Optional[NDArray]:
+    def wavelength(self) -> NDArray | None:
         """Get the wavelength array."""
         return self._wavelength
 
     @property
-    def flux(self) -> Optional[NDArray]:
+    def flux(self) -> NDArray | None:
         """Get the flux array."""
         return self._flux
 
     @property
-    def error(self) -> Optional[NDArray]:
+    def error(self) -> NDArray | None:
         """Get the error array."""
         return self._error
 
     def load_spectrum(
         self,
         filename: str | Path,
-        format: Optional[str] = None,
+        format: str | None = None,
     ) -> bool:
         """Load a spectrum from file.
 
@@ -92,7 +93,7 @@ class PrismWindow:
         self,
         wavelength: NDArray,
         flux: NDArray,
-        error: Optional[NDArray] = None,
+        error: NDArray | None = None,
     ) -> None:
         """Set spectrum data directly.
 

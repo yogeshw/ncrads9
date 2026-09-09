@@ -20,8 +20,9 @@ Animated GIF writer for NCRADS9.
 Author: Yogesh Wadadekar
 """
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence, Union
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -31,7 +32,7 @@ from PIL import Image
 class GIFWriter:
     """Writer for animated GIF files."""
 
-    def __init__(self, filepath: Union[str, Path]) -> None:
+    def __init__(self, filepath: str | Path) -> None:
         """
         Initialize GIF writer.
 

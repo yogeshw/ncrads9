@@ -27,9 +27,9 @@ import json
 import logging
 import re
 import shlex
-from typing import Any, Dict, List, Optional, Union
-from enum import Enum
 from dataclasses import dataclass
+from enum import Enum
+from typing import Any
 
 
 class XPAMessageType(Enum):
@@ -56,8 +56,8 @@ class XPAMessage:
     msg_type: XPAMessageType
     target: str
     command: str
-    params: Dict[str, Any]
-    data: Optional[bytes] = None
+    params: dict[str, Any]
+    data: bytes | None = None
 
 
 class XPAProtocol:
@@ -75,7 +75,7 @@ class XPAProtocol:
         """Initialize the XPA protocol handler."""
         self._logger: logging.Logger = logging.getLogger(__name__)
 
-    def parse_request(self, data: bytes) -> Dict[str, Any]:
+    def parse_request(self, data: bytes) -> dict[str, Any]:
         """Parse an XPA request from raw bytes.
 
         Args:
@@ -91,7 +91,7 @@ class XPAProtocol:
             self._logger.error(f"Failed to decode XPA request: {e}")
             return {"command": "", "params": {}, "error": "decode_error"}
 
-    def _parse_text_request(self, text: str) -> Dict[str, Any]:
+    def _parse_text_request(self, text: str) -> dict[str, Any]:
         """Parse a text XPA request.
 
         Args:
@@ -122,7 +122,7 @@ class XPAProtocol:
         if first in known_types:
             msg_type = known_types[first]
             tokens = tokens[1:]
-            option_values: Dict[str, Any] = {}
+            option_values: dict[str, Any] = {}
             index = 0
             options_with_values = {"-e", "-i", "-m", "-t", "-u"}
             while index < len(tokens) and tokens[index].startswith("-"):
@@ -167,7 +167,7 @@ class XPAProtocol:
             "data": payload,
         }
 
-    def _parse_params(self, tokens: List[str]) -> tuple[Dict[str, Any], List[Any]]:
+    def _parse_params(self, tokens: list[str]) -> tuple[dict[str, Any], list[Any]]:
         """Parse parameter tokens into dictionary and positional list.
 
         Args:
@@ -176,8 +176,8 @@ class XPAProtocol:
         Returns:
             Tuple of parsed parameters and positional arguments.
         """
-        params: Dict[str, Any] = {}
-        positional: List[Any] = []
+        params: dict[str, Any] = {}
+        positional: list[Any] = []
         for token in tokens:
             if "=" in token and not token.startswith("="):
                 key, value = token.split("=", 1)
@@ -187,7 +187,7 @@ class XPAProtocol:
             positional.append(self._convert_value(token))
         return params, positional
 
-    def _convert_value(self, value: str) -> Union[str, int, float, bool]:
+    def _convert_value(self, value: str) -> str | int | float | bool:
         """Convert string value to appropriate type.
 
         Args:
@@ -216,7 +216,7 @@ class XPAProtocol:
 
         return value
 
-    def format_response(self, response: Dict[str, Any]) -> bytes:
+    def format_response(self, response: dict[str, Any]) -> bytes:
         """Format a response dictionary as XPA protocol bytes.
 
         Args:
@@ -259,8 +259,8 @@ class XPAProtocol:
         msg_type: XPAMessageType,
         target: str,
         command: str,
-        params: Optional[Dict[str, Any]] = None,
-        data: Optional[bytes] = None,
+        params: dict[str, Any] | None = None,
+        data: bytes | None = None,
     ) -> XPAMessage:
         """Create an XPA message object.
 
@@ -291,7 +291,7 @@ class XPAProtocol:
         Returns:
             Serialized message as bytes.
         """
-        parts: List[str] = [message.command]
+        parts: list[str] = [message.command]
 
         for key, value in message.params.items():
             if isinstance(value, bool):

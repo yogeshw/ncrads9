@@ -20,7 +20,7 @@ Radial profile extraction for astronomical images.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Tuple
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -53,8 +53,8 @@ class RadialProfile:
     def __init__(
         self,
         data: NDArray[np.floating],
-        center: Optional[Tuple[float, float]] = None,
-        mask: Optional[NDArray[np.bool_]] = None,
+        center: tuple[float, float] | None = None,
+        mask: NDArray[np.bool_] | None = None,
     ) -> None:
         self._data = data
         self._mask = mask
@@ -79,10 +79,10 @@ class RadialProfile:
 
     def extract(
         self,
-        max_radius: Optional[float] = None,
+        max_radius: float | None = None,
         bin_width: float = 1.0,
         method: str = "mean",
-    ) -> Tuple[NDArray[np.floating], NDArray[np.floating]]:
+    ) -> tuple[NDArray[np.floating], NDArray[np.floating]]:
         """
         Extract the radial profile.
 
@@ -148,7 +148,7 @@ class RadialProfile:
         radius: float,
         width: float = 1.0,
         n_sectors: int = 8,
-    ) -> Tuple[NDArray[np.floating], NDArray[np.floating]]:
+    ) -> tuple[NDArray[np.floating], NDArray[np.floating]]:
         """
         Extract azimuthal profile at a given radius.
 
@@ -192,12 +192,12 @@ class RadialProfile:
         return sector_centers, profile
 
     @property
-    def center(self) -> Tuple[float, float]:
+    def center(self) -> tuple[float, float]:
         """Return the center coordinates."""
         return self._center
 
     @center.setter
-    def center(self, value: Tuple[float, float]) -> None:
+    def center(self, value: tuple[float, float]) -> None:
         """Set the center and recompute distance map."""
         self._center = value
         self._compute_distance_map()

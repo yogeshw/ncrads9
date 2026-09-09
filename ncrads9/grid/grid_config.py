@@ -22,7 +22,7 @@ Author: Yogesh Wadadekar
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple, Optional, Dict, Any
+from typing import Any
 
 
 @dataclass
@@ -34,19 +34,19 @@ class GridConfig:
     show_labels: bool = True
 
     # Grid line appearance
-    line_color: Tuple[int, int, int] = (128, 128, 128)
+    line_color: tuple[int, int, int] = (128, 128, 128)
     line_width: float = 1.0
     line_style: str = "solid"  # solid, dashed, dotted
 
     # Label appearance
-    label_color: Tuple[int, int, int] = (255, 255, 255)
+    label_color: tuple[int, int, int] = (255, 255, 255)
     label_font_size: float = 10.0
     label_font_family: str = "sans-serif"
 
     # Grid spacing
     auto_spacing: bool = True
-    ra_spacing: Optional[float] = None  # degrees
-    dec_spacing: Optional[float] = None  # degrees
+    ra_spacing: float | None = None  # degrees
+    dec_spacing: float | None = None  # degrees
 
     # Grid density
     min_grid_lines: int = 3
@@ -55,7 +55,7 @@ class GridConfig:
     # Coordinate system
     coordinate_system: str = "fk5"  # fk5, galactic, ecliptic
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert configuration to dictionary.
 
         Returns:
@@ -79,7 +79,7 @@ class GridConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> GridConfig:
+    def from_dict(cls, data: dict[str, Any]) -> GridConfig:
         """Create configuration from dictionary.
 
         Args:

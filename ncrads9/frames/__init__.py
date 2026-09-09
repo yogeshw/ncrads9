@@ -18,14 +18,14 @@
 
 """Frames module for NCRA DS9."""
 
+from .blink_controller import BlinkController
 from .frame import Frame
+from .frame_3d import Frame3D
 from .frame_manager import FrameManager
-from .rgb_frame import RGBFrame
 from .hls_frame import HLSFrame
 from .hsv_frame import HSVFrame
-from .frame_3d import Frame3D
+from .rgb_frame import RGBFrame
 from .tile_layout import TileLayout
-from .blink_controller import BlinkController
 
 __all__ = [
     "Frame",

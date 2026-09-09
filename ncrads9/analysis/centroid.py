@@ -20,7 +20,7 @@ Centroid calculation functions for astronomical images.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Tuple
+
 import numpy as np
 from numpy.typing import NDArray
 from scipy import ndimage
@@ -28,10 +28,10 @@ from scipy import ndimage
 
 def calculate_centroid(
     data: NDArray[np.floating],
-    region: Optional[Tuple[slice, slice]] = None,
-    mask: Optional[NDArray[np.bool_]] = None,
-    threshold: Optional[float] = None,
-) -> Tuple[float, float]:
+    region: tuple[slice, slice] | None = None,
+    mask: NDArray[np.bool_] | None = None,
+    threshold: float | None = None,
+) -> tuple[float, float]:
     """
     Calculate the intensity-weighted centroid of an image region.
 
@@ -83,12 +83,12 @@ def calculate_centroid(
 
 def calculate_centroid_iterative(
     data: NDArray[np.floating],
-    initial_guess: Optional[Tuple[float, float]] = None,
+    initial_guess: tuple[float, float] | None = None,
     box_size: int = 11,
     max_iterations: int = 10,
     tolerance: float = 0.01,
     threshold_sigma: float = 3.0,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """
     Calculate centroid iteratively with a moving box.
 
@@ -144,9 +144,9 @@ def calculate_centroid_iterative(
 
 def calculate_gaussian_centroid(
     data: NDArray[np.floating],
-    initial_guess: Optional[Tuple[float, float]] = None,
+    initial_guess: tuple[float, float] | None = None,
     box_size: int = 11,
-) -> Tuple[float, float, float, float]:
+) -> tuple[float, float, float, float]:
     """
     Calculate centroid by fitting a 2D Gaussian.
 
@@ -217,7 +217,7 @@ def _estimate_sigma(profile: NDArray[np.floating]) -> float:
 
 def peak_local_max(
     data: NDArray[np.floating],
-    threshold: Optional[float] = None,
+    threshold: float | None = None,
     min_distance: int = 5,
     num_peaks: int = 10,
 ) -> NDArray[np.int_]:

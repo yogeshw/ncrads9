@@ -21,9 +21,8 @@
 Author: Yogesh Wadadekar
 """
 
-from typing import Literal
 from pathlib import Path
-
+from typing import Literal
 
 BandType = Literal["j", "h", "k"]
 

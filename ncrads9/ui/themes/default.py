@@ -20,7 +20,6 @@ Default Theme - Light theme stylesheet.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
 
 from PyQt6.QtWidgets import QApplication
 
@@ -195,7 +194,7 @@ class DefaultTheme:
     """
 
     @classmethod
-    def apply(cls, app: Optional[QApplication] = None) -> None:
+    def apply(cls, app: QApplication | None = None) -> None:
         """
         Apply the theme to the application.
 

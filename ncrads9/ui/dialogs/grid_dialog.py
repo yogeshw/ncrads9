@@ -20,23 +20,22 @@ WCS grid configuration dialog.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
 
 from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QGroupBox,
-    QFormLayout,
-    QComboBox,
-    QDoubleSpinBox,
     QCheckBox,
     QColorDialog,
+    QComboBox,
+    QDialog,
+    QDoubleSpinBox,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QPushButton,
     QSpinBox,
+    QVBoxLayout,
 )
-from PyQt6.QtGui import QColor
 
 
 class GridDialog(QDialog):
@@ -44,7 +43,7 @@ class GridDialog(QDialog):
 
     grid_changed = pyqtSignal(dict)
 
-    def __init__(self, parent: Optional[QDialog] = None) -> None:
+    def __init__(self, parent: QDialog | None = None) -> None:
         """Initialize the grid dialog.
 
         Args:

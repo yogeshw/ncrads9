@@ -19,7 +19,7 @@
 """Parser for SAO DS9 .sao colormap files."""
 
 from pathlib import Path
-from typing import Union, List, Tuple, Optional
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -27,7 +27,7 @@ from .colormap import Colormap
 
 
 def _interpolate_channel(
-    control_points: List[Tuple[float, float]],
+    control_points: list[tuple[float, float]],
     n_colors: int,
 ) -> NDArray[np.floating]:
     """Interpolate a color channel from control points.
@@ -56,8 +56,8 @@ def _interpolate_channel(
 
 
 def parse_sao_file(
-    filepath: Union[str, Path],
-    name: Optional[str] = None,
+    filepath: str | Path,
+    name: str | None = None,
     n_colors: int = 256,
 ) -> Colormap:
     """Parse a SAO DS9 .sao colormap file.
@@ -99,14 +99,14 @@ def parse_sao_file(
         name = filepath.stem
 
     # Parse control points for each channel
-    red_points: List[Tuple[float, float]] = []
-    green_points: List[Tuple[float, float]] = []
-    blue_points: List[Tuple[float, float]] = []
+    red_points: list[tuple[float, float]] = []
+    green_points: list[tuple[float, float]] = []
+    blue_points: list[tuple[float, float]] = []
 
-    current_channel: Optional[str] = None
+    current_channel: str | None = None
     color_model: str = "RGB"
 
-    with open(filepath, "r") as f:
+    with open(filepath) as f:
         for line in f:
             line = line.strip()
 
@@ -230,7 +230,7 @@ def _hsv_to_rgb(hsv: NDArray[np.floating]) -> NDArray[np.floating]:
 
 def save_sao_file(
     colormap: Colormap,
-    filepath: Union[str, Path],
+    filepath: str | Path,
     n_control_points: int = 16,
 ) -> None:
     """Save a colormap to a SAO DS9 .sao file.

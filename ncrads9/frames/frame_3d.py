@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -74,8 +74,8 @@ class Frame3D:
         """
         self._frame_id = frame_id
         self._name = name or f"3D Frame {frame_id}"
-        self._source_frame: Optional[Frame] = None
-        self._cube_data: Optional[NDArray[np.floating[Any]]] = None
+        self._source_frame: Frame | None = None
+        self._cube_data: NDArray[np.floating[Any]] | None = None
         self._settings = View3DSettings()
         self._current_slice: int = 0
         self._axis_orientation = AxisOrientation.XY
@@ -96,12 +96,12 @@ class Frame3D:
         self._name = value
 
     @property
-    def source_frame(self) -> Optional[Frame]:
+    def source_frame(self) -> Frame | None:
         """Return the source frame."""
         return self._source_frame
 
     @source_frame.setter
-    def source_frame(self, frame: Optional[Frame]) -> None:
+    def source_frame(self, frame: Frame | None) -> None:
         """Set the source frame."""
         self._source_frame = frame
         if frame is not None and frame.image_data is not None:
@@ -113,12 +113,12 @@ class Frame3D:
             self._cube_data = None
 
     @property
-    def cube_data(self) -> Optional[NDArray[np.floating[Any]]]:
+    def cube_data(self) -> NDArray[np.floating[Any]] | None:
         """Return the 3D data cube."""
         return self._cube_data
 
     @cube_data.setter
-    def cube_data(self, data: Optional[NDArray[np.floating[Any]]]) -> None:
+    def cube_data(self, data: NDArray[np.floating[Any]] | None) -> None:
         """Set the 3D data cube directly."""
         if data is not None and data.ndim < 3:
             raise ValueError("Data must have at least 3 dimensions")
@@ -155,7 +155,7 @@ class Frame3D:
         self._current_slice = 0
 
     @property
-    def shape(self) -> Optional[tuple[int, ...]]:
+    def shape(self) -> tuple[int, ...] | None:
         """Return the shape of the data cube."""
         if self._cube_data is not None:
             return self._cube_data.shape
@@ -173,7 +173,7 @@ class Frame3D:
         else:  # YZ
             return self._cube_data.shape[2]
 
-    def get_slice(self, index: Optional[int] = None) -> Optional[NDArray[np.floating[Any]]]:
+    def get_slice(self, index: int | None = None) -> NDArray[np.floating[Any]] | None:
         """Get a 2D slice from the data cube.
 
         Args:
@@ -195,7 +195,7 @@ class Frame3D:
         else:  # YZ
             return self._cube_data[:, :, index]
 
-    def get_projection(self, method: Optional[RenderMethod] = None) -> Optional[NDArray[np.floating[Any]]]:
+    def get_projection(self, method: RenderMethod | None = None) -> NDArray[np.floating[Any]] | None:
         """Get a 2D projection of the data cube.
 
         Args:

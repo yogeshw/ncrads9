@@ -21,7 +21,6 @@ Author: Yogesh Wadadekar
 """
 
 from pathlib import Path
-from typing import Optional
 
 from .base_region import BaseRegion
 
@@ -35,7 +34,7 @@ class RegionWriter:
     def __init__(
         self,
         coordinate_system: str = "image",
-        global_properties: Optional[dict[str, str]] = None,
+        global_properties: dict[str, str] | None = None,
     ) -> None:
         """
         Initialize the region writer.

@@ -20,13 +20,12 @@ Panner panel showing overview with pan rectangle.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
 
 import numpy as np
 from numpy.typing import NDArray
-from PyQt6.QtCore import Qt, QRectF, pyqtSignal
-from PyQt6.QtGui import QImage, QPixmap, QPainter, QPen, QColor, QMouseEvent
-from PyQt6.QtWidgets import QDockWidget, QWidget, QVBoxLayout, QLabel
+from PyQt6.QtCore import QRectF, Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QImage, QMouseEvent, QPainter, QPen, QPixmap
+from PyQt6.QtWidgets import QDockWidget, QLabel, QVBoxLayout, QWidget
 
 
 class PannerLabel(QLabel):
@@ -34,7 +33,7 @@ class PannerLabel(QLabel):
 
     pan_requested = pyqtSignal(float, float)
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """Initialize the panner label."""
         super().__init__(parent)
         self._image_size: tuple[int, int] = (1, 1)
@@ -48,7 +47,7 @@ class PannerLabel(QLabel):
         """Set the scale factor for coordinate conversion."""
         self._scale_factor = factor
 
-    def mousePressEvent(self, event: Optional[QMouseEvent]) -> None:
+    def mousePressEvent(self, event: QMouseEvent | None) -> None:
         """Handle mouse press for panning."""
         if event is None:
             return
@@ -78,7 +77,7 @@ class PannerPanel(QDockWidget):
 
     pan_to = pyqtSignal(float, float)
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """
         Initialize the panner panel.
 
@@ -88,10 +87,10 @@ class PannerPanel(QDockWidget):
         super().__init__("Panner", parent)
         self.setObjectName("PannerPanel")
 
-        self._current_image: Optional[NDArray[np.float64]] = None
-        self._view_rect: Optional[QRectF] = None
+        self._current_image: NDArray[np.float64] | None = None
+        self._view_rect: QRectF | None = None
         self._thumbnail_size: int = 200
-        self._source_image_size: Optional[tuple[int, int]] = None
+        self._source_image_size: tuple[int, int] | None = None
 
         self._setup_ui()
 
@@ -116,7 +115,7 @@ class PannerPanel(QDockWidget):
     def set_image(
         self,
         image: NDArray[np.float64],
-        source_size: Optional[tuple[int, int]] = None,
+        source_size: tuple[int, int] | None = None,
     ) -> None:
         """
         Set the image data for the overview.
@@ -133,7 +132,7 @@ class PannerPanel(QDockWidget):
             self._source_image_size = source_size
         self._update_thumbnail()
 
-    def set_view_rect(self, rect: Optional[QRectF]) -> None:
+    def set_view_rect(self, rect: QRectF | None) -> None:
         """
         Set the current view rectangle.
 

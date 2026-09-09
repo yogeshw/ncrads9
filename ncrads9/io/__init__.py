@@ -22,18 +22,18 @@ Provides readers and writers for various file formats.
 Author: Yogesh Wadadekar
 """
 
-from .fits_reader import FITSReader
-from .fits_writer import FITSWriter
 from .array_reader import ArrayReader
 from .envi_reader import ENVIReader
-from .nrrd_reader import NRRDReader
-from .gif_writer import GIFWriter
-from .mpeg_writer import MPEGWriter
-from .png_writer import PNGWriter
-from .jpeg_writer import JPEGWriter
-from .tiff_writer import TIFFWriter
 from .eps_writer import EPSWriter
+from .fits_reader import FITSReader
+from .fits_writer import FITSWriter
+from .gif_writer import GIFWriter
+from .jpeg_writer import JPEGWriter
+from .mpeg_writer import MPEGWriter
+from .nrrd_reader import NRRDReader
 from .pdf_writer import PDFWriter
+from .png_writer import PNGWriter
+from .tiff_writer import TIFFWriter
 
 __all__ = [
     "FITSReader",

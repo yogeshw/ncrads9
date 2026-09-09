@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import colorsys
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -35,8 +35,8 @@ class HSVChannelSettings:
     """Settings for an individual HSV channel."""
 
     visible: bool = True
-    scale_min: Optional[float] = None
-    scale_max: Optional[float] = None
+    scale_min: float | None = None
+    scale_max: float | None = None
 
 
 class HSVFrame:
@@ -51,13 +51,13 @@ class HSVFrame:
         """
         self._frame_id = frame_id
         self._name = name or f"HSV Frame {frame_id}"
-        self._hue_frame: Optional[Frame] = None
-        self._saturation_frame: Optional[Frame] = None
-        self._value_frame: Optional[Frame] = None
+        self._hue_frame: Frame | None = None
+        self._saturation_frame: Frame | None = None
+        self._value_frame: Frame | None = None
         self._hue_settings = HSVChannelSettings()
         self._saturation_settings = HSVChannelSettings()
         self._value_settings = HSVChannelSettings()
-        self._composite: Optional[NDArray[np.uint8]] = None
+        self._composite: NDArray[np.uint8] | None = None
 
     @property
     def frame_id(self) -> int:
@@ -75,34 +75,34 @@ class HSVFrame:
         self._name = value
 
     @property
-    def hue_frame(self) -> Optional[Frame]:
+    def hue_frame(self) -> Frame | None:
         """Return the hue channel frame."""
         return self._hue_frame
 
     @hue_frame.setter
-    def hue_frame(self, frame: Optional[Frame]) -> None:
+    def hue_frame(self, frame: Frame | None) -> None:
         """Set the hue channel frame."""
         self._hue_frame = frame
         self._composite = None
 
     @property
-    def saturation_frame(self) -> Optional[Frame]:
+    def saturation_frame(self) -> Frame | None:
         """Return the saturation channel frame."""
         return self._saturation_frame
 
     @saturation_frame.setter
-    def saturation_frame(self, frame: Optional[Frame]) -> None:
+    def saturation_frame(self, frame: Frame | None) -> None:
         """Set the saturation channel frame."""
         self._saturation_frame = frame
         self._composite = None
 
     @property
-    def value_frame(self) -> Optional[Frame]:
+    def value_frame(self) -> Frame | None:
         """Return the value channel frame."""
         return self._value_frame
 
     @value_frame.setter
-    def value_frame(self, frame: Optional[Frame]) -> None:
+    def value_frame(self, frame: Frame | None) -> None:
         """Set the value channel frame."""
         self._value_frame = frame
         self._composite = None
@@ -122,7 +122,7 @@ class HSVFrame:
         """Return the value channel settings."""
         return self._value_settings
 
-    def set_channel(self, channel: str, frame: Optional[Frame]) -> None:
+    def set_channel(self, channel: str, frame: Frame | None) -> None:
         """Set a channel frame.
 
         Args:
@@ -139,7 +139,7 @@ class HSVFrame:
         else:
             raise ValueError(f"Unknown channel: {channel}")
 
-    def get_channel(self, channel: str) -> Optional[Frame]:
+    def get_channel(self, channel: str) -> Frame | None:
         """Get a channel frame.
 
         Args:
@@ -181,14 +181,14 @@ class HSVFrame:
         normalized = (data - vmin) / (vmax - vmin)
         return np.clip(normalized, 0.0, 1.0)
 
-    def compose(self) -> Optional[NDArray[np.uint8]]:
+    def compose(self) -> NDArray[np.uint8] | None:
         """Compose the RGB image from the HSV channel frames.
 
         Returns:
             RGB image as uint8 array with shape (height, width, 3), or None.
         """
         # Determine output shape from available frames
-        shape: Optional[tuple[int, ...]] = None
+        shape: tuple[int, ...] | None = None
         for frame in [self._hue_frame, self._saturation_frame, self._value_frame]:
             if frame is not None and frame.image_data is not None:
                 shape = frame.image_data.shape[:2]
@@ -241,7 +241,7 @@ class HSVFrame:
         return self._composite
 
     @property
-    def composite(self) -> Optional[NDArray[np.uint8]]:
+    def composite(self) -> NDArray[np.uint8] | None:
         """Return the cached composite image, composing if necessary."""
         if self._composite is None:
             return self.compose()

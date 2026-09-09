@@ -20,18 +20,17 @@ Colorbar panel showing color scale with value labels.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
 
 import numpy as np
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QPainter, QColor, QLinearGradient
+from PyQt6.QtGui import QColor, QLinearGradient, QPainter, QPixmap
 from PyQt6.QtWidgets import (
+    QComboBox,
     QDockWidget,
-    QWidget,
-    QVBoxLayout,
     QHBoxLayout,
     QLabel,
-    QComboBox,
+    QVBoxLayout,
+    QWidget,
 )
 
 
@@ -50,7 +49,7 @@ class ColorbarPanel(QDockWidget):
         "rainbow",
     ]
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """
         Initialize the colorbar panel.
 

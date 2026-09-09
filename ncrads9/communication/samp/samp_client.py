@@ -25,7 +25,8 @@ Author: Yogesh Wadadekar
 
 import logging
 import threading
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 try:
     from astropy.samp import SAMPIntegratedClient
@@ -68,11 +69,11 @@ class SAMPClient:
         self.description: str = description
         self.connected: bool = False
 
-        self._client: Optional[Any] = None
+        self._client: Any | None = None
         self._handlers: SAMPHandlers = SAMPHandlers()
         self._logger: logging.Logger = logging.getLogger(__name__)
         self._lock: threading.Lock = threading.Lock()
-        self._callbacks: Dict[str, List[Callable[..., None]]] = {}
+        self._callbacks: dict[str, list[Callable[..., None]]] = {}
 
         if not ASTROPY_SAMP_AVAILABLE:
             self._logger.warning("astropy.samp not available. SAMP functionality disabled.")
@@ -165,8 +166,8 @@ class SAMPClient:
         private_key: str,
         sender_id: str,
         mtype: str,
-        params: Dict[str, Any],
-        extra: Optional[Dict[str, Any]] = None,
+        params: dict[str, Any],
+        extra: dict[str, Any] | None = None,
     ) -> None:
         """Handle incoming SAMP notification.
 
@@ -187,9 +188,9 @@ class SAMPClient:
         sender_id: str,
         msg_id: str,
         mtype: str,
-        params: Dict[str, Any],
-        extra: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        params: dict[str, Any],
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Handle incoming SAMP call.
 
         Args:
@@ -212,7 +213,7 @@ class SAMPClient:
         self,
         mtype: str,
         sender_id: str,
-        params: Dict[str, Any],
+        params: dict[str, Any],
     ) -> None:
         """Fire registered callbacks for a message type.
 
@@ -231,7 +232,7 @@ class SAMPClient:
     def register_callback(
         self,
         mtype: str,
-        callback: Callable[[str, Dict[str, Any]], None],
+        callback: Callable[[str, dict[str, Any]], None],
     ) -> None:
         """Register a callback for a message type.
 
@@ -246,7 +247,7 @@ class SAMPClient:
     def unregister_callback(
         self,
         mtype: str,
-        callback: Callable[[str, Dict[str, Any]], None],
+        callback: Callable[[str, dict[str, Any]], None],
     ) -> None:
         """Unregister a callback.
 
@@ -263,8 +264,8 @@ class SAMPClient:
     def send_image(
         self,
         url: str,
-        recipient: Optional[str] = None,
-        name: Optional[str] = None,
+        recipient: str | None = None,
+        name: str | None = None,
     ) -> bool:
         """Send an image to other SAMP clients.
 
@@ -289,8 +290,8 @@ class SAMPClient:
     def send_table(
         self,
         url: str,
-        table_id: Optional[str] = None,
-        recipient: Optional[str] = None,
+        table_id: str | None = None,
+        recipient: str | None = None,
     ) -> bool:
         """Send a table to other SAMP clients.
 
@@ -316,7 +317,7 @@ class SAMPClient:
         self,
         ra: float,
         dec: float,
-        recipient: Optional[str] = None,
+        recipient: str | None = None,
     ) -> bool:
         """Send sky coordinates to other SAMP clients.
 
@@ -338,8 +339,8 @@ class SAMPClient:
     def _send_message(
         self,
         mtype: str,
-        params: Dict[str, Any],
-        recipient: Optional[str] = None,
+        params: dict[str, Any],
+        recipient: str | None = None,
     ) -> bool:
         """Send a SAMP message.
 
@@ -369,7 +370,7 @@ class SAMPClient:
             self._logger.error(f"Failed to send message {mtype}: {e}")
             return False
 
-    def get_registered_clients(self) -> List[Dict[str, str]]:
+    def get_registered_clients(self) -> list[dict[str, str]]:
         """Get list of registered SAMP clients.
 
         Returns:

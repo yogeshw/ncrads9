@@ -22,13 +22,12 @@ Provides a wrapper class for astropy.wcs for coordinate transformations.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Union, Tuple
 
+import astropy.units as u
 import numpy as np
+from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.wcs import WCS
-from astropy.coordinates import SkyCoord
-import astropy.units as u
 from numpy.typing import NDArray
 
 
@@ -44,8 +43,8 @@ class WCSHandler:
 
     def __init__(
         self,
-        header: Optional[fits.Header] = None,
-        wcs: Optional[WCS] = None,
+        header: fits.Header | None = None,
+        wcs: WCS | None = None,
     ) -> None:
         """Initialize WCSHandler.
 
@@ -53,7 +52,7 @@ class WCSHandler:
             header: FITS header to extract WCS from.
             wcs: Existing WCS object to wrap.
         """
-        self._wcs: Optional[WCS] = None
+        self._wcs: WCS | None = None
 
         if wcs is not None:
             self._wcs = wcs
@@ -61,7 +60,7 @@ class WCSHandler:
             self._wcs = WCS(header)
 
     @property
-    def wcs(self) -> Optional[WCS]:
+    def wcs(self) -> WCS | None:
         """Get the underlying WCS object."""
         return self._wcs
 
@@ -71,8 +70,8 @@ class WCSHandler:
         return self._wcs is not None and self._wcs.has_celestial
 
     def pixel_to_world(
-        self, x: Union[float, NDArray], y: Union[float, NDArray]
-    ) -> Tuple[Union[float, NDArray], Union[float, NDArray]]:
+        self, x: float | NDArray, y: float | NDArray
+    ) -> tuple[float | NDArray, float | NDArray]:
         """Convert pixel coordinates to world coordinates.
 
         Args:
@@ -94,8 +93,8 @@ class WCSHandler:
         return world
 
     def world_to_pixel(
-        self, ra: Union[float, NDArray], dec: Union[float, NDArray]
-    ) -> Tuple[Union[float, NDArray], Union[float, NDArray]]:
+        self, ra: float | NDArray, dec: float | NDArray
+    ) -> tuple[float | NDArray, float | NDArray]:
         """Convert world coordinates to pixel coordinates.
 
         Args:
@@ -115,7 +114,7 @@ class WCSHandler:
         x, y = self._wcs.world_to_pixel(coord)
         return x, y
 
-    def get_pixel_scale(self) -> Optional[float]:
+    def get_pixel_scale(self) -> float | None:
         """Get the pixel scale in arcseconds per pixel.
 
         Returns:
@@ -130,7 +129,7 @@ class WCSHandler:
         except Exception:
             return None
 
-    def get_center_coord(self) -> Optional[Tuple[float, float]]:
+    def get_center_coord(self) -> tuple[float, float] | None:
         """Get the center coordinates of the image.
 
         Returns:
@@ -147,7 +146,7 @@ class WCSHandler:
         except Exception:
             return None
 
-    def get_footprint(self) -> Optional[NDArray]:
+    def get_footprint(self) -> NDArray | None:
         """Get the WCS footprint (corner coordinates).
 
         Returns:

@@ -21,8 +21,8 @@ ESO Archive access for astronomical data retrieval.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Any
 from pathlib import Path
+from typing import Any
 
 
 class ESOArchive:
@@ -30,7 +30,7 @@ class ESOArchive:
 
     BASE_URL: str = "https://archive.eso.org"
 
-    def __init__(self, username: Optional[str] = None, password: Optional[str] = None) -> None:
+    def __init__(self, username: str | None = None, password: str | None = None) -> None:
         """
         Initialize the ESO Archive client.
 
@@ -61,7 +61,7 @@ class ESOArchive:
         ra: float,
         dec: float,
         radius: float = 5.0,
-        instrument: Optional[str] = None,
+        instrument: str | None = None,
     ) -> list[dict[str, Any]]:
         """
         Query the ESO archive for observations in a region.

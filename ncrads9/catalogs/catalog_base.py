@@ -22,11 +22,11 @@ Author: Yogesh Wadadekar
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, List, Any
+from typing import Any
 
+import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.table import Table
-import astropy.units as u
 
 
 class CatalogBase(ABC):
@@ -45,7 +45,7 @@ class CatalogBase(ABC):
         """
         self.name: str = name
         self.description: str = description
-        self._last_result: Optional[Table] = None
+        self._last_result: Table | None = None
 
     @abstractmethod
     def query_region(
@@ -53,7 +53,7 @@ class CatalogBase(ABC):
         coord: SkyCoord,
         radius: u.Quantity,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Query catalog for objects within a region.
 
@@ -77,7 +77,7 @@ class CatalogBase(ABC):
         self,
         name: str,
         **kwargs: Any,
-    ) -> Optional[Table]:
+    ) -> Table | None:
         """
         Query catalog by object name.
 
@@ -94,7 +94,7 @@ class CatalogBase(ABC):
             Result table or None if no results.
         """
 
-    def get_coordinates(self, table: Table) -> Optional[List[SkyCoord]]:
+    def get_coordinates(self, table: Table) -> list[SkyCoord] | None:
         """
         Extract coordinates from result table.
 
@@ -108,8 +108,8 @@ class CatalogBase(ABC):
         list of SkyCoord or None
             List of coordinates or None if extraction fails.
         """
-        ra_col: Optional[str] = None
-        dec_col: Optional[str] = None
+        ra_col: str | None = None
+        dec_col: str | None = None
 
         for col in table.colnames:
             col_lower = col.lower()
@@ -121,7 +121,7 @@ class CatalogBase(ABC):
         if ra_col is None or dec_col is None:
             return None
 
-        coords: List[SkyCoord] = []
+        coords: list[SkyCoord] = []
         for row in table:
             try:
                 coord = SkyCoord(
@@ -137,7 +137,7 @@ class CatalogBase(ABC):
         return coords if coords else None
 
     @property
-    def last_result(self) -> Optional[Table]:
+    def last_result(self) -> Table | None:
         """Return the last query result."""
         return self._last_result
 

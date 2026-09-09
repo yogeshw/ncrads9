@@ -21,7 +21,7 @@ Author: Yogesh Wadadekar
 """
 
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 from astropy.io import fits
 from numpy.typing import NDArray
@@ -30,7 +30,7 @@ from numpy.typing import NDArray
 class FITSWriter:
     """Writer for FITS (Flexible Image Transport System) files."""
 
-    def __init__(self, filepath: Union[str, Path]) -> None:
+    def __init__(self, filepath: str | Path) -> None:
         """
         Initialize FITS writer.
 
@@ -43,7 +43,7 @@ class FITSWriter:
     def add_image(
         self,
         data: NDArray[Any],
-        header: Optional[fits.Header] = None,
+        header: fits.Header | None = None,
         name: str = "",
     ) -> None:
         """
@@ -63,7 +63,7 @@ class FITSWriter:
     def add_table(
         self,
         columns: list[fits.Column],
-        header: Optional[fits.Header] = None,
+        header: fits.Header | None = None,
         name: str = "",
     ) -> None:
         """

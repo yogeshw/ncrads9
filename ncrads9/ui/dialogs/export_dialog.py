@@ -20,26 +20,26 @@ Export image dialog.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
-from PyQt6.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QLabel,
-    QComboBox,
-    QFileDialog,
-    QWidget,
-    QLineEdit,
-    QFormLayout,
-)
+
 from PyQt6.QtGui import QPixmap
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class ExportDialog(QDialog):
     """Dialog for exporting images."""
 
-    def __init__(self, pixmap: QPixmap, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, pixmap: QPixmap, parent: QWidget | None = None) -> None:
         """
         Initialize the export dialog.
 

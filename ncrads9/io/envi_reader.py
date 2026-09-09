@@ -21,7 +21,7 @@ Author: Yogesh Wadadekar
 """
 
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -42,7 +42,7 @@ class ENVIReader:
         15: np.dtype("uint64"),
     }
 
-    def __init__(self, filepath: Union[str, Path]) -> None:
+    def __init__(self, filepath: str | Path) -> None:
         """
         Initialize ENVI reader.
 
@@ -64,7 +64,7 @@ class ENVIReader:
             header_path = header_path.with_suffix(".hdr")
 
         self._header = {}
-        with open(header_path, "r") as f:
+        with open(header_path) as f:
             content = f.read()
 
         for line in content.split("\n"):
@@ -113,7 +113,7 @@ class ENVIReader:
                 return data_path
         return self.filepath.with_suffix("")
 
-    def get_wavelengths(self) -> Optional[list[float]]:
+    def get_wavelengths(self) -> list[float] | None:
         """
         Get wavelength information if available.
 

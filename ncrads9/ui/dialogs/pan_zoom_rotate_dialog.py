@@ -4,8 +4,6 @@ Pan/zoom/rotate parameter dialog.
 
 from __future__ import annotations
 
-from typing import Optional
-
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -22,7 +20,7 @@ class PanZoomRotateDialog(QDialog):
 
     parameters_changed = pyqtSignal(dict)
 
-    def __init__(self, parent: Optional[QDialog] = None) -> None:
+    def __init__(self, parent: QDialog | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Pan Zoom Rotate Parameters")
         self.setWindowModality(Qt.WindowModality.NonModal)

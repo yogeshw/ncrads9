@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Optional, List, Tuple
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -42,12 +42,12 @@ class PlotStyle(Enum):
 class PlotConfig:
     """Configuration for spectrum plot appearance."""
 
-    line_color: Tuple[int, int, int] = (255, 255, 255)
+    line_color: tuple[int, int, int] = (255, 255, 255)
     line_width: float = 1.0
-    error_color: Tuple[int, int, int] = (128, 128, 128)
+    error_color: tuple[int, int, int] = (128, 128, 128)
     show_error: bool = True
     style: PlotStyle = PlotStyle.LINE
-    background_color: Tuple[int, int, int] = (0, 0, 0)
+    background_color: tuple[int, int, int] = (0, 0, 0)
     grid_visible: bool = True
 
 
@@ -56,8 +56,8 @@ class SpectrumPlot:
 
     def __init__(
         self,
-        parent: Optional[object] = None,
-        config: Optional[PlotConfig] = None,
+        parent: object | None = None,
+        config: PlotConfig | None = None,
     ) -> None:
         """Initialize the spectrum plot widget.
 
@@ -65,14 +65,14 @@ class SpectrumPlot:
             parent: Parent widget.
             config: Plot configuration.
         """
-        self._parent: Optional[object] = parent
+        self._parent: object | None = parent
         self._config: PlotConfig = config or PlotConfig()
-        self._wavelength: Optional[NDArray] = None
-        self._flux: Optional[NDArray] = None
-        self._error: Optional[NDArray] = None
-        self._x_range: Optional[Tuple[float, float]] = None
-        self._y_range: Optional[Tuple[float, float]] = None
-        self._markers: List[Tuple[float, str]] = []
+        self._wavelength: NDArray | None = None
+        self._flux: NDArray | None = None
+        self._error: NDArray | None = None
+        self._x_range: tuple[float, float] | None = None
+        self._y_range: tuple[float, float] | None = None
+        self._markers: list[tuple[float, str]] = []
 
     @property
     def config(self) -> PlotConfig:
@@ -86,12 +86,12 @@ class SpectrumPlot:
         self.refresh()
 
     @property
-    def x_range(self) -> Optional[Tuple[float, float]]:
+    def x_range(self) -> tuple[float, float] | None:
         """Get the current X axis range."""
         return self._x_range
 
     @property
-    def y_range(self) -> Optional[Tuple[float, float]]:
+    def y_range(self) -> tuple[float, float] | None:
         """Get the current Y axis range."""
         return self._y_range
 
@@ -99,7 +99,7 @@ class SpectrumPlot:
         self,
         wavelength: NDArray,
         flux: NDArray,
-        error: Optional[NDArray] = None,
+        error: NDArray | None = None,
     ) -> None:
         """Set the spectrum data to display.
 
@@ -179,7 +179,7 @@ class SpectrumPlot:
         """Refresh the plot display."""
         # TODO: Implement plot rendering
 
-    def get_wavelength_at_x(self, x: int) -> Optional[float]:
+    def get_wavelength_at_x(self, x: int) -> float | None:
         """Get wavelength at a given x pixel position.
 
         Args:
@@ -191,7 +191,7 @@ class SpectrumPlot:
         # TODO: Implement coordinate conversion
         return None
 
-    def get_flux_at_wavelength(self, wavelength: float) -> Optional[float]:
+    def get_flux_at_wavelength(self, wavelength: float) -> float | None:
         """Get interpolated flux at a given wavelength.
 
         Args:

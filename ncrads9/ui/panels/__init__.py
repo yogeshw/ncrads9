@@ -20,13 +20,13 @@ UI Panels package for ncrads9.
 Author: Yogesh Wadadekar
 """
 
+from .colorbar_panel import ColorbarPanel
+from .cube_panel import CubePanel
+from .horizontal_graph import HorizontalGraph
+from .info_panel import InfoPanel
 from .magnifier import MagnifierPanel
 from .panner import PannerPanel
-from .info_panel import InfoPanel
-from .colorbar_panel import ColorbarPanel
-from .horizontal_graph import HorizontalGraph
 from .vertical_graph import VerticalGraph
-from .cube_panel import CubePanel
 
 __all__ = [
     "MagnifierPanel",

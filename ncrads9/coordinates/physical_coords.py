@@ -20,7 +20,6 @@ Physical coordinate system.
 Author: Yogesh Wadadekar
 """
 
-from typing import Tuple, Optional
 
 from .coord_system import CoordSystem, CoordSystemType
 
@@ -60,7 +59,7 @@ class PhysicalCoords(CoordSystem):
         """Set the y physical coordinate."""
         self._y = value
 
-    def get_coordinates(self) -> Tuple[float, float]:
+    def get_coordinates(self) -> tuple[float, float]:
         """
         Get the physical coordinates as a tuple.
 
@@ -80,7 +79,7 @@ class PhysicalCoords(CoordSystem):
         self._x = x
         self._y = y
 
-    def to_string(self, precision: Optional[int] = None) -> str:
+    def to_string(self, precision: int | None = None) -> str:
         """
         Convert physical coordinates to a string representation.
 

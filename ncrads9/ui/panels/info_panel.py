@@ -20,25 +20,25 @@ Info panel showing cursor coordinates, pixel values, and WCS info.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Any
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QDockWidget,
-    QWidget,
-    QVBoxLayout,
     QGridLayout,
-    QLabel,
     QGroupBox,
+    QLabel,
+    QVBoxLayout,
+    QWidget,
 )
 
 
 class InfoPanel(QDockWidget):
     """Dockable panel showing cursor coordinates, pixel values, and WCS info."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """
         Initialize the info panel.
 
@@ -48,8 +48,8 @@ class InfoPanel(QDockWidget):
         super().__init__("Info", parent)
         self.setObjectName("InfoPanel")
 
-        self._wcs: Optional[Any] = None
-        self._current_image: Optional[NDArray[np.float64]] = None
+        self._wcs: Any | None = None
+        self._current_image: NDArray[np.float64] | None = None
 
         self._setup_ui()
 

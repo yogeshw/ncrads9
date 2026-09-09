@@ -20,98 +20,94 @@ Main window for NCRADS9 application.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, TYPE_CHECKING, Dict, List, Tuple
-from pathlib import Path
 import tempfile
-from urllib.parse import urlparse, unquote
+from pathlib import Path
+from typing import TYPE_CHECKING, Optional
+from urllib.parse import unquote, urlparse
 
-from PyQt6.QtCore import Qt, QTimer, QPointF, QRectF, QSize, QUrl, pyqtSignal
-from PyQt6.QtWidgets import QDialog
-from PyQt6.QtGui import QAction, QImage, QPixmap, QColor, QDesktopServices, QKeyEvent
+import astropy.units as u
+import numpy as np
+from astropy.coordinates import (
+    FK4,
+    FK5,
+    ICRS,
+    BarycentricTrueEcliptic,
+    Galactic,
+    SkyCoord,
+)
+from astropy.table import Table
+from numpy.typing import NDArray
+from PyQt6.QtCore import QPointF, QRectF, QSize, Qt, QTimer, QUrl, pyqtSignal
+from PyQt6.QtGui import QAction, QColor, QDesktopServices, QImage, QKeyEvent, QPixmap
 from PyQt6.QtWidgets import (
-    QMainWindow,
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
+    QButtonGroup,
+    QCheckBox,
+    QColorDialog,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QDockWidget,
+    QDoubleSpinBox,
+    QFileDialog,
     QFormLayout,
     QGridLayout,
     QGroupBox,
-    QButtonGroup,
-    QRadioButton,
-    QCheckBox,
-    QComboBox,
-    QDoubleSpinBox,
-    QDialogButtonBox,
-    QDockWidget,
-    QFileDialog,
-    QLabel,
-    QScrollArea,
+    QHBoxLayout,
     QInputDialog,
-    QColorDialog,
+    QLabel,
+    QMainWindow,
+    QRadioButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
 )
-import numpy as np
-from numpy.typing import NDArray
 from scipy import ndimage
-from astropy.table import Table
-from astropy.coordinates import (
-    SkyCoord,
-    FK5,
-    FK4,
-    ICRS,
-    Galactic,
-    BarycentricTrueEcliptic,
-)
-import astropy.units as u
 
-from .menu_bar import MenuBar
-from .toolbar import MainToolbar
-from .button_bar import ButtonBar
-from .status_bar import StatusBar
-from .widgets.colorbar_widget import ColorbarWidget
-from .widgets.image_viewer_with_regions import ImageViewerWithRegions
-from .widgets.gl_image_viewer_with_regions import GLImageViewerWithRegions
-from .widgets.region_overlay import RegionMode, Region
-from .panels.panner import PannerPanel
-from .panels.magnifier import MagnifierPanel
-from .panels.horizontal_graph import HorizontalGraph
-from .panels.vertical_graph import VerticalGraph
-from .dialogs.statistics_dialog import StatisticsDialog
-from .dialogs.scale_dialog import ScaleDialog
-from .dialogs.histogram_dialog import HistogramDialog
-from .dialogs.pixel_table_dialog import PixelTableDialog
-from .dialogs.keyboard_shortcuts_dialog import KeyboardShortcutsDialog
-from .dialogs.help_contents_dialog import HelpContentsDialog
-from .dialogs.export_dialog import ExportDialog
-from .dialogs.contour_dialog import ContourDialog
-from .dialogs.grid_dialog import GridDialog
-from .dialogs.smooth_dialog import SmoothDialog
-from .dialogs.preferences_dialog import PreferencesDialog
-from .dialogs.crop_parameters_dialog import CropParametersDialog
-from .dialogs.pan_zoom_rotate_dialog import PanZoomRotateDialog
-from ..core.fits_handler import FITSHandler
-from ..core.wcs_handler import WCSHandler
-from ..rendering.scale_algorithms import apply_scale, ScaleAlgorithm, compute_zscale_limits
+from ..analysis.contour import ContourGenerator
+from ..analysis.radial_profile import RadialProfile
+from ..analysis.smooth import boxcar_smooth, gaussian_smooth, tophat_smooth
+from ..catalogs.vizier import VizierCatalog
 from ..colormaps.builtin_maps import get_colormap
 from ..colormaps.colormap import Colormap
 from ..colormaps.lut_parser import parse_lut_file, save_lut_file
 from ..colormaps.sao_parser import parse_sao_file
+from ..communication.samp import SAMPClient
+from ..core.fits_handler import FITSHandler
+from ..core.wcs_handler import WCSHandler
+from ..frames.simple_frame_manager import Frame, FrameManager
+from ..image_servers.sia_client import SIAClient
 from ..regions.region_parser import RegionParser
 from ..regions.region_writer import RegionWriter
+from ..regions.shapes.box import Box
 from ..regions.shapes.circle import Circle
 from ..regions.shapes.ellipse import Ellipse
-from ..regions.shapes.box import Box
 from ..regions.shapes.line import Line
 from ..regions.shapes.point import Point
 from ..regions.shapes.polygon import Polygon
-from ..frames.simple_frame_manager import FrameManager, Frame
-from ..analysis.contour import ContourGenerator
-from ..analysis.smooth import gaussian_smooth, boxcar_smooth, tophat_smooth
-from ..analysis.radial_profile import RadialProfile
+from ..rendering.scale_algorithms import ScaleAlgorithm, apply_scale, compute_zscale_limits
 from ..utils.preferences import Preferences
-from ..image_servers.sia_client import SIAClient
-from ..catalogs.vizier import VizierCatalog
-from ..communication.samp import SAMPClient
+from .button_bar import ButtonBar
+from .dialogs.contour_dialog import ContourDialog
+from .dialogs.crop_parameters_dialog import CropParametersDialog
+from .dialogs.export_dialog import ExportDialog
+from .dialogs.grid_dialog import GridDialog
+from .dialogs.help_contents_dialog import HelpContentsDialog
+from .dialogs.histogram_dialog import HistogramDialog
+from .dialogs.keyboard_shortcuts_dialog import KeyboardShortcutsDialog
+from .dialogs.pan_zoom_rotate_dialog import PanZoomRotateDialog
+from .dialogs.pixel_table_dialog import PixelTableDialog
+from .dialogs.preferences_dialog import PreferencesDialog
+from .dialogs.scale_dialog import ScaleDialog
+from .dialogs.smooth_dialog import SmoothDialog
+from .dialogs.statistics_dialog import StatisticsDialog
 from .dialogs.vo_query_dialog import VOQueryDialog
+from .menu_bar import MenuBar
+from .panels.horizontal_graph import HorizontalGraph
+from .panels.magnifier import MagnifierPanel
+from .panels.panner import PannerPanel
+from .panels.vertical_graph import VerticalGraph
+from .status_bar import StatusBar
+from .toolbar import MainToolbar
 from .view_transform import (
     DisplayTransform,
     flags_to_orientation,
@@ -119,6 +115,10 @@ from .view_transform import (
     orientation_to_flags,
     transform_image_array,
 )
+from .widgets.colorbar_widget import ColorbarWidget
+from .widgets.gl_image_viewer_with_regions import GLImageViewerWithRegions
+from .widgets.image_viewer_with_regions import ImageViewerWithRegions
+from .widgets.region_overlay import Region, RegionMode
 
 if TYPE_CHECKING:
     from ncrads9.utils.config import Config
@@ -135,7 +135,7 @@ class MainWindow(QMainWindow):
 
     samp_table_received = pyqtSignal(str, str, str)
 
-    def __init__(self, config: Optional["Config"] = None, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, config: Optional["Config"] = None, parent: QWidget | None = None) -> None:
         """
         Initialize the main window.
 
@@ -154,22 +154,22 @@ class MainWindow(QMainWindow):
         self.current_colormap = "grey"
         self._default_colormap = "grey"
         self.invert_colormap = False
-        self.custom_colormaps: Dict[str, Colormap] = {}
-        self._user_colormap_actions: Dict[str, object] = {}
+        self.custom_colormaps: dict[str, Colormap] = {}
+        self._user_colormap_actions: dict[str, object] = {}
         self.current_bin = 1
         self.current_wcs_system = "fk5"
         self.current_wcs_format = "sexagesimal"
-        self._last_mouse_pos: Optional[tuple[int, int]] = None
-        self._preview_rgb_cache: Optional[NDArray[np.uint8]] = None
-        self._preview_rgb_cache_frame_id: Optional[int] = None
+        self._last_mouse_pos: tuple[int, int] | None = None
+        self._preview_rgb_cache: NDArray[np.uint8] | None = None
+        self._preview_rgb_cache_frame_id: int | None = None
         self.preferences = Preferences(self._preferences_path())
         self.use_gpu_rendering = bool(self.preferences.get("use_gpu", True))
         self.using_gpu_rendering = False
         self.z1 = None  # Scale limits
         self.z2 = None
-        self._contour_settings: Optional[dict] = None
-        self._contour_paths: Optional[list] = None
-        self._contour_levels: Optional[list] = None
+        self._contour_settings: dict | None = None
+        self._contour_paths: list | None = None
+        self._contour_levels: list | None = None
         self._smooth_settings: dict = {
             "kernel_type": "Gaussian",
             "sigma": 2.0,
@@ -180,13 +180,13 @@ class MainWindow(QMainWindow):
             "preserve_nan": True,
             "normalize": True,
         }
-        self._grid_settings: Optional[dict] = None
+        self._grid_settings: dict | None = None
         self._analysis_command_log = False
-        self._analysis_command_entries: List[str] = []
-        self._loaded_analysis_actions: List[QAction] = []
+        self._analysis_command_entries: list[str] = []
+        self._loaded_analysis_actions: list[QAction] = []
         self._analysis_mask_mode = "disabled"
-        self._analysis_mask_min: Optional[float] = None
-        self._analysis_mask_max: Optional[float] = None
+        self._analysis_mask_min: float | None = None
+        self._analysis_mask_max: float | None = None
         self._crosshair_enabled = False
         self._crosshair_color = QColor(255, 0, 0)
         self._crosshair_size = 24
@@ -194,17 +194,17 @@ class MainWindow(QMainWindow):
         self._frame_display_mode = "single"
         self._tile_mode_enabled = False
         self._tile_arrangement_mode = "grid"
-        self._tile_layout: Optional[dict] = None
+        self._tile_layout: dict | None = None
         current_frame = self.frame_manager.current_frame
         self._active_frame_ids: set[int] = {current_frame.frame_id} if current_frame else set()
         self._known_frame_ids: set[int] = set(self._active_frame_ids)
-        self._frame_lock_scope: Dict[str, str] = {
+        self._frame_lock_scope: dict[str, str] = {
             "frame": "none",
             "crosshair": "none",
             "crop": "none",
             "slice": "none",
         }
-        self._frame_lock_flags: Dict[str, bool] = {
+        self._frame_lock_flags: dict[str, bool] = {
             "bin": False,
             "axes_order": False,
             "scale": False,
@@ -215,12 +215,12 @@ class MainWindow(QMainWindow):
             "3d": False,
         }
         self._fade_interval_ms = 1000
-        self._samp_client: Optional[SAMPClient] = None
+        self._samp_client: SAMPClient | None = None
         self._samp_connected = False
         self._samp_marker_color = QColor(255, 255, 0)
         self._samp_marker_shape = "box"
         self._samp_marker_size = 6.0
-        self._samp_catalog_sources: Dict[int, List[Tuple[float, float]]] = {}
+        self._samp_catalog_sources: dict[int, list[tuple[float, float]]] = {}
         self._blink_timer = QTimer(self)
         self._blink_timer.setInterval(500)
         self._blink_timer.timeout.connect(self._update_blink)
@@ -279,7 +279,7 @@ class MainWindow(QMainWindow):
         ):
             self.image_viewer.image_viewer.set_contrast_brightness(contrast, brightness)
 
-    def _get_rgb_active_channel_data(self, frame: Frame) -> Optional[NDArray[np.floating]]:
+    def _get_rgb_active_channel_data(self, frame: Frame) -> NDArray[np.floating] | None:
         """Return currently selected RGB channel data, or first available channel."""
         channel = frame.rgb_current_channel if frame.rgb_current_channel in frame.rgb_channels else "red"
         data = frame.rgb_channels.get(channel)
@@ -301,7 +301,7 @@ class MainWindow(QMainWindow):
         self,
         frame: Frame,
         channel: str,
-    ) -> tuple[ScaleAlgorithm, Optional[float], Optional[float], float, float]:
+    ) -> tuple[ScaleAlgorithm, float | None, float | None, float, float]:
         """Return per-channel RGB display settings."""
         scale = frame.rgb_channel_scale.get(channel, ScaleAlgorithm.LINEAR)
         z1 = frame.rgb_channel_z1.get(channel)
@@ -328,7 +328,7 @@ class MainWindow(QMainWindow):
         scaled = apply_scale(data, scale, vmin=adjusted_z1, vmax=adjusted_z2)
         return np.clip(scaled.astype(np.float32), 0.0, 1.0)
 
-    def _compose_rgb_frame_image(self, frame: Frame) -> Optional[NDArray[np.uint8]]:
+    def _compose_rgb_frame_image(self, frame: Frame) -> NDArray[np.uint8] | None:
         """Compose display RGB image for an RGB frame."""
         channels = {
             name: frame.rgb_channels.get(name)
@@ -362,7 +362,7 @@ class MainWindow(QMainWindow):
     def _apply_rgb_frame_channels_from_sources(
         self,
         frame: Frame,
-        channel_to_source_index: Dict[str, Optional[int]],
+        channel_to_source_index: dict[str, int | None],
     ) -> None:
         """Assign RGB channels from existing mono frames."""
         for channel, source_index in channel_to_source_index.items():
@@ -950,7 +950,7 @@ class MainWindow(QMainWindow):
         canvas.pan_changed.emit(frame.pan_x, frame.pan_y)
         canvas.update()
 
-    def open_file(self, checked: bool = False, filepath: Optional[str] = None) -> None:
+    def open_file(self, checked: bool = False, filepath: str | None = None) -> None:
         """
         Open a FITS file.
 
@@ -1359,7 +1359,7 @@ class MainWindow(QMainWindow):
         self._refresh_analysis_overlays()
         return True
 
-    def _render_frame_rgb(self, frame: Frame) -> Optional[NDArray[np.uint8]]:
+    def _render_frame_rgb(self, frame: Frame) -> NDArray[np.uint8] | None:
         """Render a frame to RGB using its own display settings."""
         if frame.frame_type == "rgb":
             return self._compose_rgb_frame_image(frame)
@@ -1532,7 +1532,7 @@ class MainWindow(QMainWindow):
             raise ValueError(f"Unknown colormap: {name}")
         return cmap
 
-    def get_available_colormaps(self) -> List[str]:
+    def get_available_colormaps(self) -> list[str]:
         """Return currently available colormap names."""
         return sorted(self.menu_bar.colormap_actions.keys())
 
@@ -2104,7 +2104,7 @@ class MainWindow(QMainWindow):
         self._clear_analysis_commands(show_message=False)
         loaded = 0
         try:
-            with open(filepath, "r", encoding="utf-8") as handle:
+            with open(filepath, encoding="utf-8") as handle:
                 lines = handle.readlines()
         except Exception as exc:
             self.statusBar().showMessage(f"Failed to load analysis commands: {exc}", 3500)
@@ -2939,7 +2939,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("SAMP catalog has no usable RA/Dec columns", 3000)
             return
 
-        sources: List[Tuple[float, float]] = []
+        sources: list[tuple[float, float]] = []
         for coord in coords:
             pixel = self._world_to_overlay_pixel(coord.ra.deg, coord.dec.deg)
             if pixel is not None:
@@ -2954,7 +2954,7 @@ class MainWindow(QMainWindow):
         self._update_regions_for_frame(frame)
         self.statusBar().showMessage(f"Loaded SAMP catalog {table_id}: {len(sources)} sources", 4000)
 
-    def _read_samp_table(self, url: str, table_format: str) -> Optional[Table]:
+    def _read_samp_table(self, url: str, table_format: str) -> Table | None:
         """Read SAMP table from URL/path."""
         target = url
         parsed = urlparse(url)
@@ -2969,10 +2969,10 @@ class MainWindow(QMainWindow):
             except Exception:
                 return None
 
-    def _extract_catalog_coordinates(self, table: Table) -> Optional[List[SkyCoord]]:
+    def _extract_catalog_coordinates(self, table: Table) -> list[SkyCoord] | None:
         """Extract ICRS coordinates from a table."""
-        ra_col: Optional[str] = None
-        dec_col: Optional[str] = None
+        ra_col: str | None = None
+        dec_col: str | None = None
         for col in table.colnames:
             col_lower = col.lower()
             if col_lower in ("ra", "_ra", "raj2000", "ra_icrs", "ra_j2000"):
@@ -2982,7 +2982,7 @@ class MainWindow(QMainWindow):
         if ra_col is None or dec_col is None:
             return None
 
-        coords: List[SkyCoord] = []
+        coords: list[SkyCoord] = []
         for row in table:
             try:
                 coord = SkyCoord(
@@ -3121,7 +3121,7 @@ class MainWindow(QMainWindow):
                 return str(table[col][0])
         return ""
 
-    def _world_to_overlay_pixel(self, ra_deg: float, dec_deg: float) -> Optional[Tuple[float, float]]:
+    def _world_to_overlay_pixel(self, ra_deg: float, dec_deg: float) -> tuple[float, float] | None:
         """Convert WCS world coordinates to overlay pixel coordinates."""
         if self.wcs_handler is None or not self.wcs_handler.is_valid or self.image_data is None:
             return None
@@ -3282,7 +3282,7 @@ class MainWindow(QMainWindow):
 
         from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
         from matplotlib.figure import Figure
-        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QPushButton, QHBoxLayout
+        from PyQt6.QtWidgets import QDialog, QHBoxLayout, QPushButton, QVBoxLayout
 
         dialog = QDialog(self)
         dialog.setWindowTitle("Radial Profile")
@@ -3597,8 +3597,8 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("No image to print", 2000)
             return
 
-        from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
         from PyQt6.QtGui import QPainter
+        from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
 
         printer = QPrinter(QPrinter.PrinterMode.HighResolution)
         dialog = QPrintDialog(printer, self)
@@ -3614,7 +3614,7 @@ class MainWindow(QMainWindow):
             painter.end()
             self.statusBar().showMessage("Print completed", 2000)
 
-    def _get_current_pixmap(self) -> Optional[QPixmap]:
+    def _get_current_pixmap(self) -> QPixmap | None:
         """Get a pixmap of the current image for export/print."""
         if self.image_data is None:
             return None
@@ -3999,7 +3999,7 @@ class MainWindow(QMainWindow):
         self._refresh_frame_menu_items()
         self._update_frame_title()
 
-    def _update_regions_for_frame(self, frame: Optional[Frame]) -> None:
+    def _update_regions_for_frame(self, frame: Frame | None) -> None:
         """Sync region overlay with current frame."""
         if not hasattr(self.image_viewer, "clear_regions"):
             return
@@ -4137,7 +4137,7 @@ class MainWindow(QMainWindow):
         channel_group = QGroupBox("Current Channel", dialog)
         channel_layout = QHBoxLayout(channel_group)
         button_group = QButtonGroup(channel_group)
-        radio_buttons: Dict[str, QRadioButton] = {}
+        radio_buttons: dict[str, QRadioButton] = {}
         for channel in self._rgb_channel_names():
             radio = QRadioButton(channel.capitalize(), channel_group)
             radio.setChecked(frame.rgb_current_channel == channel)
@@ -4148,7 +4148,7 @@ class MainWindow(QMainWindow):
 
         view_group = QGroupBox("View", dialog)
         view_layout = QHBoxLayout(view_group)
-        view_checks: Dict[str, QCheckBox] = {}
+        view_checks: dict[str, QCheckBox] = {}
         for channel in self._rgb_channel_names():
             checkbox = QCheckBox(channel.capitalize(), view_group)
             checkbox.setChecked(frame.rgb_view.get(channel, True))
@@ -4174,7 +4174,7 @@ class MainWindow(QMainWindow):
             ("Asinh", ScaleAlgorithm.ASINH),
             ("HistEq", ScaleAlgorithm.HISTOGRAM_EQUALIZATION),
         ]
-        channel_settings: Dict[str, Dict[str, object]] = {}
+        channel_settings: dict[str, dict[str, object]] = {}
         for row, channel in enumerate(self._rgb_channel_names(), start=1):
             settings_layout.addWidget(QLabel(channel.capitalize()), row, 0)
 
@@ -4241,7 +4241,7 @@ class MainWindow(QMainWindow):
 
         source_group = QGroupBox("Assign Channels from Existing Frames", dialog)
         source_layout = QFormLayout(source_group)
-        source_combos: Dict[str, QComboBox] = {}
+        source_combos: dict[str, QComboBox] = {}
         source_frames = [
             (index, candidate)
             for index, candidate in enumerate(self.frame_manager.frames)
@@ -4307,7 +4307,7 @@ class MainWindow(QMainWindow):
                     float(brightness_spin.value()) if isinstance(brightness_spin, QDoubleSpinBox) else 0.0
                 )
 
-            updates: Dict[str, Optional[int]] = {}
+            updates: dict[str, int | None] = {}
             for channel, combo in source_combos.items():
                 value = combo.currentData()
                 if value == "KEEP":
@@ -4701,7 +4701,7 @@ class MainWindow(QMainWindow):
                 converted.append(Polygon(vertices=vertices))
         return converted
 
-    def _base_region_to_overlay(self, region) -> Optional[Region]:
+    def _base_region_to_overlay(self, region) -> Region | None:
         """Convert a BaseRegion to an overlay Region."""
         if isinstance(region, Circle):
             cx, cy = region.center

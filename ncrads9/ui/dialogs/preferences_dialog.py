@@ -20,26 +20,26 @@ Application preferences dialog.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, Dict, Any
+from typing import Any
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QGroupBox,
-    QFormLayout,
-    QComboBox,
-    QSpinBox,
-    QCheckBox,
-    QLineEdit,
-    QColorDialog,
-    QTabWidget,
-    QWidget,
-    QFileDialog,
-)
 from PyQt6.QtGui import QColor
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QColorDialog,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLineEdit,
+    QPushButton,
+    QSpinBox,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class PreferencesDialog(QDialog):
@@ -47,7 +47,7 @@ class PreferencesDialog(QDialog):
 
     preferences_changed = pyqtSignal(dict)
 
-    def __init__(self, parent: Optional[QDialog] = None) -> None:
+    def __init__(self, parent: QDialog | None = None) -> None:
         """Initialize the preferences dialog.
 
         Args:
@@ -329,7 +329,7 @@ class PreferencesDialog(QDialog):
         self._apply()
         self.accept()
 
-    def load_preferences(self, prefs: Dict[str, Any]) -> None:
+    def load_preferences(self, prefs: dict[str, Any]) -> None:
         """Load preferences into the dialog.
 
         Args:

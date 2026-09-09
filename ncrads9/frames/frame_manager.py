@@ -20,8 +20,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import Enum, auto
-from typing import Callable, Optional
 
 from .frame import Frame
 
@@ -60,11 +60,11 @@ class FrameManager:
     def __init__(self) -> None:
         """Initialize the FrameManager."""
         self._frames: dict[int, Frame] = {}
-        self._active_frame_id: Optional[int] = None
+        self._active_frame_id: int | None = None
         self._next_frame_id: int = 1
         self._match_mode: MatchMode = MatchMode.NONE
         self._lock_modes: set[LockMode] = set()
-        self._frame_change_callbacks: list[Callable[[Optional[Frame]], None]] = []
+        self._frame_change_callbacks: list[Callable[[Frame | None], None]] = []
 
     @property
     def frames(self) -> dict[int, Frame]:
@@ -77,14 +77,14 @@ class FrameManager:
         return len(self._frames)
 
     @property
-    def active_frame(self) -> Optional[Frame]:
+    def active_frame(self) -> Frame | None:
         """Return the active frame."""
         if self._active_frame_id is not None:
             return self._frames.get(self._active_frame_id)
         return None
 
     @property
-    def active_frame_id(self) -> Optional[int]:
+    def active_frame_id(self) -> int | None:
         """Return the active frame ID."""
         return self._active_frame_id
 
@@ -144,7 +144,7 @@ class FrameManager:
 
         return True
 
-    def get_frame(self, frame_id: int) -> Optional[Frame]:
+    def get_frame(self, frame_id: int) -> Frame | None:
         """Get a frame by ID.
 
         Args:
@@ -171,7 +171,7 @@ class FrameManager:
         self._notify_frame_change()
         return True
 
-    def next_frame(self) -> Optional[Frame]:
+    def next_frame(self) -> Frame | None:
         """Switch to the next frame.
 
         Returns:
@@ -190,7 +190,7 @@ class FrameManager:
 
         return self.active_frame
 
-    def previous_frame(self) -> Optional[Frame]:
+    def previous_frame(self) -> Frame | None:
         """Switch to the previous frame.
 
         Returns:
@@ -209,7 +209,7 @@ class FrameManager:
 
         return self.active_frame
 
-    def first_frame(self) -> Optional[Frame]:
+    def first_frame(self) -> Frame | None:
         """Switch to the first frame.
 
         Returns:
@@ -222,7 +222,7 @@ class FrameManager:
         self.set_active_frame(frame_ids[0])
         return self.active_frame
 
-    def last_frame(self) -> Optional[Frame]:
+    def last_frame(self) -> Frame | None:
         """Switch to the last frame.
 
         Returns:
@@ -294,7 +294,7 @@ class FrameManager:
             # WCS matching would require coordinate transformation
             pass
 
-    def add_frame_change_callback(self, callback: Callable[[Optional[Frame]], None]) -> None:
+    def add_frame_change_callback(self, callback: Callable[[Frame | None], None]) -> None:
         """Add a callback for frame change events.
 
         Args:
@@ -302,7 +302,7 @@ class FrameManager:
         """
         self._frame_change_callbacks.append(callback)
 
-    def remove_frame_change_callback(self, callback: Callable[[Optional[Frame]], None]) -> None:
+    def remove_frame_change_callback(self, callback: Callable[[Frame | None], None]) -> None:
         """Remove a frame change callback.
 
         Args:

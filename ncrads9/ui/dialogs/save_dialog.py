@@ -20,21 +20,20 @@ Save/export dialog for FITS and image files.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QFileDialog,
-    QPushButton,
-    QComboBox,
-    QGroupBox,
-    QFormLayout,
-    QLineEdit,
     QCheckBox,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLineEdit,
+    QPushButton,
     QSpinBox,
+    QVBoxLayout,
 )
 
 
@@ -43,7 +42,7 @@ class SaveDialog(QDialog):
 
     file_saved = pyqtSignal(str, str)  # path, format
 
-    def __init__(self, parent: Optional[QDialog] = None) -> None:
+    def __init__(self, parent: QDialog | None = None) -> None:
         """Initialize the save dialog.
 
         Args:

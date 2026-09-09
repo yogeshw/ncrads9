@@ -20,13 +20,12 @@ Galactic coordinate transformations.
 Author: Yogesh Wadadekar
 """
 
-from typing import Tuple
 
-from astropy.coordinates import SkyCoord
 import astropy.units as u
+from astropy.coordinates import SkyCoord
 
 
-def equatorial_to_galactic(ra: float, dec: float, frame: str = "icrs") -> Tuple[float, float]:
+def equatorial_to_galactic(ra: float, dec: float, frame: str = "icrs") -> tuple[float, float]:
     """
     Convert equatorial coordinates to Galactic coordinates.
 
@@ -44,7 +43,7 @@ def equatorial_to_galactic(ra: float, dec: float, frame: str = "icrs") -> Tuple[
     return (galactic.l.deg, galactic.b.deg)
 
 
-def galactic_to_equatorial(l: float, b: float, frame: str = "icrs") -> Tuple[float, float]:
+def galactic_to_equatorial(l: float, b: float, frame: str = "icrs") -> tuple[float, float]:
     """
     Convert Galactic coordinates to equatorial coordinates.
 

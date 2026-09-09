@@ -20,26 +20,26 @@ Pixel table dialog for examining pixel values.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional
+
 import numpy as np
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QDialog,
-    QVBoxLayout,
     QHBoxLayout,
+    QLabel,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
-    QLabel,
+    QVBoxLayout,
     QWidget,
 )
-from PyQt6.QtCore import Qt
 
 
 class PixelTableDialog(QDialog):
     """Dialog showing pixel values in a table."""
 
     def __init__(
-        self, image_data: np.ndarray, x: int, y: int, size: int = 11, parent: Optional[QWidget] = None
+        self, image_data: np.ndarray, x: int, y: int, size: int = 11, parent: QWidget | None = None
     ) -> None:
         """
         Initialize the pixel table dialog.

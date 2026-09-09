@@ -20,18 +20,18 @@ RegionList Widget - Widget for managing regions.
 Author: Yogesh Wadadekar
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Any
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QGroupBox,
     QHBoxLayout,
     QListWidget,
     QListWidgetItem,
-    QPushButton,
     QMenu,
-    QGroupBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 
@@ -45,7 +45,7 @@ class RegionList(QWidget):
 
     def __init__(
         self,
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         """
         Initialize the RegionList widget.
@@ -55,7 +55,7 @@ class RegionList(QWidget):
         """
         super().__init__(parent)
 
-        self._regions: List[Dict[str, Any]] = []
+        self._regions: list[dict[str, Any]] = []
         self._setup_ui()
         self._connect_signals()
 
@@ -156,7 +156,7 @@ class RegionList(QWidget):
             prefix = "✓ " if visible else "✗ "
             item.setText(f"{prefix}{name}")
 
-    def addRegion(self, region: Dict[str, Any]) -> int:
+    def addRegion(self, region: dict[str, Any]) -> int:
         """
         Add a region to the list.
 
@@ -191,11 +191,11 @@ class RegionList(QWidget):
         self._list_widget.clear()
         self.regionsCleared.emit()
 
-    def regions(self) -> List[Dict[str, Any]]:
+    def regions(self) -> list[dict[str, Any]]:
         """Get all regions."""
         return self._regions.copy()
 
-    def regionAt(self, index: int) -> Optional[Dict[str, Any]]:
+    def regionAt(self, index: int) -> dict[str, Any] | None:
         """Get a region by index."""
         if 0 <= index < len(self._regions):
             return self._regions[index].copy()
