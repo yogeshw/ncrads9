@@ -52,6 +52,13 @@ REGION_SHAPES: tuple[tuple[str, str], ...] = (
     ("bpanda", "Bpand&a"),
 )
 
+#: DS9's three Auto Plot toggles, under Region -> Region Parameters.
+REGION_AUTO_TOGGLES: tuple[tuple[str, str], ...] = (
+    ("plot2d", "Auto Plot &2D"),
+    ("plot3d", "Auto Plot &3D"),
+    ("statistics", "Auto Plot &Statistics"),
+)
+
 #: The colours DS9's Region -> Color cascade offers, and its default.
 REGION_COLORS: tuple[str, ...] = (
     "black",
@@ -1455,6 +1462,34 @@ class MenuBar(QMenuBar):
 
         self.action_region_delete_all: QAction = QAction("&Delete All", self)
         self.region_menu.addAction(self.action_region_delete_all)
+
+        self.region_menu.addSeparator()
+
+        params_menu = self.region_menu.addMenu("Region &Parameters")
+        self.action_region_show: QAction = QAction("Sho&w", self)
+        self.action_region_show.setCheckable(True)
+        self.action_region_show.setChecked(True)
+        params_menu.addAction(self.action_region_show)
+        self.action_region_show_text: QAction = QAction("Show &Text", self)
+        self.action_region_show_text.setCheckable(True)
+        self.action_region_show_text.setChecked(True)
+        params_menu.addAction(self.action_region_show_text)
+        params_menu.addSeparator()
+
+        #: The three Auto Plot toggles, by name. M6-26 gives them behaviour.
+        self.region_auto_actions: dict[str, QAction] = {}
+        for name, label in REGION_AUTO_TOGGLES:
+            action = QAction(label, self)
+            action.setCheckable(True)
+            params_menu.addAction(action)
+            self.region_auto_actions[name] = action
+        params_menu.addSeparator()
+
+        self.action_region_auto_centroid: QAction = QAction("Auto &Centroid", self)
+        self.action_region_auto_centroid.setCheckable(True)
+        params_menu.addAction(self.action_region_auto_centroid)
+        self.action_region_centroid_params: QAction = QAction("Centroid Parameters...", self)
+        params_menu.addAction(self.action_region_centroid_params)
 
     def _setup_vo_menu(self) -> None:
         """Set up the VO menu."""

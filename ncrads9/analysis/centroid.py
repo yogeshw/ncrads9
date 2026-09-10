@@ -256,3 +256,75 @@ def peak_local_max(
     x_coords = x_coords[sorted_indices][:num_peaks]
 
     return np.column_stack([y_coords, x_coords])
+
+
+# -- DS9's own centroid (M6-20) ------------------------------------------------
+#
+# `Base::centroid` in `tksao/frame/frmarker.C:855`. The functions above are
+# general-purpose; this one is DS9's, because Region -> Centroid has to move a
+# region where DS9 would move it and not merely somewhere defensible.
+
+#: DS9's defaults, from `ds9/library/marker.tcl:28`.
+DEFAULT_ITERATIONS = 30
+DEFAULT_RADIUS = 10.0
+
+
+def centroid_at(
+    data: NDArray[np.floating],
+    x: float,
+    y: float,
+    radius: float = DEFAULT_RADIUS,
+    iterations: int = DEFAULT_ITERATIONS,
+) -> tuple[float, float]:
+    """Walk a position onto the nearby flux, as DS9's Centroid does.
+
+    Each pass takes the flux-weighted mean of the pixels within `radius` of
+    the current position and moves there; `iterations` passes let the
+    position walk to a peak it did not start on. Non-finite pixels are
+    skipped, and a pass whose weight is not positive stops the walk -- over
+    empty sky there is nothing to be drawn towards, and DS9 returns the
+    position unmoved rather than drifting to the corner of the box.
+
+    Args:
+        data: The image, indexed [y, x].
+        x: Starting x, in image pixels (1-based, as regions are).
+        y: Starting y.
+        radius: The aperture radius, in pixels.
+        iterations: How many passes to make.
+
+    Returns:
+        The centroid, in the same 1-based image pixels.
+    """
+    if data is None or data.ndim != 2 or radius <= 0:
+        return (float(x), float(y))
+
+    height, width = data.shape
+    reach = int(radius)
+    offsets = np.arange(-reach, reach + 1)
+    dx, dy = np.meshgrid(offsets, offsets)
+    inside = dx * dx + dy * dy <= radius * radius
+
+    # Regions count pixels from one; arrays from zero.
+    cx, cy = float(x) - 1.0, float(y) - 1.0
+    for _pass in range(max(1, iterations)):
+        column = np.rint(cx).astype(int) + dx
+        row = np.rint(cy).astype(int) + dy
+        usable = inside & (column >= 0) & (column < width) & (row >= 0) & (row < height)
+        if not usable.any():
+            break
+
+        values = np.where(usable, data[np.clip(row, 0, height - 1), np.clip(column, 0, width - 1)], 0.0)
+        values = np.where(np.isfinite(values), values, 0.0)
+        values = np.where(usable, values, 0.0)
+
+        weight = float(values.sum())
+        if weight <= 0:
+            break
+        moved_x = float((column * values).sum()) / weight
+        moved_y = float((row * values).sum()) / weight
+        if abs(moved_x - cx) < 1e-9 and abs(moved_y - cy) < 1e-9:
+            cx, cy = moved_x, moved_y
+            break
+        cx, cy = moved_x, moved_y
+
+    return (cx + 1.0, cy + 1.0)

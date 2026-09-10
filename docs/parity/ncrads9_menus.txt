@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 772 (683 excluding separators)
+# entries: 783 (691 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -705,6 +705,17 @@
 .region|command|Save
 .region|command|List
 .region|command|Delete All
+.region|separator|---
+.region|cascade|Region Parameters
+.region.regionparameters|checkbutton|Show
+.region.regionparameters|checkbutton|Show Text
+.region.regionparameters|separator|---
+.region.regionparameters|checkbutton|Auto Plot 2D
+.region.regionparameters|checkbutton|Auto Plot 3D
+.region.regionparameters|checkbutton|Auto Plot Statistics
+.region.regionparameters|separator|---
+.region.regionparameters|checkbutton|Auto Centroid
+.region.regionparameters|command|Centroid Parameters
 # VO
 .vo|cascade|SIAP
 .vo.siap|command|2MASS Image

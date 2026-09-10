@@ -41,12 +41,14 @@ from __future__ import annotations
 import numpy as np
 from PyQt6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
+from ...analysis.centroid import DEFAULT_ITERATIONS, DEFAULT_RADIUS, centroid_at
 from ...regions import group_manager
 from ...regions.base_region import BaseRegion
 from ...regions.region_formats import RegionFormat, dropped_shapes
 from ...regions.region_parser import RegionParser
 from ...regions.region_writer import RegionWriter
 from ...regions.shapes.composite import Composite
+from ..dialogs.centroid_dialog import CentroidDialog
 from ..dialogs.group_dialog import GroupDialog
 from ..dialogs.region_dialog import RegionDialog
 from ..menu_bar import (
@@ -111,6 +113,12 @@ class RegionController(Controller):
         #: The Groups dialog, kept for the same reason.
         self._group_dialog: GroupDialog | None = None
 
+        #: DS9's centroid settings, from `ds9/library/marker.tcl:28`.
+        self.centroid_radius: float = DEFAULT_RADIUS
+        self.centroid_iterations: int = DEFAULT_ITERATIONS
+        #: Whether a newly drawn region is centroided at once.
+        self.auto_centroid: bool = False
+
     def connect(self) -> None:
         """Wire the Region menu."""
         menu = self.menu
@@ -148,10 +156,22 @@ class RegionController(Controller):
         menu.action_composite_create.triggered.connect(lambda _checked=False: self.create_composite())
         menu.action_composite_dissolve.triggered.connect(lambda _checked=False: self.dissolve_composite())
 
-        for action, milestone in (
-            (menu.action_region_template, "M6-18"),
-            (menu.action_region_centroid, "M6-20"),
-        ):
+        menu.action_region_centroid.triggered.connect(lambda _checked=False: self.centroid())
+        menu.action_region_centroid_params.triggered.connect(
+            lambda _checked=False: self.show_centroid_parameters()
+        )
+        menu.action_region_auto_centroid.toggled.connect(self.set_auto_centroid)
+        menu.action_region_show.toggled.connect(self.set_show_regions)
+        menu.action_region_show_text.toggled.connect(self.set_show_text)
+
+        for name, action in menu.region_auto_actions.items():
+            action.toggled.connect(
+                lambda state, key=name: self.status(
+                    f"Auto {key} arrives in M6-26" if state else f"Auto {key} off", 3000
+                )
+            )
+
+        for action, milestone in ((menu.action_region_template, "M6-18"),):
             action.triggered.connect(
                 lambda _checked=False, a=action, m=milestone: self.status(
                     f"{a.text().replace('&', '')} arrives in {m}", 3000
@@ -250,6 +270,75 @@ class RegionController(Controller):
             if hasattr(region, attribute):
                 setattr(region, attribute, value)
         return region
+
+    # -- centroid (M6-20) -------------------------------------------------------
+
+    def centroid(self, regions: list[BaseRegion] | None = None) -> None:
+        """Walk each chosen region onto the flux under it, DS9's Centroid.
+
+        Args:
+            regions: What to centroid. Defaults to the selection; with
+                nothing selected DS9 centroids nothing, since moving every
+                region on the frame is not a thing anyone asks for by
+                accident.
+        """
+        frame = self.frame
+        chosen = regions if regions is not None else self.selection_only()
+        if frame is None or frame.image_data is None:
+            self.status("No image to centroid on", 3000)
+            return
+        if not chosen:
+            self.status("Select a region to centroid", 3000)
+            return
+
+        moved = 0
+        for region in chosen:
+            if not region.can_move:
+                continue
+            x, y = region.center
+            found = centroid_at(
+                frame.image_data,
+                x,
+                y,
+                radius=self.centroid_radius,
+                iterations=self.centroid_iterations,
+            )
+            if found != (x, y):
+                region.center = found
+                moved += 1
+
+        self.refresh_overlay()
+        self.status(f"Centroided {moved} region{'s' if moved != 1 else ''}")
+
+    def show_centroid_parameters(self) -> None:
+        """Ask for the centroid radius and iteration count."""
+        dialog = CentroidDialog(self.centroid_radius, self.centroid_iterations, self.window)
+        if not dialog.exec():
+            return
+        self.centroid_radius, self.centroid_iterations = dialog.values()
+        self.status(f"Centroid: radius {self.centroid_radius:g}, {self.centroid_iterations} iterations")
+
+    def set_auto_centroid(self, enabled: bool) -> None:
+        """Centroid each region as it is drawn, DS9's Auto Centroid."""
+        self.auto_centroid = bool(enabled)
+        self.status(f"Auto centroid: {'on' if enabled else 'off'}")
+
+    # -- what is drawn ------------------------------------------------------------
+
+    def set_show_regions(self, shown: bool) -> None:
+        """Show or hide every region, DS9's Region Parameters -> Show."""
+        overlay = getattr(self.viewer, "region_overlay", None)
+        if overlay is not None:
+            overlay.setVisible(bool(shown))
+        self.status(f"Regions: {'shown' if shown else 'hidden'}")
+
+    def set_show_text(self, shown: bool) -> None:
+        """Show or hide region labels, DS9's Show Text."""
+        overlay = getattr(self.viewer, "region_overlay", None)
+        if overlay is not None:
+            overlay.renderer.show_labels = bool(shown)
+        self.refresh_overlay()
+        self.status(f"Region text: {'shown' if shown else 'hidden'}")
 
     # -- composites (M6-17) ----------------------------------------------------
 
@@ -637,6 +726,10 @@ class RegionController(Controller):
         if frame is not None:
             frame.regions.append(self.apply_defaults(region))
         self.status(f"Created {describe(region)} region")
+        if self.auto_centroid:
+            # DS9's Auto Centroid: a region dropped near a source snaps onto
+            # it, so it need not be placed precisely by hand.
+            self.centroid([region])
 
     def on_selected(self, region: BaseRegion) -> None:
         """Report the region the user just clicked."""

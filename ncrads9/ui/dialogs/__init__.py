@@ -20,6 +20,7 @@ Dialog modules for NCRADS9.
 Author: Yogesh Wadadekar
 """
 
+from .centroid_dialog import CentroidDialog
 from .colormap_dialog import ColormapDialog
 from .contour_dialog import ContourDialog
 from .crop_parameters_dialog import CropParametersDialog
@@ -43,6 +44,7 @@ __all__ = [
     "SmoothDialog",
     "ScaleDialog",
     "ColormapDialog",
+    "CentroidDialog",
     "GroupDialog",
     "RegionDialog",
     "PreferencesDialog",
