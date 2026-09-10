@@ -110,6 +110,18 @@ def parse_font(spec: str) -> QFont:
 #: underneath stays readable, which is the point of an overlay.
 FILL_ALPHA = 60
 
+#: `RegionMode` values previewed as a circle swept from the centre. Plain
+#: strings, because the renderer must not depend on the UI layer.
+PREVIEW_RADIUS: frozenset[str] = frozenset(
+    {"circle", "annulus", "ellipseannulus", "boxannulus", "panda", "epanda", "bpanda", "compass"}
+)
+
+#: `RegionMode` values previewed as a straight line between two points.
+PREVIEW_ENDPOINT: frozenset[str] = frozenset({"line", "vector", "ruler", "projection"})
+
+#: `RegionMode` values previewed as the open path through every vertex.
+PREVIEW_VERTEX: frozenset[str] = frozenset({"polygon", "segment"})
+
 #: The diagonal DS9 strikes through an excluded region.
 EXCLUSION_COLOR = QColor(255, 0, 0)
 EXCLUSION_SIZE = 8.0
@@ -687,15 +699,21 @@ class RegionRenderer:
         painter.setPen(self.preview_pen())
         widget_points = [to_widget(x, y) for x, y in image_points]
 
-        if mode == "circle" and len(widget_points) >= 2:
-            center, edge = widget_points[0], widget_points[1]
-            radius = math.hypot(edge.x() - center.x(), edge.y() - center.y())
-            painter.drawEllipse(center, radius, radius)
-        elif mode == "box" and len(widget_points) >= 2:
-            painter.drawRect(QRectF(widget_points[0], widget_points[1]))
-        elif mode == "ellipse" and len(widget_points) >= 2:
-            painter.drawEllipse(QRectF(widget_points[0], widget_points[1]))
-        elif mode == "polygon" and len(widget_points) >= 2:
+        if mode in PREVIEW_VERTEX and len(widget_points) >= 2:
             painter.drawPolyline(QPolygonF(widget_points))
-        elif mode == "line" and len(widget_points) >= 2:
-            painter.drawLine(widget_points[0], widget_points[1])
+            return
+        if len(widget_points) < 2:
+            return
+
+        first, second = widget_points[0], widget_points[1]
+        if mode in PREVIEW_RADIUS:
+            # Every shape drawn outwards from a centre previews as the circle
+            # the drag sweeps out: the outer bound of whatever it becomes.
+            radius = math.hypot(second.x() - first.x(), second.y() - first.y())
+            painter.drawEllipse(first, radius, radius)
+        elif mode == "box":
+            painter.drawRect(QRectF(first, second))
+        elif mode == "ellipse":
+            painter.drawEllipse(QRectF(first, second))
+        elif mode in PREVIEW_ENDPOINT:
+            painter.drawLine(first, second)

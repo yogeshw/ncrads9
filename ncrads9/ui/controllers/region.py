@@ -49,45 +49,22 @@ from ..menu_bar import (
     DEFAULT_REGION_COLOR,
     DEFAULT_REGION_FONT,
     DEFAULT_REGION_FONT_SIZE,
+    REGION_SHAPES,
 )
 from ..widgets.region_overlay import RegionMode
 from .base import Controller
 
-#: Region mode -> the label the menu and button bar show.
-MODE_LABELS: dict[RegionMode, str] = {
-    RegionMode.NONE: "None",
-    RegionMode.CIRCLE: "Circle",
-    RegionMode.ELLIPSE: "Ellipse",
-    RegionMode.BOX: "Box",
-    RegionMode.POLYGON: "Polygon",
-    RegionMode.LINE: "Line",
-    RegionMode.POINT: "Point",
+#: Mode -> the name the status bar and button bar show. Read off the Shape
+#: cascade so a shape cannot be offered under one name and reported under
+#: another; the ampersands are the menu's accelerator marks.
+MODE_LABELS: dict[RegionMode, str] = {RegionMode.NONE: "None"} | {
+    RegionMode(name): label.replace("&", "") for name, label in REGION_SHAPES
 }
 
 #: Button-bar label -> region mode. The button bar has no Point button.
 LABEL_MODES: dict[str, RegionMode] = {label: mode for mode, label in MODE_LABELS.items()}
 
 REGION_FILTER = "Region Files (*.reg);;All Files (*)"
-
-#: Shapes the Shape cascade offers that no gesture can draw yet. Choosing
-#: one says so rather than silently leaving the mode unchanged; M6-4 gives
-#: each of them a gesture.
-UNDRAWABLE_SHAPES: frozenset[str] = frozenset(
-    {
-        "vector",
-        "segment",
-        "text",
-        "ruler",
-        "compass",
-        "projection",
-        "annulus",
-        "ellipseannulus",
-        "boxannulus",
-        "panda",
-        "epanda",
-        "bpanda",
-    }
-)
 
 
 def describe(region: BaseRegion) -> str:
@@ -171,9 +148,6 @@ class RegionController(Controller):
         Args:
             name: A key of `MenuBar.region_shape_actions`.
         """
-        if name in UNDRAWABLE_SHAPES:
-            self.status(f"Drawing a {name} arrives in M6-4; it can be loaded from a file", 3000)
-            return
         try:
             self.set_mode(RegionMode(name))
         except ValueError:

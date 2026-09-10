@@ -212,9 +212,13 @@ def test_the_shape_cascade_offers_every_drawable_shape(main_window):
         assert name in main_window.menu_bar.region_shape_actions
 
 
-def test_choosing_an_undrawable_shape_says_which_milestone(main_window):
-    main_window.menu_bar.region_shape_actions["panda"].trigger()
-    assert "M6-4" in main_window.status_bar.currentMessage()
+@pytest.mark.parametrize("name", [name for name, _label in REGION_SHAPES])
+def test_choosing_a_shape_arms_that_drawing_mode(main_window, name):
+    """Thirteen of the eighteen used to answer "arrives in M6-4"."""
+    from ncrads9.ui.widgets.region_overlay import RegionMode
+
+    main_window.menu_bar.region_shape_actions[name].trigger()
+    assert main_window.image_viewer.region_overlay.mode is RegionMode(name)
 
 
 def test_choosing_a_drawable_shape_sets_the_mode(main_window):
