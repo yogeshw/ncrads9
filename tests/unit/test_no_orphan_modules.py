@@ -49,7 +49,7 @@ ENTRY_POINTS = ("ncrads9.app", "ncrads9.__main__")
 PENDING_ADOPTION: dict[str, str] = {
     # M7 -- analysis platform. The task engine is written and tested; M7-4
     # and M7-8 put it behind the Analysis menu, which is what reaches it.
-    "analysis.task_file": "M7-8",
+    # `task_file` is already reached, by the plot data reader's Tcl splitter.
     "analysis.macros": "M7-8",
     "analysis.task_runner": "M7-8",
     "analysis.pixel_table": "M7-26",

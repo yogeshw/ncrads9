@@ -61,6 +61,7 @@ from PyQt6.QtWidgets import (
 from scipy import ndimage
 
 from ...analysis.contour import ContourGenerator
+from ...analysis.plot import PlotState, PlotStyle
 from ...analysis.radial_profile import RadialProfile
 from ...analysis.smooth import boxcar_smooth, gaussian_smooth, tophat_smooth
 from ...frames.frame import Frame
@@ -68,6 +69,7 @@ from ..dialogs.contour_dialog import ContourDialog
 from ..dialogs.grid_dialog import GridDialog
 from ..dialogs.histogram_dialog import HistogramDialog
 from ..dialogs.pixel_table_dialog import PixelTableDialog
+from ..dialogs.plot_window import PlotWindow
 from ..dialogs.smooth_dialog import SmoothDialog
 from ..dialogs.statistics_dialog import StatisticsDialog
 from ..menu_bar import BLOCK_FACTORS
@@ -78,6 +80,17 @@ from .base import Controller
 
 class AnalysisController(Controller):
     """Owns the Analysis and Bin menus."""
+
+    def __init__(self, window) -> None:
+        """
+        Args:
+            window: The main window, as every controller takes.
+        """
+        super().__init__(window)
+        #: Open plot windows. A modeless window nothing holds a reference to
+        #: is collected the moment it is shown. Per instance, not per class:
+        #: a shared set would outlive the window that opened them.
+        self._plots: set[PlotWindow] = set()
 
     def connect(self) -> None:
         """Wire the Analysis and Bin menus."""
@@ -111,6 +124,11 @@ class AnalysisController(Controller):
         menu.action_smooth_params.triggered.connect(self.show_smooth_dialog)
 
         menu.action_analysis_command_log.triggered.connect(self.set_command_log)
+        menu.action_plot_tool_line.triggered.connect(
+            lambda _checked=False: self.open_plot_tool(PlotStyle.LINE)
+        )
+        menu.action_plot_tool_bar.triggered.connect(lambda _checked=False: self.open_plot_tool(PlotStyle.BAR))
+
         menu.action_load_analysis_commands.triggered.connect(self.load_commands)
         menu.action_clear_analysis_commands.triggered.connect(self.clear_commands)
         menu.action_web_browser.triggered.connect(self.open_web_browser)
@@ -496,6 +514,30 @@ class AnalysisController(Controller):
         self.window._analysis_command_entries.append(command)
         if len(self.window._analysis_command_entries) > 200:
             self.window._analysis_command_entries = self.window._analysis_command_entries[-200:]
+
+    # -- the Plot Tool (M7-15 ... M7-20) -------------------------------------
+
+    def open_plot_tool(self, style: PlotStyle = PlotStyle.LINE) -> PlotWindow:
+        """Open an empty plot window, DS9's Analysis -> Plot Tool.
+
+        Empty on purpose: DS9's Plot Tool opens with nothing in it and its
+        File -> Load Data reads a column file. The same window is what an
+        analysis task's `$plot` output lands in.
+        """
+        window = PlotWindow(PlotState(style=style), self.window)
+        window.finished.connect(lambda _result, w=window: self._plots.discard(w))
+        self._plots.add(window)
+        window.show()
+        self.status(f"Plot Tool: {style.value}")
+        return window
+
+    def show_plot(self, state: PlotState) -> PlotWindow:
+        """Open a plot window on data that already exists."""
+        window = PlotWindow(state, self.window)
+        window.finished.connect(lambda _result, w=window: self._plots.discard(w))
+        self._plots.add(window)
+        window.show()
+        return window
 
     def load_commands(self) -> None:
         """Load simple external analysis commands into the Analysis menu."""
