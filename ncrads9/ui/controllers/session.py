@@ -132,6 +132,8 @@ class SessionController(Controller):
                 "locked": window.crosshair.locked,
             },
             "nan_color": window.nan_color,
+            "notes": window.notes.text,
+            "preserve": dict(window._preserve),
         }
         return (state, arrays)
 
@@ -199,6 +201,10 @@ class SessionController(Controller):
         window.crosshair.size = int(crosshair.get("size", window.crosshair.size))
         window.crosshair.locked = bool(crosshair.get("locked", False))
         window.nan_color = str(state.get("nan_color", window.nan_color))
+        window.notes.text = str(state.get("notes", ""))
+        window.notes.refresh()
+        for what, enabled in (state.get("preserve") or {}).items():
+            window.file.set_preserve(str(what), bool(enabled))
 
         wanted = int(state.get("current", 0))
         if 0 <= wanted < self.frames.num_frames:

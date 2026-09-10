@@ -368,22 +368,6 @@ class MenuBar(QMenuBar):
 
         self.file_menu.addSeparator()
 
-        # DS9 puts Prism here, between the save entries and Save Image
-        # (`mfile.tcl`).
-        self.action_prism: QAction = QAction("&Prism...", self)
-        self.file_menu.addAction(self.action_prism)
-
-        self.file_menu.addSeparator()
-
-        self.save_image_menu: QMenu = self.file_menu.addMenu("Save &Image")
-        #: Format name -> its action.
-        self.save_image_actions: dict[str, QAction] = {}
-        for name, label in SAVE_IMAGE_ENTRIES:
-            action = QAction(label, self)
-            self.save_image_menu.addAction(action)
-            self.save_image_actions[name] = action
-            setattr(self, f"action_save_image_{name}", action)
-
         # DS9's Import and Export cascades (`mfile.tcl`), which replaced a
         # single `Export...` of ours: DS9 has ten formats each way, and one
         # entry could not say which.
@@ -415,6 +399,25 @@ class MenuBar(QMenuBar):
                 setattr(self, f"action_export_{name}", action)
             self.export_menu.addSeparator()
 
+        self.file_menu.addSeparator()
+
+        # DS9's order on the File menu: the save entries, then Import and
+        # Export, then Prism, then Save Image and Create Movie
+        # (`mfile.tcl`).
+        self.action_prism: QAction = QAction("&Prism...", self)
+        self.file_menu.addAction(self.action_prism)
+
+        self.file_menu.addSeparator()
+
+        self.save_image_menu: QMenu = self.file_menu.addMenu("Save &Image")
+        #: Format name -> its action.
+        self.save_image_actions: dict[str, QAction] = {}
+        for name, label in SAVE_IMAGE_ENTRIES:
+            action = QAction(label, self)
+            self.save_image_menu.addAction(action)
+            self.save_image_actions[name] = action
+            setattr(self, f"action_save_image_{name}", action)
+
         self.action_create_movie: QAction = QAction("Create &Movie...", self)
         self.file_menu.addAction(self.action_create_movie)
 
@@ -426,6 +429,29 @@ class MenuBar(QMenuBar):
         self.file_menu.addAction(self.action_backup)
         self.action_restore: QAction = QAction("&Restore...", self)
         self.file_menu.addAction(self.action_restore)
+
+        self.file_menu.addSeparator()
+
+        # DS9 keeps Header on the File menu, not on Analysis where ours used
+        # to be: it is about the file, not about the analysis.
+        self.action_fits_header: QAction = QAction("&Header...", self)
+        self.file_menu.addAction(self.action_fits_header)
+        self.action_notes: QAction = QAction("&Notes...", self)
+        self.file_menu.addAction(self.action_notes)
+
+        self.file_menu.addSeparator()
+
+        self.preserve_menu: QMenu = self.file_menu.addMenu("&Preserve During Load")
+        #: What is preserved -> its action.
+        self.preserve_actions: dict[str, QAction] = {}
+        for name, label in (("pan", "&Pan"), ("regions", "&Region")):
+            action = QAction(label, self)
+            action.setCheckable(True)
+            self.preserve_menu.addAction(action)
+            self.preserve_actions[name] = action
+            setattr(self, f"action_preserve_{name}", action)
+
+        self.file_menu.addSeparator()
 
         self.action_print: QAction = QAction("&Print...", self)
         self.action_print.setShortcut(QKeySequence.StandardKey.Print)
@@ -1981,10 +2007,6 @@ class MenuBar(QMenuBar):
         self.analysis_menu.addAction(self.action_load_analysis_commands)
         self.action_clear_analysis_commands: QAction = QAction("C&lear Analysis Commands", self)
         self.analysis_menu.addAction(self.action_clear_analysis_commands)
-
-        self.analysis_menu.addSeparator()
-        self.action_fits_header: QAction = QAction("FITS &Header", self)
-        self.analysis_menu.addAction(self.action_fits_header)
 
     def _setup_help_menu(self) -> None:
         """Set up the Help menu."""

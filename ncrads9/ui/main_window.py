@@ -150,6 +150,10 @@ class MainWindow(QMainWindow):
         self._analysis_command_entries: list[str] = []
         # DS9's pointer mode: what a drag on the image does.
         self.edit_mode = "none"
+        # DS9's File -> Preserve During Load. Off by default, as DS9 has it:
+        # loading new data into a frame refits the view and clears the
+        # regions, which were drawn around things in the old data.
+        self._preserve: dict[str, bool] = {"pan": False, "regions": False}
         # DS9 draws its N/E compass in the panner, not over the data, so the
         # image overlay is opt-in via WCS -> Show Direction Arrows.
         self._show_direction_arrows = False
@@ -298,6 +302,7 @@ class MainWindow(QMainWindow):
         self.crop.connect()
         self.crosshair.connect()
         self.illustrate.connect()
+        self.notes.connect()
         self.prism.connect()
         self.session.connect()
         self.image_servers.connect()

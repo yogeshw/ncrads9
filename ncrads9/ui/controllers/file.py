@@ -117,6 +117,8 @@ class FileController(Controller):
         self.menu.action_save.triggered.connect(self.save_file)
         self.menu.action_save_as.triggered.connect(self.save_file_as)
         self.menu.action_create_movie.triggered.connect(lambda _checked=False: self.create_movie())
+        for name, action in self.menu.preserve_actions.items():
+            action.toggled.connect(lambda checked, key=name: self.set_preserve(key, checked))
         for name, action in self.menu.import_actions.items():
             action.triggered.connect(lambda _checked=False, key=name: self.import_file(key))
         for name, action in self.menu.export_actions.items():
@@ -130,6 +132,20 @@ class FileController(Controller):
             action.triggered.connect(lambda _checked=False, key=name: self.save_as(key))
         for name, action in self.menu.save_image_actions.items():
             action.triggered.connect(lambda _checked=False, key=name: self.save_image(key))
+
+    # -- Preserve During Load (M9-17) ----------------------------------------
+
+    def preserving(self, what: str) -> bool:
+        """Whether one thing survives a load into the same frame."""
+        return bool(self.window._preserve.get(what, False))
+
+    def set_preserve(self, what: str, enabled: bool) -> None:
+        """Turn one Preserve During Load entry on or off."""
+        self.window._preserve[what] = bool(enabled)
+        action = self.menu.preserve_actions.get(what)
+        if action is not None and action.isChecked() != bool(enabled):
+            action.setChecked(bool(enabled))
+        self.status(f"Preserve {what} during load: {'on' if enabled else 'off'}", 2000)
 
     # -- opening -------------------------------------------------------------
 

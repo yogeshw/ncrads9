@@ -314,6 +314,15 @@ class DisplayPipeline:
         header = image.header
         wcs_handler = WCSHandler(header)
 
+        # DS9's Preserve During Load, read before anything is replaced.
+        preserve = getattr(self.window, "_preserve", {})
+        kept_view = (frame.zoom, frame.pan_x, frame.pan_y) if preserve.get("pan") else None
+        if not preserve.get("regions"):
+            # Regions were drawn around things in the old data; keeping them
+            # over new data would leave them around nothing. DS9 clears them
+            # unless told not to.
+            frame.regions = []
+
         # Update frame
         frame.filepath = spec.path
         frame.file_spec = str(spec) if spec.has_specification else None
@@ -364,8 +373,16 @@ class DisplayPipeline:
         # Display the image
         self.display()
 
-        # Fit image to window on initial load
-        self.window.zoom.zoom_fit()
+        if kept_view is not None:
+            # Preserve Pan: put the view back where it was, rather than
+            # refitting -- which is the point of the setting when stepping
+            # through a series of images of the same field.
+            frame.zoom, frame.pan_x, frame.pan_y = kept_view
+            self.window.zoom.set_zoom(frame.zoom)
+            self.window.zoom.on_panner_pan(frame.pan_x, frame.pan_y)
+        else:
+            # Fit image to window on initial load
+            self.window.zoom.zoom_fit()
 
         # Update status bar image info
         shape = image_data.shape

@@ -32,6 +32,7 @@ from .group_dialog import GroupDialog
 from .header_dialog import HeaderDialog
 from .mask_dialog import MaskDialog
 from .movie_dialog import MovieDialog
+from .notes_dialog import NotesDialog
 from .open_dialog import OpenDialog
 from .pan_zoom_rotate_dialog import PanZoomRotateDialog
 from .preferences_dialog import PreferencesDialog
@@ -62,5 +63,6 @@ __all__ = [
     "ArrayDialog",
     "CropParametersDialog",
     "MovieDialog",
+    "NotesDialog",
     "PanZoomRotateDialog",
 ]

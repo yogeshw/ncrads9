@@ -37,6 +37,7 @@ from .frame import FrameController
 from .help import HelpController
 from .illustrate import IllustrateController
 from .image_servers import ImageServerController
+from .notes import NotesController
 from .pointer import PointerController
 from .prism import PrismController
 from .region import RegionController
@@ -80,6 +81,7 @@ CONTROLLERS: tuple[tuple[str, type], ...] = (
     ("help", HelpController),
     ("illustrate", IllustrateController),
     ("image_servers", ImageServerController),
+    ("notes", NotesController),
     ("pointer", PointerController),
     ("prism", PrismController),
     ("region", RegionController),

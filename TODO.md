@@ -1010,8 +1010,19 @@ Depends on M2, M3.
       and the radio button disabled rather than the movie failing at the end. A fade is made
       as extra blended images, so both formats treat it as ordinary frames, and frames of
       different sizes are padded into the largest rather than the movie being refused.
-- [ ] **M9-16** (S) Notes window (`File → Notes`).
-- [ ] **M9-17** (S) Preserve During Load → Pan / Region.
+- [x] **M9-16** (S) Notes window (`File → Notes`). `ui/controllers/notes.py`,
+      `ui/dialogs/notes_dialog.py`, with DS9's File and Edit menus over an editable text pane.
+      The text lives on the controller rather than in the window, so it survives the window
+      being closed and goes into the backup -- which is the whole reason DS9 has notes of its
+      own rather than leaving you to a text editor.
+- [x] **M9-17** (S) Preserve During Load → Pan / Region. Both off by default, as DS9 has them.
+      **Behaviour change:** with Preserve Region off -- the default -- loading new data into a
+      frame now clears its regions, where before they stayed. DS9 clears them, and it is
+      right to: they were drawn around things in the old data. Preserve Pan keeps the view
+      instead of refitting, which is what makes stepping through a series of images of one
+      field possible without losing your place. Both settings are in the backup.
+      Also moved `Header` from the Analysis menu to File, where DS9 keeps it, and put the
+      whole File menu into DS9's order.
 
 ### Printing
 - [ ] **M9-18** (L) Real Postscript driver: adopt `printing/postscript.py`; levels 1/2/3, colour
