@@ -703,58 +703,109 @@ Depends on M1, M2.
 Depends on M2.
 
 ### External analysis tasks (`.ds9.ans`)
-- [ ] **M7-1** (M) `analysis/task_file.py` — parser for the 4-line task block format
+- [x] **M7-1** (M) `analysis/task_file.py` — parser for the 4-line task block format
       (label, file template, type, command) with `#` comments and `---` separators.
-- [ ] **M7-2** (M) Task types: `menu`, `button`, `bind <key>`, `web`.
-- [ ] **M7-3** (L) Macro expansion: `$data $filename $filename(root|full|,base) $regions
+- [x] **M7-2** (M) Task types: `menu`, `button`, `bind <key>`, `web`.
+- [x] **M7-3** (L) Macro expansion: `$data $filename $filename(root|full|,base) $regions
       $filename[$regions] $x $y $z $width $height $depth $bitpix $env(VAR) $entry(msg)
       $filedialog(open|save) $dir $pan $zoom $cmap $scale $wcs $geturl`, and `$$` escaping.
-- [ ] **M7-4** (M) Output sinks: `$text` (text window), `$plot` / `$plot(...)` (plot window),
+- [x] **M7-4** (M) Output sinks: `$text` (text window), `$plot` / `$plot(...)` (plot window),
       `$image` (load result into a frame), `$null`.
-- [ ] **M7-5** (M) Hierarchical menus (`hmenu`) and `param`/`endparam` parameter dialogs — adopt
+- [x] **M7-5** (M) Hierarchical menus (`hmenu`) and `param`/`endparam` parameter dialogs — adopt
       the pattern in `.tmp_sao_ds9/ds9/library/analysisparam.tcl`.
-- [ ] **M7-6** (M) Async subprocess execution with cancellation and a progress indicator; sync
+- [x] **M7-6** (M) Async subprocess execution with cancellation and a progress indicator; sync
       mode for XPA.
-- [ ] **M7-7** (S) Startup autoload from `./ds9.ans`, `./ds9.analysis`, `$HOME/ds9.ans`, and
+- [x] **M7-7** (S) Startup autoload from `./ds9.ans`, `./ds9.analysis`, `$HOME/ds9.ans`, and
       `*.ds9` in `.`, `$HOME/bin`, `/usr/local/bin`, `/opt/local/bin`.
-- [ ] **M7-8** (S) Replace the current `label|command` loader in
+- [x] **M7-8** (S) Replace the current `label|command` loader in
       `main_window.py:_load_analysis_commands()` with the real parser.
-- [ ] **M7-9** (S) Tests with a fixture `.ds9.ans` covering each type and macro.
+- [x] **M7-9** (S) Tests with a fixture `.ds9.ans` covering each type and macro.
 
 ### WCS coordinate grid
-- [ ] **M7-10** (L) Replace the pixel grid in `ui/widgets/contour_overlay.py:140` with a real WCS
+- [x] **M7-10** (L) Replace the pixel grid in `ui/widgets/contour_overlay.py:140` with a real WCS
       graticule. Back it with `astropy.visualization.wcsaxes` transforms rather than porting AST;
       adopt `grid/grid_renderer.py` + `grid/grid_labels.py` as the implementation home and delete
       `grid/ast_wrapper.py`.
-- [ ] **M7-11** (M) Grid elements: grid lines, axes, tick marks, border, title, numbers — each
+- [x] **M7-11** (M) Grid elements: grid lines, axes, tick marks, border, title, numbers — each
       with independent colour, width, style, and font.
-- [ ] **M7-12** (M) Numeric formats per coordinate system, supporting DS9's format characters
+- [x] **M7-12** (M) Numeric formats per coordinate system, supporting DS9's format characters
       (`+`, `z`, `i`, `b`, `l`, `g`) and `printf`-style specs.
-- [ ] **M7-13** (M) Grid Parameters dialog rebuilt to cover all of the above; load/save grid
+- [x] **M7-13** (M) Grid Parameters dialog rebuilt to cover all of the above; load/save grid
       settings.
-- [ ] **M7-14** (S) Axes placement: interior/exterior, and the grid's coordinate-system menu.
+- [x] **M7-14** (S) Axes placement: interior/exterior, and the grid's coordinate-system menu.
 
 ### Plot tool
-- [ ] **M7-15** (M) `analysis/plot/` — plot window with line, bar, and scatter modes.
-- [ ] **M7-16** (M) Axis configuration: title, range, log/linear, grid, format.
-- [ ] **M7-17** (M) Multiple datasets with per-dataset colour/width/shape/legend.
-- [ ] **M7-18** (S) Zoom stack (zoom in/out/pan with history), matching DS9's
+- [x] **M7-15** (M) `analysis/plot/` — plot window with line, bar, and scatter modes.
+- [x] **M7-16** (M) Axis configuration: title, range, log/linear, grid, format.
+- [x] **M7-17** (M) Multiple datasets with per-dataset colour/width/shape/legend.
+- [x] **M7-18** (S) Zoom stack (zoom in/out/pan with history), matching DS9's
       `plotzoomstack.tcl`.
-- [ ] **M7-19** (S) Plot print and plot save/restore.
-- [ ] **M7-20** (S) Wire `Analysis → Plot Tool → Line / Bar` (currently dead menu entries).
+- [x] **M7-19** (S) Plot print and plot save/restore.
+- [x] **M7-20** (S) Wire `Analysis → Plot Tool → Line / Bar` (currently dead menu entries).
 
 ### Contours
-- [ ] **M7-21** (M) Contour file load/save in DS9's contour format (header, global properties,
+- [x] **M7-21** (M) Contour file load/save in DS9's contour format (header, global properties,
       coordinate system, levels, points).
-- [ ] **M7-22** (S) Copy / Paste contours between frames.
-- [ ] **M7-23** (S) Contour method BLOCK vs SMOOTH, matching DS9's semantics.
+- [x] **M7-22** (S) Copy / Paste contours between frames.
+- [x] **M7-23** (S) Contour method BLOCK vs SMOOTH, matching DS9's semantics.
 
 ### Other analysis
-- [ ] **M7-24** (M) Mask files: load a FITS mask, with blend mode, colour, value range, and
+- [x] **M7-24** (M) Mask files: load a FITS mask, with blend mode, colour, value range, and
       transparency (DS9 `mask.tcl`).
-- [ ] **M7-25** (S) Elliptical-gaussian smoothing kernel.
-- [ ] **M7-26** (S) Adopt `analysis/pixel_table.py` in the pixel-table dialog; add DS9's
+- [x] **M7-25** (S) Elliptical-gaussian smoothing kernel.
+- [x] **M7-26** (S) Adopt `analysis/pixel_table.py` in the pixel-table dialog; add DS9's
       3×3/5×5/7×7/9×9 sizes and per-cell coordinate display.
+
+### Deviations from the plan as written
+
+* **The graticule is built on `astropy.wcs`'s transforms, not on
+  `astropy.visualization.wcsaxes`.** M7-10 named wcsaxes; its transform machinery is bound to a
+  matplotlib axes object and the drawing here is QPainter, so the transform is taken from the WCS
+  directly and the sampling done in `grid/grid_renderer.py`. The point of the suggestion -- do not
+  port AST -- stands either way, and `grid/ast_wrapper.py` is deleted as planned.
+* **`$xcen` and `$ycen` are not implemented, because DS9 does not implement them either.** They
+  appear in its own sample analysis file and in none of its `Parse*Macro` procedures; like any
+  unknown macro they pass through untouched.
+* **`$url` becomes a `curl` in the command line rather than a download behind the user's back.**
+  DS9 fetches the URL to a temporary file and pipes that in. The command line is what runs, and it
+  should say what it does.
+* **An IRAF `@param` file is recorded but not read.** DS9 looks for it in `./`, `$UPARM/` and
+  `$HOME/iraf/`; the dialog says so rather than pretending the parameters exist.
+* **The Plot Tool is one graph per window.** DS9's Plot menu can add, delete and lay out several
+  graphs in one window (grid/row/column/strip). Everything else on its four menus is here.
+* **Analysis buttons get a button-bar category called "Tasks", not "Analysis".** That name is
+  already the category mirroring the Analysis *menu*, and sharing it would let Clear Analysis
+  Commands delete the built-in buttons.
+
+### Bugs found and fixed on the way
+
+* **The displayed image was stretched to the viewport, ignoring aspect ratio.** The image label had
+  `setScaledContents(True)` and is sized by the layout rather than by its own `resize`, so an image
+  in a viewport of a different shape was drawn *distorted* -- and every overlay (regions, contours,
+  the new grid) drew in the correct uniform transform and therefore did not line up with the
+  picture underneath it. Found by drawing a coordinate grid and seeing the border miss the image.
+* **`WCSHandler.world_to_pixel` assumed ICRS.** It built a `SkyCoord(ra=, dec=)`, so a galactic or
+  ecliptic WCS was misprojected -- silently, since the transform still returns numbers. A
+  coordinate grid over a galactic image drew nothing at all, which is how it was found.
+* **Six parts of DS9's own analysis format could not be read**, found by parsing its documented
+  sample: a `#` mid-line truncating a task label, help text needing exemption from that, a bare
+  `end` closing any block, and the ordering rules `$xpa_method` before `$xpa`,
+  `$filename[$regions]` before `$filename`, and `$plot` before `$geturl` (whose argument is greedy
+  to the last bracket).
+* **The Smooth dialog's Position angle field did nothing.** The elliptical case passed axis-aligned
+  sigmas to `gaussian_filter`, which cannot express an angle.
+* **`PixelTable.get_region` clipped at the image edge instead of padding**, returning a smaller
+  array whose centre was no longer the centre -- so a pixel table near a corner showed the wrong
+  values against the wrong coordinates.
+* **A contour file written at `%.8g` lost a tenth of an arcsecond** on a right ascension near 200
+  degrees, so a saved contour drifted off the feature it was drawn on.
+* **Three type errors in `analysis/` surfaced once the package was reachable**: an integer contour
+  coordinate returned where floats were promised, a rank-any shape assigned to a two-tuple, and a
+  numpy index used unconverted.
+* **A bar plot of widely spaced data drew hairlines**, because matplotlib's default bar width of
+  0.8 assumes data spaced about one apart.
+* **A log plot axis with non-positive data drew an empty plot and said nothing**; it falls back to
+  linear.
 
 ---
 

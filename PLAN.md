@@ -569,12 +569,17 @@ nineteen, not the twenty this plan first said; see the M6 deviations in TODO.md,
 modules the plan said to adopt and that were rewritten instead, because what they held could not
 have worked.
 
-### M7 — Analysis platform (12 d)
+### M7 — Analysis platform (12 d) — **done**
 The `.ds9.ans` engine (all four task types, the full macro set, `$text`/`$plot`/`$image` sinks,
 hierarchical menus, parameter dialogs, startup autoload). A real WCS coordinate grid
 (graticule, ticks, numeric formats, axes, border, title) — adopt `grid/` and back it with
 `astropy.visualization.wcsaxes` rather than porting AST. The Plot Tool (line/bar/scatter, axis
 config, multiple datasets, zoom stack, print, save/restore).
+
+The graticule is built on `astropy.wcs`'s own transforms rather than on wcsaxes, whose transform
+machinery is tied to a matplotlib axes object while the drawing here is QPainter; AST is not
+ported either way, and `grid/ast_wrapper.py` is deleted. See the M7 deviations in TODO.md, and
+the bugs -- two of which were in the display pipeline, not in M7's own code.
 
 ### M8 — Catalogs, image servers, VO (12 d)
 Catalog Tool: query, sortable/filterable table window, symbol editor driven by column
