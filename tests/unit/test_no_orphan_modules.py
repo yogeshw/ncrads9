@@ -52,7 +52,6 @@ PENDING_ADOPTION: dict[str, str] = {
     # catalogue queries go through VizieR like every other CDS catalogue.
     "catalogs.sdss": "M8-17",
     # M9 -- remaining subsystems.
-    "communication.iis.iis_server": "M9-29",
     # M4 -- FITS coverage.
     # A save dialog with a format combo, duplicating QFileDialog's filter.
     # DS9 puts each format on its own `Save as` entry and so does M4, so

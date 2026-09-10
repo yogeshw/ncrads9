@@ -586,4 +586,5 @@ class MainWindow(QMainWindow):
             self._samp_connected = False
         self.session.clean_exit()
         self.samp.clean_exit()
+        self.iis.stop()
         super().closeEvent(event)

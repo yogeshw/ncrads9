@@ -208,6 +208,10 @@ class RegionOverlay(QWidget):
         #: it is let go, so the controller can record the move for undo. A
         #: drag spans two events, which a context manager cannot.
         self.edit_notifier = None
+        #: Called with an image position on the next press, once, when an
+        #: interactive examine is waiting for a click. Returns True to
+        #: swallow the press.
+        self.examine_handler = None
         #: Which resize handle is being dragged, if any. `None` means the
         #: drag is a move (or nothing at all); an index means a reshape.
         self.dragging_handle: int | None = None
@@ -747,6 +751,14 @@ class RegionOverlay(QWidget):
 
     def mousePressEvent(self, event) -> None:
         """Handle a press: the pointer mode first, then regions."""
+        if self.examine_handler is not None:
+            # An interactive examine is waiting for one click, and it wins
+            # over every mode: that is what the crosshair cursor means.
+            point = self._widget_to_image_coords(event.position())
+            if self.examine_handler(point.x(), point.y()):
+                event.accept()
+                return
+
         if self._to_illustrate(event, "press"):
             event.accept()
             return

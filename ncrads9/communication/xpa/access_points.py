@@ -1328,6 +1328,19 @@ TOOL_WINDOW_POINTS: tuple[AccessPoint, ...] = (
     ),
     AccessPoint("vo", set=_show_window("vo.show_dialog"), summary="the virtual observatory tool"),
     AccessPoint(
+        "iis",
+        get=lambda window: _iis_text(window),
+        set=lambda window, args: _iis(window, args),
+        summary="the IIS server for IRAF: filename, start, stop",
+    ),
+    AccessPoint(
+        "iexam",
+        get=lambda window: examine(window, []),
+        set=lambda window, args: None,
+        aliases=("imexam",),
+        summary="wait for a click and answer with what was asked for",
+    ),
+    AccessPoint(
         "samp",
         get=lambda window: _samp_text(window),
         set=lambda window, args: _samp(window, args),
@@ -1443,3 +1456,74 @@ def _samp(window, args: list[str]) -> str | None:
             return None
         return f"{what} is not a hub command"
     return f"{args[0]} is not a SAMP command"
+
+
+def _iis_text(window) -> str:
+    """`iis filename` answers the file an IIS frame is showing."""
+    return window.iis.filename()
+
+
+def _iis(window, args: list[str]) -> str | None:
+    """`iis filename <file> [#]`, `iis start|stop`."""
+    words = [str(word) for word in args]
+    if not words:
+        return "filename, start or stop is needed"
+    first = words[0].lower()
+
+    if first == "filename":
+        if len(words) < 2:
+            return "a filename is needed"
+        frame = int(float(words[2])) if len(words) > 2 else None
+        window.iis.set_filename(words[1], frame)
+        return None
+    if first == "start":
+        port = int(float(words[1])) if len(words) > 1 else 5137
+        return None if window.iis.start(port) else "the IIS server could not be started"
+    if first == "stop":
+        window.iis.stop()
+        return None
+    return f"{words[0]} is not an IIS command"
+
+
+def examine(window, args: list[str]) -> str:
+    """DS9's interactive examine: wait for a click, then answer.
+
+    `iexam [button|key|any] coordinate <sys> [<sky>] [<format>]`,
+    `iexam [...] data [w] [h]`, or a macro string.
+    """
+    words = [str(word) for word in args]
+    # DS9 takes an event kind first -- button, key or any. Ours is always
+    # a button, since a key event needs the keyboard grab DS9's cursor
+    # mode takes; the word is accepted and ignored.
+    if words and words[0].lower() in ("button", "key", "any"):
+        words = words[1:]
+
+    if not words:
+        return window.iis.examine("coordinate", "image")
+
+    first = words[0].lower()
+    if first == "coordinate":
+        rest = [word.lower() for word in words[1:]]
+        system = rest[0] if rest else "image"
+        sky = "fk5"
+        sky_format = "degrees"
+        if system not in ("image", "physical", "amplifier", "detector", "wcs"):
+            # `iexam coordinate fk5` is DS9's shorthand for a WCS frame.
+            sky = system
+            system = "wcs"
+            rest = rest[1:] if rest else []
+        else:
+            rest = rest[1:] if rest else []
+        for word in rest:
+            if word in ("degrees", "sexagesimal"):
+                sky_format = word
+            else:
+                sky = word
+        return window.iis.examine("coordinate", system, sky, sky_format)
+
+    if first == "data":
+        width = int(float(words[1])) if len(words) > 1 else 1
+        height = int(float(words[2])) if len(words) > 2 else width
+        return window.iis.examine("data", width=width, height=height)
+
+    return window.iis.examine(macro=" ".join(str(word) for word in args))

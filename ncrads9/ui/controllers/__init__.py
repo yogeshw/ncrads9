@@ -36,6 +36,7 @@ from .file import FileController
 from .frame import FrameController
 from .frame_3d import Frame3DController
 from .help import HelpController
+from .iis import IISController
 from .illustrate import IllustrateController
 from .image_servers import ImageServerController
 from .notes import NotesController
@@ -84,6 +85,7 @@ CONTROLLERS: tuple[tuple[str, type], ...] = (
     ("frame_controller", FrameController),
     ("frame_3d", Frame3DController),
     ("help", HelpController),
+    ("iis", IISController),
     ("illustrate", IllustrateController),
     ("image_servers", ImageServerController),
     ("notes", NotesController),

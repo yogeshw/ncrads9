@@ -188,6 +188,11 @@ class XPACommands:
 
         getting = bool(params.get("get")) and not args
 
+        if point.name in ("iexam",):
+            # `xpaget ds9 iexam key coordinate image`: a read that takes
+            # arguments, which is unusual enough to name.
+            return {"status": "ok", "result": access_points.examine(self.viewer, args)}
+
         if getting or (point.set is None and point.get is not None):
             if point.get is None:
                 return {"status": "error", "message": f"{point.name} cannot be read"}

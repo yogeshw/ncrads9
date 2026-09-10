@@ -1143,8 +1143,23 @@ Depends on M2, M3.
       turned off from the controller or over XPA (`samp hub web no`). Information says which.
       The hub is stopped on a clean exit, so it does not outlive the application holding its
       port.
-- [ ] **M9-29** (M) IIS / IRAF `imexam`: adopt `communication/iis/iis_server.py`; the `iis` and
-      `iexam` XPA points.
+- [x] **M9-29** (M) IIS / IRAF `imexam`: adopt `communication/iis/iis_server.py`; the `iis` and
+      `iexam` XPA points. `ui/controllers/iis.py` owns the server and the examine.
+      **The protocol layer was rewritten, because what was there could not have worked**: an
+      8-byte header read as `>HBBHHHH` where the protocol's is eight big-endian shorts, the
+      command taken from `tid` instead of `subunit`, no checksum, and a memory write that never
+      stored a pixel. It is now DS9's `struct iism70` (`tksao/iis/iis.c:83`) throughout --
+      MEMORY, LUT, FEEDBACK, IMCURSOR and WCS, the PACKED and IIS_READ flags, the one-bit-per-
+      frame `z`, the checksum that also says which byte order the client is, and the fixed
+      160-byte cursor reply IRAF reads. Tested against a client that speaks the protocol over a
+      real socket, which is the only way to know short of installing IRAF.
+      Interactive examine is DS9's `iexam`: it blocks on its own event loop -- so the window
+      still redraws and the click can actually be made -- and answers with a coordinate in any
+      system, a box of data values, or an expanded macro string.
+      **Deviation:** DS9's `iexam` can wait for a key as well as a button, and IRAF's blocking
+      cursor read likewise. Ours is always a button: a key event needs the keyboard grab DS9's
+      cursor mode takes, and an unattended reply of the current position is more useful to
+      `imexam` than a socket that never answers. The event word is accepted and ignored.
 - [ ] **M9-30** (S) Shared-memory loading (`shm`).
 
 ### Polish
