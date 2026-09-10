@@ -82,6 +82,7 @@ class XPACommands:
             "save": self._handle_save,
             "exit": self._handle_exit,
             "quit": self._handle_exit,
+            "prism": self._handle_prism,
             "version": self._handle_version,
             "about": self._handle_about,
         }
@@ -755,6 +756,138 @@ class XPACommands:
             self.viewer.close()
         self._logger.info("Exit command received")
         return {"status": "ok", "result": "Exiting"}
+
+    #: What `prism import` and `prism export` call each format, and what
+    #: `catalogs/catalog_file.py` calls it (`xpa.html`, the prism section).
+    PRISM_FORMATS = {"xml": "votable", "rdb": "starbase", "tsv": "tsv"}
+
+    def _handle_prism(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle the `prism` access point.
+
+        `xpaget` lists the open windows; `xpaset` opens one, loads a file
+        into it, walks its extensions or plots one of its columns. The whole
+        syntax is in `ds9/doc/ref/xpa.html` under `prism`.
+
+        Args:
+            params: The command's arguments.
+
+        Returns:
+            Response dictionary.
+        """
+        viewer_error = self._require_viewer()
+        if viewer_error:
+            return viewer_error
+        controller = getattr(self.viewer, "prism", None)
+        if controller is None:
+            return {"status": "error", "message": "Prism not available"}
+
+        args = [str(value) for value in self._args(params)]
+        if not args:
+            # `xpaget prism` lists the windows; `xpaset -p prism` opens one.
+            if params.get("get"):
+                return {"status": "ok", "result": "\n".join(controller.refs())}
+            controller.ensure()
+            return {"status": "ok", "result": "\n".join(controller.refs())}
+
+        command = args[0].lower()
+        rest = args[1:]
+
+        if command == "open":
+            # Bare `prism` and `prism open` both open on the current frame's
+            # file, as DS9's parser has them (`prismparser.tac:49`).
+            controller.show()
+            return {"status": "ok"}
+        if command == "current":
+            if not rest or not controller.set_current(rest[0]):
+                return {"status": "error", "message": "Unable to find PRISM window"}
+            return {"status": "ok"}
+
+        if command == "load":
+            if not rest:
+                return {"status": "error", "message": "prism load needs a filename"}
+            controller.show(rest[0])
+            return {"status": "ok"}
+
+        if command in ("import", "export"):
+            if len(rest) < 2 or rest[0].lower() not in self.PRISM_FORMATS:
+                return {"status": "error", "message": f"prism {command} needs a format and a file"}
+            from ...catalogs import catalog_file
+
+            chosen = catalog_file.CatalogFormat(self.PRISM_FORMATS[rest[0].lower()])
+            dialog = controller.ensure()
+            action = dialog.import_table if command == "import" else dialog.export_table
+            ok = action(chosen, rest[1])
+            return {"status": "ok"} if ok else {"status": "error", "message": f"prism {command} failed"}
+
+        # `prism foo.fits`: a bare filename opens a window on that file
+        # (`prismparser.tac:51`).
+        from pathlib import Path
+
+        if len(args) == 1 and Path(args[0]).exists():
+            controller.show(args[0])
+            return {"status": "ok"}
+
+        dialog = controller.latest
+        if dialog is None:
+            return {"status": "error", "message": "No PRISM window"}
+
+        if command == "clear":
+            dialog.clear()
+            return {"status": "ok"}
+        if command == "ext":
+            if not rest or not dialog.select_extension(rest[0]):
+                return {"status": "error", "message": "No such extension"}
+            return {"status": "ok"}
+        if command in ("first", "next", "prev", "last"):
+            {
+                "first": dialog.first_block,
+                "next": dialog.next_block,
+                "prev": dialog.previous_block,
+                "last": dialog.last_block,
+            }[command]()
+            return {"status": "ok"}
+        if command == "goto":
+            if not rest:
+                return {"status": "error", "message": "prism goto needs a row"}
+            dialog.goto_row(int(float(rest[0])))
+            return {"status": "ok"}
+        if command == "image":
+            return (
+                {"status": "ok"} if dialog.load_image() else {"status": "error", "message": "No file loaded"}
+            )
+        if command == "mode":
+            if not rest:
+                return {"status": "ok", "result": dialog.plot_mode}
+            dialog.plot_mode = rest[0].lower()
+            return {"status": "ok"}
+
+        if command == "histogram":
+            if not rest:
+                return {"status": "error", "message": "prism histogram needs a column"}
+            bins = int(float(rest[1])) if len(rest) > 1 else None
+            low, high = (float(rest[2]), float(rest[3])) if len(rest) > 3 else (None, None)
+            plot = dialog.histogram(rest[0], bins, low, high)
+            return {"status": "ok"} if plot is not None else {"status": "error", "message": "Unable to plot"}
+
+        if command == "plot":
+            # The last word says which of the remaining columns are errors:
+            # xy, xyex, xyey or xyexey (`xpa.html`).
+            columns = list(rest)
+            shape = columns.pop().lower() if columns and columns[-1].lower().startswith("xy") else "xy"
+            if len(columns) < 2:
+                return {"status": "error", "message": "prism plot needs two columns"}
+            x_error = y_error = None
+            extra = columns[2:]
+            if shape == "xyex" and extra:
+                x_error = extra[0]
+            elif shape == "xyey" and extra:
+                y_error = extra[0]
+            elif shape == "xyexey" and len(extra) > 1:
+                x_error, y_error = extra[0], extra[1]
+            plot = dialog.plot(columns[0], columns[1], x_error, y_error)
+            return {"status": "ok"} if plot is not None else {"status": "error", "message": "Unable to plot"}
+
+        return {"status": "error", "message": f"Unknown prism command: {command}"}
 
     def _handle_version(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle version command.

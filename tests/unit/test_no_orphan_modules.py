@@ -72,9 +72,6 @@ PENDING_ADOPTION: dict[str, str] = {
     "printing.page_setup": "M9-19",
     "printing.postscript": "M9-18",
     "printing.print_engine": "M9-20",
-    "prism.line_id": "M9-9",
-    "prism.prism_main": "M9-9",
-    "prism.spectrum_plot": "M9-9",
     # M4 -- FITS coverage.
     # A save dialog with a format combo, duplicating QFileDialog's filter.
     # DS9 puts each format on its own `Save as` entry and so does M4, so

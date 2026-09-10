@@ -1,4 +1,4 @@
-# This file is part of ncrads9.
+# NCRADS9 - NCRA DS9-like FITS Viewer
 # Copyright (C) 2026 Yogesh Wadadekar
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,13 +14,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Prism package for spectral analysis.
+"""DS9's Prism: a browser for a FITS file's extensions, headers and rows."""
 
-Author: Yogesh Wadadekar
-"""
+from .browser import BLOCK, MIN_COLS, MIN_ROWS, PrismBrowser, format_value
 
-from .line_id import LineIdentifier, SpectralLine
-from .prism_main import PrismWindow
-from .spectrum_plot import SpectrumPlot
-
-__all__ = ["PrismWindow", "SpectrumPlot", "LineIdentifier", "SpectralLine"]
+__all__ = ["BLOCK", "MIN_COLS", "MIN_ROWS", "PrismBrowser", "format_value"]

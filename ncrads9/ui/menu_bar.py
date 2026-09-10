@@ -348,6 +348,13 @@ class MenuBar(QMenuBar):
 
         self.file_menu.addSeparator()
 
+        # DS9 puts Prism here, between the save entries and Save Image
+        # (`mfile.tcl`).
+        self.action_prism: QAction = QAction("&Prism...", self)
+        self.file_menu.addAction(self.action_prism)
+
+        self.file_menu.addSeparator()
+
         self.save_image_menu: QMenu = self.file_menu.addMenu("Save &Image")
         #: Format name -> its action.
         self.save_image_actions: dict[str, QAction] = {}

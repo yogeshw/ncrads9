@@ -946,9 +946,22 @@ Depends on M2, M3.
 - [ ] **M9-8** (M) Illustrate file format read/write and its own selection handles.
 
 ### Prism
-- [ ] **M9-9** (L) Rewrite `prism/` as a real FITS browser: HDU list, header view, table view
+- [x] **M9-9** (L) Rewrite `prism/` as a real FITS browser: HDU list, header view, table view
       with sortable columns, image preview, plot a column, load an HDU into a frame.
-- [ ] **M9-10** (S) `File → Prism` and the `prism` XPA point.
+      `prism/browser.py` reads and pages; `ui/dialogs/prism_dialog.py` is DS9's window --
+      extension list, header, extension data, and DS9's File/Edit/Table menus over them.
+      What the package held before was a spectral-analysis skeleton nothing called, which was
+      a guess at the name rather than at DS9; deleted. Two deviations from the line above,
+      both deliberate: **no sortable columns**, because Prism shows one 1000-row block of a
+      table at a time and sorting a block would sort the wrong rows -- sorting belongs to the
+      catalogue tool, which holds the whole table; and **no image preview**, because DS9 has
+      none either, its `Image` button loading the extension into a frame instead, which is
+      what ours does.
+- [x] **M9-10** (S) `File → Prism` and the `prism` XPA point. `ui/controllers/prism.py`. Opens
+      on the current frame's file when it has one, as DS9 does. The XPA point is DS9's whole
+      syntax: open, load, import/export xml|rdb|tsv, clear, current, ext by number or name,
+      first/next/prev/last, goto, image, mode, histogram with optional limits, and plot with
+      DS9's xy|xyex|xyey|xyexey error-column shapes.
 
 ### Session and files
 - [ ] **M9-11** (L) Backup / Restore: adopt `io/session/` to serialise all frames, their data

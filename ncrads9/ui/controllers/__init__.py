@@ -38,6 +38,7 @@ from .help import HelpController
 from .illustrate import IllustrateController
 from .image_servers import ImageServerController
 from .pointer import PointerController
+from .prism import PrismController
 from .region import RegionController
 from .scale import ScaleController
 from .view import ViewController
@@ -79,6 +80,7 @@ CONTROLLERS: tuple[tuple[str, type], ...] = (
     ("illustrate", IllustrateController),
     ("image_servers", ImageServerController),
     ("pointer", PointerController),
+    ("prism", PrismController),
     ("region", RegionController),
     ("scale", ScaleController),
     ("view", ViewController),

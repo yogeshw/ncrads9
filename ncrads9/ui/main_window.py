@@ -298,6 +298,7 @@ class MainWindow(QMainWindow):
         self.crop.connect()
         self.crosshair.connect()
         self.illustrate.connect()
+        self.prism.connect()
         self.image_servers.connect()
 
         self.menu_bar.action_fits_header.triggered.connect(self.file.show_header)
