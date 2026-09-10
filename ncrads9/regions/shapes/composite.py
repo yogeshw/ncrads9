@@ -54,6 +54,16 @@ class Composite(BaseRegion):
         center = self._compute_center()
         super().__init__(center, color, width, font, text, tags, **kwargs)
 
+    def recompute_center(self) -> tuple[float, float]:
+        """Take the centre from the children again, and return it.
+
+        A composite's centre is the mean of its members, so anything that
+        moves the members behind its back -- placing a template, say --
+        has to ask for it to be worked out again.
+        """
+        self.center = self._compute_center()
+        return self.center
+
     def _compute_center(self) -> tuple[float, float]:
         """Compute the center from all child regions."""
         if not self._regions:

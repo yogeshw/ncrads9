@@ -38,11 +38,13 @@ Author: Yogesh Wadadekar
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 from PyQt6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
 from ...analysis.centroid import DEFAULT_ITERATIONS, DEFAULT_RADIUS, centroid_at
-from ...regions import group_manager
+from ...regions import group_manager, region_template
 from ...regions.base_region import BaseRegion
 from ...regions.region_formats import RegionFormat, dropped_shapes
 from ...regions.region_parser import RegionParser
@@ -71,6 +73,9 @@ MODE_LABELS: dict[RegionMode, str] = {RegionMode.NONE: "None"} | {
 LABEL_MODES: dict[str, RegionMode] = {label: mode for mode, label in MODE_LABELS.items()}
 
 REGION_FILTER = "Region Files (*.reg);;All Files (*)"
+
+#: The filter DS9's template chooser uses.
+TEMPLATE_FILTER = "Template Files (*.tpl);;All Files (*)"
 
 
 def describe(region: BaseRegion) -> str:
@@ -171,12 +176,10 @@ class RegionController(Controller):
                 )
             )
 
-        for action, milestone in ((menu.action_region_template, "M6-18"),):
-            action.triggered.connect(
-                lambda _checked=False, a=action, m=milestone: self.status(
-                    f"{a.text().replace('&', '')} arrives in {m}", 3000
-                )
-            )
+        menu.action_template_open.triggered.connect(lambda _checked=False: self.load_template())
+        menu.action_template_save.triggered.connect(lambda _checked=False: self.save_template())
+        for path, action in menu.region_fov_actions.items():
+            action.triggered.connect(lambda _checked=False, key=path: self.load_fov(key))
 
     # -- drawing mode --------------------------------------------------------
 
@@ -270,6 +273,77 @@ class RegionController(Controller):
             if hasattr(region, attribute):
                 setattr(region, attribute, value)
         return region
+
+    # -- templates and instrument FOVs (M6-18, M6-19) --------------------------
+
+    def load_template(self, path: str | None = None) -> None:
+        """Load a template onto the current frame at its WCS centre.
+
+        Args:
+            path: The template file. Asked for when not given.
+        """
+        frame = self.frame
+        if frame is None:
+            self.status("No frame", 3000)
+            return
+
+        if path is None:
+            path, _filter = QFileDialog.getOpenFileName(self.window, "Open Template", "", TEMPLATE_FILTER)
+            if not path:
+                return
+
+        try:
+            placed = region_template.load(path, getattr(frame, "wcs_handler", None))
+        except region_template.TemplateError as exc:
+            self.status(str(exc), 5000)
+            return
+        except OSError as exc:
+            self.status(f"Cannot read {Path(path).name}: {exc}", 5000)
+            return
+
+        for region in placed:
+            frame.regions.append(region)
+        self.refresh_overlay()
+        self.status(f"Loaded {Path(path).name}: {len(placed)} region{'s' if len(placed) != 1 else ''}")
+
+    def load_fov(self, name: str) -> None:
+        """Load one of DS9's bundled instrument fields of view.
+
+        Args:
+            name: A key of `bundled_templates`, e.g. "chandra/acis/acis-i".
+        """
+        path = region_template.bundled_templates().get(name)
+        if path is None:
+            self.status(f"No such instrument template: {name}", 3000)
+            return
+        self.load_template(str(path))
+
+    def save_template(self) -> None:
+        """Save the regions as a template, relative to the WCS centre.
+
+        DS9 saves everything on the frame, not the selection: a template is
+        an instrument, and half an instrument is not one.
+        """
+        frame = self.frame
+        if frame is None or not frame.regions:
+            self.status("No regions to save", 3000)
+            return
+
+        path, _filter = QFileDialog.getSaveFileName(self.window, "Save Template", "", TEMPLATE_FILTER)
+        if not path:
+            return
+        if not Path(path).suffix:
+            path = f"{path}{region_template.TEMPLATE_SUFFIX}"
+
+        try:
+            region_template.save(path, frame.regions, getattr(frame, "wcs_handler", None))
+        except region_template.TemplateError as exc:
+            self.status(str(exc), 5000)
+            return
+        except OSError as exc:
+            self.status(f"Cannot write {Path(path).name}: {exc}", 5000)
+            return
+        self.status(f"Saved {len(frame.regions)} regions to {Path(path).name}")
 
     # -- centroid (M6-20) -------------------------------------------------------
 

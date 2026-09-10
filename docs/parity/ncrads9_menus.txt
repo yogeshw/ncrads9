@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 783 (691 excluding separators)
+# entries: 819 (727 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -644,7 +644,43 @@
 .region|cascade|Composite Region
 .region.compositeregion|command|Create
 .region.compositeregion|command|Dissolve
-.region|command|Template
+.region|cascade|Instrument FOV
+.region.instrumentfov|cascade|CHANDRA
+.region.instrumentfov.chandra|cascade|ACIS
+.region.instrumentfov.chandra.acis|command|acis-i
+.region.instrumentfov.chandra.acis|command|acis-is
+.region.instrumentfov.chandra.acis|command|acis-s
+.region.instrumentfov.chandra.acis|command|acis-si
+.region.instrumentfov.chandra|cascade|HRC
+.region.instrumentfov.chandra.hrc|command|hrc-i
+.region.instrumentfov.chandra.hrc|command|hrc-s
+.region.instrumentfov|cascade|HEASARC
+.region.instrumentfov.heasarc|cascade|SUZAKU
+.region.instrumentfov.heasarc.suzaku|command|hxd
+.region.instrumentfov.heasarc.suzaku|command|xis
+.region.instrumentfov.heasarc.suzaku|command|xrs
+.region.instrumentfov|cascade|MMT
+.region.instrumentfov.mmt|command|binospec
+.region.instrumentfov.mmt|cascade|HECTO
+.region.instrumentfov.mmt.hecto|command|hectochelle
+.region.instrumentfov.mmt.hecto|command|hectospec
+.region.instrumentfov.mmt|cascade|MEGACAM
+.region.instrumentfov.mmt.megacam|command|megacam-amp-guide
+.region.instrumentfov.mmt.megacam|command|megacam-amp
+.region.instrumentfov.mmt.megacam|command|megacam-chip-guide
+.region.instrumentfov.mmt.megacam|command|megacam-chip
+.region.instrumentfov.mmt|cascade|MMIRS
+.region.instrumentfov.mmt.mmirs|command|image
+.region.instrumentfov.mmt.mmirs|command|longslit
+.region.instrumentfov.mmt.mmirs|command|mask
+.region.instrumentfov.mmt|command|swirc
+.region.instrumentfov|cascade|XMM
+.region.instrumentfov.xmm|command|epicmos1
+.region.instrumentfov.xmm|command|epicmos2
+.region.instrumentfov.xmm|command|epicpn
+.region|cascade|Template
+.region.template|command|Open
+.region.template|command|Save
 .region|separator|---
 .region|cascade|Color
 .region.color|radiobutton|Black

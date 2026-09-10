@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import QMenu, QMenuBar, QWidget
 
 from ..colormaps.bundled import CATEGORIES, colormap_label
 from ..core.bin_table import BUFFER_SIZES, DEFAULT_BUFFER_SIZE
+from ..regions.region_template import bundled_templates
 from .layout.view_state import DEFAULT_INFO_FIELDS, WCS_SUFFIXES
 
 #: The shapes the Region menu's Shape cascade offers, in DS9's order. Every
@@ -1358,8 +1359,16 @@ class MenuBar(QMenuBar):
         composite_menu.addAction(self.action_composite_create)
         self.action_composite_dissolve: QAction = QAction("&Dissolve", self)
         composite_menu.addAction(self.action_composite_dissolve)
-        self.action_region_template: QAction = QAction("&Template", self)
-        self.region_menu.addAction(self.action_region_template)
+        fov_menu = self.region_menu.addMenu("&Instrument FOV")
+        #: Template path (e.g. "chandra/acis/acis-i") -> its action.
+        self.region_fov_actions: dict[str, QAction] = {}
+        self._fill_fov_menu(fov_menu)
+
+        template_menu = self.region_menu.addMenu("&Template")
+        self.action_template_open: QAction = QAction("&Open...", self)
+        template_menu.addAction(self.action_template_open)
+        self.action_template_save: QAction = QAction("&Save...", self)
+        template_menu.addAction(self.action_template_save)
 
         self.region_menu.addSeparator()
 
@@ -1490,6 +1499,30 @@ class MenuBar(QMenuBar):
         params_menu.addAction(self.action_region_auto_centroid)
         self.action_region_centroid_params: QAction = QAction("Centroid Parameters...", self)
         params_menu.addAction(self.action_region_centroid_params)
+
+    def _fill_fov_menu(self, menu: QMenu) -> None:
+        """Build the Instrument FOV cascade from the bundled templates.
+
+        DS9 builds its own the same way (`CreateFOVMenu` in
+        `ds9/library/template.tcl`): the directory tree under `template/` is
+        the menu tree, upper-cased. Reading the tree rather than listing the
+        instruments here means a template dropped in appears in the menu.
+        """
+        submenus: dict[str, QMenu] = {}
+
+        for path in bundled_templates():
+            parts = path.split("/")
+            parent = menu
+            trail = ""
+            for part in parts[:-1]:
+                trail = f"{trail}/{part}" if trail else part
+                if trail not in submenus:
+                    submenus[trail] = parent.addMenu(part.upper())
+                parent = submenus[trail]
+
+            action = QAction(parts[-1], self)
+            parent.addAction(action)
+            self.region_fov_actions[path] = action
 
     def _setup_vo_menu(self) -> None:
         """Set up the VO menu."""

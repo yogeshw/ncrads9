@@ -11,6 +11,7 @@ exclude = ["tests*", "docs*", "resources*"]
 # and ten of the Color menu's cascades come up empty.
 [tool.setuptools.package-data]
 "ncrads9.colormaps" = ["data/*.sao", "data/*.lut"]
+"ncrads9.regions" = ["templates/**/*.tpl"]
 
 [project]
 name = "ncrads9"
