@@ -453,6 +453,18 @@ class MenuBar(QMenuBar):
 
         self.file_menu.addSeparator()
 
+        # DS9's File -> XPA submenu (`mfile.tcl`).
+        self.xpa_menu: QMenu = self.file_menu.addMenu("&XPA")
+        self.action_xpa_information: QAction = QAction("&Information", self)
+        self.xpa_menu.addAction(self.action_xpa_information)
+        self.xpa_menu.addSeparator()
+        self.action_xpa_connect: QAction = QAction("&Connect", self)
+        self.xpa_menu.addAction(self.action_xpa_connect)
+        self.action_xpa_disconnect: QAction = QAction("&Disconnect", self)
+        self.xpa_menu.addAction(self.action_xpa_disconnect)
+
+        self.file_menu.addSeparator()
+
         self.action_page_setup: QAction = QAction("Page Set&up...", self)
         self.file_menu.addAction(self.action_page_setup)
 

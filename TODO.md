@@ -1095,21 +1095,40 @@ Depends on M2, M3.
       back over the frame's.
 
 ### Communication
-- [ ] **M9-25** (L) Grow XPA from 23 to DS9's 143 access points. Use
+- [~] **M9-25** (L) Grow XPA from 23 to DS9's 143 access points. Use
       `.tmp_sao_ds9/ds9/library/xpa.tcl` as the specification and
-      `.tmp_sao_ds9/ds9/parsers/*` for each point's grammar. Suggested order:
-      **(a)** display: `scale zscale minmax cmap colorbar invert block bin smooth mask
-      grid contour crop rotate orient align`;
-      **(b)** frames: `single tile blink fade multiframe mecube cube slice datacube 3d rgb hsv hls
-      lock match first last next prev`;
-      **(c)** files: `array nrrd envi mosaic* rgb* hsv* hls* url sfits memf shm gif jpeg png tiff
-      export import saveimage savefits savempeg movie backup restore`;
-      **(d)** tools: `analysis catalog cat fp footprint plot prism pixeltable magnifier panner
-      nameserver iexam imexam illustrate notes samp vo sia skyview dss* 2mass nvss vla vlss`;
-      **(e)** app: `about version prefs theme threads mode cursor iconify raise lower height width
-      view source tcl console sleep update nan precision preserve pagesetup psprint print header
-      data`.
-- [ ] **M9-26** (S) XPA UI: `File → XPA → Information / Connect / Disconnect`.
+      `.tmp_sao_ds9/ds9/parsers/*` for each point's grammar.
+      **109 of DS9's 145 names answer now, up from 24.** `communication/xpa/access_points.py`
+      is a *table* rather than a method per point: DS9's points are almost all the same shape
+      -- read something the application knows, or hand an argument to something it does -- and
+      145 near-identical methods would be a fifth of the codebase. The ones with real grammars
+      (`file`, `frame`, `regions`, `prism`, `3d`, `colorbar`, `scale`, `cmap`, `zoom`, `pan`,
+      `wcs`, `save`) keep their hand-written handlers.
+      Done: groups (a) display -- `zscale minmax invert block smooth grid contour orient align
+      rotate crop magnifier panner mask`; (b) frames -- `single tile blink fade first last next
+      prev slice cube datacube lock match`; (c) files -- `array nrrd envi gif tiff tif jpeg jpg
+      png export url rgb*/hsv*/hls* mosaic* mecube multiframe backup restore saveimage movie
+      savempeg`; (d) tools -- `notes pixeltable illustrate nameserver catalog cat footprint fp
+      vo prefs`; (e) app -- `width height iconify raise lower nan preserve mode cursor
+      crosshair cd pagesetup psprint print sleep update header about version`.
+      Still to do: `analysis` beyond its current handler, `samp vo sia skyview dss* 2mass nvss
+      vla vlss` image-server points, `iis iexam imexam`, `shm memf sfits`, `console tcl source
+      theme threads precision graph data plot`.
+      **Five bugs found in the 24 that existed**, all in points that reported success while
+      doing nothing: `mode` echoed the mode back and never changed it; `cursor` and `crosshair`
+      reported the last mouse position and could not move anything; `lock` echoed its argument;
+      and `match` matched *frames* whatever scope word it was given, so `match crosshair`
+      moved the views. All five are now real, and their tests say what they used to do.
+      **Three more found while wiring the table**, each the same shape -- a setter that assumed
+      the menu had already ticked itself, so any other caller changed the status bar and
+      nothing else: `set_smooth`, `set_contours` and `set_panel`.
+      Also fixed here: the pixel table was modal and rebuilt on every open, so it blocked the
+      application and always showed the middle of the image. DS9's follows the cursor, and the
+      dialog was already built for it -- non-modal, with a `set_center` nothing called.
+- [x] **M9-26** (S) XPA UI: `File → XPA → Information / Connect / Disconnect`.
+      `ui/controllers/xpa.py`. Information is the only reason anyone opens the submenu: it
+      says the name to address, the address, whether it is connected, and how many access
+      points there are, with the whole list behind the details button.
 - [ ] **M9-27** (M) SAMP: broadcast image and broadcast table; the SAMP Hub UI
       (Information / Start / Stop) over the existing `samp_hub.py`.
 - [ ] **M9-28** (M) SAMP web hub.

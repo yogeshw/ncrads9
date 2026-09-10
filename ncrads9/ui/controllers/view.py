@@ -153,6 +153,17 @@ class ViewController(Controller):
             self.status(f"Unknown panel: {name}")
             return
         setattr(self.state, name, bool(visible))
+
+        # The menu's tick is set here rather than assumed: a caller that is
+        # not the menu -- XPA, a script, a restored session -- would
+        # otherwise hide a panel and leave it ticked.
+        attribute = PANEL_ACTIONS.get(name)
+        action = getattr(self.menu, attribute, None) if attribute else None
+        if action is not None and action.isChecked() != bool(visible):
+            action.blockSignals(True)
+            action.setChecked(bool(visible))
+            action.blockSignals(False)
+
         self.apply()
 
         milestone = UNIMPLEMENTED_PANELS.get(name)

@@ -128,6 +128,9 @@ class MainWindow(QMainWindow):
         # A staticmethod, so it is callable before the controllers exist.
         self.preferences = Preferences(EditController.preferences_path())
         self.use_gpu_rendering = bool(self.preferences.get("use_gpu", True))
+        #: The last object name the name server resolved, which the
+        #: `nameserver` XPA point reads back.
+        self._last_resolved_name = ""
         #: DS9's Blank/Inf/NaN colour, which a cropped-out pixel gets too.
         self.nan_color = str(self.preferences.get("nan_color", DEFAULT_NAN_COLOR))
         self.using_gpu_rendering = False
@@ -307,6 +310,7 @@ class MainWindow(QMainWindow):
         self.notes.connect()
         self.prism.connect()
         self.session.connect()
+        self.xpa.connect()
         self.image_servers.connect()
 
         self.menu_bar.action_fits_header.triggered.connect(self.file.show_header)
@@ -529,6 +533,7 @@ class MainWindow(QMainWindow):
                 if display_coords is not None:
                     self.magnifier_panel.update_cursor_position(*display_coords)
         self.view.update_cursor(x, y)
+        self.analysis.update_pixel_table(x, y)
         if hasattr(self, "horizontal_graph") and self.horizontal_graph.isVisible():
             self.horizontal_graph.update_cursor_position(x, row)
         if hasattr(self, "vertical_graph") and self.vertical_graph.isVisible():

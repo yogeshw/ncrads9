@@ -490,6 +490,10 @@ def run_application(argv: list[str]) -> int:
     # Apply startup files/options
     apply_startup_cli(main_window, argv)
 
+    # File -> XPA needs the server to say anything about it, and the
+    # command table to say how many access points there are.
+    main_window.xpa.attach(xpa_server, XPACommands(main_window))
+
     if xpa_server is not None:
         app.aboutToQuit.connect(xpa_server.stop)
 

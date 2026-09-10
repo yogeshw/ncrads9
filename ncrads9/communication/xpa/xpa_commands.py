@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from ...rendering.scale_algorithms import ScaleAlgorithm
+from . import access_points
 
 
 class XPACommandType(Enum):
@@ -59,6 +60,9 @@ class XPACommands:
         """
         self.viewer: Any | None = viewer
         self._logger: logging.Logger = logging.getLogger(__name__)
+        #: DS9's access points that are a value or a call each, by name and
+        #: by alias. The ones with real grammars are handlers below.
+        self._points = access_points.by_name()
         self._command_handlers: dict[str, Callable[..., dict[str, Any]]] = {
             "file": self._handle_file,
             "fits": self._handle_fits,
@@ -70,15 +74,6 @@ class XPACommands:
             "colorbar": self._handle_colorbar,
             "regions": self._handle_regions,
             "wcs": self._handle_wcs,
-            "crosshair": self._handle_crosshair,
-            "cursor": self._handle_cursor,
-            "mode": self._handle_mode,
-            "tile": self._handle_tile,
-            "blink": self._handle_blink,
-            "match": self._handle_match,
-            "lock": self._handle_lock,
-            "width": self._handle_width,
-            "height": self._handle_height,
             "save": self._handle_save,
             "exit": self._handle_exit,
             "quit": self._handle_exit,
@@ -142,9 +137,21 @@ class XPACommands:
         Returns:
             Response dictionary with status and result/message.
         """
-        handler = self._command_handlers.get(command.lower())
+        name = command.lower()
+        handler = self._command_handlers.get(name)
 
         if handler is None:
+            # The hand-written handlers above are the points with real
+            # grammars; everything else is in the table, which is most of
+            # DS9's 145.
+            point = self._points.get(name)
+            if point is not None:
+                try:
+                    return self._table_point(point, params)
+                except Exception as exc:
+                    self._logger.error("Error handling command %s: %s", command, exc)
+                    return {"status": "error", "message": str(exc)}
+
             self._logger.warning(f"Unknown XPA command: {command}")
             return {
                 "status": "error",
@@ -157,13 +164,58 @@ class XPACommands:
             self._logger.error(f"Error handling command {command}: {e}")
             return {"status": "error", "message": str(e)}
 
+    def _table_point(self, point, params: dict[str, Any]) -> dict[str, Any]:
+        """Answer one access point out of the table.
+
+        `xpaget` reads, `xpaset` sets, and a point that cannot do the one
+        asked for says so rather than pretending.
+        """
+        viewer_error = self._require_viewer()
+        if viewer_error:
+            return viewer_error
+
+        args = [str(value) for value in self._args(params)]
+        if not args:
+            # The hand-written handlers take their argument by keyword --
+            # `{"enabled": True}`, `{"value": 2}` -- and callers inside the
+            # application still do, so a point in the table understands
+            # both rather than silently doing nothing for one of them.
+            for key in ("value", "enabled", "action", "level", "name", "mode", "type"):
+                if key in params and params[key] is not None:
+                    found = params[key]
+                    args = [access_points.on_off(found) if isinstance(found, bool) else str(found)]
+                    break
+
+        getting = bool(params.get("get")) and not args
+
+        if getting or (point.set is None and point.get is not None):
+            if point.get is None:
+                return {"status": "error", "message": f"{point.name} cannot be read"}
+            return {"status": "ok", "result": point.get(self.viewer)}
+
+        if point.set is None:
+            return {"status": "error", "message": f"{point.name} cannot be set"}
+        problem = point.set(self.viewer, args)
+        if problem:
+            return {"status": "error", "message": problem}
+        return {"status": "ok"}
+
     def get_available_commands(self) -> list[str]:
         """Get list of available commands.
 
         Returns:
-            List of command names.
+            Every access point's name, the table's included.
         """
-        return list(self._command_handlers.keys())
+        return sorted({*self._command_handlers, *self._points})
+
+    def describe_points(self) -> str:
+        """What `xpaget ds9 xpa` lists: every point and what it does."""
+        lines = []
+        for name in self.get_available_commands():
+            point = self._points.get(name)
+            summary = point.summary if point is not None else ""
+            lines.append(f"{name}\t{summary}" if summary else name)
+        return "\n".join(lines)
 
     def register_command(
         self,
@@ -561,165 +613,6 @@ class XPACommands:
             self.viewer.wcs.set_sky_frame(system)
             return {"status": "ok", "result": system}
         return {"status": "ok", "result": self.viewer.coord_context.sky.value}
-
-    def _handle_crosshair(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle crosshair commands.
-
-        Args:
-            params: Command parameters including 'x', 'y'.
-
-        Returns:
-            Response dictionary.
-        """
-        return self._handle_cursor(params)
-
-    def _handle_cursor(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle cursor commands.
-
-        Args:
-            params: Command parameters.
-
-        Returns:
-            Response dictionary.
-        """
-        viewer_error = self._require_viewer()
-        if viewer_error:
-            return viewer_error
-        if self.viewer._last_mouse_pos is None:
-            return {"status": "ok", "result": "0 0"}
-        x, y = self.viewer._last_mouse_pos
-        return {"status": "ok", "result": f"{x} {y}"}
-
-    def _handle_mode(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle mode commands.
-
-        Args:
-            params: Command parameters including 'mode'.
-
-        Returns:
-            Response dictionary.
-        """
-        mode = params.get("mode", self._first_arg(params))
-        if mode:
-            return {"status": "ok", "result": str(mode)}
-        return {"status": "ok", "result": "none"}
-
-    def _handle_tile(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle tile display commands.
-
-        Args:
-            params: Command parameters including 'enabled'.
-
-        Returns:
-            Response dictionary.
-        """
-        viewer_error = self._require_viewer()
-        if viewer_error:
-            return viewer_error
-
-        enabled = params.get("enabled", self._first_arg(params))
-        enabled_bool = self._as_bool(enabled)
-        if enabled_bool is not None:
-            self.viewer.menu_bar.action_tile_frames.setChecked(enabled_bool)
-            self.viewer.frame_controller.set_tile(enabled_bool)
-        return {
-            "status": "ok",
-            "result": "yes" if self.viewer.menu_bar.action_tile_frames.isChecked() else "no",
-        }
-
-    def _handle_blink(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle blink commands.
-
-        Args:
-            params: Command parameters.
-
-        Returns:
-            Response dictionary.
-        """
-        viewer_error = self._require_viewer()
-        if viewer_error:
-            return viewer_error
-
-        action = str(params.get("action", self._first_arg(params, "get"))).lower()
-        if action in {"start", "on"}:
-            self.viewer.menu_bar.action_blink_frames.setChecked(True)
-            self.viewer.frame_controller.set_blink(True)
-        elif action in {"stop", "off"}:
-            self.viewer.menu_bar.action_blink_frames.setChecked(False)
-            self.viewer.frame_controller.set_blink(False)
-        return {
-            "status": "ok",
-            "result": "yes" if self.viewer._blink_timer.isActive() else "no",
-        }
-
-    def _handle_match(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle frame matching commands.
-
-        Args:
-            params: Command parameters including 'type'.
-
-        Returns:
-            Response dictionary.
-        """
-        viewer_error = self._require_viewer()
-        if viewer_error:
-            return viewer_error
-        match_type = str(params.get("type", self._first_arg(params, "wcs"))).lower()
-        if match_type == "image":
-            self.viewer.frame_controller.match_image()
-        else:
-            self.viewer.frame_controller.match_wcs()
-            match_type = "wcs"
-        return {"status": "ok", "result": f"Frames matched by {match_type}"}
-
-    def _handle_lock(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle frame locking commands.
-
-        Args:
-            params: Command parameters including 'type'.
-
-        Returns:
-            Response dictionary.
-        """
-        lock_type = params.get("type")
-
-        if lock_type:
-            return {"status": "ok", "result": f"Lock set to {lock_type}"}
-        return {"status": "ok", "result": "none"}
-
-    def _handle_width(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle window width commands.
-
-        Args:
-            params: Command parameters including 'value'.
-
-        Returns:
-            Response dictionary.
-        """
-        viewer_error = self._require_viewer()
-        if viewer_error:
-            return viewer_error
-        value = params.get("value", self._first_arg(params))
-        if value is not None:
-            self.viewer.resize(int(value), self.viewer.height())
-        return {"status": "ok", "result": str(self.viewer.width())}
-
-    def _handle_height(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle window height commands.
-
-        Args:
-            params: Command parameters including 'value'.
-
-        Returns:
-            Response dictionary.
-        """
-        viewer_error = self._require_viewer()
-        if viewer_error:
-            return viewer_error
-        value = params.get("value", self._first_arg(params))
-        if value is not None:
-            self.viewer.resize(self.viewer.width(), int(value))
-        return {"status": "ok", "result": str(self.viewer.height())}
 
     def _handle_save(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle save commands.

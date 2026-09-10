@@ -61,6 +61,7 @@ from ...analysis import contour_file
 from ...analysis import mask as mask_module
 from ...analysis.contour import ContourGenerator
 from ...analysis.mask import MaskSettings
+from ...analysis.pixel_table import PixelTable
 from ...analysis.plot import PlotState, PlotStyle
 from ...analysis.radial_profile import RadialProfile
 from ...analysis.smooth import (
@@ -112,6 +113,8 @@ class AnalysisController(Controller):
 
         #: What the coordinate grid looks like, and the renderer that works
         #: out where its lines go.
+        #: The pixel table, while it is open. DS9's follows the cursor.
+        self.pixel_table = None
         self.grid_config = GridConfig()
         self._grid_renderer = GridRenderer(config=self.grid_config)
 
@@ -242,7 +245,18 @@ class AnalysisController(Controller):
         self.set_smooth(True)
 
     def set_smooth(self, checked: bool) -> None:
-        """Toggle display smoothing."""
+        """Turn display smoothing on or off.
+
+        The menu action is set here rather than assumed: the display reads
+        it to decide whether to smooth, so a caller that is not the menu --
+        XPA, a script, a restored session -- would otherwise turn smoothing
+        on in the status bar and nowhere else.
+        """
+        action = self.menu.action_smooth
+        if action.isChecked() != bool(checked):
+            action.blockSignals(True)
+            action.setChecked(bool(checked))
+            action.blockSignals(False)
         self.window.z1 = None
         self.window.z2 = None
         self.window.display.display()
@@ -411,6 +425,22 @@ class AnalysisController(Controller):
         self.log_command("mask params")
         self.status(f"Mask: {settings.mode.value}, {settings.blend.value}")
 
+    def load_mask(self, path: str) -> bool:
+        """Load a mask file without asking for it, as `mask <file>` does.
+
+        Returns:
+            Whether it loaded.
+        """
+        try:
+            self.mask_layer = mask_module.load(str(path))
+        except (mask_module.MaskError, OSError) as exc:
+            self.status(f"Cannot read {Path(path).name}: {exc}", 5000)
+            return False
+        self.mask_path = str(path)
+        self.window.display.display()
+        self.status(f"Mask loaded from {Path(path).name}", 3000)
+        return True
+
     def clear_mask(self) -> None:
         """Remove the mask, DS9's Clear."""
         self.mask_layer = None
@@ -459,6 +489,34 @@ class AnalysisController(Controller):
         # The crosshair has its own controller as of M9-1; it used to follow
         # the pointer from here, which is not what DS9's crosshair does.
         self.window.crosshair.refresh()
+
+    def resolve_name(self, name: str) -> str | None:
+        """Resolve one object name and pan to it, without asking for it.
+
+        What the `nameserver` XPA point calls; `resolve_object_name` is the
+        menu entry that asks first and then comes here.
+
+        Returns:
+            None if it worked, or what went wrong.
+        """
+        query = str(name).strip()
+        if not query:
+            return "an object name is needed"
+        try:
+            coord = SkyCoord.from_name(query)
+        except Exception as exc:
+            self.status(f"Name resolution failed: {exc}", 3500)
+            return f"could not resolve {query}: {exc}"
+
+        self.window._last_resolved_name = query
+        handler = self.window.wcs_handler
+        if handler is None or not handler.is_valid:
+            self.status(f"{query}: {coord.to_string('hmsdms')} (no WCS to pan to)", 4000)
+            return None
+        x, y = handler.world_to_pixel(coord.ra.deg, coord.dec.deg)
+        self.window.zoom.on_panner_pan(float(x), float(y))
+        self.status(f"{query}: panned to {x:.1f} {y:.1f}", 3000)
+        return None
 
     def resolve_object_name(self) -> None:
         """Resolve an object name and pan to it if WCS is available."""
@@ -686,7 +744,19 @@ class AnalysisController(Controller):
         self.log_command("contour params")
 
     def set_contours(self, checked: bool) -> None:
-        """Toggle contour overlay visibility."""
+        """Show or hide the contour overlay.
+
+        The menu action is set here for the same reason smoothing's is: a
+        caller that is not the menu would otherwise draw contours and leave
+        the entry unticked, and the next click on it would turn them *on*
+        again.
+        """
+        action = self.menu.action_contours
+        if action.isChecked() != bool(checked):
+            action.blockSignals(True)
+            action.setChecked(bool(checked))
+            action.blockSignals(False)
+
         if checked:
             if self.window._contour_settings is None:
                 self.window._contour_settings = {
@@ -973,24 +1043,63 @@ class AnalysisController(Controller):
         self.status(f"Exported contours to {filepath}", 3000)
 
     def show_pixel_table(self) -> None:
-        """Show pixel table dialog."""
+        """Show the pixel table, and keep it following the cursor.
+
+        DS9's pixel table is a window that stays open and tracks the
+        pointer -- that is the whole point of it. Ours used to be modal and
+        made fresh each time, so it blocked the application and showed the
+        middle of the image rather than what was under the cursor. The
+        dialog itself was always ready for this: it is non-modal and has
+        `set_center` for exactly this purpose.
+        """
         frame = self.frames.current_frame
         if frame is None or frame.image_data is None:
             self.status("No image loaded", 2000)
             return
 
-        # Use image center as default
         analysis_data = self.analysis_image_data(frame)
         height, width = analysis_data.shape
-        x, y = width // 2, height // 2
+        where = self.window._last_mouse_pos or (width // 2, height // 2)
 
-        frame = self.frames.current_frame
+        existing = self.pixel_table
+        if existing is not None:
+            existing.image_data = analysis_data
+            existing.reader = PixelTable(analysis_data)
+            existing.wcs_handler = getattr(frame, "wcs_handler", None)
+            existing.set_center(*where)
+            existing.show()
+            existing.raise_()
+            return
+
         dialog = PixelTableDialog(
             analysis_data,
-            x,
-            y,
+            where[0],
+            where[1],
             parent=self.window,
-            wcs_handler=getattr(frame, "wcs_handler", None) if frame else None,
+            wcs_handler=getattr(frame, "wcs_handler", None),
         )
-        dialog.exec()
+        dialog.finished.connect(lambda _result: self._forget_pixel_table())
+        self.pixel_table = dialog
+        dialog.show()
         self.log_command("pixel_table")
+
+    def _forget_pixel_table(self) -> None:
+        """Drop the pixel table when it is closed."""
+        self.pixel_table = None
+
+    def close_pixel_table(self) -> None:
+        """Close the pixel table, as `pixeltable close` asks."""
+        dialog = self.pixel_table
+        self.pixel_table = None
+        if dialog is not None:
+            dialog.close()
+
+    def pixel_table_open(self) -> bool:
+        """Whether the pixel table window is open."""
+        return self.pixel_table is not None
+
+    def update_pixel_table(self, x: int, y: int) -> None:
+        """Point the pixel table at the pixel under the cursor."""
+        dialog = self.pixel_table
+        if dialog is not None and dialog.isVisible():
+            dialog.set_center(x, y)

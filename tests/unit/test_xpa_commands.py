@@ -146,6 +146,23 @@ class _DummyFrameController:
     def set_blink(self, checked: bool):
         self.window._blink_timer._active = checked
 
+    def set_display_mode(self, mode: str):
+        # M9-25's `tile` and `blink` access points go through the one
+        # display-mode setter the real controller has, rather than a
+        # method each.
+        self.window._frame_display_mode = mode
+        self.window.menu_bar.action_tile_frames.setChecked(mode == "tile")
+        self.window._blink_timer._active = mode in ("blink", "fade")
+
+    def set_tile_arrangement(self, mode: str):
+        self.window.tile_arrangement = mode
+
+    def set_blink_interval(self, interval_ms: int):
+        self.window.blink_interval = interval_ms
+
+    def set_fade_interval(self, interval_ms: int):
+        self.window.fade_interval = interval_ms
+
     def match_image(self):
         return
 
@@ -250,6 +267,7 @@ class _DummyViewer:
         self.colorbar_numerics = True
         self.colorbar_spacing = "value"
         self._last_mouse_pos = (5, 6)
+        self._frame_display_mode = "single"
         # XPA reaches scale and WCS through the controllers as of M2, so the
         # fake exposes the same surface rather than the old flat methods.
         self.frame_controller = _DummyFrameController(self)
@@ -320,9 +338,13 @@ def test_zoom_tile_and_blink_commands():
     commands = XPACommands(viewer)
     commands.handle("zoom", {"level": 2.5})
     assert viewer.image_viewer.get_zoom() == 2.5
+    # `tile` and `blink` moved into the access-point table in M9-25, where
+    # they gained DS9's `tile mode` and `blink interval`; both argument
+    # shapes still reach them.
     commands.handle("tile", {"enabled": True})
-    assert viewer.menu_bar.action_tile_frames.isChecked()
-    commands.handle("blink", {"action": "start"})
+    assert viewer._frame_display_mode == "tile"
+    commands.handle("blink", {"args": ["yes"]})
+    assert viewer._frame_display_mode == "blink"
     assert viewer._blink_timer.isActive()
 
 

@@ -48,6 +48,7 @@ from .undo import UndoController
 from .view import ViewController
 from .vo import VOController
 from .wcs import WCSController
+from .xpa import XPAController
 from .zoom import ZoomController
 
 __all__ = [
@@ -94,5 +95,6 @@ CONTROLLERS: tuple[tuple[str, type], ...] = (
     ("view", ViewController),
     ("vo", VOController),
     ("wcs", WCSController),
+    ("xpa", XPAController),
     ("zoom", ZoomController),
 )
