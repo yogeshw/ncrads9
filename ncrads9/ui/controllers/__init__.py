@@ -29,6 +29,7 @@ from .base import Controller
 from .bin import BinController
 from .catalog import CatalogController
 from .color import ColorController
+from .crop import CropController
 from .crosshair import CrosshairController
 from .edit import EditController
 from .file import FileController
@@ -68,6 +69,7 @@ CONTROLLERS: tuple[tuple[str, type], ...] = (
     ("bin", BinController),
     ("catalog", CatalogController),
     ("color", ColorController),
+    ("crop", CropController),
     ("crosshair", CrosshairController),
     ("edit", EditController),
     ("file", FileController),

@@ -132,13 +132,15 @@ def test_a_zoom_click_zooms_in_and_a_right_click_out():
     ]
 
 
-def test_a_zoom_box_shows_that_rectangle():
+def test_a_zoom_box_zooms_to_that_rectangle_and_does_not_crop():
+    """Zoom and crop are different modes: a zoom box must not throw away the
+    rest of the data, which is what cropping from here used to do."""
     target = Recorder()
     handler = handler_for("zoom", target)
     handler.press(10.0, 10.0)
     handler.move(60.0, 40.0)
     handler.release(60.0, 40.0)
-    assert target.calls == [("crop_to", (10.0, 10.0, 60.0, 40.0))]
+    assert target.calls == [("zoom_to", (10.0, 10.0, 60.0, 40.0))]
 
 
 def test_a_rotate_drag_turns_the_view():
@@ -296,16 +298,24 @@ def test_a_rotate_drag_is_relative_to_the_current_angle(main_window):
     assert main_window.frame_manager.current_frame.rotation == pytest.approx(45.0)
 
 
-def test_cropping_zooms_to_fit_the_box(main_window):
+def test_zooming_to_a_box_fits_it(main_window):
     before = main_window.image_viewer.get_zoom()
-    main_window.pointer.crop_to(80.0, 80.0, 120.0, 120.0)
+    main_window.pointer.zoom_to(80.0, 80.0, 120.0, 120.0)
     # A forty-pixel box in a viewport hundreds wide is a zoom in.
     assert main_window.image_viewer.get_zoom() > before
 
 
-def test_a_crop_too_small_is_refused(main_window):
-    main_window.pointer.crop_to(50.0, 50.0, 50.5, 50.5)
+def test_a_box_too_small_to_zoom_to_is_refused(main_window):
+    main_window.pointer.zoom_to(50.0, 50.0, 50.5, 50.5)
     assert "too small" in main_window.status_bar.currentMessage()
+
+
+def test_a_crop_drag_crops_and_leaves_the_view_alone(main_window):
+    """DS9's crop chooses the data displayed; it is not a zoom."""
+    zoom_before = main_window.image_viewer.get_zoom()
+    main_window.pointer.crop_to(80.0, 80.0, 120.0, 120.0)
+    assert main_window.frame_manager.current_frame.crop is not None
+    assert main_window.image_viewer.get_zoom() == pytest.approx(zoom_before)
 
 
 def test_examine_opens_a_second_frame_and_leaves_the_first(main_window):

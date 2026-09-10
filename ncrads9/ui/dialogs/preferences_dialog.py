@@ -68,6 +68,7 @@ class PreferencesDialog(QDialog):
         self.setWindowTitle("Preferences")
         self.setMinimumSize(550, 500)
         self._bg_color = QColor(0, 0, 0)
+        self._nan_color = QColor(255, 255, 255)
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -160,6 +161,16 @@ class PreferencesDialog(QDialog):
         bg_color_layout.addWidget(self._bg_color_btn)
         bg_color_layout.addStretch()
         appearance_layout.addRow("Background color:", bg_color_layout)
+
+        # DS9 calls it this, and it covers cropped-out pixels too.
+        nan_color_layout = QHBoxLayout()
+        self._nan_color_btn = QPushButton()
+        self._nan_color_btn.setFixedSize(60, 25)
+        self._update_nan_color_button()
+        self._nan_color_btn.clicked.connect(self._choose_nan_color)
+        nan_color_layout.addWidget(self._nan_color_btn)
+        nan_color_layout.addStretch()
+        appearance_layout.addRow("Blank/Inf/NaN color:", nan_color_layout)
 
         self._anti_alias_check = QCheckBox("Anti-aliasing")
         self._anti_alias_check.setChecked(True)
@@ -281,6 +292,19 @@ class PreferencesDialog(QDialog):
         if directory:
             line_edit.setText(directory)
 
+    def _choose_nan_color(self) -> None:
+        """Open the colour picker for the blank/Inf/NaN colour."""
+        color = QColorDialog.getColor(self._nan_color, self, "Choose Blank/Inf/NaN Color")
+        if color.isValid():
+            self._nan_color = color
+            self._update_nan_color_button()
+
+    def _update_nan_color_button(self) -> None:
+        """Show the chosen blank colour on its button."""
+        self._nan_color_btn.setStyleSheet(
+            f"background-color: {self._nan_color.name()}; border: 1px solid black;"
+        )
+
     def _choose_bg_color(self) -> None:
         """Open color picker for background color."""
         color = QColorDialog.getColor(self._bg_color, self, "Choose Background Color")
@@ -305,7 +329,9 @@ class PreferencesDialog(QDialog):
         self._autoload_regions_check.setChecked(True)
         self._theme_combo.setCurrentText("System")
         self._bg_color = QColor(0, 0, 0)
+        self._nan_color = QColor(255, 255, 255)
         self._update_bg_color_button()
+        self._update_nan_color_button()
         self._anti_alias_check.setChecked(True)
         self._default_scale_combo.setCurrentText("Linear")
         self._default_cmap_combo.setCurrentText("gray")
@@ -331,6 +357,7 @@ class PreferencesDialog(QDialog):
             "autoload_fits_regions": self._autoload_regions_check.isChecked(),
             "theme": self._theme_combo.currentText(),
             "background_color": self._bg_color.name(),
+            "nan_color": self._nan_color.name(),
             "anti_aliasing": self._anti_alias_check.isChecked(),
             "default_scale": self._default_scale_combo.currentText(),
             "default_colormap": self._default_cmap_combo.currentText(),
@@ -377,6 +404,9 @@ class PreferencesDialog(QDialog):
         if "background_color" in prefs:
             self._bg_color = QColor(prefs["background_color"])
             self._update_bg_color_button()
+        if "nan_color" in prefs:
+            self._nan_color = QColor(prefs["nan_color"])
+            self._update_nan_color_button()
         if "anti_aliasing" in prefs:
             self._anti_alias_check.setChecked(prefs["anti_aliasing"])
         if "default_scale" in prefs:

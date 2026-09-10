@@ -34,7 +34,6 @@ from __future__ import annotations
 import numpy as np
 from PyQt6.QtCore import QRectF
 
-from ..dialogs.crop_parameters_dialog import CropParametersDialog
 from ..dialogs.pan_zoom_rotate_dialog import PanZoomRotateDialog
 from ..view_transform import (
     flags_to_orientation,
@@ -71,7 +70,6 @@ class ZoomController(Controller):
         for degrees, action in self.menu.zoom_rotation_actions.items():
             action.triggered.connect(lambda _checked=False, d=degrees: self.set_rotation(d))
 
-        self.menu.action_crop_parameters.triggered.connect(self.show_crop_dialog)
         self.menu.action_pan_zoom_rotate_parameters.triggered.connect(self.show_pan_zoom_rotate_dialog)
 
     def sync(self) -> None:
@@ -352,52 +350,6 @@ class ZoomController(Controller):
         self.window.panner_panel.set_view_rect(QRectF(x, y, rect_w, rect_h))
 
     # -- crop ----------------------------------------------------------------
-
-    def apply_crop_parameters(self, params: dict) -> None:
-        """Zoom and pan so the requested crop region fills the viewport."""
-        frame = self.require_frame()
-        if frame is None:
-            return
-
-        frame.crop_center_x = float(params["center_x"])
-        frame.crop_center_y = float(params["center_y"])
-        frame.crop_width = max(1.0, float(params["width"]))
-        frame.crop_height = max(1.0, float(params["height"]))
-
-        viewport = self.window._effective_viewport_size()
-        self.set_zoom(
-            min(
-                viewport.width() / frame.crop_width,
-                viewport.height() / frame.crop_height,
-            )
-        )
-
-        if self.window.using_gpu_rendering and hasattr(self.viewer, "set_pan"):
-            self.viewer.set_pan(frame.crop_center_x, frame.crop_center_y)
-        else:
-            self._scroll_to_image_point(frame.crop_center_x, frame.crop_center_y, viewport)
-
-        self.window.frame_controller.persist_view_state()
-        self.window.frame_controller.apply_locks()
-        self.status("Crop parameters applied", 1500)
-
-    def show_crop_dialog(self) -> None:
-        """Show the Crop Parameters dialog, seeded from the frame."""
-        frame = self.require_frame()
-        if frame is None:
-            return
-
-        width = float(frame.image_data.shape[1])
-        height = float(frame.image_data.shape[0])
-        dialog = CropParametersDialog(self.window)
-        dialog.set_values(
-            center_x=frame.crop_center_x if frame.crop_center_x is not None else width / 2.0,
-            center_y=frame.crop_center_y if frame.crop_center_y is not None else height / 2.0,
-            width=frame.crop_width if frame.crop_width is not None else width,
-            height=frame.crop_height if frame.crop_height is not None else height,
-        )
-        dialog.parameters_changed.connect(self.apply_crop_parameters)
-        dialog.exec()
 
     # -- pan/zoom/rotate dialog ----------------------------------------------
 

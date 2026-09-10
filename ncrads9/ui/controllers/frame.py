@@ -142,11 +142,11 @@ class FrameController(Controller):
                 lambda _checked=False, v=system: self.window.crosshair.match(v)
             )
 
-        menu.action_match_crop_wcs.triggered.connect(self.match_wcs)
-        menu.action_match_crop_image.triggered.connect(self.match_image)
-        menu.action_match_crop_physical.triggered.connect(self.match_image)
-        menu.action_match_crop_amplifier.triggered.connect(self.match_image)
-        menu.action_match_crop_detector.triggered.connect(self.match_image)
+        # Match -> Crop copies the crop, not the view, for the same reason.
+        for system in ("wcs", "image", "physical", "amplifier", "detector"):
+            getattr(menu, f"action_match_crop_{system}").triggered.connect(
+                lambda _checked=False, v=system: self.window.crop.match(v)
+            )
 
         menu.action_match_slice_wcs.triggered.connect(self.match_wcs)
         menu.action_match_slice_image.triggered.connect(self.match_image)
@@ -196,10 +196,8 @@ class FrameController(Controller):
         frame.align_wcs = False
         frame.contrast = 1.0
         frame.brightness = 0.0
-        frame.crop_center_x = None
-        frame.crop_center_y = None
-        frame.crop_width = None
-        frame.crop_height = None
+        frame.crop = None
+        frame.crop_z = None
         frame.rgb_channel_scale = {
             "red": ScaleAlgorithm.LINEAR,
             "green": ScaleAlgorithm.LINEAR,
@@ -983,6 +981,8 @@ class FrameController(Controller):
         self.window._frame_lock_scope[scope] = value
         if scope == "crosshair":
             self.window.crosshair.set_locked(value != "none", value)
+        elif scope == "crop":
+            self.window.crop.set_locked(value != "none", value)
         self.status(f"Frame lock {scope}: {value}", 2000)
 
     def set_lock_flag(self, flag: str, enabled: bool) -> None:

@@ -51,6 +51,9 @@ PREFERENCE_DEFAULTS: dict[str, object] = {
     "tile_size": 512,
     "cache_size_mb": 1000,
     "background_color": "#000000",
+    #: DS9's Blank/Inf/NaN colour (`pds9(nan)` in `ds9.tcl:157`), which is
+    #: also what a cropped-out pixel is painted in.
+    "nan_color": "#ffffff",
     "default_scale": "Linear",
     "default_colormap": "gray",
     "anti_aliasing": True,
@@ -301,6 +304,7 @@ class EditController(Controller):
         self.apply_theme(str(prefs.get("theme", "System")))
 
         window._apply_background_color(prefs.get("background_color", "#000000"))
+        window.nan_color = str(prefs.get("nan_color", "#ffffff"))
 
         default_scale = prefs.get("default_scale", "Linear")
         if default_scale in DEFAULT_SCALES:

@@ -51,7 +51,7 @@ from ..utils.preferences import Preferences
 from .button_bar import ButtonBar
 from .controllers import CONTROLLERS, EditController
 from .controllers.base import Controller
-from .display import DisplayPipeline
+from .display import DEFAULT_NAN_COLOR, DisplayPipeline
 from .layout.shell import WindowShell
 from .layout.view_state import ViewState
 from .menu_bar import MenuBar
@@ -128,6 +128,8 @@ class MainWindow(QMainWindow):
         # A staticmethod, so it is callable before the controllers exist.
         self.preferences = Preferences(EditController.preferences_path())
         self.use_gpu_rendering = bool(self.preferences.get("use_gpu", True))
+        #: DS9's Blank/Inf/NaN colour, which a cropped-out pixel gets too.
+        self.nan_color = str(self.preferences.get("nan_color", DEFAULT_NAN_COLOR))
         self.using_gpu_rendering = False
         self.z1 = None  # Scale limits
         self.z2 = None
@@ -293,6 +295,7 @@ class MainWindow(QMainWindow):
         self.analysis_tasks.connect()
         self.bin.connect()
         self.catalog.connect()
+        self.crop.connect()
         self.crosshair.connect()
         self.image_servers.connect()
 

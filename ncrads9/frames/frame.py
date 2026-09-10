@@ -37,6 +37,7 @@ import numpy as np
 
 from ..core.image_data import ImageData
 from ..rendering.scale_algorithms import ScaleAlgorithm
+from .crop import CropRegion
 
 
 @dataclass
@@ -96,10 +97,13 @@ class Frame:
     #: from one, or None until it is placed. Per frame, because DS9's
     #: crosshair is per frame -- and its lock is what ties them together.
     crosshair: tuple[float, float] | None = None
-    crop_center_x: float | None = None
-    crop_center_y: float | None = None
-    crop_width: float | None = None
-    crop_height: float | None = None
+    #: The section of the data this frame displays, or None for all of it.
+    #: A crop is not a zoom: the pixel grid and its coordinates stay as they
+    #: were and what falls outside stops being displayed, which is also why
+    #: the scale limits then come from the crop alone (DS9's CROPSEC).
+    crop: CropRegion | None = None
+    #: A cube's cropped slice range, DS9's `crop 3d`, counting from one.
+    crop_z: tuple[float, float] | None = None
     frame_type: str = "base"
     rgb_channels: dict[str, np.ndarray | None] = None
     rgb_view: dict[str, bool] = None

@@ -48,13 +48,14 @@ from dataclasses import replace
 
 import numpy as np
 from numpy.typing import NDArray
-from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtGui import QColor, QImage, QPixmap
 
 from ..colormaps.colormap import Colormap
 from ..core.cube_handler import CubeHandler, is_cube
 from ..core.file_spec import parse as parse_file_spec
 from ..core.fits_handler import FITSHandler, HDUKind
 from ..core.wcs_handler import WCSHandler
+from ..frames.crop import blank_outside
 from ..frames.frame import Frame
 from ..frames.tile_layout import TileLayout
 from ..regions.fits_regions import has_region_extension, load_from_file
@@ -63,6 +64,9 @@ from ..rendering.rgb_compositor import compose_rgb
 from ..rendering.scale_algorithms import ScaleAlgorithm, apply_scale
 from .view_transform import transform_image_array
 from .widgets.colorbar_widget import ColorbarEntry
+
+#: DS9's default blank/Inf/NaN colour (`pds9(nan)` in `ds9.tcl:157`).
+DEFAULT_NAN_COLOR = "#ffffff"
 
 #: The channels of a colour frame, in the order the colorbar shows them.
 RGB_CHANNEL_ORDER: tuple[str, str, str] = ("red", "green", "blue")
@@ -740,7 +744,7 @@ class DisplayPipeline:
         cmap = self.window.color.apply_tags(cmap, frame)
 
         scaled = apply_scale(image_data, frame.scale, vmin=adjusted_z1, vmax=adjusted_z2)
-        return cmap.apply_normalized(scaled)
+        return self.paint_blanks(cmap.apply_normalized(scaled), image_data)
 
     def display_tiled(self) -> bool:
         """Render all loaded frames in a tiled grid."""
@@ -928,6 +932,29 @@ class DisplayPipeline:
         )
         return (painted * scale).astype(rgb.dtype)
 
+    def paint_blanks(
+        self,
+        rgb: NDArray[np.uint8],
+        image_data: NDArray[np.floating],
+    ) -> NDArray[np.uint8]:
+        """Paint blank, infinite and NaN pixels in DS9's blank colour.
+
+        A pixel with no value is not a pixel with the lowest value, which is
+        what the colormap alone would make of it -- and cropped-out pixels
+        are blank, so a crop would otherwise be invisible against dark data.
+        """
+        if image_data.size == 0 or rgb.ndim != 3:
+            return rgb
+        blank = ~np.isfinite(image_data)
+        if not blank.any():
+            return rgb
+        color = QColor(getattr(self.window, "nan_color", DEFAULT_NAN_COLOR))
+        if not color.isValid():
+            color = QColor(DEFAULT_NAN_COLOR)
+        painted = rgb.copy()
+        painted[blank] = (color.red(), color.green(), color.blue())
+        return painted
+
     def display_image_data(self, frame: Frame) -> NDArray[np.floating]:
         """Return frame data after the display-level transforms.
 
@@ -939,6 +966,9 @@ class DisplayPipeline:
         image_data = self.active_channel_data(frame) if frame.frame_type == "rgb" else frame.image_data
         if image_data is None:
             return np.array([], dtype=np.float32)
+        # The crop comes first: it is expressed in the frame's own pixels, and
+        # blanking before the block keeps its edge where the user drew it.
+        image_data = blank_outside(image_data, getattr(frame, "crop", None))
         image_data = block_image(image_data, getattr(frame, "block_factor", 1))
         if self.window.menu_bar.action_smooth.isChecked():
             return self.window.analysis.apply_smoothing(image_data)

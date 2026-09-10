@@ -98,20 +98,29 @@ class PointerController(Controller):
         self.window.zoom.set_rotation(float(getattr(frame, "rotation", 0.0)) + float(degrees))
 
     def crop_to(self, x0: float, y0: float, x1: float, y1: float) -> None:
-        """Show one rectangle of the image: centre it and zoom to fit."""
+        """Display only this rectangle, DS9's crop.
+
+        The view does not move: a crop chooses what is displayed, not where
+        the display is looking, which is what `zoom_to` is for.
+        """
+        if self.window.crop.crop_to(x0, y0, x1, y1):
+            self.status(f"Cropped to {abs(x1 - x0):.0f} x {abs(y1 - y0):.0f} pixels")
+
+    def zoom_to(self, x0: float, y0: float, x1: float, y1: float) -> None:
+        """Centre a rectangle and zoom so it fills the viewport."""
         left, right = sorted((float(x0), float(x1)))
         bottom, top = sorted((float(y0), float(y1)))
         width = right - left
         height = top - bottom
         if width < MIN_CROP or height < MIN_CROP:
-            self.status("That crop is too small to show", 3000)
+            self.status("That box is too small to zoom to", 3000)
             return
 
         viewport = self.window._effective_viewport_size()
         scale = min(viewport.width() / width, viewport.height() / height)
         self.window.zoom.set_zoom(max(MIN_ZOOM, min(MAX_ZOOM, scale)))
         self.pan_to((left + right) / 2.0, (bottom + top) / 2.0)
-        self.status(f"Cropped to {width:.0f} x {height:.0f} pixels")
+        self.status(f"Zoomed to {width:.0f} x {height:.0f} pixels")
 
     def examine_at(self, x: float, y: float, zoom: float) -> None:
         """Open a zoomed view of one position in a new frame.

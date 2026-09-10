@@ -41,6 +41,7 @@ import numpy as np
 from numpy.typing import NDArray
 from PyQt6.QtWidgets import QInputDialog
 
+from ...frames.crop import blank_outside
 from ...frames.frame import Frame
 from ...rendering.scale_algorithms import ScaleAlgorithm
 from ...rendering.scale_limits import (
@@ -424,6 +425,18 @@ class ScaleController(Controller):
         whole = None
         if frame is not None and frame.image is not None:
             whole = frame.image.data
+        crop = getattr(frame, "crop", None) if frame is not None else None
+        if crop is not None:
+            # DS9's CROPSEC: a cropped frame measures the crop, not the whole
+            # extension, so the stretch suits what is actually on screen.
+            # Blanked pixels are not finite and drop out by themselves.
+            # Data that has already been blocked has a different shape, and
+            # was blanked on its way through the display pipeline anyway.
+            reference = frame.image_data
+            if data is not None and reference is not None and data.shape == reference.shape:
+                data = blank_outside(data, crop)
+            if whole is not None and whole.shape == getattr(reference, "shape", None):
+                whole = blank_outside(whole, crop)
         return compute_limits(data, self.settings, header=header, global_data=whole)
 
     def current_limits(self) -> tuple[float, float]:

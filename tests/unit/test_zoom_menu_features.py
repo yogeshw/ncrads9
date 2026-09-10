@@ -118,19 +118,12 @@ def test_center_image_recenters_scrollbars(main_window: MainWindow):
     assert main_window.scroll_area.verticalScrollBar().value() > 0
 
 
-def test_crop_and_pan_zoom_rotate_parameters_apply_to_frame(main_window: MainWindow):
+def test_pan_zoom_rotate_parameters_apply_to_frame(main_window: MainWindow):
+    """The crop half of this moved to the crop controller in M9-2, where a
+    crop chooses the data displayed rather than zooming the view."""
     _load_test_image(main_window, width=400, height=300)
     frame = main_window.frame_manager.current_frame
     assert frame is not None
-
-    main_window.zoom.apply_crop_parameters(
-        {"center_x": 120.0, "center_y": 80.0, "width": 40.0, "height": 20.0}
-    )
-    assert frame.crop_center_x == pytest.approx(120.0)
-    assert frame.crop_center_y == pytest.approx(80.0)
-    assert frame.crop_width == pytest.approx(40.0)
-    assert frame.crop_height == pytest.approx(20.0)
-    assert frame.zoom > 1.0
 
     main_window.zoom.apply_pan_zoom_rotate_parameters(
         {"zoom": 2.5, "pan_x": 150.0, "pan_y": 120.0, "rotation": 180.0, "align": True}
@@ -237,8 +230,8 @@ def test_effective_viewport_size_prefers_real_viewport(main_window: MainWindow, 
     assert size.height() == 700
 
 
-def test_crop_zoom_is_independent_of_unlaid_out_viewport(main_window: MainWindow):
-    """Cropping to a small region must zoom in, however small the raw viewport is."""
+def test_zoom_to_a_box_is_independent_of_unlaid_out_viewport(main_window: MainWindow):
+    """Zooming to a small box must zoom in, however small the raw viewport is."""
     _load_test_image(main_window, width=400, height=300)
     frame = main_window.frame_manager.current_frame
     assert frame is not None
@@ -246,7 +239,5 @@ def test_crop_zoom_is_independent_of_unlaid_out_viewport(main_window: MainWindow
     raw = main_window.scroll_area.viewport().size()
     assert raw.height() < 20, "precondition: viewport is not laid out in this test"
 
-    main_window.zoom.apply_crop_parameters(
-        {"center_x": 120.0, "center_y": 80.0, "width": 40.0, "height": 20.0}
-    )
+    main_window.pointer.zoom_to(100.0, 70.0, 140.0, 90.0)
     assert frame.zoom > 1.0

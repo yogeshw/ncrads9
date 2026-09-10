@@ -75,7 +75,10 @@ class PointerTarget(Protocol):
         """Turn the view."""
 
     def crop_to(self, x0: float, y0: float, x1: float, y1: float) -> None:
-        """Crop to an image rectangle."""
+        """Display only an image rectangle, as DS9's crop does."""
+
+    def zoom_to(self, x0: float, y0: float, x1: float, y1: float) -> None:
+        """Zoom and pan so an image rectangle fills the viewport."""
 
     def examine_at(self, x: float, y: float, zoom: float) -> None:
         """Open a zoomed view of one position."""
@@ -195,7 +198,10 @@ class ZoomHandler(PointerHandler):
 
         if travelled >= MINIMUM_DRAG:
             # A box means "show me this": centre it and zoom to fit it.
-            self.target.crop_to(start[0], start[1], x, y)
+            # A zoom box zooms; it does not crop. DS9 keeps the two apart,
+            # and cropping from the zoom mode would leave no way back to the
+            # rest of the data.
+            self.target.zoom_to(start[0], start[1], x, y)
             return True
 
         factor = ZOOM_STEP if self._button == "left" else 1.0 / ZOOM_STEP
