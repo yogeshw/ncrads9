@@ -101,7 +101,7 @@ class Histogram:
         """
         cumsum = np.cumsum(self.counts)
         cumsum_norm = cumsum / cumsum[-1] * 100
-        idx = np.searchsorted(cumsum_norm, percentile)
+        idx = int(np.searchsorted(cumsum_norm, percentile))
         return float(self.bin_centers[min(idx, len(self.bin_centers) - 1)])
 
     def get_mode(self) -> float:

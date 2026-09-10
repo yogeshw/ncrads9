@@ -196,7 +196,10 @@ class ContourGenerator:
             dilated = ndimage.binary_dilation(binary)
             edge = dilated ^ binary
             y_coords, x_coords = np.where(edge)
-            contours.append([(x_coords, y_coords)])
+            # `np.where` gives integer indices; the caller is promised
+            # floating-point coordinates, since a real contour lies between
+            # pixels.
+            contours.append([(x_coords.astype(float), y_coords.astype(float))])
 
         return contours
 

@@ -49,8 +49,6 @@ ENTRY_POINTS = ("ncrads9.app", "ncrads9.__main__")
 PENDING_ADOPTION: dict[str, str] = {
     # M6 -- regions to parity. The shapes exist but the overlay cannot yet
     # create them, and group_manager backs the Groups dialog.
-    "analysis.statistics": "M6-22",
-    "analysis.histogram": "M6-23",
     # M7 -- analysis platform.
     "analysis.pixel_table": "M7-26",
     "grid.grid_config": "M7-13",

@@ -43,6 +43,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -53,6 +54,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenuBar,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
@@ -127,6 +129,44 @@ DIALOG_PROPERTIES: tuple[tuple[str, str], ...] = (
     ("dash", "Dash"),
     ("fill", "Fill"),
 )
+
+#: DS9's Analysis menu, in its order: name and label.
+ANALYSIS_COMMANDS: tuple[tuple[str, str], ...] = (
+    ("statistics", "&Statistics"),
+    ("histogram", "&Histogram"),
+    ("radial", "&Radial Profile"),
+    ("plot2d", "Plot &2D"),
+    ("plot3d", "Plot &3D"),
+)
+
+#: Shapes with annuli, which are the ones a radial profile means anything for.
+ANNULAR_NAMES: frozenset[str] = frozenset(
+    {"annulus", "ellipseannulus", "boxannulus", "panda", "epanda", "bpanda"}
+)
+
+#: Shapes that are a line, which are the ones a 2D cut can be taken along.
+LINEAR_NAMES: frozenset[str] = frozenset({"line", "ruler", "projection", "vector", "segment"})
+
+#: Shapes with no interior, so nothing to sum: no statistics, no histogram.
+HOLLOW_NAMES: frozenset[str] = frozenset(
+    {"text", "point", "compass", "line", "ruler", "projection", "vector", "segment"}
+)
+
+
+def analysis_commands_for(region: BaseRegion) -> tuple[str, ...]:
+    """Which Analysis entries a shape gets."""
+    name = type(region).__name__.lower()
+    offered: list[str] = []
+    if name not in HOLLOW_NAMES:
+        offered.extend(("statistics", "histogram"))
+    if name in ANNULAR_NAMES:
+        offered.append("radial")
+    if name in LINEAR_NAMES:
+        offered.append("plot2d")
+    if name not in HOLLOW_NAMES:
+        offered.append("plot3d")
+    return tuple(offered)
+
 
 #: The pixel systems, then the sky frames. A sky frame is only offered when
 #: the frame has a WCS to convert through.
@@ -267,6 +307,7 @@ class RegionDialog(QDialog):
     def _build(self) -> None:
         """Lay the dialog out: coordinates, geometry, style, properties."""
         layout = QVBoxLayout(self)
+        layout.setMenuBar(self._menu_bar())
         layout.addWidget(QLabel(f"<b>{type(self.region).__name__}</b>"))
 
         text_row = QFormLayout()
@@ -279,6 +320,30 @@ class RegionDialog(QDialog):
         layout.addWidget(self._style_group())
         layout.addWidget(self._property_group())
         layout.addWidget(self._buttons())
+
+    def _menu_bar(self) -> QMenuBar:
+        """The Analysis menu DS9 puts on every region dialog.
+
+        Which entries a shape gets is DS9's rule, not a uniform list: a
+        radial profile needs annuli (`annulus.tcl:47`), a 2D cut needs a
+        line (`line.tcl:36`), a 3D plot needs an area to sum over
+        (`circle.tcl:39`). An entry that could only ever report "this shape
+        cannot do that" is not offered at all.
+        """
+        bar = QMenuBar(self)
+        menu = bar.addMenu("&Analysis")
+
+        #: Analysis command name -> its action, for the controller to wire.
+        self.analysis_actions: dict[str, QAction] = {}
+        for name, label in ANALYSIS_COMMANDS:
+            if name not in analysis_commands_for(self.region):
+                continue
+            action = QAction(label, self)
+            menu.addAction(action)
+            self.analysis_actions[name] = action
+
+        menu.setEnabled(bool(self.analysis_actions))
+        return bar
 
     def _coordinate_group(self) -> QGroupBox:
         """The system and format menus, which restate every position."""

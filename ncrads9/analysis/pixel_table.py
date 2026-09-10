@@ -52,7 +52,7 @@ class PixelTable:
     ) -> None:
         self.data = data
         self.wcs = wcs
-        self.shape: tuple[int, int] = data.shape
+        self.shape: tuple[int, int] = (int(data.shape[0]), int(data.shape[1]))
 
     def get_pixel(
         self,

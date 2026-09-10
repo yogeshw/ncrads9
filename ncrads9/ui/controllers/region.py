@@ -44,7 +44,7 @@ import numpy as np
 from PyQt6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
 from ...analysis.centroid import DEFAULT_ITERATIONS, DEFAULT_RADIUS, centroid_at
-from ...regions import group_manager, region_template
+from ...regions import group_manager, region_analysis, region_template
 from ...regions.base_region import BaseRegion
 from ...regions.region_formats import RegionFormat, dropped_shapes
 from ...regions.region_parser import RegionParser
@@ -52,7 +52,8 @@ from ...regions.region_writer import RegionWriter
 from ...regions.shapes.composite import Composite
 from ..dialogs.centroid_dialog import CentroidDialog
 from ..dialogs.group_dialog import GroupDialog
-from ..dialogs.region_dialog import RegionDialog
+from ..dialogs.region_analysis_dialog import RegionPlotDialog, RegionStatisticsDialog
+from ..dialogs.region_dialog import RegionDialog, analysis_commands_for
 from ..menu_bar import (
     DEFAULT_REGION_COLOR,
     DEFAULT_REGION_FONT,
@@ -124,6 +125,11 @@ class RegionController(Controller):
         #: Whether a newly drawn region is centroided at once.
         self.auto_centroid: bool = False
 
+        #: Open analysis windows, keyed by (region id, command).
+        self._analysis: dict[tuple[int, str], object] = {}
+        #: Which of DS9's Auto Plot toggles are on.
+        self._auto: set[str] = set()
+
     def connect(self) -> None:
         """Wire the Region menu."""
         menu = self.menu
@@ -170,11 +176,7 @@ class RegionController(Controller):
         menu.action_region_show_text.toggled.connect(self.set_show_text)
 
         for name, action in menu.region_auto_actions.items():
-            action.toggled.connect(
-                lambda state, key=name: self.status(
-                    f"Auto {key} arrives in M6-26" if state else f"Auto {key} off", 3000
-                )
-            )
+            action.toggled.connect(lambda state, key=name: self.set_auto_analysis(key, state))
 
         menu.action_template_open.triggered.connect(lambda _checked=False: self.load_template())
         menu.action_template_save.triggered.connect(lambda _checked=False: self.save_template())
@@ -273,6 +275,110 @@ class RegionController(Controller):
             if hasattr(region, attribute):
                 setattr(region, attribute, value)
         return region
+
+    # -- region analysis (M6-22 ... M6-26) -------------------------------------
+
+    def open_analysis(self, region: BaseRegion, name: str) -> None:
+        """Open one of a region's Analysis windows, or raise the open one.
+
+        Args:
+            region: The region measured.
+            name: One of `ANALYSIS_COMMANDS`.
+        """
+        key = (id(region), name)
+        existing = self._analysis.get(key)
+        if existing is not None:
+            existing.refresh()
+            existing.raise_()
+            existing.activateWindow()
+            return
+
+        window = self._analysis_window(region, name)
+        if window is None:
+            self.status(f"Unknown analysis: {name}", 3000)
+            return
+        window.finished.connect(lambda _result, k=key: self._analysis.pop(k, None))
+        self._analysis[key] = window
+        window.show()
+
+    def _analysis_window(self, region: BaseRegion, name: str):
+        """Build the window one analysis command wants."""
+        if name == "statistics":
+            return RegionStatisticsDialog(region, self._statistics_text, self.window)
+
+        plots = {
+            "histogram": (self._histogram_of, "Histogram", ("Value", "Pixels"), "bar"),
+            "radial": (self._radial_of, "Radial Profile", ("Radius (pixels)", "Surface brightness"), "line"),
+            "plot2d": (self._cut_of, "Plot 2D", ("Distance (pixels)", "Value"), "line"),
+            "plot3d": (self._depth_of, "Plot 3D", ("Slice", "Sum in region"), "line"),
+        }
+        if name not in plots:
+            return None
+        provider, title, labels, style = plots[name]
+        return RegionPlotDialog(region, provider, title, labels, style, self.window)
+
+    # -- what the windows ask for ------------------------------------------------
+
+    def _image(self):
+        """The current frame's image, or None."""
+        frame = self.frame
+        return None if frame is None else frame.image_data
+
+    def _statistics_text(self, region: BaseRegion) -> str:
+        return region_analysis.describe(region, self._image())
+
+    def _histogram_of(self, region: BaseRegion):
+        centres, counts = region_analysis.histogram(region, self._image())
+        return (centres, counts, None)
+
+    def _radial_of(self, region: BaseRegion):
+        return region_analysis.radial_profile(region, self._image())
+
+    def _cut_of(self, region: BaseRegion):
+        distances, values = region_analysis.cut(region, self._image())
+        return (distances, values, None)
+
+    def _depth_of(self, region: BaseRegion):
+        frame = self.frame
+        cube = None if frame is None else getattr(getattr(frame, "image", None), "data", None)
+        slices, totals = region_analysis.depth_profile(region, cube)
+        return (slices, totals, None)
+
+    # -- the Auto toggles (M6-26) -------------------------------------------------
+
+    def set_auto_analysis(self, name: str, enabled: bool) -> None:
+        """Turn one of DS9's Auto Plot toggles on or off.
+
+        With one on, every region drawn or changed opens -- and keeps up to
+        date -- that window. That is what makes them worth having: DS9's
+        point is that you drag a projection across a source and watch the
+        cut change, rather than reopening a dialog each time.
+        """
+        if enabled:
+            self._auto.add(name)
+        else:
+            self._auto.discard(name)
+        self.status(f"Auto {name}: {'on' if enabled else 'off'}")
+        if enabled:
+            for region in self.selection_only():
+                self._auto_open(region)
+
+    def _auto_open(self, region: BaseRegion) -> None:
+        """Open the automatic windows a region qualifies for."""
+        offered = analysis_commands_for(region)
+        for name in self._auto:
+            if name in offered:
+                self.open_analysis(region, name)
+
+    def refresh_analysis(self, region: BaseRegion | None = None) -> None:
+        """Measure again in every open analysis window.
+
+        Called after anything that moves a region, so a window never shows
+        an answer for where the region used to be.
+        """
+        for (region_id, _name), window in list(self._analysis.items()):
+            if region is None or region_id == id(region):
+                window.refresh()
 
     # -- templates and instrument FOVs (M6-18, M6-19) --------------------------
 
@@ -562,11 +668,18 @@ class RegionController(Controller):
 
         frame = self.frame
         dialog = RegionDialog(region, getattr(frame, "wcs_handler", None), self.window)
-        dialog.region_changed.connect(lambda _region: self.refresh_overlay())
+        dialog.region_changed.connect(self._on_region_changed)
+        for name, action in dialog.analysis_actions.items():
+            action.triggered.connect(lambda _checked=False, r=region, key=name: self.open_analysis(r, key))
         dialog.region_deleted.connect(self._delete_one)
         dialog.finished.connect(lambda _result, key=id(region): self._dialogs.pop(key, None))
         self._dialogs[id(region)] = dialog
         dialog.show()
+
+    def _on_region_changed(self, region: BaseRegion) -> None:
+        """Redraw, and re-measure anything watching this region."""
+        self.refresh_overlay()
+        self.refresh_analysis(region)
 
     def _delete_one(self, region: BaseRegion) -> None:
         """Delete one region, from its own dialog."""
@@ -804,6 +917,8 @@ class RegionController(Controller):
             # DS9's Auto Centroid: a region dropped near a source snaps onto
             # it, so it need not be placed precisely by hand.
             self.centroid([region])
+        if self._auto:
+            self._auto_open(region)
 
     def on_selected(self, region: BaseRegion) -> None:
         """Report the region the user just clicked."""

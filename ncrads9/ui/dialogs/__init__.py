@@ -30,6 +30,7 @@ from .header_dialog import HeaderDialog
 from .open_dialog import OpenDialog
 from .pan_zoom_rotate_dialog import PanZoomRotateDialog
 from .preferences_dialog import PreferencesDialog
+from .region_analysis_dialog import RegionPlotDialog, RegionStatisticsDialog
 from .region_dialog import RegionDialog
 from .save_dialog import SaveDialog
 from .scale_dialog import ScaleDialog
@@ -47,6 +48,8 @@ __all__ = [
     "CentroidDialog",
     "GroupDialog",
     "RegionDialog",
+    "RegionPlotDialog",
+    "RegionStatisticsDialog",
     "PreferencesDialog",
     "CropParametersDialog",
     "PanZoomRotateDialog",
