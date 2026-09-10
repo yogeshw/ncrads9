@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 697 (616 excluding separators)
+# entries: 770 (681 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -618,17 +618,90 @@
 .color|command|Colormap Parameters
 .color|command|Reset Contrast/Bias
 # Region
+.region|command|Get Information
+.region|separator|---
+.region|cascade|Shape
+.region.shape|radiobutton|Circle
+.region.shape|radiobutton|Ellipse
+.region.shape|radiobutton|Box
+.region.shape|radiobutton|Polygon
+.region.shape|radiobutton|Point
+.region.shape|radiobutton|Line
+.region.shape|radiobutton|Vector
+.region.shape|radiobutton|Segment
+.region.shape|radiobutton|Text
+.region.shape|radiobutton|Ruler
+.region.shape|radiobutton|Compass
+.region.shape|radiobutton|Projection
+.region.shape|radiobutton|Annulus
+.region.shape|radiobutton|Ellipse Annulus
+.region.shape|radiobutton|Box Annulus
+.region.shape|radiobutton|Panda
+.region.shape|radiobutton|Epanda
+.region.shape|radiobutton|Bpanda
+.region.shape|separator|---
+.region.shape|radiobutton|None
+.region|command|Composite Region
+.region|command|Template
+.region|separator|---
+.region|cascade|Color
+.region.color|radiobutton|Black
+.region.color|radiobutton|White
+.region.color|radiobutton|Red
+.region.color|radiobutton|Green
+.region.color|radiobutton|Blue
+.region.color|radiobutton|Cyan
+.region.color|radiobutton|Magenta
+.region.color|radiobutton|Yellow
+.region|cascade|Width
+.region.width|radiobutton|1
+.region.width|radiobutton|2
+.region.width|radiobutton|3
+.region.width|radiobutton|4
+.region|cascade|Properties
+.region.properties|checkbutton|Fixed in Size
+.region.properties|checkbutton|Edit
+.region.properties|checkbutton|Move
+.region.properties|checkbutton|Rotate
+.region.properties|checkbutton|Delete
+.region.properties|checkbutton|Include
+.region.properties|checkbutton|Source
+.region.properties|checkbutton|Dash
+.region.properties|checkbutton|Fill
+.region|cascade|Font
+.region.font|radiobutton|Helvetica
+.region.font|radiobutton|Times
+.region.font|radiobutton|Courier
+.region.font|separator|---
+.region.font|radiobutton|9
+.region.font|radiobutton|10
+.region.font|radiobutton|12
+.region.font|radiobutton|14
+.region.font|radiobutton|16
+.region.font|radiobutton|18
+.region.font|radiobutton|24
+.region|separator|---
+.region|command|Centroid
+.region|separator|---
+.region|command|New Group
+.region|command|Groups
+.region|separator|---
+.region|command|All
 .region|command|None
+.region|command|Invert
+.region|command|Front
+.region|command|Back
 .region|separator|---
-.region|command|Circle
-.region|command|Ellipse
-.region|command|Box
-.region|command|Polygon
-.region|command|Line
-.region|command|Point
+.region|command|Move to Front
+.region|command|Move to Back
 .region|separator|---
-.region|command|Load
+.region|command|Save Selection
+.region|command|List Selection
+.region|command|Delete Selection
+.region|separator|---
+.region|command|Open
 .region|command|Save
+.region|command|List
 .region|command|Delete All
 # VO
 .vo|cascade|SIAP

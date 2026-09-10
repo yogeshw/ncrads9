@@ -15,14 +15,23 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
-The Region menu: drawing mode, and region file load/save.
+The Region menu: drawing mode, properties, selection and region files.
 
-DS9's Region menu is the second largest in the application and NCRADS9 has
-about a seventh of it (PLAN.md §5.9). Six of DS9's twenty shapes can be drawn;
-the properties submenu, selection operations, groups, composites, templates,
-instrument FOVs, centroiding and the per-shape information dialog are all
-absent. M6 is the milestone that closes this, and the region *model* is already
-ready for it after M1 -- `BaseRegion` carries the full DS9 property set.
+Two things live here. The *defaults* -- colour, width, font and the property
+flags -- are what a newly drawn region takes and what the menu applies to
+whatever is selected, which is how DS9's Color, Width, Properties and Font
+cascades behave: they act on the selection when there is one and set the
+default when there is not.
+
+The *selection* operations are DS9's All, None, Invert, Front, Back, Move to
+Front and Move to Back, plus Save, List and Delete for the selection alone.
+Front and Back are the drawing order, so they are a reordering of the frame's
+region list -- the last drawn is on top.
+
+Still missing against DS9 (PLAN.md §5.9): creating the shapes that need more
+than a drag (M6-4), resize and rotate handles (M6-6), the per-shape
+information dialog (M6-7), groups (M6-16), composites (M6-17), templates and
+instrument FOVs (M6-18, M6-19) and centroiding (M6-20).
 
 Author: Yogesh Wadadekar
 """
@@ -30,11 +39,17 @@ Author: Yogesh Wadadekar
 from __future__ import annotations
 
 import numpy as np
-from PyQt6.QtWidgets import QFileDialog
+from PyQt6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
 from ...regions.base_region import BaseRegion
+from ...regions.region_formats import RegionFormat, dropped_shapes
 from ...regions.region_parser import RegionParser
 from ...regions.region_writer import RegionWriter
+from ..menu_bar import (
+    DEFAULT_REGION_COLOR,
+    DEFAULT_REGION_FONT,
+    DEFAULT_REGION_FONT_SIZE,
+)
 from ..widgets.region_overlay import RegionMode
 from .base import Controller
 
@@ -54,6 +69,26 @@ LABEL_MODES: dict[str, RegionMode] = {label: mode for mode, label in MODE_LABELS
 
 REGION_FILTER = "Region Files (*.reg);;All Files (*)"
 
+#: Shapes the Shape cascade offers that no gesture can draw yet. Choosing
+#: one says so rather than silently leaving the mode unchanged; M6-4 gives
+#: each of them a gesture.
+UNDRAWABLE_SHAPES: frozenset[str] = frozenset(
+    {
+        "vector",
+        "segment",
+        "text",
+        "ruler",
+        "compass",
+        "projection",
+        "annulus",
+        "ellipseannulus",
+        "boxannulus",
+        "panda",
+        "epanda",
+        "bpanda",
+    }
+)
+
 
 def describe(region: BaseRegion) -> str:
     """Name a region for the status bar, e.g. "circle".
@@ -71,21 +106,78 @@ def describe(region: BaseRegion) -> str:
 class RegionController(Controller):
     """Owns the Region menu."""
 
+    def __init__(self, window) -> None:
+        """
+        Args:
+            window: The main window, as for every controller.
+        """
+        super().__init__(window)
+        #: What a newly drawn region takes, and what the Color, Width,
+        #: Properties and Font cascades set when nothing is selected. Kept
+        #: here rather than on the window, which M2-16 caps at 600 lines.
+        self.region_defaults: dict = {
+            "color": DEFAULT_REGION_COLOR,
+            "width": 1,
+            "font_family": DEFAULT_REGION_FONT,
+            "font_size": DEFAULT_REGION_FONT_SIZE,
+        }
+
     def connect(self) -> None:
         """Wire the Region menu."""
-        self.menu.action_region_none.triggered.connect(lambda: self.set_mode(RegionMode.NONE))
-        self.menu.action_region_circle.triggered.connect(lambda: self.set_mode(RegionMode.CIRCLE))
-        self.menu.action_region_ellipse.triggered.connect(lambda: self.set_mode(RegionMode.ELLIPSE))
-        self.menu.action_region_box.triggered.connect(lambda: self.set_mode(RegionMode.BOX))
-        self.menu.action_region_polygon.triggered.connect(lambda: self.set_mode(RegionMode.POLYGON))
-        self.menu.action_region_line.triggered.connect(lambda: self.set_mode(RegionMode.LINE))
-        self.menu.action_region_point.triggered.connect(lambda: self.set_mode(RegionMode.POINT))
+        menu = self.menu
 
-        self.menu.action_region_load.triggered.connect(self.load_regions)
-        self.menu.action_region_save.triggered.connect(self.save_regions)
-        self.menu.action_region_delete_all.triggered.connect(self.clear_regions)
+        for name, action in menu.region_shape_actions.items():
+            action.triggered.connect(lambda _checked=False, key=name: self.set_shape(key))
+        menu.action_region_none.triggered.connect(lambda: self.set_mode(RegionMode.NONE))
+
+        for name, action in menu.region_color_actions.items():
+            action.triggered.connect(lambda _checked=False, key=name: self.set_color(key))
+        for value, action in menu.region_width_actions.items():
+            action.triggered.connect(lambda _checked=False, key=value: self.set_width(key))
+        for name, action in menu.region_property_actions.items():
+            action.toggled.connect(lambda state, key=name: self.set_property(key, state))
+        for family, action in menu.region_font_actions.items():
+            action.triggered.connect(lambda _checked=False, key=family: self.set_font_family(key))
+        for size, action in menu.region_font_size_actions.items():
+            action.triggered.connect(lambda _checked=False, key=size: self.set_font_size(key))
+
+        for name, action in menu.region_selection_actions.items():
+            action.triggered.connect(lambda _checked=False, key=name: self.selection_command(key))
+
+        menu.action_region_load.triggered.connect(self.load_regions)
+        menu.action_region_save.triggered.connect(self.save_regions)
+        menu.action_region_list.triggered.connect(self.list_regions)
+        menu.action_region_delete_all.triggered.connect(self.clear_regions)
+
+        for action, milestone in (
+            (menu.action_region_info, "M6-7"),
+            (menu.action_region_composite, "M6-17"),
+            (menu.action_region_template, "M6-18"),
+            (menu.action_region_centroid, "M6-20"),
+            (menu.action_region_new_group, "M6-16"),
+            (menu.action_region_groups, "M6-16"),
+        ):
+            action.triggered.connect(
+                lambda _checked=False, a=action, m=milestone: self.status(
+                    f"{a.text().replace('&', '')} arrives in {m}", 3000
+                )
+            )
 
     # -- drawing mode --------------------------------------------------------
+
+    def set_shape(self, name: str) -> None:
+        """Choose the shape the next drag draws.
+
+        Args:
+            name: A key of `MenuBar.region_shape_actions`.
+        """
+        if name in UNDRAWABLE_SHAPES:
+            self.status(f"Drawing a {name} arrives in M6-4; it can be loaded from a file", 3000)
+            return
+        try:
+            self.set_mode(RegionMode(name))
+        except ValueError:
+            self.status(f"Unknown region shape: {name}", 3000)
 
     def set_mode(self, mode: RegionMode) -> None:
         """Set the shape the next drag will draw."""
@@ -98,30 +190,209 @@ class RegionController(Controller):
         """Set the drawing mode from a button-bar label."""
         self.set_mode(LABEL_MODES.get(label, RegionMode.NONE))
 
-    # -- overlay signals -----------------------------------------------------
+    # -- defaults, and the selection they apply to ---------------------------
 
-    def on_created(self, region: BaseRegion) -> None:
-        """Record a region the user just drew on the current frame."""
+    @property
+    def defaults(self) -> dict:
+        """What a newly drawn region takes for its colour, width and flags."""
+        return self.region_defaults
+
+    def selection(self) -> list[BaseRegion]:
+        """The selected regions, or every region when none is selected.
+
+        DS9's Color, Width, Properties and Font cascades act on what is
+        selected; with nothing selected they set the default for what comes
+        next, which `_apply` does by writing to `defaults` as well.
+        """
         frame = self.frame
-        if frame is not None:
-            frame.regions.append(region)
-        self.status(f"Created {describe(region)} region")
-
-    def on_selected(self, region: BaseRegion) -> None:
-        """Report the region the user just clicked."""
-        self.status(f"Selected {describe(region)} region")
-
-    # -- frame synchronisation -----------------------------------------------
-
-    def show_frame_regions(self, frame) -> None:
-        """Replace the overlay's regions with the given frame's."""
-        if not hasattr(self.viewer, "clear_regions"):
-            return
-        self.viewer.clear_regions()
         if frame is None:
+            return []
+        return [region for region in frame.regions if getattr(region, "selected", False)]
+
+    def _apply(self, attribute: str, value: object, message: str) -> None:
+        """Set a default, and apply it to the selection if there is one."""
+        self.defaults[attribute] = value
+        chosen = self.selection()
+        for region in chosen:
+            setattr(region, attribute, value)
+        if chosen:
+            self.refresh_overlay()
+            self.status(f"{message} for {len(chosen)} selected")
+        else:
+            self.status(f"{message} for new regions")
+
+    def set_color(self, color: str) -> None:
+        """Set the region colour."""
+        self._apply("color", color, f"Region colour: {color}")
+
+    def set_width(self, width: int) -> None:
+        """Set the region line width."""
+        self._apply("width", int(width), f"Region width: {width}")
+
+    def set_property(self, name: str, enabled: bool) -> None:
+        """Set one of DS9's region property flags.
+
+        Args:
+            name: A key of `MenuBar.region_property_actions`.
+            enabled: Whether the flag is on.
+        """
+        self._apply(name, bool(enabled), f"Region {name.replace('_', ' ')}: {'on' if enabled else 'off'}")
+
+    def set_font_family(self, family: str) -> None:
+        """Set the region font family, keeping the current size."""
+        size = self.defaults.get("font_size", 10)
+        self.defaults["font_family"] = family
+        self._apply("font", f"{family} {size} normal roman", f"Region font: {family}")
+
+    def set_font_size(self, size: int) -> None:
+        """Set the region font size, keeping the current family."""
+        family = self.defaults.get("font_family", "helvetica")
+        self.defaults["font_size"] = int(size)
+        self._apply("font", f"{family} {size} normal roman", f"Region font size: {size}")
+
+    def apply_defaults(self, region: BaseRegion) -> BaseRegion:
+        """Give a newly drawn region the current defaults."""
+        for attribute, value in self.defaults.items():
+            if attribute in ("font_family", "font_size"):
+                continue
+            if hasattr(region, attribute):
+                setattr(region, attribute, value)
+        return region
+
+    # -- selection operations (M6-14, M6-15) ---------------------------------
+
+    def selection_command(self, name: str) -> None:
+        """Run one of DS9's selection or ordering commands."""
+        handler = {
+            "all": self.select_all,
+            "none": self.select_none,
+            "invert": self.select_invert,
+            "front": self.bring_front,
+            "back": self.send_back,
+            "move_front": self.move_front,
+            "move_back": self.move_back,
+            "save_selection": self.save_selection,
+            "list_selection": self.list_selection,
+            "delete_selection": self.delete_selection,
+        }.get(name)
+        if handler is None:
+            self.status(f"Unknown region command: {name}", 3000)
             return
-        for region in frame.regions:
-            self.viewer.add_region(region)
+        handler()
+
+    def _regions(self) -> list[BaseRegion]:
+        """The current frame's regions, or an empty list."""
+        frame = self.frame
+        return frame.regions if frame is not None and frame.regions is not None else []
+
+    def _set_selected(self, regions, selected: bool) -> None:
+        """Mark a run of regions selected or not, and redraw."""
+        for region in regions:
+            region.selected = selected
+        self.refresh_overlay()
+
+    def select_all(self) -> None:
+        """Select every region on the frame."""
+        regions = self._regions()
+        self._set_selected(regions, True)
+        self.status(f"Selected {len(regions)} regions")
+
+    def select_none(self) -> None:
+        """Deselect everything."""
+        self._set_selected(self._regions(), False)
+        self.status("Selection cleared")
+
+    def select_invert(self) -> None:
+        """Select what was not selected, and deselect what was."""
+        for region in self._regions():
+            region.selected = not getattr(region, "selected", False)
+        self.refresh_overlay()
+        self.status(f"Selected {len(self.selection())} regions")
+
+    def bring_front(self) -> None:
+        """Select the frontmost region, which is the last drawn."""
+        regions = self._regions()
+        self._set_selected(regions, False)
+        if regions:
+            regions[-1].selected = True
+            self.refresh_overlay()
+        self.status("Selected the front region")
+
+    def send_back(self) -> None:
+        """Select the backmost region, which is the first drawn."""
+        regions = self._regions()
+        self._set_selected(regions, False)
+        if regions:
+            regions[0].selected = True
+            self.refresh_overlay()
+        self.status("Selected the back region")
+
+    def move_front(self) -> None:
+        """Move the selection to the end of the list, so it draws on top."""
+        self._reorder(to_front=True)
+
+    def move_back(self) -> None:
+        """Move the selection to the start, so everything draws over it."""
+        self._reorder(to_front=False)
+
+    def _reorder(self, to_front: bool) -> None:
+        """Move the selected regions to one end of the drawing order."""
+        frame = self.frame
+        chosen = self.selection()
+        if frame is None or not chosen:
+            self.status("No regions selected")
+            return
+
+        rest = [region for region in frame.regions if region not in chosen]
+        frame.regions = (rest + chosen) if to_front else (chosen + rest)
+        self.refresh_overlay()
+        self.status(f"Moved {len(chosen)} regions to the {'front' if to_front else 'back'}")
+
+    def delete_selection(self) -> None:
+        """Delete the selected regions, honouring DS9's delete property."""
+        frame = self.frame
+        chosen = self.selection()
+        if frame is None or not chosen:
+            self.status("No regions selected")
+            return
+
+        protected = [region for region in chosen if not getattr(region, "can_delete", True)]
+        deletable = [region for region in chosen if getattr(region, "can_delete", True)]
+        frame.regions = [region for region in frame.regions if region not in deletable]
+        self.refresh_overlay()
+
+        message = f"Deleted {len(deletable)} regions"
+        if protected:
+            message += f"; {len(protected)} are marked delete=0"
+        self.status(message, 3000)
+
+    def list_selection(self) -> None:
+        """Show the selected regions as DS9 would write them."""
+        self._show_listing(self.selection(), "Selected Regions")
+
+    def list_regions(self) -> None:
+        """Show every region as DS9 would write them."""
+        self._show_listing(self._regions(), "Regions")
+
+    def _show_listing(self, regions: list[BaseRegion], title: str) -> None:
+        """Put a region listing in a scrollable message box."""
+        if not regions:
+            self.status("No regions to list")
+            return
+        text = RegionWriter(coordinate_system=self.window.coord_context.frame.value).to_string(regions)
+        box = QMessageBox(self.window)
+        box.setWindowTitle(title)
+        box.setText(f"{len(regions)} regions")
+        box.setDetailedText(text)
+        box.exec()
+
+    def save_selection(self) -> None:
+        """Write the selected regions to a file."""
+        chosen = self.selection()
+        if not chosen:
+            self.status("No regions selected")
+            return
+        self._write(chosen)
 
     # -- file operations -----------------------------------------------------
 
@@ -144,29 +415,93 @@ class RegionController(Controller):
 
     def save_regions(self) -> None:
         """Write the current frame's regions to a DS9 region file."""
-        frame = self.frame
-        if frame is None or not frame.regions:
+        regions = self._regions()
+        if not regions:
             self.status("No regions to save")
             return
+        self._write(regions)
 
-        filepath, _ = QFileDialog.getSaveFileName(self.window, "Save Region File", "", REGION_FILTER)
+    def _write(self, regions: list[BaseRegion]) -> None:
+        """Prompt for a path and a format, then write.
+
+        The format is taken from the chosen filter, so DS9's File Format menu
+        is the file dialog's own -- one fewer dialog for the same choice.
+        """
+        filters = ";;".join(f"{value.value.upper()} region files (*.reg)" for value in RegionFormat)
+        filepath, chosen = QFileDialog.getSaveFileName(
+            self.window, "Save Region File", "", f"{REGION_FILTER};;{filters}"
+        )
         if not filepath:
             return
-        RegionWriter().write_file(frame.regions, filepath)
-        self.status(f"Saved regions to {filepath}", 3000)
+
+        region_format = RegionFormat.DS9
+        for value in RegionFormat:
+            if chosen.lower().startswith(value.value):
+                region_format = value
+                break
+
+        lost = dropped_shapes(regions, region_format)
+        try:
+            RegionWriter(
+                coordinate_system=self.window.coord_context.frame.value,
+                region_format=region_format,
+            ).write_file(regions, filepath)
+        except OSError as exc:
+            self.status(f"Error saving regions: {exc}", 5000)
+            return
+
+        message = f"Saved {len(regions)} regions to {filepath}"
+        if lost:
+            message += f"; {region_format.value} cannot hold {', '.join(lost)}"
+        self.status(message, 4000)
 
     def clear_regions(self) -> None:
         """Delete every region on the current frame."""
         frame = self.frame
         if frame is not None:
-            frame.regions.clear()
+            protected = [r for r in frame.regions if not getattr(r, "can_delete", True)]
+            frame.regions = list(protected)
             # SAMP markers are regenerated from stored positions, so drop
             # those too or they would reappear on the next refresh.
             self.window._samp_catalog_sources.pop(frame.frame_id, None)
+            if protected:
+                self.show_frame_regions(frame)
+                self.set_mode(RegionMode.NONE)
+                self.status(f"Cleared all but {len(protected)} regions marked delete=0", 3000)
+                return
         if hasattr(self.viewer, "clear_regions"):
             self.viewer.clear_regions()
         self.set_mode(RegionMode.NONE)
         self.status("Cleared all regions")
+
+    # -- overlay signals -----------------------------------------------------
+
+    def on_created(self, region: BaseRegion) -> None:
+        """Record a region the user just drew on the current frame."""
+        frame = self.frame
+        if frame is not None:
+            frame.regions.append(self.apply_defaults(region))
+        self.status(f"Created {describe(region)} region")
+
+    def on_selected(self, region: BaseRegion) -> None:
+        """Report the region the user just clicked."""
+        self.status(f"Selected {describe(region)} region")
+
+    # -- frame synchronisation -----------------------------------------------
+
+    def show_frame_regions(self, frame) -> None:
+        """Replace the overlay's regions with the given frame's."""
+        if not hasattr(self.viewer, "clear_regions"):
+            return
+        self.viewer.clear_regions()
+        if frame is None:
+            return
+        for region in frame.regions:
+            self.viewer.add_region(region)
+
+    def refresh_overlay(self) -> None:
+        """Redraw the overlay after a change to the regions themselves."""
+        self.show_frame_regions(self.frame)
 
     # -- coordinates ---------------------------------------------------------
 
@@ -186,3 +521,8 @@ class RegionController(Controller):
         if not np.isfinite(x) or not np.isfinite(y):
             return None
         return float(x), float(y)
+
+    def ask_text(self) -> str:
+        """Prompt for a region's text label."""
+        text, ok = QInputDialog.getText(self.window, "Region Text", "Text:")
+        return text if ok else ""

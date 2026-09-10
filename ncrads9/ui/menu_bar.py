@@ -28,6 +28,82 @@ from ..colormaps.bundled import CATEGORIES, colormap_label
 from ..core.bin_table import BUFFER_SIZES, DEFAULT_BUFFER_SIZE
 from .layout.view_state import DEFAULT_INFO_FIELDS, WCS_SUFFIXES
 
+#: The shapes the Region menu's Shape cascade offers, in DS9's order. Every
+#: one of DS9's nineteen descriptions except Composite, which has a cascade
+#: of its own, and Text, which is created by typing rather than dragging.
+REGION_SHAPES: tuple[tuple[str, str], ...] = (
+    ("circle", "&Circle"),
+    ("ellipse", "&Ellipse"),
+    ("box", "&Box"),
+    ("polygon", "&Polygon"),
+    ("point", "Poi&nt"),
+    ("line", "&Line"),
+    ("vector", "&Vector"),
+    ("segment", "Se&gment"),
+    ("text", "&Text"),
+    ("ruler", "&Ruler"),
+    ("compass", "Co&mpass"),
+    ("projection", "Pro&jection"),
+    ("annulus", "&Annulus"),
+    ("ellipseannulus", "Ellipse Ann&ulus"),
+    ("boxannulus", "Box Annul&us"),
+    ("panda", "Pa&nda"),
+    ("epanda", "Epa&nda"),
+    ("bpanda", "Bpand&a"),
+)
+
+#: The colours DS9's Region -> Color cascade offers, and its default.
+REGION_COLORS: tuple[str, ...] = (
+    "black",
+    "white",
+    "red",
+    "green",
+    "blue",
+    "cyan",
+    "magenta",
+    "yellow",
+)
+DEFAULT_REGION_COLOR = "green"
+
+#: The line widths DS9's Region -> Width cascade offers.
+REGION_WIDTHS: tuple[int, ...] = (1, 2, 3, 4)
+
+#: DS9's Region -> Properties cascade: the flags a region carries, with the
+#: value a new region takes.
+REGION_PROPERTIES: tuple[tuple[str, str, bool], ...] = (
+    ("fixed", "Fi&xed in Size", False),
+    ("can_edit", "&Edit", True),
+    ("can_move", "&Move", True),
+    ("can_rotate", "&Rotate", True),
+    ("can_delete", "&Delete", True),
+    ("include", "&Include", True),
+    ("source", "&Source", True),
+    ("dash", "Das&h", False),
+    ("fill", "&Fill", False),
+)
+
+#: The fonts DS9's Region -> Font cascade offers, and its defaults.
+REGION_FONTS: tuple[str, ...] = ("helvetica", "times", "courier")
+REGION_FONT_SIZES: tuple[int, ...] = (9, 10, 12, 14, 16, 18, 24)
+DEFAULT_REGION_FONT = "helvetica"
+DEFAULT_REGION_FONT_SIZE = 10
+
+#: DS9's selection and ordering commands, in menu order.
+REGION_SELECTION_COMMANDS: tuple[tuple[str | None, str], ...] = (
+    ("all", "&All"),
+    ("none", "N&one"),
+    ("invert", "In&vert"),
+    ("front", "&Front"),
+    ("back", "Bac&k"),
+    (None, ""),
+    ("move_front", "Move to Fron&t"),
+    ("move_back", "Move to Bac&k"),
+    (None, ""),
+    ("save_selection", "Save Se&lection..."),
+    ("list_selection", "List Selectio&n"),
+    ("delete_selection", "Delete Selec&tion"),
+)
+
 #: DS9's pointer modes, in the order its Edit menu lists them.
 EDIT_MODES: tuple[tuple[str, str], ...] = (
     ("none", "&None"),
@@ -1231,38 +1307,148 @@ class MenuBar(QMenuBar):
         return self._add_colormap_action(self.user_colormap_menu, colormap_name, cmap_key)
 
     def _setup_region_menu(self) -> None:
-        """Set up the Region menu."""
+        """Set up the Region menu.
+
+        DS9's order (`ds9/library/mregion.tcl`): Get Information; the Shape,
+        Composite Region, Instrument FOV and Template cascades; Color, Width,
+        Properties and Font; Centroid; the group entries; the selection
+        entries; and the file entries.
+
+        Shape is a cascade in DS9 and a flat list here, because NCRADS9's
+        shape list is also what the button bar shows and a cascade would put
+        every shape two clicks away.
+        """
         self.region_menu: QMenu = self.addMenu("&Region")
 
+        self.action_region_info: QAction = QAction("Get &Information", self)
+        self.region_menu.addAction(self.action_region_info)
+
+        self.region_menu.addSeparator()
+
+        self.region_shape_menu: QMenu = self.region_menu.addMenu("&Shape")
+        shape_group = QActionGroup(self)
+        shape_group.setExclusive(True)
+        #: Shape name -> its action.
+        self.region_shape_actions: dict[str, QAction] = {}
+        for name, label in REGION_SHAPES:
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(name == "circle")
+            shape_group.addAction(action)
+            self.region_shape_menu.addAction(action)
+            self.region_shape_actions[name] = action
+            setattr(self, f"action_region_{name}", action)
+
+        # The six shapes the button bar and toolbar already reach by name.
         self.action_region_none: QAction = QAction("&None", self)
-        self.region_menu.addAction(self.action_region_none)
-        self.region_menu.addSeparator()
+        self.action_region_none.setCheckable(True)
+        shape_group.addAction(self.action_region_none)
+        self.region_shape_menu.addSeparator()
+        self.region_shape_menu.addAction(self.action_region_none)
 
-        self.action_region_circle: QAction = QAction("&Circle", self)
-        self.region_menu.addAction(self.action_region_circle)
-
-        self.action_region_ellipse: QAction = QAction("&Ellipse", self)
-        self.region_menu.addAction(self.action_region_ellipse)
-
-        self.action_region_box: QAction = QAction("&Box", self)
-        self.region_menu.addAction(self.action_region_box)
-
-        self.action_region_polygon: QAction = QAction("&Polygon", self)
-        self.region_menu.addAction(self.action_region_polygon)
-
-        self.action_region_line: QAction = QAction("&Line", self)
-        self.region_menu.addAction(self.action_region_line)
-
-        self.action_region_point: QAction = QAction("Poi&nt", self)
-        self.region_menu.addAction(self.action_region_point)
+        self.action_region_composite: QAction = QAction("&Composite Region", self)
+        self.region_menu.addAction(self.action_region_composite)
+        self.action_region_template: QAction = QAction("&Template", self)
+        self.region_menu.addAction(self.action_region_template)
 
         self.region_menu.addSeparator()
 
-        self.action_region_load: QAction = QAction("&Load...", self)
+        self.region_color_menu: QMenu = self.region_menu.addMenu("&Color")
+        color_group = QActionGroup(self)
+        color_group.setExclusive(True)
+        #: Colour name -> its action.
+        self.region_color_actions: dict[str, QAction] = {}
+        for name in REGION_COLORS:
+            action = QAction(name.title(), self)
+            action.setCheckable(True)
+            action.setChecked(name == DEFAULT_REGION_COLOR)
+            color_group.addAction(action)
+            self.region_color_menu.addAction(action)
+            self.region_color_actions[name] = action
+
+        self.region_width_menu: QMenu = self.region_menu.addMenu("&Width")
+        width_group = QActionGroup(self)
+        width_group.setExclusive(True)
+        #: Line width -> its action.
+        self.region_width_actions: dict[int, QAction] = {}
+        for value in REGION_WIDTHS:
+            action = QAction(str(value), self)
+            action.setCheckable(True)
+            action.setChecked(value == 1)
+            width_group.addAction(action)
+            self.region_width_menu.addAction(action)
+            self.region_width_actions[value] = action
+
+        self.region_properties_menu: QMenu = self.region_menu.addMenu("&Properties")
+        #: Property name -> its action.
+        self.region_property_actions: dict[str, QAction] = {}
+        for name, label, default in REGION_PROPERTIES:
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(default)
+            self.region_properties_menu.addAction(action)
+            self.region_property_actions[name] = action
+
+        self.region_font_menu: QMenu = self.region_menu.addMenu("&Font")
+        font_group = QActionGroup(self)
+        font_group.setExclusive(True)
+        #: Font family -> its action.
+        self.region_font_actions: dict[str, QAction] = {}
+        for family in REGION_FONTS:
+            action = QAction(family.title(), self)
+            action.setCheckable(True)
+            action.setChecked(family == DEFAULT_REGION_FONT)
+            font_group.addAction(action)
+            self.region_font_menu.addAction(action)
+            self.region_font_actions[family] = action
+
+        self.region_font_menu.addSeparator()
+        size_group = QActionGroup(self)
+        size_group.setExclusive(True)
+        #: Font size -> its action.
+        self.region_font_size_actions: dict[int, QAction] = {}
+        for size in REGION_FONT_SIZES:
+            action = QAction(str(size), self)
+            action.setCheckable(True)
+            action.setChecked(size == DEFAULT_REGION_FONT_SIZE)
+            size_group.addAction(action)
+            self.region_font_menu.addAction(action)
+            self.region_font_size_actions[size] = action
+
+        self.region_menu.addSeparator()
+
+        self.action_region_centroid: QAction = QAction("Cen&troid", self)
+        self.region_menu.addAction(self.action_region_centroid)
+
+        self.region_menu.addSeparator()
+
+        self.action_region_new_group: QAction = QAction("New &Group", self)
+        self.region_menu.addAction(self.action_region_new_group)
+        self.action_region_groups: QAction = QAction("Gro&ups", self)
+        self.region_menu.addAction(self.action_region_groups)
+
+        self.region_menu.addSeparator()
+
+        #: Selection command name -> its action.
+        self.region_selection_actions: dict[str, QAction] = {}
+        for name, label in REGION_SELECTION_COMMANDS:
+            if name is None:
+                self.region_menu.addSeparator()
+                continue
+            action = QAction(label, self)
+            self.region_menu.addAction(action)
+            self.region_selection_actions[name] = action
+
+        self.region_menu.addSeparator()
+
+        self.action_region_load: QAction = QAction("&Open...", self)
         self.region_menu.addAction(self.action_region_load)
 
         self.action_region_save: QAction = QAction("&Save...", self)
         self.region_menu.addAction(self.action_region_save)
+
+        self.action_region_list: QAction = QAction("&List", self)
+        self.region_menu.addAction(self.action_region_list)
 
         self.action_region_delete_all: QAction = QAction("&Delete All", self)
         self.region_menu.addAction(self.action_region_delete_all)
