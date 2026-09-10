@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import QVBoxLayout, QWidget
 from ...regions.base_region import BaseRegion
 from ...rendering.gl_canvas import GLCanvas
 from ..view_transform import DisplayTransform
+from .catalog_overlay import CatalogOverlay
 from .contour_overlay import ContourOverlay
 from .region_overlay import RegionMode, RegionOverlay
 
@@ -67,6 +68,8 @@ class GLImageViewerWithRegions(QWidget):
 
         self.region_overlay = RegionOverlay(self.gl_canvas)
         self.contour_overlay = ContourOverlay(self.gl_canvas)
+        # Catalogue symbols are a layer of their own, as in DS9.
+        self.catalog_overlay = CatalogOverlay(self.gl_canvas)
 
         self.gl_canvas.cursor_moved.connect(self._on_cursor_moved)
         self.gl_canvas.mouse_clicked.connect(self._on_mouse_clicked)
@@ -307,6 +310,7 @@ class GLImageViewerWithRegions(QWidget):
         super().resizeEvent(event)
         self.region_overlay.setGeometry(self.gl_canvas.geometry())
         self.contour_overlay.setGeometry(self.gl_canvas.geometry())
+        self.catalog_overlay.setGeometry(self.gl_canvas.geometry())
         self._update_overlay_transform()
 
     def _update_overlay_transform(self) -> None:
@@ -323,6 +327,15 @@ class GLImageViewerWithRegions(QWidget):
             flip_y=self._flip_y,
         )
         self.contour_overlay.set_zoom(
+            self.gl_canvas.zoom,
+            (x_offset, y_offset),
+            image_width=image_width,
+            image_height=image_height,
+            rotation=self._rotation,
+            flip_x=self._flip_x,
+            flip_y=self._flip_y,
+        )
+        self.catalog_overlay.set_zoom(
             self.gl_canvas.zoom,
             (x_offset, y_offset),
             image_width=image_width,

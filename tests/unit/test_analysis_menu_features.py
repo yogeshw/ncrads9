@@ -109,8 +109,8 @@ def test_analysis_mask_range(main_window: MainWindow):
 
     from ncrads9.analysis.mask import MaskMode, MaskSettings
 
-    main_window.mask_layer = np.array([[-1.0, 0.5, 2.0, np.nan]], dtype=np.float64)
-    main_window.mask_settings = MaskSettings(mode=MaskMode.RANGE, low=0.0, high=1.0)
+    main_window.analysis.mask_layer = np.array([[-1.0, 0.5, 2.0, np.nan]], dtype=np.float64)
+    main_window.analysis.mask_settings = MaskSettings(mode=MaskMode.RANGE, low=0.0, high=1.0)
     data = np.array([[-1.0, 0.5, 2.0, np.nan]], dtype=np.float32)
     masked = main_window.analysis.apply_mask(data)
     assert np.isnan(masked[0, 0])

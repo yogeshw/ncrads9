@@ -903,8 +903,9 @@ class DisplayPipeline:
         colour laid on top, not a change to the data, so it must not go
         through the scale or the colour table.
         """
-        layer = getattr(self.window, "mask_layer", None)
-        settings = getattr(self.window, "mask_settings", None)
+        analysis = getattr(self.window, "analysis", None)
+        layer = getattr(analysis, "mask_layer", None)
+        settings = getattr(analysis, "mask_settings", None)
         if layer is None or settings is None:
             return rgb
 

@@ -24,6 +24,8 @@ Author: Yogesh Wadadekar
 from PyQt6.QtGui import QAction, QActionGroup, QKeySequence
 from PyQt6.QtWidgets import QMenu, QMenuBar, QWidget
 
+from ..catalogs.servers import SECTIONS as CATALOG_SECTIONS
+from ..catalogs.servers import in_section as catalogs_in_section
 from ..colormaps.bundled import CATEGORIES, colormap_label
 from ..core.bin_table import BUFFER_SIZES, DEFAULT_BUFFER_SIZE
 from ..regions.region_template import bundled_templates
@@ -1500,6 +1502,27 @@ class MenuBar(QMenuBar):
         self.action_region_centroid_params: QAction = QAction("Centroid Parameters...", self)
         params_menu.addAction(self.action_region_centroid_params)
 
+    def _fill_catalogs_menu(self, menu: QMenu) -> None:
+        """Build DS9's Catalogs cascade from its own catalogue list.
+
+        Six sections of forty-odd catalogues (`icat(def)` in
+        `ds9/library/cat.tcl:48`), each a submenu. Read from
+        `catalogs/servers.py` rather than listed here, so the menu and the
+        query layer cannot name different catalogues.
+        """
+        #: DS9's catalogue name (e.g. `catgaia`) -> its action.
+        self.catalog_actions: dict[str, QAction] = {}
+
+        for section in CATALOG_SECTIONS:
+            entries = catalogs_in_section(section)
+            if not entries:
+                continue
+            submenu = menu.addMenu(section)
+            for entry in entries:
+                action = QAction(entry.label, self)
+                submenu.addAction(action)
+                self.catalog_actions[entry.name] = action
+
     def _fill_fov_menu(self, menu: QMenu) -> None:
         """Build the Instrument FOV cascade from the bundled templates.
 
@@ -1692,8 +1715,18 @@ class MenuBar(QMenuBar):
         self.action_analysis_2mass: QAction = QAction("2MASS &Image...", self)
         self.analysis_image_servers_menu.addAction(self.action_analysis_2mass)
         self.analysis_catalogs_menu: QMenu = self.analysis_menu.addMenu("&Catalogs")
+        self._fill_catalogs_menu(self.analysis_catalogs_menu)
+        # Kept as a name of its own: the VO menu and the XPA both reach it.
         self.action_analysis_vizier: QAction = QAction("&VizieR...", self)
+        self.analysis_catalogs_menu.addSeparator()
         self.analysis_catalogs_menu.addAction(self.action_analysis_vizier)
+        self.action_catalog_search: QAction = QAction("&Search for Catalogs...", self)
+        self.analysis_catalogs_menu.addAction(self.action_catalog_search)
+        self.analysis_catalogs_menu.addSeparator()
+        self.action_catalog_load: QAction = QAction("&Load Catalog...", self)
+        self.analysis_catalogs_menu.addAction(self.action_catalog_load)
+        self.action_catalog_clear_all: QAction = QAction("&Clear All Catalogs", self)
+        self.analysis_catalogs_menu.addAction(self.action_catalog_clear_all)
 
         self.analysis_menu.addSeparator()
         self.action_catalog_tool: QAction = QAction("Catalog &Tool", self)

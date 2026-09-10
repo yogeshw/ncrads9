@@ -48,14 +48,9 @@ ENTRY_POINTS = ("ncrads9.app", "ncrads9.__main__")
 #: which is which.
 PENDING_ADOPTION: dict[str, str] = {
     # M8 -- catalogs, image servers, VO.
-    "catalogs.catalog_display": "M8-2",
-    "catalogs.catalog_table": "M8-5",
-    "catalogs.cone_search": "M8-11",
-    "catalogs.ned": "M8-11",
-    "catalogs.sdss": "M8-11",
-    "catalogs.simbad": "M8-11",
-    "catalogs.skybot": "M8-11",
-    "catalogs.twomass": "M8-11",
+    # Its `get_images` is the SDSS image backend M8-17 wires up; its
+    # catalogue queries go through VizieR like every other CDS catalogue.
+    "catalogs.sdss": "M8-17",
     # M9 -- remaining subsystems.
     "communication.iis.iis_server": "M9-29",
     "io.array_reader": "M9-13",

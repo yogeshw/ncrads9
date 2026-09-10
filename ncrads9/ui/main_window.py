@@ -32,7 +32,6 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from ..analysis.mask import MaskSettings
 from ..colormaps.colormap import Colormap
 from ..communication.samp import SAMPClient
 from ..coordinates.coord_system import CoordinateContext
@@ -54,6 +53,7 @@ from .controllers.analysis import AnalysisController
 from .controllers.analysis_tasks import AnalysisTaskController
 from .controllers.base import Controller
 from .controllers.bin import BinController
+from .controllers.catalog import CatalogController
 from .controllers.color import ColorController
 from .controllers.edit import EditController
 from .controllers.file import FileController
@@ -160,11 +160,6 @@ class MainWindow(QMainWindow):
         }
         self._analysis_command_log = False
         self._analysis_command_entries: list[str] = []
-        #: DS9's mask layer: a second FITS image painted over the first.
-        #: `None` until one is opened, which is what "no mask" means.
-        self.mask_layer = None
-        self.mask_path: str | None = None
-        self.mask_settings = MaskSettings()
         # DS9's pointer mode: what a drag on the image does.
         self.edit_mode = "none"
         self._crosshair_enabled = False
@@ -264,6 +259,7 @@ class MainWindow(QMainWindow):
         self.analysis = AnalysisController(self)
         self.analysis_tasks = AnalysisTaskController(self)
         self.bin = BinController(self)
+        self.catalog = CatalogController(self)
         self.color = ColorController(self)
         # Named `frame_controller`: `self.frame` would shadow nothing on the
         # window, but reads as a Frame everywhere else in the codebase.
@@ -283,6 +279,7 @@ class MainWindow(QMainWindow):
             self.analysis,
             self.analysis_tasks,
             self.bin,
+            self.catalog,
             self.color,
             self.edit,
             self.frame_controller,
@@ -336,6 +333,7 @@ class MainWindow(QMainWindow):
         self.analysis.connect()
         self.analysis_tasks.connect()
         self.bin.connect()
+        self.catalog.connect()
 
         self.menu_bar.action_fits_header.triggered.connect(self.file.show_header)
         self.menu_bar.action_plot_tool_line.triggered.connect(
@@ -422,6 +420,7 @@ class MainWindow(QMainWindow):
         viewer.contrast_changed.connect(self.color.on_contrast_changed)
         viewer.region_created.connect(self.region.on_created)
         viewer.region_activated.connect(self.region.show_information)
+        self.catalog.attach(viewer)
         viewer.region_selected.connect(self.region.on_selected)
         if hasattr(viewer, "gl_canvas"):
             viewer.gl_canvas.pan_changed.connect(lambda *_: self.zoom.update_panner_rect())

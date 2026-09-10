@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 819 (727 excluding separators)
+# entries: 869 (775 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -814,7 +814,57 @@
 .analysis|cascade|Image Servers
 .analysis.imageservers|command|2MASS Image
 .analysis|cascade|Catalogs
+.analysis.catalogs|cascade|Database
+.analysis.catalogs.database|command|NED
+.analysis.catalogs.database|command|SIMBAD
+.analysis.catalogs.database|command|DENIS
+.analysis.catalogs.database|command|SkyBot
+.analysis.catalogs|cascade|Optical
+.analysis.catalogs.optical|command|AAVSO
+.analysis.catalogs.optical|command|AC 2000.2
+.analysis.catalogs.optical|command|ASCC-2.5
+.analysis.catalogs.optical|command|Carlsberg Meridian 14
+.analysis.catalogs.optical|command|GAIA DR1
+.analysis.catalogs.optical|command|GAIA DR2
+.analysis.catalogs.optical|command|GSC 2.2
+.analysis.catalogs.optical|command|GSC 2.3
+.analysis.catalogs.optical|command|NOMAD
+.analysis.catalogs.optical|command|PPMX
+.analysis.catalogs.optical|command|SAO J2000
+.analysis.catalogs.optical|command|SDSS Release 7
+.analysis.catalogs.optical|command|SDSS Release 9
+.analysis.catalogs.optical|command|SDSS Release 12
+.analysis.catalogs.optical|command|Tycho-2
+.analysis.catalogs.optical|command|USNO-A2.0
+.analysis.catalogs.optical|command|USNO-B1.0
+.analysis.catalogs.optical|command|USNO UCAC2
+.analysis.catalogs.optical|command|USNO UCAC4
+.analysis.catalogs.optical|command|USNO UCAC5
+.analysis.catalogs.optical|command|USNO URAT1
+.analysis.catalogs|cascade|Infrared
+.analysis.catalogs.infrared|command|2MASS Point Sources
+.analysis.catalogs.infrared|command|IRAS Point Sources
+.analysis.catalogs|cascade|High Energy
+.analysis.catalogs.highenergy|command|Chandra Source 1.1
+.analysis.catalogs.highenergy|command|Chandra Source 2.0
+.analysis.catalogs.highenergy|command|Chandra Source Current
+.analysis.catalogs.highenergy|command|XMM-Newton 4XMM-DR13 Source
+.analysis.catalogs.highenergy|command|Second ROSAT PSPC
+.analysis.catalogs|cascade|Radio
+.analysis.catalogs.radio|command|FIRST Survey
+.analysis.catalogs.radio|command|NVSS
+.analysis.catalogs|cascade|Observation Logs
+.analysis.catalogs.observationlogs|command|Chandra Archive
+.analysis.catalogs.observationlogs|command|CFHT Exposures
+.analysis.catalogs.observationlogs|command|ESO Science Archive
+.analysis.catalogs.observationlogs|command|HST Archive
+.analysis.catalogs.observationlogs|command|XMM Observation
+.analysis.catalogs|separator|---
 .analysis.catalogs|command|VizieR
+.analysis.catalogs|command|Search for Catalogs
+.analysis.catalogs|separator|---
+.analysis.catalogs|command|Load Catalog
+.analysis.catalogs|command|Clear All Catalogs
 .analysis|separator|---
 .analysis|command|Catalog Tool
 .analysis|cascade|Plot Tool

@@ -21,26 +21,26 @@ Catalog query and display module for ncrads9.
 Author: Yogesh Wadadekar
 """
 
+from . import catalog_file, catalog_query, servers
 from .catalog_base import CatalogBase
-from .catalog_display import CatalogDisplay
-from .catalog_table import CatalogTable
+from .catalog_set import CatalogSet, LoadedCatalog, Symbol
 from .cone_search import ConeSearch
 from .ned import NEDCatalog
-from .sdss import SDSSCatalog
 from .simbad import SimbadCatalog
 from .skybot import SkybotCatalog
-from .twomass import TwoMASSCatalog
 from .vizier import VizierCatalog
 
 __all__ = [
     "CatalogBase",
+    "catalog_file",
+    "catalog_query",
+    "servers",
+    "CatalogSet",
+    "LoadedCatalog",
+    "Symbol",
     "VizierCatalog",
     "SimbadCatalog",
     "NEDCatalog",
     "SkybotCatalog",
-    "SDSSCatalog",
-    "TwoMASSCatalog",
-    "CatalogDisplay",
-    "CatalogTable",
     "ConeSearch",
 ]

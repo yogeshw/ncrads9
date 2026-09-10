@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import QScrollArea, QVBoxLayout, QWidget
 
 from ...regions.base_region import BaseRegion
 from ..image_viewer import ImageViewer
+from .catalog_overlay import CatalogOverlay
 from .contour_overlay import ContourOverlay
 from .region_overlay import RegionMode, RegionOverlay
 
@@ -62,6 +63,9 @@ class ImageViewerWithRegions(QWidget):
 
         # Create contour overlay on top
         self.contour_overlay = ContourOverlay(self.image_viewer)
+        # Catalogue symbols are a layer of their own, as in DS9: not
+        # regions, not saved with them, not deleted by Region -> Delete All.
+        self.catalog_overlay = CatalogOverlay(self.image_viewer)
 
         # Connect signals
         self.image_viewer.mouse_moved.connect(self.mouse_moved)
@@ -211,6 +215,7 @@ class ImageViewerWithRegions(QWidget):
         """Update region overlay geometry to match image viewer."""
         self.region_overlay.setGeometry(self.image_viewer.geometry())
         self.contour_overlay.setGeometry(self.image_viewer.geometry())
+        self.catalog_overlay.setGeometry(self.image_viewer.geometry())
         self._update_overlay_transform()
 
     def _update_overlay_transform(self) -> None:
@@ -233,6 +238,15 @@ class ImageViewerWithRegions(QWidget):
                 flip_y=self._flip_y,
             )
             self.contour_overlay.set_zoom(
+                self.image_viewer.get_zoom(),
+                (x_offset, y_offset),
+                image_width=self.image_viewer.get_image_size()[0],
+                image_height=image_height,
+                rotation=self._rotation,
+                flip_x=self._flip_x,
+                flip_y=self._flip_y,
+            )
+            self.catalog_overlay.set_zoom(
                 self.image_viewer.get_zoom(),
                 (x_offset, y_offset),
                 image_width=self.image_viewer.get_image_size()[0],

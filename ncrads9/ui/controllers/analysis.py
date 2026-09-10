@@ -61,6 +61,7 @@ from scipy import ndimage
 from ...analysis import contour_file
 from ...analysis import mask as mask_module
 from ...analysis.contour import ContourGenerator
+from ...analysis.mask import MaskSettings
 from ...analysis.plot import PlotState, PlotStyle
 from ...analysis.radial_profile import RadialProfile
 from ...analysis.smooth import (
@@ -101,6 +102,14 @@ class AnalysisController(Controller):
         #: is collected the moment it is shown. Per instance, not per class:
         #: a shared set would outlive the window that opened them.
         self._plots: set[PlotWindow] = set()
+
+        #: DS9's mask layer: a second FITS image painted over the first.
+        #: `None` until one is opened, which is what "no mask" means. On
+        #: the controller rather than the window, which the M2 guard caps
+        #: at 600 lines.
+        self.mask_layer = None
+        self.mask_path: str | None = None
+        self.mask_settings = MaskSettings()
 
         #: What the coordinate grid looks like, and the renderer that works
         #: out where its lines go.
@@ -254,8 +263,8 @@ class AnalysisController(Controller):
         histogram it has to actually remove pixels, which is what this does.
         With no mask loaded the data is returned untouched.
         """
-        layer = self.window.mask_layer
-        settings = self.window.mask_settings
+        layer = self.mask_layer
+        settings = self.mask_settings
         if layer is None or settings is None or np.ndim(data) != 2:
             return data
 
@@ -374,8 +383,8 @@ class AnalysisController(Controller):
     def show_mask_dialog(self) -> None:
         """Show DS9's Mask Parameters dialog (M7-24)."""
         dialog = MaskDialog(
-            self.window.mask_settings,
-            str(getattr(self.window, "mask_path", "") or ""),
+            self.mask_settings,
+            str(self.mask_path or "" or ""),
             self.window,
         )
         dialog.mask_changed.connect(self.apply_mask_settings)
@@ -384,19 +393,19 @@ class AnalysisController(Controller):
 
     def apply_mask_settings(self, settings, path: str) -> None:
         """Load a mask file if one was chosen, and redraw with the settings."""
-        self.window.mask_settings = settings
-        if path and path != getattr(self.window, "mask_path", None):
+        self.mask_settings = settings
+        if path and path != self.mask_path:
             try:
-                self.window.mask_layer = mask_module.load(path)
+                self.mask_layer = mask_module.load(path)
             except mask_module.MaskError as exc:
                 self.status(str(exc), 5000)
                 return
             except OSError as exc:
                 self.status(f"Cannot read {Path(path).name}: {exc}", 5000)
                 return
-            self.window.mask_path = path
+            self.mask_path = path
 
-        if self.window.mask_layer is None:
+        if self.mask_layer is None:
             self.status("Open a mask file first", 3000)
             return
 
@@ -406,8 +415,8 @@ class AnalysisController(Controller):
 
     def clear_mask(self) -> None:
         """Remove the mask, DS9's Clear."""
-        self.window.mask_layer = None
-        self.window.mask_path = None
+        self.mask_layer = None
+        self.mask_path = None
         self.window.display.display()
         self.status("Mask cleared")
 

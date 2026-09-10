@@ -28,7 +28,7 @@ from PyQt6.QtWidgets import QWidget
 
 from ...grid.grid_config import GridElement
 from ...grid.grid_labels import Label, LabelPosition
-from ..view_transform import DisplayTransform
+from .overlay_transform import OverlayTransformMixin
 
 #: How far an axis title sits from the edge of the widget, in pixels.
 AXIS_TITLE_MARGIN = 6.0
@@ -102,22 +102,16 @@ def _label_point(
     return QPointF(point.x() + offset, point.y() + height / 2.0)
 
 
-class ContourOverlay(QWidget):
-    """Overlay widget for drawing contour paths."""
+class ContourOverlay(OverlayTransformMixin, QWidget):
+    """Overlay widget for drawing contour paths, the grid and the crosshair."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.setMouseTracking(False)
+        self.init_transform()
         self._contours: list[list[NDArray[np.float64]]] = []
         self._levels: list[float] = []
-        self._zoom: float = 1.0
-        self._offset: tuple[float, float] = (0.0, 0.0)
-        self._image_width: int = 0
-        self._image_height: int = 0
-        self._rotation: float = 0.0
-        self._flip_x: bool = False
-        self._flip_y: bool = False
         self._color: QColor = QColor(0, 255, 0)
         self._line_width: float = 1.0
         self._line_style: Qt.PenStyle = Qt.PenStyle.SolidLine
@@ -139,37 +133,6 @@ class ContourOverlay(QWidget):
         self._crosshair_color: QColor = QColor(255, 0, 0)
         self._crosshair_size: int = 24
         self._crosshair_position: tuple[float, float] | None = None
-
-    def set_zoom(
-        self,
-        zoom: float,
-        offset: tuple[float, float],
-        image_width: int | None = None,
-        image_height: int | None = None,
-        rotation: float = 0.0,
-        flip_x: bool = False,
-        flip_y: bool = False,
-    ) -> None:
-        """Set zoom and offset for coordinate transform."""
-        self._zoom = zoom
-        self._offset = offset
-        if image_width is not None:
-            self._image_width = max(0, int(image_width))
-        if image_height is not None:
-            self._image_height = max(0, int(image_height))
-        self._rotation = rotation
-        self._flip_x = flip_x
-        self._flip_y = flip_y
-        self.update()
-
-    def _display_transform(self) -> DisplayTransform:
-        return DisplayTransform(
-            width=self._image_width,
-            height=self._image_height,
-            rotation=self._rotation,
-            flip_x=self._flip_x,
-            flip_y=self._flip_y,
-        )
 
     def set_contours(
         self,
@@ -248,15 +211,6 @@ class ContourOverlay(QWidget):
         if size is not None:
             self._crosshair_size = max(4, int(size))
         self.update()
-
-    def _image_to_widget(self, x: float, y: float) -> QPointF:
-        """Convert image coordinates (origin bottom-left) to widget coordinates."""
-        if self._image_height > 0:
-            source_top_y = self._image_height - 1 - y
-        else:
-            source_top_y = y
-        display_x, display_y = self._display_transform().source_to_display(x, source_top_y)
-        return QPointF(display_x * self._zoom + self._offset[0], display_y * self._zoom + self._offset[1])
 
     def _draw_direction_arrow(
         self,
