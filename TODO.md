@@ -1170,9 +1170,24 @@ Depends on M2, M3.
       be worse than reading the kind we can.
 
 ### Polish
-- [ ] **M9-31** (M) i18n: extract all UI strings, add Qt translation files for DS9's 8 locales
+- [~] **M9-31** (M) i18n: extract all UI strings, add Qt translation files for DS9's 8 locales
       (cs, da, de, es, fr, ja, pt, zh) seeded from `.tmp_sao_ds9/ds9/msgs/*.msg`, and a Language
-      preference.
+      preference. **The menus are translated into all eight**, from DS9's own catalogues:
+      `tools/import_ds9_messages.py` converts `ds9/msgs/*.msg` into `ncrads9/i18n/locales/*.json`
+      (2893 translations, SAOImageDS9's work under the same GPL, provenance recorded in each
+      file), and `ncrads9/i18n/` looks a label up -- taking the `&` accelerator and the `...`
+      off, putting them back, and putting the accelerator on the same letter where the
+      translation still has it. The Language preference chooses it at startup.
+      **Not JSON versus Qt `.ts` by accident:** `.ts`/`.qm` needs `lrelease` at build time and
+      `tr()` at every call site; the menus are built from literals in one readable file, and
+      wrapping two thousand of them would put the English a translator needs behind a function
+      call. They are translated once, afterwards, and each action keeps its English text so the
+      XPA points and the parity tools still find entries by name in Japanese.
+      **What is left:** the dialogs' own labels and the status messages. DS9's catalogue has
+      almost none of those -- they are its menus -- so they need translations written rather
+      than imported, and a half-translated sentence is worse than an English one. Coverage is
+      also DS9's coverage, which is partial: `Zoom`, `Scale` and `Contours` sit in DS9's French
+      file with nothing beside them and so stay in English.
 - [x] **M9-32** (M) Grow Preferences to DS9's topic coverage: General, Precision, Startup,
       Coordinates, Region, Annulus, Panda, Scale, Colour, Contour, Grid, Bin, Smooth, Zoom,
       Graph, Panner, Magnifier, PixelTable, Examine, Catalog, VO, NRES, Analysis, HTTP, Print,

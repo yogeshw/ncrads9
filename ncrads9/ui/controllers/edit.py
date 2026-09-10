@@ -37,6 +37,8 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import QApplication
 
+from ... import i18n
+from ...i18n.menus import translate_menu
 from ...regions.base_region import BaseRegion
 from ...rendering.scale_algorithms import ScaleAlgorithm
 from ...utils import preference_defs
@@ -253,6 +255,23 @@ class EditController(Controller):
             return
         theme.apply(app)
         app.setProperty(THEME_PROPERTY, name)
+
+    def apply_startup_preferences(self) -> None:
+        """Apply the preferences the menu has to be built before.
+
+        The keyboard shortcuts (M9-33) and the language (M9-31) are
+        preferences like any other, so they are applied to the menu once it
+        exists rather than being hard-coded in it. The menus are built in
+        English and translated here, which keeps the English text in the
+        source where a translator can see it.
+        """
+        store = self.window.preferences
+        bindings.apply(self.menu, bindings.from_preferences(store))
+
+        language = str(store.get("language", i18n.DEFAULT_LANGUAGE))
+        if language != i18n.DEFAULT_LANGUAGE:
+            i18n.set_language(language)
+            translate_menu(self.menu)
 
     def preferences_dict(self) -> dict:
         """The current preferences, with defaults filled in."""
