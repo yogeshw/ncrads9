@@ -24,6 +24,7 @@ from .colormap_dialog import ColormapDialog
 from .contour_dialog import ContourDialog
 from .crop_parameters_dialog import CropParametersDialog
 from .grid_dialog import GridDialog
+from .group_dialog import GroupDialog
 from .header_dialog import HeaderDialog
 from .open_dialog import OpenDialog
 from .pan_zoom_rotate_dialog import PanZoomRotateDialog
@@ -42,6 +43,7 @@ __all__ = [
     "SmoothDialog",
     "ScaleDialog",
     "ColormapDialog",
+    "GroupDialog",
     "RegionDialog",
     "PreferencesDialog",
     "CropParametersDialog",

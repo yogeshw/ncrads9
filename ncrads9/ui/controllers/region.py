@@ -41,10 +41,12 @@ from __future__ import annotations
 import numpy as np
 from PyQt6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
+from ...regions import group_manager
 from ...regions.base_region import BaseRegion
 from ...regions.region_formats import RegionFormat, dropped_shapes
 from ...regions.region_parser import RegionParser
 from ...regions.region_writer import RegionWriter
+from ..dialogs.group_dialog import GroupDialog
 from ..dialogs.region_dialog import RegionDialog
 from ..menu_bar import (
     DEFAULT_REGION_COLOR,
@@ -105,6 +107,9 @@ class RegionController(Controller):
         #: moment it is shown, so it must be kept somewhere.
         self._dialogs: dict[int, RegionDialog] = {}
 
+        #: The Groups dialog, kept for the same reason.
+        self._group_dialog: GroupDialog | None = None
+
     def connect(self) -> None:
         """Wire the Region menu."""
         menu = self.menu
@@ -136,12 +141,13 @@ class RegionController(Controller):
         # first argument, which would arrive as the region to show.
         menu.action_region_info.triggered.connect(lambda _checked=False: self.show_information())
 
+        menu.action_region_new_group.triggered.connect(lambda _checked=False: self.new_group())
+        menu.action_region_groups.triggered.connect(lambda _checked=False: self.show_groups())
+
         for action, milestone in (
             (menu.action_region_composite, "M6-17"),
             (menu.action_region_template, "M6-18"),
             (menu.action_region_centroid, "M6-20"),
-            (menu.action_region_new_group, "M6-16"),
-            (menu.action_region_groups, "M6-16"),
         ):
             action.triggered.connect(
                 lambda _checked=False, a=action, m=milestone: self.status(
@@ -241,6 +247,69 @@ class RegionController(Controller):
             if hasattr(region, attribute):
                 setattr(region, attribute, value)
         return region
+
+    # -- groups (M6-16) -------------------------------------------------------
+
+    def new_group(self) -> None:
+        """Tag the selection as a new group, DS9's New Group.
+
+        A group in DS9 is a tag, so this is exactly "put a name on these
+        regions" -- and because it is a tag, it survives being written to a
+        region file and read back.
+        """
+        chosen = self.selection_only()
+        if not chosen:
+            self.status("Select the regions to group first", 3000)
+            return
+
+        frame = self.frame
+        suggestion = group_manager.default_name(frame.regions if frame else [])
+        name, accepted = QInputDialog.getText(self.window, "New Group", "Enter group name:", text=suggestion)
+        name = name.strip()
+        if not accepted or not name:
+            return
+
+        added = group_manager.create(chosen, name)
+        self.refresh_overlay()
+        self.status(f"Group {name}: {added} region{'s' if added != 1 else ''}")
+
+    def selection_only(self) -> list[BaseRegion]:
+        """The selected regions, and nothing when none is selected.
+
+        `selection` falls back to every region, which is right for the Color
+        and Width cascades -- they set a default -- and wrong here: grouping
+        every region because none was chosen is not what anyone meant.
+        """
+        frame = self.frame
+        if frame is None:
+            return []
+        return [region for region in frame.regions if getattr(region, "selected", False)]
+
+    def show_groups(self) -> None:
+        """Open DS9's Groups dialog on the current frame."""
+        frame = self.frame
+        if frame is None:
+            self.status("No frame", 3000)
+            return
+
+        existing = getattr(self, "_group_dialog", None)
+        if existing is not None:
+            existing.regions = frame.regions
+            existing.refresh()
+            existing.raise_()
+            existing.activateWindow()
+            return
+
+        dialog = GroupDialog(frame.regions, self.window)
+        dialog.groups_changed.connect(self._on_groups_changed)
+        dialog.finished.connect(lambda _result: setattr(self, "_group_dialog", None))
+        self._group_dialog = dialog
+        dialog.show()
+
+    def _on_groups_changed(self, message: str) -> None:
+        """Redraw and report, after the Groups dialog changes something."""
+        self.refresh_overlay()
+        self.status(message)
 
     # -- Get Information (M6-7) ----------------------------------------------
 

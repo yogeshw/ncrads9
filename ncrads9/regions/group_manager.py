@@ -1,4 +1,4 @@
-# NCRADS9 - NCRA DS9 Viewer
+# NCRADS9 - NCRA DS9-like FITS Viewer
 # Copyright (C) 2026 Yogesh Wadadekar
 #
 # This program is free software: you can redistribute it and/or modify
@@ -15,404 +15,140 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
-Group manager for region grouping functionality.
+Region groups, which in DS9 are tags.
+
+DS9's New Group puts a tag on every selected region (`GroupCreate` in
+`ds9/library/group.tcl` is two lines: ask for a name, then
+`$current(frame) marker tag "{$name}"`), and the Groups dialog lists the tags
+in use, selects the regions carrying one, renames a tag, or deletes it. There
+is no group object anywhere: a group is exactly "the regions with this tag".
+
+That matters for more than tidiness. Membership written as a tag survives a
+round trip through a region file, because `tag={name}` is part of DS9's own
+format; membership held as a list of positions does not survive anything at
+all -- not Move to Front, not deleting a region, not loading a second file.
+This module used to hold `RegionGroup(region_indices=[...])`, which every one
+of those silently corrupted, and nothing had ever opened it
+(`test_no_orphan_modules` listed it against M6-16).
+
+The functions here take the region list rather than owning it, because the
+regions belong to a frame and each frame has its own.
 
 Author: Yogesh Wadadekar
 """
 
-from collections.abc import Callable, Iterator
-from dataclasses import dataclass, field
+from __future__ import annotations
 
 from .base_region import BaseRegion
-from .region_manager import RegionManager
-
-
-@dataclass
-class RegionGroup:
-    """A group of regions."""
-
-    name: str
-    color: str = "green"
-    visible: bool = True
-    locked: bool = False
-    region_indices: list[int] = field(default_factory=list)
-
-    def __post_init__(self) -> None:
-        """Initialize the region indices list if None."""
-        if self.region_indices is None:
-            self.region_indices = []
-
-
-class GroupManager:
-    """Manager for region groups."""
-
-    def __init__(self, region_manager: RegionManager | None = None) -> None:
-        """
-        Initialize the group manager.
-
-        Args:
-            region_manager: Optional region manager to associate with.
-        """
-        self._region_manager = region_manager
-        self._groups: dict[str, RegionGroup] = {}
-        self._change_callbacks: list[Callable[[], None]] = []
-
-    @property
-    def groups(self) -> dict[str, RegionGroup]:
-        """Get all groups."""
-        return self._groups.copy()
-
-    @property
-    def group_names(self) -> list[str]:
-        """Get all group names."""
-        return list(self._groups.keys())
-
-    @property
-    def count(self) -> int:
-        """Get the number of groups."""
-        return len(self._groups)
-
-    def set_region_manager(self, manager: RegionManager) -> None:
-        """
-        Set the region manager.
-
-        Args:
-            manager: The region manager to associate with.
-        """
-        self._region_manager = manager
-
-    def create_group(
-        self,
-        name: str,
-        color: str = "green",
-        visible: bool = True,
-        locked: bool = False,
-    ) -> RegionGroup:
-        """
-        Create a new group.
-
-        Args:
-            name: The name of the group.
-            color: The default color for the group.
-            visible: Whether the group is visible.
-            locked: Whether the group is locked.
-
-        Returns:
-            The created RegionGroup.
-
-        Raises:
-            ValueError: If a group with the name already exists.
-        """
-        if name in self._groups:
-            raise ValueError(f"Group '{name}' already exists")
-
-        group = RegionGroup(name=name, color=color, visible=visible, locked=locked)
-        self._groups[name] = group
-        self._notify_change()
-        return group
-
-    def delete_group(self, name: str, remove_tag: bool = True) -> bool:
-        """
-        Delete a group.
-
-        Args:
-            name: The name of the group to delete.
-            remove_tag: Whether to remove the group tag from regions.
-
-        Returns:
-            True if the group was deleted, False if it didn't exist.
-        """
-        if name not in self._groups:
-            return False
-
-        group = self._groups[name]
-
-        # Remove tag from regions if requested
-        if remove_tag and self._region_manager is not None:
-            for index in group.region_indices:
-                region = self._region_manager.get_region(index)
-                if region and name in region.tags:
-                    region.tags.remove(name)
-
-        del self._groups[name]
-        self._notify_change()
-        return True
-
-    def rename_group(self, old_name: str, new_name: str) -> bool:
-        """
-        Rename a group.
-
-        Args:
-            old_name: The current name of the group.
-            new_name: The new name for the group.
-
-        Returns:
-            True if the group was renamed, False otherwise.
 
-        Raises:
-            ValueError: If new_name already exists.
-        """
-        if old_name not in self._groups:
-            return False
-
-        if new_name in self._groups:
-            raise ValueError(f"Group '{new_name}' already exists")
-
-        group = self._groups.pop(old_name)
-        group.name = new_name
-        self._groups[new_name] = group
-
-        # Update tags in regions
-        if self._region_manager is not None:
-            for index in group.region_indices:
-                region = self._region_manager.get_region(index)
-                if region and old_name in region.tags:
-                    region.tags.remove(old_name)
-                    region.tags.append(new_name)
-
-        self._notify_change()
-        return True
-
-    def get_group(self, name: str) -> RegionGroup | None:
-        """
-        Get a group by name.
-
-        Args:
-            name: The name of the group.
-
-        Returns:
-            The RegionGroup or None if not found.
-        """
-        return self._groups.get(name)
-
-    def add_region_to_group(self, group_name: str, region_index: int) -> bool:
-        """
-        Add a region to a group.
-
-        Args:
-            group_name: The name of the group.
-            region_index: The index of the region to add.
-
-        Returns:
-            True if successful, False otherwise.
-        """
-        if group_name not in self._groups:
-            return False
-
-        group = self._groups[group_name]
-        if region_index not in group.region_indices:
-            group.region_indices.append(region_index)
-
-            # Add tag to region
-            if self._region_manager is not None:
-                region = self._region_manager.get_region(region_index)
-                if region and group_name not in region.tags:
-                    region.tags.append(group_name)
-
-            self._notify_change()
-
-        return True
-
-    def remove_region_from_group(self, group_name: str, region_index: int) -> bool:
-        """
-        Remove a region from a group.
-
-        Args:
-            group_name: The name of the group.
-            region_index: The index of the region to remove.
-
-        Returns:
-            True if successful, False otherwise.
-        """
-        if group_name not in self._groups:
-            return False
-
-        group = self._groups[group_name]
-        if region_index in group.region_indices:
-            group.region_indices.remove(region_index)
-
-            # Remove tag from region
-            if self._region_manager is not None:
-                region = self._region_manager.get_region(region_index)
-                if region and group_name in region.tags:
-                    region.tags.remove(group_name)
-
-            self._notify_change()
-
-        return True
-
-    def get_regions_in_group(self, group_name: str) -> list[BaseRegion]:
-        """
-        Get all regions in a group.
-
-        Args:
-            group_name: The name of the group.
-
-        Returns:
-            List of regions in the group.
-        """
-        if group_name not in self._groups or self._region_manager is None:
-            return []
-
-        group = self._groups[group_name]
-        regions: list[BaseRegion] = []
-
-        for index in group.region_indices:
-            region = self._region_manager.get_region(index)
-            if region:
-                regions.append(region)
-
-        return regions
-
-    def get_groups_for_region(self, region_index: int) -> list[str]:
-        """
-        Get all groups that contain a region.
-
-        Args:
-            region_index: The index of the region.
-
-        Returns:
-            List of group names containing the region.
-        """
-        return [name for name, group in self._groups.items() if region_index in group.region_indices]
-
-    def set_group_visibility(self, group_name: str, visible: bool) -> bool:
-        """
-        Set the visibility of a group.
-
-        Args:
-            group_name: The name of the group.
-            visible: Whether the group should be visible.
-
-        Returns:
-            True if successful, False otherwise.
-        """
-        if group_name not in self._groups:
-            return False
-
-        self._groups[group_name].visible = visible
-        self._notify_change()
-        return True
-
-    def set_group_locked(self, group_name: str, locked: bool) -> bool:
-        """
-        Set the locked state of a group.
-
-        Args:
-            group_name: The name of the group.
-            locked: Whether the group should be locked.
-
-        Returns:
-            True if successful, False otherwise.
-        """
-        if group_name not in self._groups:
-            return False
-
-        self._groups[group_name].locked = locked
-        self._notify_change()
-        return True
-
-    def set_group_color(self, group_name: str, color: str) -> bool:
-        """
-        Set the color of a group.
-
-        Args:
-            group_name: The name of the group.
-            color: The color for the group.
-
-        Returns:
-            True if successful, False otherwise.
-        """
-        if group_name not in self._groups:
-            return False
-
-        self._groups[group_name].color = color
-
-        # Update color of all regions in the group
-        if self._region_manager is not None:
-            for index in self._groups[group_name].region_indices:
-                region = self._region_manager.get_region(index)
-                if region:
-                    region.color = color
-
-        self._notify_change()
-        return True
-
-    def select_group(self, group_name: str) -> bool:
-        """
-        Select all regions in a group.
-
-        Args:
-            group_name: The name of the group.
-
-        Returns:
-            True if successful, False otherwise.
-        """
-        if group_name not in self._groups or self._region_manager is None:
-            return False
-
-        group = self._groups[group_name]
-        for index in group.region_indices:
-            self._region_manager.select(index)
-
-        return True
-
-    def deselect_group(self, group_name: str) -> bool:
-        """
-        Deselect all regions in a group.
-
-        Args:
-            group_name: The name of the group.
-
-        Returns:
-            True if successful, False otherwise.
-        """
-        if group_name not in self._groups or self._region_manager is None:
-            return False
-
-        group = self._groups[group_name]
-        for index in group.region_indices:
-            self._region_manager.deselect(index)
-
-        return True
-
-    def clear(self) -> None:
-        """Remove all groups."""
-        self._groups.clear()
-        self._notify_change()
-
-    def add_change_callback(self, callback: Callable[[], None]) -> None:
-        """
-        Add a callback to be called when groups change.
-
-        Args:
-            callback: The callback function.
-        """
-        self._change_callbacks.append(callback)
-
-    def remove_change_callback(self, callback: Callable[[], None]) -> None:
-        """
-        Remove a change callback.
-
-        Args:
-            callback: The callback function to remove.
-        """
-        if callback in self._change_callbacks:
-            self._change_callbacks.remove(callback)
-
-    def _notify_change(self) -> None:
-        """Notify all callbacks of a change."""
-        for callback in self._change_callbacks:
-            callback()
-
-    def __iter__(self) -> Iterator[RegionGroup]:
-        """Iterate over all groups."""
-        return iter(self._groups.values())
-
-    def __len__(self) -> int:
-        """Get the number of groups."""
-        return len(self._groups)
-
-    def __contains__(self, name: str) -> bool:
-        """Check if a group exists."""
-        return name in self._groups
+#: The stem DS9 numbers its automatic group names from ("Group 1", "Group 2").
+DEFAULT_STEM = "Group"
+
+
+def group_names(regions: list[BaseRegion]) -> list[str]:
+    """Every tag in use, in the order first met.
+
+    Ordering by first appearance rather than alphabetically keeps a list of
+    groups stable as regions are added, which a sorted list would not.
+    """
+    names: list[str] = []
+    for region in regions:
+        for tag in region.tags:
+            if tag not in names:
+                names.append(tag)
+    return names
+
+
+def default_name(regions: list[BaseRegion]) -> str:
+    """The name DS9 offers for a new group: the first unused "Group N"."""
+    taken = set(group_names(regions))
+    number = 1
+    while f"{DEFAULT_STEM} {number}" in taken:
+        number += 1
+    return f"{DEFAULT_STEM} {number}"
+
+
+def regions_in(regions: list[BaseRegion], name: str) -> list[BaseRegion]:
+    """The regions carrying one tag."""
+    return [region for region in regions if name in region.tags]
+
+
+def create(members: list[BaseRegion], name: str) -> int:
+    """Tag every region in `members` with `name`.
+
+    Args:
+        members: The regions to put in the group -- DS9 uses the selection.
+        name: The group's name.
+
+    Returns:
+        How many regions gained the tag. A region already in the group keeps
+        one tag rather than gaining a second.
+    """
+    added = 0
+    for region in members:
+        if name not in region.tags:
+            region.tags = [*region.tags, name]
+            added += 1
+    return added
+
+
+def rename(regions: list[BaseRegion], old: str, new: str) -> int:
+    """Rename a group, keeping each region's tag order.
+
+    Returns:
+        How many regions were retagged.
+    """
+    if old == new:
+        return 0
+    changed = 0
+    for region in regions:
+        if old not in region.tags:
+            continue
+        # A region already carrying `new` must not end up with it twice.
+        tags = [tag for tag in region.tags if tag != old]
+        if new not in tags:
+            tags.insert(min(region.tags.index(old), len(tags)), new)
+        region.tags = tags
+        changed += 1
+    return changed
+
+
+def delete(regions: list[BaseRegion], name: str) -> int:
+    """Delete a group. The regions themselves stay; only the tag goes.
+
+    Returns:
+        How many regions lost the tag.
+    """
+    removed = 0
+    for region in regions:
+        if name in region.tags:
+            region.tags = [tag for tag in region.tags if tag != name]
+            removed += 1
+    return removed
+
+
+def delete_all(regions: list[BaseRegion]) -> int:
+    """Delete every group, which is DS9's Delete All Groups.
+
+    Returns:
+        How many regions lost at least one tag.
+    """
+    removed = 0
+    for region in regions:
+        if region.tags:
+            region.tags = []
+            removed += 1
+    return removed
+
+
+def select(regions: list[BaseRegion], name: str) -> int:
+    """Select exactly the regions in one group, as DS9's Groups list does.
+
+    Returns:
+        How many regions ended up selected.
+    """
+    count = 0
+    for region in regions:
+        region.selected = name in region.tags
+        count += bool(region.selected)
+    return count

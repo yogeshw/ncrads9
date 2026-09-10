@@ -509,3 +509,48 @@ def test_deleting_from_the_dialog_removes_the_region(main_window):
     dialog._delete()
     assert region not in frame.regions
     assert len(frame.regions) == 2
+
+
+# -- groups, from the menu (M6-16) --------------------------------------------
+
+
+def test_new_group_with_nothing_selected_says_so(main_window):
+    """Grouping every region because none was chosen is not what anyone meant."""
+    main_window.region.select_none()
+    main_window.menu_bar.action_region_new_group.trigger()
+    assert "Select the regions to group first" in main_window.status_bar.currentMessage()
+
+
+def test_new_group_tags_the_selection(main_window, monkeypatch):
+    from PyQt6.QtWidgets import QInputDialog
+
+    monkeypatch.setattr(QInputDialog, "getText", staticmethod(lambda *a, **k: ("bright", True)))
+    regions = main_window.frame_manager.current_frame.regions
+    regions[0].selected = True
+    main_window.menu_bar.action_region_new_group.trigger()
+    assert regions[0].tags == ["bright"]
+    assert regions[1].tags == []
+
+
+def test_new_group_suggests_the_first_unused_name(main_window, monkeypatch):
+    from PyQt6.QtWidgets import QInputDialog
+
+    offered = {}
+
+    def prompt(_parent, _title, _label, text=""):
+        offered["text"] = text
+        return ("", False)
+
+    monkeypatch.setattr(QInputDialog, "getText", staticmethod(prompt))
+    regions = main_window.frame_manager.current_frame.regions
+    regions[0].tags = ["Group 1"]
+    regions[0].selected = True
+    main_window.menu_bar.action_region_new_group.trigger()
+    assert offered["text"] == "Group 2"
+
+
+def test_the_groups_dialog_opens_and_is_kept(main_window):
+    main_window.menu_bar.action_region_groups.trigger()
+    assert main_window.region._group_dialog is not None
+    main_window.region._group_dialog.close()
+    assert main_window.region._group_dialog is None

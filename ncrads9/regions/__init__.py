@@ -23,8 +23,8 @@ rendering, and management.
 Author: Yogesh Wadadekar
 """
 
+from . import group_manager
 from .base_region import BaseRegion
-from .group_manager import GroupManager
 from .region_manager import RegionManager
 from .region_parser import RegionParser
 from .region_renderer import RegionRenderer
@@ -36,5 +36,5 @@ __all__ = [
     "RegionWriter",
     "RegionManager",
     "RegionRenderer",
-    "GroupManager",
+    "group_manager",
 ]
