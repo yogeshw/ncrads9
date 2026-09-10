@@ -92,6 +92,10 @@ class Frame:
     align_wcs: bool = False
     contrast: float = 1.0
     brightness: float = 0.0
+    #: Where DS9's crosshair sits on this frame, in image pixels counting
+    #: from one, or None until it is placed. Per frame, because DS9's
+    #: crosshair is per frame -- and its lock is what ties them together.
+    crosshair: tuple[float, float] | None = None
     crop_center_x: float | None = None
     crop_center_y: float | None = None
     crop_width: float | None = None

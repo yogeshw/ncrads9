@@ -48,7 +48,6 @@ from numpy.typing import NDArray
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QColor, QDesktopServices, QGuiApplication
 from PyQt6.QtWidgets import (
-    QColorDialog,
     QDialog,
     QFileDialog,
     QHBoxLayout,
@@ -127,7 +126,6 @@ class AnalysisController(Controller):
         menu.action_radial_profile.triggered.connect(self.show_radial_profile)
 
         menu.action_mask_params.triggered.connect(self.show_mask_dialog)
-        menu.action_crosshair_params.triggered.connect(self.show_crosshair_dialog)
         menu.action_graph_params.triggered.connect(self.show_graph_dialog)
 
         menu.action_contours.triggered.connect(self.set_contours)
@@ -420,40 +418,6 @@ class AnalysisController(Controller):
         self.window.display.display()
         self.status("Mask cleared")
 
-    def show_crosshair_dialog(self) -> None:
-        """Show crosshair parameter controls."""
-        enabled, ok = QInputDialog.getItem(
-            self,
-            "Crosshair Parameters",
-            "Crosshair:",
-            ["Off", "On"],
-            1 if self.window._crosshair_enabled else 0,
-            False,
-        )
-        if not ok:
-            return
-        self.window._crosshair_enabled = enabled == "On"
-        if self.window._crosshair_enabled:
-            color = QColorDialog.getColor(self.window._crosshair_color, self.window, "Crosshair Color")
-            if color.isValid():
-                self.window._crosshair_color = color
-            size, ok_size = QInputDialog.getInt(
-                self,
-                "Crosshair Parameters",
-                "Crosshair size (pixels):",
-                self.window._crosshair_size,
-                4,
-                256,
-            )
-            if ok_size:
-                self.window._crosshair_size = int(size)
-        self.refresh_overlays()
-        self.log_command(f"crosshair {'on' if self.window._crosshair_enabled else 'off'}")
-        self.status(
-            f"Crosshair {'enabled' if self.window._crosshair_enabled else 'disabled'}",
-            2000,
-        )
-
     def show_graph_dialog(self) -> None:
         """Show graph panel visibility controls."""
         current = "None"
@@ -490,20 +454,11 @@ class AnalysisController(Controller):
             self.window.vertical_graph.set_image(analysis_data)
 
     def refresh_overlays(self) -> None:
-        """Apply grid/crosshair overlay states to the active viewer."""
+        """Apply the grid and crosshair overlay states to the active viewer."""
         self.refresh_grid()
-        if hasattr(self.viewer, "set_crosshair"):
-            position = (
-                (float(self.window._last_mouse_pos[0]), float(self.window._last_mouse_pos[1]))
-                if self.window._last_mouse_pos is not None
-                else None
-            )
-            self.viewer.set_crosshair(
-                self.window._crosshair_enabled,
-                position=position,
-                color=self.window._crosshair_color,
-                size=self.window._crosshair_size,
-            )
+        # The crosshair has its own controller as of M9-1; it used to follow
+        # the pointer from here, which is not what DS9's crosshair does.
+        self.window.crosshair.refresh()
 
     def resolve_object_name(self) -> None:
         """Resolve an object name and pan to it if WCS is available."""

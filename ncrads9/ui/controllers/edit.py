@@ -68,13 +68,6 @@ PASTE_OFFSET = 10.0
 #: that gives each an effect. `none`, `region`, `crosshair` and `colorbar`
 #: are live.
 DEFERRED_MODES: dict[str, str] = {
-    "pan": "M9-3",
-    "zoom": "M9-3",
-    "rotate": "M9-3",
-    "crop": "M9-2",
-    "catalog": "M8-1",
-    "footprint": "M8-12",
-    "examine": "M9-3",
     "3d": "M9-21",
     "illustrate": "M9-6",
 }
@@ -141,6 +134,12 @@ class EditController(Controller):
         self.window.edit_mode = mode
         self.sync()
 
+        # Every mode but these three is carried out by the pointer
+        # controller, which arms the handler the overlay dispatches to.
+        self.window.pointer.set_mode(mode)
+        if mode != "crosshair":
+            self.window.crosshair.set_enabled(False)
+
         if mode == "region":
             # Region mode is the drawing mode the Region menu already sets;
             # leaving the shape alone means switching to Region mode keeps
@@ -148,11 +147,10 @@ class EditController(Controller):
             self.status("Edit mode: region")
             return
         if mode == "crosshair":
-            # The crosshair overlay is the Analysis menu's; this only turns
-            # it on, so Edit -> Crosshair and Analysis agree.
-            self.window._crosshair_enabled = True
-            self.refresh()
-            self.status("Edit mode: crosshair")
+            # Placed in the middle if it has never been placed, so the mode
+            # does something the moment it is chosen.
+            self.window.crosshair.set_enabled(True)
+            self.status("Edit mode: crosshair -- click to place the crosshair")
             return
 
         milestone = DEFERRED_MODES.get(mode)

@@ -135,11 +135,12 @@ class FrameController(Controller):
         menu.action_match_frame_detector.triggered.connect(self.match_image)
         menu.action_match_image.triggered.connect(self.match_image)
 
-        menu.action_match_crosshair_wcs.triggered.connect(self.match_wcs)
-        menu.action_match_crosshair_image.triggered.connect(self.match_image)
-        menu.action_match_crosshair_physical.triggered.connect(self.match_image)
-        menu.action_match_crosshair_amplifier.triggered.connect(self.match_image)
-        menu.action_match_crosshair_detector.triggered.connect(self.match_image)
+        # Match -> Crosshair moves the crosshairs, not the views; these used
+        # to match the frames, which is what Match -> Frame is for.
+        for system in ("wcs", "image", "physical", "amplifier", "detector"):
+            getattr(menu, f"action_match_crosshair_{system}").triggered.connect(
+                lambda _checked=False, v=system: self.window.crosshair.match(v)
+            )
 
         menu.action_match_crop_wcs.triggered.connect(self.match_wcs)
         menu.action_match_crop_image.triggered.connect(self.match_image)
@@ -980,6 +981,8 @@ class FrameController(Controller):
     def set_lock_scope(self, scope: str, value: str) -> None:
         """Set lock scope value."""
         self.window._frame_lock_scope[scope] = value
+        if scope == "crosshair":
+            self.window.crosshair.set_locked(value != "none", value)
         self.status(f"Frame lock {scope}: {value}", 2000)
 
     def set_lock_flag(self, flag: str, enabled: bool) -> None:

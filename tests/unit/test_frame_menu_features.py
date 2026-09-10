@@ -204,13 +204,16 @@ def test_wcs_direction_arrows_default_and_toggle(main_window: MainWindow):
     assert overlay._east_vector is not None
 
 
-def test_clear_regions_returns_to_pan_mode(main_window: MainWindow):
+def test_clear_regions_returns_to_pointer_mode(main_window: MainWindow):
     main_window.region.set_mode(RegionMode.CIRCLE)
     assert main_window.image_viewer.region_overlay.mode == RegionMode.CIRCLE
 
     main_window.region.clear_regions()
     assert main_window.image_viewer.region_overlay.mode == RegionMode.NONE
-    assert main_window.image_viewer.region_overlay.testAttribute(
+    # The overlay keeps the mouse in every mode now: it is the topmost
+    # child and the only one dispatching, and in pointer mode it is what
+    # selects, moves and resizes an existing region.
+    assert not main_window.image_viewer.region_overlay.testAttribute(
         Qt.WidgetAttribute.WA_TransparentForMouseEvents
     )
 

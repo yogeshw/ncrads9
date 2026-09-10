@@ -49,23 +49,8 @@ from ..rendering.scale_algorithms import ScaleAlgorithm
 from ..rendering.scale_limits import ScaleLimits
 from ..utils.preferences import Preferences
 from .button_bar import ButtonBar
-from .controllers.analysis import AnalysisController
-from .controllers.analysis_tasks import AnalysisTaskController
+from .controllers import CONTROLLERS, EditController
 from .controllers.base import Controller
-from .controllers.bin import BinController
-from .controllers.catalog import CatalogController
-from .controllers.color import ColorController
-from .controllers.edit import EditController
-from .controllers.file import FileController
-from .controllers.frame import FrameController
-from .controllers.help import HelpController
-from .controllers.image_servers import ImageServerController
-from .controllers.region import RegionController
-from .controllers.scale import ScaleController
-from .controllers.view import ViewController
-from .controllers.vo import VOController
-from .controllers.wcs import WCSController
-from .controllers.zoom import ZoomController
 from .display import DisplayPipeline
 from .layout.shell import WindowShell
 from .layout.view_state import ViewState
@@ -163,9 +148,6 @@ class MainWindow(QMainWindow):
         self._analysis_command_entries: list[str] = []
         # DS9's pointer mode: what a drag on the image does.
         self.edit_mode = "none"
-        self._crosshair_enabled = False
-        self._crosshair_color = QColor(255, 0, 0)
-        self._crosshair_size = 24
         # DS9 draws its N/E compass in the panner, not over the data, so the
         # image overlay is opt-in via WCS -> Show Direction Arrows.
         self._show_direction_arrows = False
@@ -257,44 +239,18 @@ class MainWindow(QMainWindow):
         # without building the whole window.
         self.display = DisplayPipeline(self)
 
-        self.analysis = AnalysisController(self)
-        self.analysis_tasks = AnalysisTaskController(self)
-        self.bin = BinController(self)
-        self.catalog = CatalogController(self)
-        self.color = ColorController(self)
-        # Named `frame_controller`: `self.frame` would shadow nothing on the
-        # window, but reads as a Frame everywhere else in the codebase.
-        self.frame_controller = FrameController(self)
-        self.help = HelpController(self)
-        self.image_servers = ImageServerController(self)
-        self.edit = EditController(self)
-        self.file = FileController(self)
-        self.region = RegionController(self)
-        self.view = ViewController(self)
-        self.vo = VOController(self)
-        self.zoom = ZoomController(self)
-        self.scale = ScaleController(self)
-        self.wcs = WCSController(self)
+        # Built from one table, which is also the sync list: keeping two
+        # lists of nineteen controllers in step by hand is a line of code
+        # away from being wrong. `frame_controller` is spelt out because
+        # `self.frame` reads as a Frame everywhere else in the codebase.
+        built = []
+        for name, kind in CONTROLLERS:
+            controller = kind(self)
+            setattr(self, name, controller)
+            built.append(controller)
 
         #: Every controller, for broadcasting `sync()` on a frame change.
-        self.controllers: tuple[Controller, ...] = (
-            self.analysis,
-            self.analysis_tasks,
-            self.bin,
-            self.catalog,
-            self.color,
-            self.edit,
-            self.frame_controller,
-            self.help,
-            self.image_servers,
-            self.file,
-            self.region,
-            self.scale,
-            self.view,
-            self.vo,
-            self.wcs,
-            self.zoom,
-        )
+        self.controllers: tuple[Controller, ...] = tuple(built)
 
     def _sync_controllers(self) -> None:
         """Bring every controller's menu state in step with the current frame."""
@@ -337,6 +293,7 @@ class MainWindow(QMainWindow):
         self.analysis_tasks.connect()
         self.bin.connect()
         self.catalog.connect()
+        self.crosshair.connect()
         self.image_servers.connect()
 
         self.menu_bar.action_fits_header.triggered.connect(self.file.show_header)

@@ -24,12 +24,18 @@ Author: Yogesh Wadadekar
 """
 
 from .analysis import AnalysisController
+from .analysis_tasks import AnalysisTaskController
 from .base import Controller
+from .bin import BinController
+from .catalog import CatalogController
 from .color import ColorController
+from .crosshair import CrosshairController
 from .edit import EditController
 from .file import FileController
 from .frame import FrameController
 from .help import HelpController
+from .image_servers import ImageServerController
+from .pointer import PointerController
 from .region import RegionController
 from .scale import ScaleController
 from .view import ViewController
@@ -52,3 +58,27 @@ __all__ = [
     "WCSController",
     "ZoomController",
 ]
+
+
+#: Every menu controller, by the attribute it is reached through. The
+#: order is the order `sync()` is broadcast in, which nothing depends on.
+CONTROLLERS: tuple[tuple[str, type], ...] = (
+    ("analysis", AnalysisController),
+    ("analysis_tasks", AnalysisTaskController),
+    ("bin", BinController),
+    ("catalog", CatalogController),
+    ("color", ColorController),
+    ("crosshair", CrosshairController),
+    ("edit", EditController),
+    ("file", FileController),
+    ("frame_controller", FrameController),
+    ("help", HelpController),
+    ("image_servers", ImageServerController),
+    ("pointer", PointerController),
+    ("region", RegionController),
+    ("scale", ScaleController),
+    ("view", ViewController),
+    ("vo", VOController),
+    ("wcs", WCSController),
+    ("zoom", ZoomController),
+)
