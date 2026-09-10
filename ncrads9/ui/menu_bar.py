@@ -499,6 +499,16 @@ class MenuBar(QMenuBar):
 
         self.file_menu.addSeparator()
 
+        # DS9 offers `Open TCL Console` and `Source TCL` here, because DS9
+        # is written in TCL. Ours is written in Python, so the console is a
+        # Python one and the script is a Python script.
+        self.action_console: QAction = QAction("Open Python &Console", self)
+        self.file_menu.addAction(self.action_console)
+        self.action_run_script: QAction = QAction("&Run Python Script...", self)
+        self.file_menu.addAction(self.action_run_script)
+
+        self.file_menu.addSeparator()
+
         self.action_page_setup: QAction = QAction("Page Set&up...", self)
         self.file_menu.addAction(self.action_page_setup)
 
@@ -980,6 +990,7 @@ class MenuBar(QMenuBar):
         self.frame_menu.addSeparator()
         self.frame_params_menu: QMenu = self.frame_menu.addMenu("Frame &Parameters")
         self.tile_params_menu: QMenu = self.frame_params_menu.addMenu("&Tile")
+
         self.blink_interval_menu: QMenu = self.frame_params_menu.addMenu("&Blink Interval")
         self.fade_interval_menu: QMenu = self.frame_params_menu.addMenu("&Fade Interval")
 
@@ -997,6 +1008,10 @@ class MenuBar(QMenuBar):
         self.action_tile_mode_rows: QAction = QAction("&Rows", self)
         self.action_tile_mode_rows.setCheckable(True)
         self.tile_params_menu.addAction(self.action_tile_mode_rows)
+
+        self.tile_params_menu.addSeparator()
+        self.action_tile_parameters: QAction = QAction("Tile &Parameters...", self)
+        self.tile_params_menu.addAction(self.action_tile_parameters)
         self.tile_mode_group.addAction(self.action_tile_mode_rows)
 
         self.blink_interval_group = QActionGroup(self)
@@ -1038,6 +1053,11 @@ class MenuBar(QMenuBar):
             self.fade_interval_menu.addAction(action)
             self.fade_interval_group.addAction(action)
             self.fade_interval_actions[ms] = action
+
+        # DS9 puts Display Size on Frame Parameters itself, after the two
+        # interval cascades (`mframe.tcl`).
+        self.action_display_size: QAction = QAction("&Display Size...", self)
+        self.frame_params_menu.addAction(self.action_display_size)
 
     def _setup_bin_menu(self) -> None:
         """Set up the Bin menu.

@@ -848,11 +848,15 @@ class DisplayPipeline:
             self.status("No loaded frames to tile", 2000)
             return False
 
+        settings = self.window._tile_settings
         layout = TileLayout.compute(
             count=len(rgb_frames),
             cell_width=max(rgb.shape[1] for rgb in rgb_frames),
             cell_height=max(rgb.shape[0] for rgb in rgb_frames),
             mode=self.window._tile_arrangement_mode,
+            gap=settings.gap,
+            manual=(settings.rows, settings.columns) if settings.manual else None,
+            direction=settings.direction,
         )
         self.window._tile_layout = layout
         self.window._tile_frame_indices = frame_indices

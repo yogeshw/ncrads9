@@ -44,7 +44,7 @@ from ..frames.blink_controller import (
     BlinkController,
 )
 from ..frames.frame_manager import FrameManager
-from ..frames.tile_layout import TileLayout
+from ..frames.tile_layout import TileLayout, TileSettings
 from ..rendering.scale_algorithms import ScaleAlgorithm
 from ..rendering.scale_limits import ScaleLimits
 from ..utils.preferences import Preferences
@@ -162,6 +162,8 @@ class MainWindow(QMainWindow):
         self._show_direction_arrows = False
         self._frame_display_mode = "single"
         self._tile_mode_enabled = False
+        #: DS9's Tile Parameters: the grid, the direction and the gap.
+        self._tile_settings = TileSettings()
         self._tile_arrangement_mode = "grid"
         self._tile_layout: TileLayout | None = None
         self._tile_frame_indices: list[int] = []

@@ -62,6 +62,25 @@ class TilePlacement:
     height: int
 
 
+@dataclass
+class TileSettings:
+    """What DS9's Tile Parameters dialog holds.
+
+    Attributes:
+        manual: Whether the grid is the one asked for rather than the
+            automatic square-ish one.
+        rows, columns: The grid asked for.
+        direction: `x` fills a row before starting the next, `y` a column.
+        gap: The gutter between tiles, in pixels.
+    """
+
+    manual: bool = False
+    rows: int = 2
+    columns: int = 2
+    direction: str = "x"
+    gap: int = DEFAULT_GAP
+
+
 @dataclass(frozen=True)
 class TileLayout:
     """A computed tile grid.
@@ -76,6 +95,9 @@ class TileLayout:
     cell_width: int
     cell_height: int
     gap: int = DEFAULT_GAP
+    #: Which way the tiles are filled: `x` along a row first, `y` down a
+    #: column first. DS9's Tile Parameters calls it Direction.
+    direction: str = "x"
 
     @classmethod
     def compute(
@@ -85,11 +107,30 @@ class TileLayout:
         cell_height: int,
         mode: TileMode | str = TileMode.GRID,
         gap: int = DEFAULT_GAP,
+        manual: tuple[int, int] | None = None,
+        direction: str = "x",
     ) -> TileLayout:
         """Work out the grid for `count` tiles of the given cell size.
 
         GRID keeps the mosaic as square as possible, which is what DS9's
-        automatic grid mode does; COLUMN stacks vertically and ROW horizontally.
+        automatic grid mode does; COLUMN stacks vertically and ROW
+        horizontally.
+
+        Args:
+            count: How many tiles.
+            cell_width: How wide each is.
+            cell_height: How tall.
+            mode: Grid, column or row.
+            gap: The gutter between them, in pixels.
+            manual: An explicit (rows, columns), as DS9's Tile Parameters
+                offers instead of the automatic grid. A grid too small for
+                the frames is grown rather than dropping them: DS9 asks
+                for a shape, not for some of the frames.
+            direction: `x` fills a row before starting the next, `y` fills
+                a column. DS9's Tile Parameters calls this Direction.
+
+        Returns:
+            The layout.
         """
         if isinstance(mode, str):
             mode = TileMode(mode)
@@ -97,6 +138,28 @@ class TileLayout:
 
         if count == 0:
             rows = cols = 0
+        elif manual is not None:
+            wanted_rows = max(0, int(manual[0]))
+            wanted_cols = max(0, int(manual[1]))
+            if wanted_rows and wanted_cols:
+                rows, cols = wanted_rows, wanted_cols
+                while rows * cols < count:
+                    # Grow along whichever the direction fills last, so a
+                    # 2x2 asked to hold five frames becomes 3x2 rather
+                    # than losing one.
+                    if direction == "y":
+                        cols += 1
+                    else:
+                        rows += 1
+            elif wanted_cols:
+                cols = wanted_cols
+                rows = math.ceil(count / cols)
+            elif wanted_rows:
+                rows = wanted_rows
+                cols = math.ceil(count / rows)
+            else:
+                cols = max(1, math.ceil(math.sqrt(count)))
+                rows = math.ceil(count / cols)
         elif mode is TileMode.COLUMN:
             cols, rows = 1, count
         elif mode is TileMode.ROW:
@@ -112,6 +175,7 @@ class TileLayout:
             cell_width=max(0, int(cell_width)),
             cell_height=max(0, int(cell_height)),
             gap=max(0, int(gap)),
+            direction="y" if direction == "y" else "x",
         )
 
     @property
@@ -136,7 +200,11 @@ class TileLayout:
         """
         if not 0 <= index < self.count:
             return None
-        row, col = divmod(index, self.cols)
+        if self.direction == "y" and self.rows:
+            # Down the first column, then the next: DS9's Y direction.
+            col, row = divmod(index, self.rows)
+        else:
+            row, col = divmod(index, self.cols)
         x = self.gap + col * (self.cell_width + self.gap)
         top_y = self.gap + row * (self.cell_height + self.gap)
         y = self.height - top_y - self.cell_height
@@ -183,5 +251,8 @@ class TileLayout:
         if row_offset % row_span >= self.cell_height:
             return None
 
-        index = row * self.cols + col
+        # The same arithmetic as `placement`, the other way round, so a
+        # click lands on the tile it looks like it landed on whichever
+        # direction the tiles were filled in.
+        index = (col * self.rows + row) if self.direction == "y" else (row * self.cols + col)
         return index if index < self.count else None

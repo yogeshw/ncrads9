@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 1009 (886 excluding separators)
+# entries: 1015 (890 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -120,6 +120,9 @@
 .file.xpa|separator|---
 .file.xpa|command|Connect
 .file.xpa|command|Disconnect
+.file|separator|---
+.file|command|Open Python Console
+.file|command|Run Python Script
 .file|separator|---
 .file|command|Page Setup
 .file|command|Print
@@ -333,6 +336,8 @@
 .frame.frameparameters.tile|radiobutton|Grid
 .frame.frameparameters.tile|radiobutton|Columns
 .frame.frameparameters.tile|radiobutton|Rows
+.frame.frameparameters.tile|separator|---
+.frame.frameparameters.tile|command|Tile Parameters
 .frame.frameparameters|cascade|Blink Interval
 .frame.frameparameters.blinkinterval|radiobutton|.125 Seconds
 .frame.frameparameters.blinkinterval|radiobutton|.25 Seconds
@@ -347,6 +352,7 @@
 .frame.frameparameters.fadeinterval|radiobutton|2 Seconds
 .frame.frameparameters.fadeinterval|radiobutton|4 Seconds
 .frame.frameparameters.fadeinterval|radiobutton|8 Seconds
+.frame.frameparameters|command|Display Size
 # Bin
 .bin|radiobutton|Average
 .bin|radiobutton|Sum

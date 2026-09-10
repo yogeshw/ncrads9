@@ -151,6 +151,8 @@ class FrameController(Controller):
         menu.action_match_slice_image.triggered.connect(self.match_image)
 
         menu.action_match_bin.triggered.connect(self.match_bin)
+        menu.action_tile_parameters.triggered.connect(lambda _checked=False: self.show_tile_dialog())
+        menu.action_display_size.triggered.connect(lambda _checked=False: self.show_display_size_dialog())
         menu.action_match_axes_order.triggered.connect(self.match_axes_order)
         menu.action_match_scale.triggered.connect(self.match_scale)
         menu.action_match_scale_limits.triggered.connect(self.match_scale_limits)
@@ -608,6 +610,66 @@ class FrameController(Controller):
         self.window._fade_interval_ms = max(1, int(interval_ms))
         if self.window._frame_display_mode == "fade":
             self.window._blink_timer.start(self.window._fade_interval_ms)
+
+    # -- Tile Parameters and Display Size (M9-35, M9-36) ----------------------
+
+    @property
+    def tile_settings(self):
+        """DS9's Tile Parameters: the grid, the direction and the gap."""
+        return self.window._tile_settings
+
+    def apply_tile_settings(self, settings) -> None:
+        """Take a new grid and lay the frames out again."""
+        self.window._tile_settings = settings
+        if self.window._frame_display_mode == "tile":
+            self.window.display.display()
+        shape = f"{settings.columns}x{settings.rows}" if settings.manual else "automatic"
+        self.status(
+            f"Tile: {shape}, direction {settings.direction}, gap {settings.gap}",
+            3000,
+        )
+
+    def show_tile_dialog(self):
+        """DS9's Tile Parameters dialog."""
+        from ..dialogs.tile_dialog import TileParametersDialog
+
+        existing = getattr(self, "_tile_dialog", None)
+        if existing is not None:
+            existing.reload()
+            existing.raise_()
+            existing.activateWindow()
+            return existing
+
+        dialog = TileParametersDialog(self, self.window)
+        dialog.finished.connect(lambda _result: setattr(self, "_tile_dialog", None))
+        self._tile_dialog = dialog
+        dialog.show()
+        return dialog
+
+    def show_display_size_dialog(self) -> bool:
+        """DS9's Display Size: how large the image display is.
+
+        The window is grown by however much the display is short, since
+        what DS9 sizes is the display and not the window around it.
+
+        Returns:
+            Whether the size was changed.
+        """
+        from ..dialogs.tile_dialog import DisplaySizeDialog
+
+        viewer = self.window.image_viewer
+        chosen = DisplaySizeDialog(viewer.width(), viewer.height(), self.window).choose()
+        if chosen is None:
+            return False
+
+        width, height = chosen
+        size = self.window.size()
+        self.window.resize(
+            size.width() + (width - viewer.width()),
+            size.height() + (height - viewer.height()),
+        )
+        self.status(f"Display size: {width} x {height}", 3000)
+        return True
 
     def show_frame_dialog(self, frame_mode: str) -> None:
         """Open frame mode dialog."""

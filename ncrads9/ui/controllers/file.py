@@ -129,6 +129,8 @@ class FileController(Controller):
         self.menu.action_save.triggered.connect(self.save_file)
         self.menu.action_save_as.triggered.connect(self.save_file_as)
         self.menu.action_create_movie.triggered.connect(lambda _checked=False: self.create_movie())
+        self.menu.action_console.triggered.connect(lambda _checked=False: self.show_console())
+        self.menu.action_run_script.triggered.connect(lambda _checked=False: self.run_script())
         for name, action in self.menu.preserve_actions.items():
             action.toggled.connect(lambda checked, key=name: self.set_preserve(key, checked))
         for name, action in self.menu.import_actions.items():
@@ -145,6 +147,49 @@ class FileController(Controller):
             action.triggered.connect(lambda _checked=False, key=name: self.save_as(key))
         for name, action in self.menu.save_image_actions.items():
             action.triggered.connect(lambda _checked=False, key=name: self.save_image(key))
+
+    # -- the Python console (M9-34) ------------------------------------------
+
+    def show_console(self):
+        """DS9's TCL console, in the language this application is made of."""
+        from ..dialogs.console_dialog import ConsoleDialog
+
+        existing = getattr(self, "_console", None)
+        if existing is not None:
+            existing.raise_()
+            existing.activateWindow()
+            return existing
+
+        console = ConsoleDialog(self.window, self.window)
+        console.finished.connect(lambda _result: setattr(self, "_console", None))
+        self._console = console
+        console.show()
+        return console
+
+    def run_script(self, path: str | None = None) -> bool:
+        """Run a Python script, where DS9 sources a TCL one.
+
+        The console is opened to run it, so what it printed and anything it
+        raised can be read -- a script that failed silently would be worse
+        than no script at all.
+
+        Args:
+            path: The script, or None to ask.
+
+        Returns:
+            Whether a script was run.
+        """
+        if path is None:
+            path, _ = QFileDialog.getOpenFileName(
+                self.window, "Run Python Script", "", "Python scripts (*.py);;All files (*)"
+            )
+        if not path:
+            return False
+
+        console = self.show_console()
+        console.run_script(str(path))
+        self.status(f"Ran {Path(path).name}", 3000)
+        return True
 
     # -- Preserve During Load (M9-17) ----------------------------------------
 

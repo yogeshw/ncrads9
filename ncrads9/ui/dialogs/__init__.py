@@ -25,6 +25,7 @@ from .analysis_text_dialog import AnalysisTextDialog
 from .array_dialog import ArrayDialog
 from .centroid_dialog import CentroidDialog
 from .colormap_dialog import ColormapDialog
+from .console_dialog import ConsoleDialog
 from .contour_dialog import ContourDialog
 from .crop_parameters_dialog import CropParametersDialog
 from .grid_dialog import GridDialog
@@ -43,6 +44,7 @@ from .region_dialog import RegionDialog
 from .save_dialog import SaveDialog
 from .scale_dialog import ScaleDialog
 from .smooth_dialog import SmoothDialog
+from .tile_dialog import DisplaySizeDialog, TileParametersDialog
 
 __all__ = [
     "OpenDialog",
@@ -63,10 +65,13 @@ __all__ = [
     "RegionStatisticsDialog",
     "PreferencesDialog",
     "ArrayDialog",
+    "ConsoleDialog",
     "CropParametersDialog",
     "MovieDialog",
     "NotesDialog",
     "PageSetupDialog",
+    "DisplaySizeDialog",
     "PrintDialog",
+    "TileParametersDialog",
     "PanZoomRotateDialog",
 ]

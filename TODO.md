@@ -1178,10 +1178,25 @@ Depends on M2, M3.
       Graph, Panner, Magnifier, PixelTable, Examine, Catalog, VO, NRES, Analysis, HTTP, Print,
       Page Setup, Menu/Buttonbar customisation.
 - [ ] **M9-33** (M) Configurable keyboard and mouse bindings + a Keyboard Shortcuts editor.
-- [ ] **M9-34** (S) Python console replacing DS9's TCL console; `Run Python Script` replacing
-      `Source TCL`.
-- [ ] **M9-35** (S) Display Size (`Frame → Frame Parameters → Display Size`).
-- [ ] **M9-36** (S) Tile Parameters: grid rows/columns, automatic/manual, direction, gap.
+- [x] **M9-34** (S) Python console replacing DS9's TCL console; `Run Python Script` replacing
+      `Source TCL`. `ui/dialogs/console_dialog.py`. DS9's console is a TCL interpreter because
+      DS9 is written in TCL; ours is a Python one, with `window` and every controller in scope,
+      because that is what this application is made of. History on the arrow keys, statements
+      over several lines, `exit()` closing nothing.
+      **Bug avoided by testing it:** `code.InteractiveInterpreter.runsource` reports an error
+      by calling `sys.excepthook` when something has replaced it, which in a GUI means the
+      traceback goes to the application's handler rather than to the console window -- the one
+      place it is any use. The console compiles and runs the source itself and formats its own
+      errors. Running a script opens the console to show what it printed, since a script that
+      failed silently is worse than no script.
+- [x] **M9-35** (S) Display Size (`Frame → Frame Parameters → Display Size`). The window is
+      grown by however much the *display* is short of the size asked for, since that is what
+      DS9 sizes -- the display, not the window around it.
+- [x] **M9-36** (S) Tile Parameters: grid rows/columns, automatic/manual, direction, gap.
+      `TileSettings` in `frames/tile_layout.py`, and DS9's dialog. A manual grid too small for
+      the frames is grown along whichever axis the direction fills last, rather than dropping a
+      frame: the dialog asks for a shape, not for some of the frames. The hit test follows the
+      direction too, or clicking a tiled frame would select its neighbour.
 
 ---
 
