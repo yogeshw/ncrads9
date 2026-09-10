@@ -1346,8 +1346,11 @@ class MenuBar(QMenuBar):
         self.region_shape_menu.addSeparator()
         self.region_shape_menu.addAction(self.action_region_none)
 
-        self.action_region_composite: QAction = QAction("&Composite Region", self)
-        self.region_menu.addAction(self.action_region_composite)
+        composite_menu = self.region_menu.addMenu("&Composite Region")
+        self.action_composite_create: QAction = QAction("C&reate", self)
+        composite_menu.addAction(self.action_composite_create)
+        self.action_composite_dissolve: QAction = QAction("&Dissolve", self)
+        composite_menu.addAction(self.action_composite_dissolve)
         self.action_region_template: QAction = QAction("&Template", self)
         self.region_menu.addAction(self.action_region_template)
 

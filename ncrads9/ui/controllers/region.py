@@ -46,6 +46,7 @@ from ...regions.base_region import BaseRegion
 from ...regions.region_formats import RegionFormat, dropped_shapes
 from ...regions.region_parser import RegionParser
 from ...regions.region_writer import RegionWriter
+from ...regions.shapes.composite import Composite
 from ..dialogs.group_dialog import GroupDialog
 from ..dialogs.region_dialog import RegionDialog
 from ..menu_bar import (
@@ -144,8 +145,10 @@ class RegionController(Controller):
         menu.action_region_new_group.triggered.connect(lambda _checked=False: self.new_group())
         menu.action_region_groups.triggered.connect(lambda _checked=False: self.show_groups())
 
+        menu.action_composite_create.triggered.connect(lambda _checked=False: self.create_composite())
+        menu.action_composite_dissolve.triggered.connect(lambda _checked=False: self.dissolve_composite())
+
         for action, milestone in (
-            (menu.action_region_composite, "M6-17"),
             (menu.action_region_template, "M6-18"),
             (menu.action_region_centroid, "M6-20"),
         ):
@@ -247,6 +250,58 @@ class RegionController(Controller):
             if hasattr(region, attribute):
                 setattr(region, attribute, value)
         return region
+
+    # -- composites (M6-17) ----------------------------------------------------
+
+    def create_composite(self) -> None:
+        """Fold the selection into one composite region, DS9's Create.
+
+        The members leave the frame's region list and live inside the
+        composite from then on, which is what makes the whole thing move,
+        rotate and delete as one.
+        """
+        frame = self.frame
+        chosen = self.selection_only()
+        if frame is None or len(chosen) < 2:
+            self.status("Select two or more regions to make a composite", 3000)
+            return
+
+        composite = Composite(regions=list(chosen))
+        self.apply_defaults(composite)
+        # Put the composite where the first member was, so folding regions
+        # up does not also bring them to the front.
+        position = min(frame.regions.index(region) for region in chosen)
+        frame.regions = [region for region in frame.regions if region not in chosen]
+        frame.regions.insert(position, composite)
+
+        for member in chosen:
+            member.selected = False
+        composite.selected = True
+
+        self.refresh_overlay()
+        self.status(f"Composite of {len(chosen)} regions")
+
+    def dissolve_composite(self) -> None:
+        """Break the selected composites back into their members."""
+        frame = self.frame
+        if frame is None:
+            return
+        composites = [region for region in self.selection_only() if isinstance(region, Composite)]
+        if not composites:
+            self.status("Select a composite region to dissolve", 3000)
+            return
+
+        released = 0
+        for composite in composites:
+            position = frame.regions.index(composite)
+            members = list(composite.regions)
+            frame.regions[position : position + 1] = members
+            for member in members:
+                member.selected = True
+            released += len(members)
+
+        self.refresh_overlay()
+        self.status(f"Dissolved {len(composites)} composite{'s' if len(composites) != 1 else ''}")
 
     # -- groups (M6-16) -------------------------------------------------------
 

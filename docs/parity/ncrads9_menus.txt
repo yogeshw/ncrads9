@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 770 (681 excluding separators)
+# entries: 772 (683 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -641,7 +641,9 @@
 .region.shape|radiobutton|Bpanda
 .region.shape|separator|---
 .region.shape|radiobutton|None
-.region|command|Composite Region
+.region|cascade|Composite Region
+.region.compositeregion|command|Create
+.region.compositeregion|command|Dissolve
 .region|command|Template
 .region|separator|---
 .region|cascade|Color

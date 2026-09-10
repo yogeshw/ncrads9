@@ -501,9 +501,13 @@ class RegionRenderer:
             self._draw_compass(painter, region, to_widget)
 
         elif isinstance(region, Composite):
-            # A composite is drawn by its children; a cross marks its origin
-            # so an empty one is still visible and selectable.
+            # A composite is its children, so draw them. A cross marks the
+            # origin as well, so an empty composite is still visible and
+            # selectable rather than being nothing at all.
             self._draw_centre_tick(painter, to_widget(*region.center))
+            for child in region.regions:
+                self.render_region(painter, child, to_widget)
+            painter.setPen(self.pen_for(region))
 
         else:
             # Anything with no painter of its own gets a centre tick, so a
