@@ -36,7 +36,7 @@ from ncrads9.regions.region_formats import (
     is_writable,
     shape_keyword,
 )
-from ncrads9.regions.region_parser import RegionParser
+from ncrads9.regions.region_parser import CoordinateSystem, RegionParser
 from ncrads9.regions.region_writer import RegionWriter
 from ncrads9.regions.shapes.annulus import Annulus
 from ncrads9.regions.shapes.box import Box
@@ -441,3 +441,69 @@ def test_a_full_span_contains_every_angle():
     region = Epanda((0.0, 0.0), 0.0, 360.0, 4, 2.0, 2.0, 10.0, 10.0, 2)
     for x, y in ((6.0, 0.0), (0.0, 6.0), (-6.0, 0.0), (0.0, -6.0), (4.0, 4.0)):
         assert region.contains(x, y), (x, y)
+
+
+# -- the parts of DS9's format its own templates use (M6-18) -----------------
+
+
+def test_a_unit_suffix_is_read_as_an_angle():
+    """`16"` is sixteen arcseconds; DS9 writes its templates that way."""
+    box = RegionParser().parse_string('fk5\nbox(150,2,16",32",0)\n')[0]
+    assert box.width_box == pytest.approx(16 / 3600)
+    assert box.height_box == pytest.approx(32 / 3600)
+
+
+def test_arcminutes_too():
+    circle = RegionParser().parse_string("fk5\ncircle(150,2,3')\n")[0]
+    assert circle.radius == pytest.approx(0.05)
+
+
+def test_a_unit_suffix_in_pixels_is_left_alone():
+    """There is nothing to convert an arcsecond to in image pixels."""
+    box = RegionParser().parse_string('image\nbox(50,50,16",16",0)\n')[0]
+    assert box.width_box == pytest.approx(16.0)
+
+
+def test_parameters_may_be_separated_by_spaces():
+    """DS9's own documentation gives `circle 100 100 10`."""
+    circle = RegionParser().parse_string("image\ncircle(100 100 10)\n")[0]
+    assert (circle.center, circle.radius) == ((100.0, 100.0), 10.0)
+
+
+def test_a_coordinate_system_may_share_the_line():
+    regions = RegionParser().parse_string("image; circle(10,10,5)\n")
+    assert len(regions) == 1
+
+
+def test_a_shape_written_behind_a_hash_is_still_a_shape():
+    """DS9 writes text, vector, ruler, compass and projection that way."""
+    regions = RegionParser().parse_string("image\n# text(10,10) textangle=30 text={I0}\n")
+    assert [type(region).__name__ for region in regions] == ["Text"]
+    assert regions[0].text == "I0"
+
+
+def test_composite_members_are_gathered_by_their_bars():
+    """`||` means "or'd with the next", so the last member has none."""
+    regions = RegionParser().parse_string(
+        "image\n"
+        "# composite(0,0,0) || composite=1\n"
+        "circle(10,10,5) || # color=red\n"
+        "box(20,20,4,4)\n"
+        "circle(99,99,1)\n"
+    )
+    assert [type(region).__name__ for region in regions] == ["Composite", "Circle"]
+    assert len(regions[0].regions) == 2
+
+
+def test_wcs0_marks_a_file_as_relative():
+    """DS9's template system: positions are offsets, in the frame beside it."""
+    parser = RegionParser()
+    parser.parse_string("wcs0;fk5\ncircle(0.1,0.1,0.01)\n")
+    assert parser.relative is True
+    assert parser.coordinate_system is CoordinateSystem.FK5
+
+
+def test_an_ordinary_file_is_not_relative():
+    parser = RegionParser()
+    parser.parse_string("fk5\ncircle(150,2,0.01)\n")
+    assert parser.relative is False

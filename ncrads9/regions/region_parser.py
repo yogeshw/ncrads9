@@ -27,6 +27,7 @@ Supports multiple region file formats:
 Author: Yogesh Wadadekar
 """
 
+import math
 import re
 from enum import Enum
 from pathlib import Path
@@ -75,6 +76,27 @@ class CoordinateSystem(Enum):
     ECLIPTIC = "ecliptic"
     ICRS = "icrs"
     WCS = "wcs"
+    #: DS9's template system: the positions are offsets from the current WCS
+    #: location rather than absolute (`ds9/doc/ref/region.html`, Template
+    #: Region), which is what lets a template load onto any image.
+    WCS0 = "wcs0"
+
+
+#: DS9's unit suffixes and what one of each is worth in degrees. A bare
+#: number carries no suffix and means whatever the coordinate system means.
+UNIT_DEGREES: dict[str, float] = {
+    '"': 1.0 / 3600.0,
+    "'": 1.0 / 60.0,
+    "d": 1.0,
+    "r": 180.0 / math.pi,
+}
+
+#: Suffixes that name a pixel system rather than an angle.
+UNIT_PIXELS: frozenset[str] = frozenset({"p", "i"})
+
+#: The coordinate systems whose numbers are angles, so a suffixed length
+#: converts to degrees rather than being taken as pixels.
+SKY_SYSTEMS: frozenset[str] = frozenset({"fk4", "fk5", "galactic", "ecliptic", "icrs", "wcs", "wcs0"})
 
 
 def _pairs(values: list[float]) -> list[tuple[float, float]]:
@@ -108,7 +130,25 @@ class RegionParser:
     #: and `line=0 1`, which the key=value pattern would cut at the space.
     #: DS9 writes a composite as `# composite(x,y,angle)`, the only shape
     #: whose line begins with a `#`.
-    _COMPOSITE_LINE = re.compile(r"^#\s*composite\b", re.IGNORECASE)
+    #: DS9 writes some shapes behind a `#`, so they survive being read by a
+    #: tool that does not know them: `# composite(...)`, `# text(...)`,
+    #: `# vector(...)` and the rest. Only these keywords come back out from
+    #: behind the comment marker -- `# Filename: ...` stays a comment.
+    #: The `||` that marks a composite member, followed by its properties
+    #: already in a comment.
+    _COMPOSITE_BAR_COMMENT = re.compile(r"\s*\|\|\s*(?=#)")
+
+    #: The same `||`, followed by bare properties. DS9 writes both forms:
+    #: `point(...) || # point=boxcircle` and `# text(...) || textangle=30`.
+    _COMPOSITE_BAR = re.compile(r"\s*\|\|\s*")
+
+    #: A shape whose properties follow its parentheses with no `#`.
+    _BARE_PROPERTIES_AFTER = re.compile(r"^(\w+\s*\([^)]*\))\s+(?!#)(\S.*)$")
+
+    _COMMENTED_SHAPE = re.compile(
+        r"^#\s*(composite|text|vector|ruler|compass|projection|segment|line)\s*[(\s]",
+        re.IGNORECASE,
+    )
 
     SPACED_PROPERTIES: tuple[str, ...] = ("point", "line", "ruler", "compass", "vector")
 
@@ -119,6 +159,10 @@ class RegionParser:
         self._format: RegionFormat = RegionFormat.DS9
         self._coordinate_system: CoordinateSystem = CoordinateSystem.IMAGE
         self._global_properties: dict[str, str] = {}
+        #: The composite currently taking members, if a run is open.
+        self._composite: Composite | None = None
+        #: Whether the file declared `wcs0`, DS9's template system.
+        self._relative: bool = False
 
     @property
     def format(self) -> RegionFormat:
@@ -129,6 +173,15 @@ class RegionParser:
     def coordinate_system(self) -> CoordinateSystem:
         """Get the current coordinate system."""
         return self._coordinate_system
+
+    @property
+    def relative(self) -> bool:
+        """Whether the file's positions are offsets, not absolute.
+
+        True when it declared `wcs0`, which is what makes a file a template:
+        it can be loaded at any location into any image with a WCS.
+        """
+        return self._relative
 
     def parse_file(self, filepath: str | Path) -> list[BaseRegion]:
         """
@@ -164,42 +217,97 @@ class RegionParser:
             List of parsed BaseRegion objects.
         """
         regions: list[BaseRegion] = []
+        self._composite = None
+        self._relative = False
         lines = content.strip().split("\n")
 
         for raw in lines:
-            line = raw.strip()
-            if not line:
-                continue
-            if line.startswith("#"):
-                # Almost every `#` line is a comment -- but DS9 writes a
-                # composite region as `# composite(x,y,angle)`, so a
-                # composite would be thrown away with the comments.
-                if self._COMPOSITE_LINE.match(line):
-                    line = line.lstrip("# ").strip()
-                else:
-                    continue
-
-            # Detect format from header
-            if self._is_format_header(line):
-                self._parse_format_header(line)
-                continue
-
-            # Parse global properties
-            if self._is_global_line(line):
-                self._parse_global_properties(line)
-                continue
-
-            # Parse coordinate system
-            if self._is_coordinate_system(line):
-                self._parse_coordinate_system(line)
-                continue
-
-            # Parse region shape
-            region = self._parse_region_line(line)
-            if region is not None:
-                regions.append(region)
+            for line in self._statements(raw):
+                self._consume(line, regions)
 
         return regions
+
+    def _statements(self, raw: str) -> list[str]:
+        """Split one input line into the statements it holds.
+
+        DS9 allows a coordinate system and a region on one line, separated
+        by a semicolon -- `image; circle 100 100 10`, and even
+        `wcsa; fk4; point 202 47`. Splitting here rather than in the caller
+        keeps the rest of the loop working a statement at a time.
+        """
+        line = raw.strip()
+        if not line or ";" not in line:
+            return [line] if line else []
+        return [part.strip() for part in line.split(";") if part.strip()]
+
+    def _consume(self, line: str, regions: list[BaseRegion]) -> None:
+        """Read one statement, appending a region if it is one."""
+        if not line:
+            return
+        uncommented = False
+        if line.startswith("#"):
+            # Almost every `#` line is a comment -- but DS9 writes a
+            # composite as `# composite(x,y,angle)` and a text region as
+            # `# text(x,y)`, so those would be thrown away with them.
+            if self._COMMENTED_SHAPE.match(line):
+                line = line.lstrip("# ").strip()
+                uncommented = True
+            else:
+                return
+
+        # A member of a composite is written `shape(...) || props`, the `||`
+        # meaning "or'd with the next one". Every one of DS9's own instrument
+        # templates is written this way, and a line carrying it matched no
+        # shape pattern at all. Where the properties are not already behind a
+        # `#`, the bar becomes one, since that is where they belong.
+        continues = "||" in line
+        line = self._COMPOSITE_BAR_COMMENT.sub(" ", line, count=1)
+        line = self._COMPOSITE_BAR.sub(" # ", line, count=1).strip()
+        if not line:
+            return
+        if uncommented:
+            # A shape written behind a `#` carries its properties bare, the
+            # single `#` at the head of the line having served for both:
+            # `# text(x,y) textangle=90 text={Camera 2}`. Put the properties
+            # back in a comment, which is where every other line has them.
+            line = self._BARE_PROPERTIES_AFTER.sub(r"\1 # \2", line, count=1)
+
+        if self._is_format_header(line):
+            self._parse_format_header(line)
+            return
+
+        if self._is_global_line(line):
+            self._parse_global_properties(line)
+            return
+
+        if self._is_coordinate_system(line):
+            self._parse_coordinate_system(line)
+            return
+
+        region = self._parse_region_line(line)
+        if region is None:
+            return
+        self._place(region, regions, continues)
+
+    def _place(self, region: BaseRegion, regions: list[BaseRegion], continues: bool) -> None:
+        """File a parsed region: into the open composite, or on its own.
+
+        A composite declaration opens a run, and every region until one whose
+        line carried no `||` belongs to it -- the bar means "or'd with the
+        next", so the last member is the one without it.
+        """
+        if isinstance(region, Composite):
+            regions.append(region)
+            self._composite = region if continues else None
+            return
+
+        if self._composite is not None:
+            self._composite.add_region(region)
+            if not continues:
+                self._composite = None
+            return
+
+        regions.append(region)
 
     def detect_format(self, content: str) -> RegionFormat:
         """
@@ -262,9 +370,18 @@ class RegionParser:
         return line.lower().strip() in coord_systems
 
     def _parse_coordinate_system(self, line: str) -> None:
-        """Parse the coordinate system from a line."""
+        """Parse the coordinate system from a line.
+
+        `wcs0` says the positions are offsets rather than absolute, and it
+        is written alongside a sky frame -- `wcs0;fk5`. The two are separate
+        facts, so `wcs0` sets `relative` and leaves the frame that follows
+        it to say which sky frame the offsets are in.
+        """
+        name = line.lower().strip()
+        if name == CoordinateSystem.WCS0.value:
+            self._relative = True
         try:
-            self._coordinate_system = CoordinateSystem(line.lower().strip())
+            self._coordinate_system = CoordinateSystem(name)
         except ValueError:
             pass
 
@@ -296,6 +413,30 @@ class RegionParser:
         # Create region based on shape type
         return self._create_region(shape_type, params, properties, include)
 
+    def _to_number(self, value: str) -> float:
+        """Read one parameter, applying DS9's unit suffix if it carries one.
+
+        `16"` is sixteen arcseconds and `3'` three arcminutes. In a sky
+        coordinate system those are lengths in degrees, which is the unit
+        the rest of the numbers on the line are in; in a pixel system there
+        is nothing to convert them to, so the number stands as written.
+        Without this, `box(x,y,16",16",0)` -- which is how DS9 writes its
+        own instrument templates -- parsed as nothing at all.
+        """
+        text = str(value).strip()
+        if not text:
+            raise ValueError("empty parameter")
+
+        suffix = text[-1]
+        if suffix in UNIT_PIXELS and len(text) > 1:
+            return float(text[:-1])
+        if suffix in UNIT_DEGREES and len(text) > 1:
+            number = float(text[:-1])
+            if self._coordinate_system.value in SKY_SYSTEMS:
+                return number * UNIT_DEGREES[suffix]
+            return number
+        return float(text)
+
     def _parse_parameters(self, params_str: str) -> list[str]:
         """Parse comma-separated parameters."""
         params: list[str] = []
@@ -309,8 +450,13 @@ class RegionParser:
             elif char == ")":
                 paren_depth -= 1
                 current += char
-            elif char == "," and paren_depth == 0:
-                params.append(current.strip())
+            elif char in ", \t" and paren_depth == 0:
+                # DS9 separates parameters with a comma or with whitespace --
+                # its own documentation gives `circle 100 100 10`, and two of
+                # its bundled templates mix the two on one line
+                # (`composite(0 0,0.0)`). Splitting on either reads both.
+                if current.strip():
+                    params.append(current.strip())
                 current = ""
             else:
                 current += char
@@ -459,7 +605,7 @@ class RegionParser:
             return None
 
         try:
-            return builder(self, [float(value) for value in params], properties, common)
+            return builder(self, [self._to_number(value) for value in params], properties, common)
         except (IndexError, ValueError, TypeError):
             # A shape whose numbers cannot be read is skipped, not fatal.
             return None
