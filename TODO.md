@@ -814,43 +814,95 @@ Depends on M2.
 Depends on M2.
 
 ### Catalog tool
-- [ ] **M8-1** (L) `catalogs/catalog_window.py` — the catalog list window: sortable columns,
+- [x] **M8-1** (L) `catalogs/catalog_window.py` — the catalog list window: sortable columns,
       row selection, header view, print, close.
-- [ ] **M8-2** (M) Live two-way selection sync between table rows and overlay symbols.
-- [ ] **M8-3** (L) Symbol editor: shape, size, colour, angle and text driven by column
+- [x] **M8-2** (M) Live two-way selection sync between table rows and overlay symbols.
+- [x] **M8-3** (L) Symbol editor: shape, size, colour, angle and text driven by column
       expressions; save/load symbol sets (DS9 `catsym.tcl`).
-- [ ] **M8-4** (M) Filtering: expression-based row filter with immediate overlay update
+- [x] **M8-4** (M) Filtering: expression-based row filter with immediate overlay update
       (DS9 `catopt.tcl`).
-- [ ] **M8-5** (M) Local catalog load/save: starbase (rdb), CSV with and without header, VOTable,
+- [x] **M8-5** (M) Local catalog load/save: starbase (rdb), CSV with and without header, VOTable,
       TSV — adopt `catalogs/catalog_table.py`.
-- [ ] **M8-6** (M) Catalog match between two loaded catalogs with a radius (DS9 `catmatch.tcl`).
-- [ ] **M8-7** (S) Catalog plot (feed columns to the M7 plot tool).
-- [ ] **M8-8** (S) Export catalog selection as regions (DS9 `catreg.tcl`).
-- [ ] **M8-9** (S) Clear All / per-catalog clear.
-- [ ] **M8-10** (M) Search for Catalogs — CDS catalog search by title, keyword, mission,
+- [x] **M8-6** (M) Catalog match between two loaded catalogs with a radius (DS9 `catmatch.tcl`).
+- [x] **M8-7** (S) Catalog plot (feed columns to the M7 plot tool).
+- [x] **M8-8** (S) Export catalog selection as regions (DS9 `catreg.tcl`).
+- [x] **M8-9** (S) Clear All / per-catalog clear.
+- [x] **M8-10** (M) Search for Catalogs — CDS catalog search by title, keyword, mission,
       wavelength, object type (DS9 `catcdssrch.tcl`).
 
 ### Catalog backends
-- [ ] **M8-11** (M) Adopt `catalogs/{simbad,ned,sdss,twomass,skybot,vizier,cone_search}.py`
+- [x] **M8-11** (M) Adopt `catalogs/{simbad,ned,sdss,twomass,skybot,vizier,cone_search}.py`
       behind a common `CatalogBase` interface; add the CDS and CXC servers.
-- [ ] **M8-12** (S) Populate `Analysis → Catalogs` with DS9's server list.
+- [x] **M8-12** (S) Populate `Analysis → Catalogs` with DS9's server list.
 
 ### Image servers
-- [ ] **M8-13** (M) Real DSS backends: SAO, ESO, STScI (replace the
+- [x] **M8-13** (M) Real DSS backends: SAO, ESO, STScI (replace the
       `NotImplementedError` skeletons in `image_servers/dss.py`, `eso.py`).
-- [ ] **M8-14** (S) Real 2MASS (NASA/IPAC) backend.
-- [ ] **M8-15** (S) Real SkyView (NASA/HEASARC) backend with survey selection.
-- [ ] **M8-16** (M) VLA, NVSS, VLSS (NRAO) backends.
-- [ ] **M8-17** (S) Real SDSS image backend.
-- [ ] **M8-18** (M) Shared image-server dialog: object name or coordinates, size, survey, band,
+- [x] **M8-14** (S) Real 2MASS (NASA/IPAC) backend.
+- [x] **M8-15** (S) Real SkyView (NASA/HEASARC) backend with survey selection.
+- [x] **M8-16** (M) VLA, NVSS, VLSS (NRAO) backends.
+- [x] **M8-17** (S) Real SDSS image backend.
+- [x] **M8-18** (M) Shared image-server dialog: object name or coordinates, size, survey, band,
       colour/format — matching DS9's `imgsvr.tcl`.
 
 ### Archives and VO
-- [ ] **M8-19** (M) Archives menu: Chandra Public Archive by ObsId and by Cone Search;
+- [x] **M8-19** (M) Archives menu: Chandra Public Archive by ObsId and by Cone Search;
       SIMBAD SAO/CDS; ADS SAO/CDS.
-- [ ] **M8-20** (M) Footprint servers with a footprint overlay and Clear All (DS9 `fp.tcl`).
-- [ ] **M8-21** (M) VO registry browser: discover and query SIA, SSA, cone-search and TAP
+- [x] **M8-20** (M) Footprint servers with a footprint overlay and Clear All (DS9 `fp.tcl`).
+- [x] **M8-21** (M) VO registry browser: discover and query SIA, SSA, cone-search and TAP
       services; broaden `ui/dialogs/vo_query_dialog.py` beyond its current scope.
+
+---
+
+### Deviations from the plan as written
+
+* **`catalogs/catalog_table.py` was not adopted for M8-5; it is a table *widget*, not a file
+  reader.** The local formats are in a new `catalogs/catalog_file.py`, and the widget was deleted
+  as a lesser version of the list window -- its Copy Cell, Copy Row and Pan to Position moved onto
+  that window's context menu.
+* **`catalogs/catalog_display.py` was not adopted for M8-2 either.** It rendered DS9 *region text*
+  and shipped it to an external DS9 over XPA, which is driving somebody else's viewer rather than
+  drawing in this one. Deleted; the overlay is `ui/widgets/catalog_overlay.py`.
+* **`catalogs/twomass.py` was deleted**: it wrapped the same VizieR path the query layer already
+  takes. `catalogs/sdss.py` stays, pending nothing -- its `get_images` is not used, since SDSS
+  images come through SIAP, but its SQL and spectra queries have no equivalent.
+* **`image_servers/dss.py` and `eso.py` never existed**, so M8-13 was not "replacing the
+  NotImplementedError skeletons" in them. Only `sia_client.py` was there.
+* **Filter and symbol expressions are Python, not Tcl.** DS9 evaluates them with Tcl's `expr`.
+  Every example in its documentation works here, including `[string equal ...]` and `[regexp ...]`,
+  which are translated; anything else calling a Tcl command will not.
+* **SkyView is offered twenty of its surveys, not all hundred and sixty**, with the survey field
+  editable so any other can be typed.
+* **`$url` in an analysis file, and SDSS images, go through SIAP or curl rather than DS9's own
+  download-to-temporary-file.** See the M7 deviations for the first.
+* **The Archives menu's SIMBAD and ADS entries are web links to the services' current URLs.** DS9's
+  own handlers for them do not exist in 8.x -- the entries are there and do nothing.
+* **Chandra by ObsId opens the archive's own page** rather than reimplementing DS9's archive
+  protocol; the information is the same.
+* **A TAP service can be discovered but not queried.** Querying one needs a query language and a
+  schema browser to write one against, which is a feature of its own and not in M8's scope.
+
+### Bugs found and fixed on the way
+
+* **`SkyCoord.search_around_sky` as a *method* returns the argument's indices first and `self`'s
+  second**, which is the reverse of how it reads. A smoke test with two three-row catalogues could
+  not tell the difference; a one-row against a three-row raised IndexError at once. Catalog match
+  goes through the module-level function, where the order is unambiguous.
+* **`&&` in a catalogue filter hit the same precedence trap M5 hit with bin filters.** Python binds
+  `&` tighter than `>`, so `$a>1 && $a<2` became `a > (1 & a) < 2`. Each side is parenthesised.
+* **`[string equal $Class SNR]` compared the column's *name* with the literal**, so every row came
+  out false: the bare word needs quoting and the column reference does not.
+* **A `QTableWidgetItem` compares its display text**, so a magnitude column sorted 10 before 9.
+  Setting `EditRole` to a float does not help -- Qt aliases EditRole to DisplayRole inside the
+  item, so the number replaces the formatted text and the comparison stays textual.
+* **`J2000` in an STC-S polygon was read as a declination of two thousand**, on the strength of a
+  comment of mine claiming the frame name holds no digits.
+* **A `.rdb` file with no rule of dashes was quietly read as a one-column CSV**, its header line
+  becoming the only column name. The extension now forces starbase, so the error says what is
+  actually wrong with the file.
+* **The mask layer's state was on the window**, which the 600-line guard objected to when the
+  catalog controller was added. It belonged on the analysis controller.
+
 
 ---
 

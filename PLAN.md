@@ -581,7 +581,7 @@ machinery is tied to a matplotlib axes object while the drawing here is QPainter
 ported either way, and `grid/ast_wrapper.py` is deleted. See the M7 deviations in TODO.md, and
 the bugs -- two of which were in the display pipeline, not in M7's own code.
 
-### M8 — Catalogs, image servers, VO (12 d)
+### M8 — Catalogs, image servers, VO (12 d) — **done**
 Catalog Tool: query, sortable/filterable table window, symbol editor driven by column
 expressions, live table↔overlay selection sync, header view, print, local starbase/CSV/VOTable
 load & save, catalog match, catalog plot, region export. Real DSS(SAO/ESO/STScI), 2MASS, VLA,
