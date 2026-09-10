@@ -17,24 +17,23 @@
 """
 Utility modules for NCRA DS9.
 
+`math_utils`, `resources` and `threading` are deliberately not imported
+here: nothing reaches them yet, and importing them from the package would
+hide that from the no-orphan-modules guard. Import them directly if they
+gain a caller.
+
 Author: Yogesh Wadadekar
 """
 
 from .config import Config
 from .logger import setup_logging
-from .math_utils import apply_scaling, compute_histogram, normalize_image
 from .preferences import Preferences
-from .resources import ResourceLoader
-from .threading import BackgroundTask, TaskRunner
+from .undo import Command, UndoStack
 
 __all__ = [
+    "Command",
     "Config",
     "Preferences",
+    "UndoStack",
     "setup_logging",
-    "ResourceLoader",
-    "normalize_image",
-    "compute_histogram",
-    "apply_scaling",
-    "BackgroundTask",
-    "TaskRunner",
 ]

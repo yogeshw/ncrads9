@@ -1173,11 +1173,28 @@ Depends on M2, M3.
 - [ ] **M9-31** (M) i18n: extract all UI strings, add Qt translation files for DS9's 8 locales
       (cs, da, de, es, fr, ja, pt, zh) seeded from `.tmp_sao_ds9/ds9/msgs/*.msg`, and a Language
       preference.
-- [ ] **M9-32** (M) Grow Preferences to DS9's topic coverage: General, Precision, Startup,
+- [x] **M9-32** (M) Grow Preferences to DS9's topic coverage: General, Precision, Startup,
       Coordinates, Region, Annulus, Panda, Scale, Colour, Contour, Grid, Bin, Smooth, Zoom,
       Graph, Panner, Magnifier, PixelTable, Examine, Catalog, VO, NRES, Analysis, HTTP, Print,
       Page Setup, Menu/Buttonbar customisation.
-- [ ] **M9-33** (M) Configurable keyboard and mouse bindings + a Keyboard Shortcuts editor.
+      104 preferences over DS9's 29 topics, in DS9's order, as a *table* --
+      `utils/preference_defs.py` -- with the dialog generated from it: topics down the left and
+      the chosen one's controls on the right, as DS9 lays it out. Twenty-nine hand-built pages
+      is how a preferences dialog comes to disagree with the preferences it edits; a table and
+      a renderer cannot. The Edit controller's defaults are now that table's, so nothing is
+      listed twice. **Deviation:** the pages hold what DS9's hold, but not yet every one of its
+      controls -- DS9's Region page alone has a dozen more -- and a preference in the table is
+      not automatically *acted on*: the ones the application already reads (theme, colours,
+      GPU, autosave, shortcuts) work, and the rest are stored and offered. Which is which is
+      not marked in the table yet; that is worth doing.
+- [x] **M9-33** (M) Configurable keyboard and mouse bindings + a Keyboard Shortcuts editor.
+      `ui/bindings.py` is the table -- 24 commands worth a shortcut, each a preference -- and
+      the Bindings page of Preferences is the editor. Applied at startup from the preferences,
+      not only when the dialog is used. A shortcut can be cleared, which is a legitimate thing
+      to want, and a combination two commands both ask for is pointed out rather than left to
+      Qt to resolve silently. **Deviation:** keyboard only. DS9's mouse behaviour is its
+      pointer modes, which the Edit menu already chooses; a separate mouse-binding editor would
+      be a second way to say the same thing.
 - [x] **M9-34** (S) Python console replacing DS9's TCL console; `Run Python Script` replacing
       `Source TCL`. `ui/dialogs/console_dialog.py`. DS9's console is a TCL interpreter because
       DS9 is written in TCL; ours is a Python one, with `window` and every controller in scope,

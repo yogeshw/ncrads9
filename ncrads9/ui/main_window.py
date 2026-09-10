@@ -48,6 +48,7 @@ from ..frames.tile_layout import TileLayout, TileSettings
 from ..rendering.scale_algorithms import ScaleAlgorithm
 from ..rendering.scale_limits import ScaleLimits
 from ..utils.preferences import Preferences
+from . import bindings
 from .button_bar import ButtonBar
 from .controllers import CONTROLLERS, EditController
 from .controllers.base import Controller
@@ -284,6 +285,9 @@ class MainWindow(QMainWindow):
         self.file.connect()
         self.edit.connect()
         self.undo.connect()
+        # The keyboard shortcuts are preferences (M9-33), so they are
+        # applied once the menu exists rather than being hard-coded in it.
+        bindings.apply(self.menu_bar, bindings.from_preferences(self.preferences))
         self.view.connect()
 
         # Frame menu

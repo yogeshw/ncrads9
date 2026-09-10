@@ -15,411 +15,360 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
-Application preferences dialog.
+DS9's Preferences: a list of topics, and a page of controls for each.
+
+Laid out as DS9's is (`prefsdialog.tcl`) -- the topics down the left, the
+chosen one's controls on the right -- and *generated* from
+`utils/preference_defs.py` rather than written out. Twenty-nine pages of
+hand-built widgets is how a preferences dialog comes to disagree with the
+preferences it edits; a table and a renderer cannot.
+
+The Bindings page is the exception, because a shortcut editor is a table of
+its own rather than a row of controls.
 
 Author: Yogesh Wadadekar
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QKeySequence
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QColorDialog,
     QComboBox,
     QDialog,
-    QFileDialog,
+    QDoubleSpinBox,
     QFormLayout,
-    QGroupBox,
     QHBoxLayout,
+    QKeySequenceEdit,
+    QLabel,
     QLineEdit,
+    QListWidget,
     QPushButton,
+    QScrollArea,
     QSpinBox,
-    QTabWidget,
+    QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
+from ...ui import bindings as bindings_module
+from ...utils import preference_defs
+
+#: How big the window opens.
+WINDOW_SIZE = (820, 560)
+
+#: The topic the shortcut editor lives on.
+BINDINGS_TOPIC = "Bindings"
+
 
 class PreferencesDialog(QDialog):
-    """Dialog for configuring application preferences."""
+    """Every preference, by topic."""
 
+    #: Emitted with every preference when Save or Apply is pressed.
     preferences_changed = pyqtSignal(dict)
 
-    def __init__(self, parent: QDialog | None = None) -> None:
-        """Initialize the preferences dialog.
-
-        Args:
-            parent: Parent widget.
+    def __init__(self, parent: QWidget | None = None) -> None:
         """
-        # Pass None as parent to make dialog independent
-        super().__init__(None)
-
-        # Set window flags for independent draggable window
-        self.setWindowFlags(
-            Qt.WindowType.Window
-            | Qt.WindowType.WindowCloseButtonHint
-            | Qt.WindowType.WindowTitleHint
-            | Qt.WindowType.WindowStaysOnTopHint
-        )
-        self.setWindowModality(Qt.WindowModality.NonModal)
-
+        Args:
+            parent: The main window.
+        """
+        super().__init__(parent)
         self.setWindowTitle("Preferences")
-        self.setMinimumSize(550, 500)
-        self._bg_color = QColor(0, 0, 0)
-        self._nan_color = QColor(255, 255, 255)
-        self._setup_ui()
+        self.resize(*WINDOW_SIZE)
 
-    def _setup_ui(self) -> None:
-        """Set up the dialog UI."""
+        #: Preference key -> the widget editing it.
+        self.editors: dict[str, QWidget] = {}
+        #: Colour key -> the colour chosen, since a button holds no value.
+        self._colors: dict[str, QColor] = {}
+        #: Binding name -> its shortcut editor.
+        self.shortcut_editors: dict[str, QKeySequenceEdit] = {}
+
         layout = QVBoxLayout(self)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        # Tab widget
-        tabs = QTabWidget()
+        self.topics = QListWidget()
+        self.topics.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        splitter.addWidget(self.topics)
 
-        # General tab
-        general_widget = QWidget()
-        general_layout = QVBoxLayout(general_widget)
+        self.pages = QWidget()
+        self._pages_layout = QVBoxLayout(self.pages)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(self.pages)
+        splitter.addWidget(scroll)
+        splitter.setSizes([200, 620])
+        layout.addWidget(splitter)
 
-        startup_group = QGroupBox("Startup")
-        startup_layout = QFormLayout(startup_group)
+        self._build_pages()
+        self.topics.currentRowChanged.connect(self.show_topic)
+        self.topics.setCurrentRow(0)
 
-        self._restore_session_check = QCheckBox("Restore previous session")
-        startup_layout.addRow("", self._restore_session_check)
+        buttons = QHBoxLayout()
+        #: Button name -> the button, so a test can press one.
+        self.buttons: dict[str, QPushButton] = {}
+        for name, label, slot in (
+            ("defaults", "Restore Defaults", self.restore_defaults),
+            ("apply", "Apply", self.apply),
+            ("save", "Save", self.save),
+            ("close", "Close", self.reject),
+        ):
+            button = QPushButton(label)
+            button.clicked.connect(slot)
+            buttons.addWidget(button)
+            self.buttons[name] = button
+        layout.addLayout(buttons)
 
-        self._check_updates_check = QCheckBox("Check for updates on startup")
-        startup_layout.addRow("", self._check_updates_check)
+    # -- building the pages ----------------------------------------------------
 
-        self._recent_files_spin = QSpinBox()
-        self._recent_files_spin.setRange(0, 50)
-        self._recent_files_spin.setValue(10)
-        startup_layout.addRow("Recent files to remember:", self._recent_files_spin)
+    def _build_pages(self) -> None:
+        """One page per topic, from the table."""
+        #: Topic -> its page.
+        self._pages: dict[str, QWidget] = {}
+        for topic, preferences in preference_defs.by_topic().items():
+            page = self._page(preferences)
+            self._pages[topic] = page
+            self._pages_layout.addWidget(page)
+            page.hide()
+            self.topics.addItem(topic)
 
-        general_layout.addWidget(startup_group)
+        bindings_page = self._bindings_page()
+        self._pages[BINDINGS_TOPIC] = bindings_page
+        self._pages_layout.addWidget(bindings_page)
+        bindings_page.hide()
+        self.topics.addItem(BINDINGS_TOPIC)
+        self._pages_layout.addStretch()
 
-        # Default directories
-        dir_group = QGroupBox("Default Directories")
-        dir_layout = QFormLayout(dir_group)
+    def _page(self, preferences) -> QWidget:
+        """One topic's controls."""
+        page = QWidget()
+        form = QFormLayout(page)
+        for preference in preferences:
+            editor = self._editor(preference)
+            self.editors[preference.key] = editor
+            row = editor
+            if preference.suffix:
+                row = QWidget()
+                inner = QHBoxLayout(row)
+                inner.setContentsMargins(0, 0, 0, 0)
+                inner.addWidget(editor)
+                inner.addWidget(QLabel(preference.suffix))
+            form.addRow(preference.label + ":", row)
+            if preference.note:
+                note = QLabel(preference.note)
+                note.setWordWrap(True)
+                note.setEnabled(False)
+                form.addRow("", note)
+        return page
 
-        data_layout = QHBoxLayout()
-        self._data_dir_edit = QLineEdit()
-        data_layout.addWidget(self._data_dir_edit)
-        data_browse_btn = QPushButton("Browse...")
-        data_browse_btn.clicked.connect(lambda: self._browse_directory(self._data_dir_edit))
-        data_layout.addWidget(data_browse_btn)
-        dir_layout.addRow("Data directory:", data_layout)
+    def _editor(self, preference) -> QWidget:
+        """The control one preference needs."""
+        if preference.kind == "bool":
+            box = QCheckBox()
+            box.setChecked(bool(preference.default))
+            return box
+        if preference.kind == "int":
+            spin = QSpinBox()
+            spin.setRange(int(preference.minimum), int(preference.maximum))
+            spin.setValue(int(preference.default))
+            return spin
+        if preference.kind == "float":
+            spin = QDoubleSpinBox()
+            spin.setRange(float(preference.minimum), float(preference.maximum))
+            spin.setSingleStep(float(preference.step))
+            spin.setDecimals(3)
+            spin.setValue(float(preference.default))
+            return spin
+        if preference.kind == "choice":
+            combo = QComboBox()
+            combo.addItems(list(preference.choices))
+            combo.setCurrentText(str(preference.default))
+            return combo
+        if preference.kind == "color":
+            button = QPushButton()
+            button.setFixedSize(70, 24)
+            self._colors[preference.key] = QColor(str(preference.default))
+            button.clicked.connect(lambda _checked=False, key=preference.key: self._choose(key))
+            self._paint(button, self._colors[preference.key])
+            return button
+        line = QLineEdit()
+        line.setText("" if preference.default is None else str(preference.default))
+        return line
 
-        export_layout = QHBoxLayout()
-        self._export_dir_edit = QLineEdit()
-        export_layout.addWidget(self._export_dir_edit)
-        export_browse_btn = QPushButton("Browse...")
-        export_browse_btn.clicked.connect(lambda: self._browse_directory(self._export_dir_edit))
-        export_layout.addWidget(export_browse_btn)
-        dir_layout.addRow("Export directory:", export_layout)
-
-        general_layout.addWidget(dir_group)
-
-        loading_group = QGroupBox("Loading")
-        loading_layout = QFormLayout(loading_group)
-        self._prompt_hdu_check = QCheckBox("Ask which extension to load when a file has more than one")
-        self._prompt_hdu_check.setChecked(True)
-        self._prompt_hdu_check.setToolTip(
-            "DS9 never asks: it loads the primary HDU if it is an image, else "
-            "the first extension that is one. Uncheck for that behaviour."
-        )
-        loading_layout.addRow(self._prompt_hdu_check)
-
-        self._autoload_regions_check = QCheckBox("Autoload FITS regions")
-        self._autoload_regions_check.setChecked(True)
-        self._autoload_regions_check.setToolTip(
-            "Load the regions in a file's REGION extension when it is opened, " "as DS9 does."
-        )
-        loading_layout.addRow(self._autoload_regions_check)
-        general_layout.addWidget(loading_group)
-
-        general_layout.addStretch()
-
-        tabs.addTab(general_widget, "General")
-
-        # Display tab
-        display_widget = QWidget()
-        display_layout = QVBoxLayout(display_widget)
-
-        appearance_group = QGroupBox("Appearance")
-        appearance_layout = QFormLayout(appearance_group)
-
-        self._theme_combo = QComboBox()
-        self._theme_combo.addItems(["System", "Light", "Dark"])
-        appearance_layout.addRow("Theme:", self._theme_combo)
-
-        bg_color_layout = QHBoxLayout()
-        self._bg_color_btn = QPushButton()
-        self._bg_color_btn.setFixedSize(60, 25)
-        self._update_bg_color_button()
-        self._bg_color_btn.clicked.connect(self._choose_bg_color)
-        bg_color_layout.addWidget(self._bg_color_btn)
-        bg_color_layout.addStretch()
-        appearance_layout.addRow("Background color:", bg_color_layout)
-
-        # DS9 calls it this, and it covers cropped-out pixels too.
-        nan_color_layout = QHBoxLayout()
-        self._nan_color_btn = QPushButton()
-        self._nan_color_btn.setFixedSize(60, 25)
-        self._update_nan_color_button()
-        self._nan_color_btn.clicked.connect(self._choose_nan_color)
-        nan_color_layout.addWidget(self._nan_color_btn)
-        nan_color_layout.addStretch()
-        appearance_layout.addRow("Blank/Inf/NaN color:", nan_color_layout)
-
-        self._anti_alias_check = QCheckBox("Anti-aliasing")
-        self._anti_alias_check.setChecked(True)
-        appearance_layout.addRow("", self._anti_alias_check)
-
-        display_layout.addWidget(appearance_group)
-
-        # Default display settings
-        defaults_group = QGroupBox("Default Display Settings")
-        defaults_layout = QFormLayout(defaults_group)
-
-        self._default_scale_combo = QComboBox()
-        self._default_scale_combo.addItems(["Linear", "Log", "Sqrt", "Power", "Asinh"])
-        defaults_layout.addRow("Default scale:", self._default_scale_combo)
-
-        self._default_cmap_combo = QComboBox()
-        self._default_cmap_combo.addItems(["gray", "heat", "cool", "viridis", "plasma"])
-        defaults_layout.addRow("Default colormap:", self._default_cmap_combo)
-
-        self._default_clip_combo = QComboBox()
-        self._default_clip_combo.addItems(["MinMax", "ZScale", "Percentile"])
-        defaults_layout.addRow("Default clip:", self._default_clip_combo)
-
-        display_layout.addWidget(defaults_group)
-        display_layout.addStretch()
-
-        tabs.addTab(display_widget, "Display")
-
-        # Performance tab
-        perf_widget = QWidget()
-        perf_layout = QVBoxLayout(perf_widget)
-
-        memory_group = QGroupBox("Memory")
-        memory_layout = QFormLayout(memory_group)
-
-        self._cache_size_spin = QSpinBox()
-        self._cache_size_spin.setRange(100, 10000)
-        self._cache_size_spin.setValue(1000)
-        self._cache_size_spin.setSuffix(" MB")
-        memory_layout.addRow("Image cache size:", self._cache_size_spin)
-
-        self._tile_size_spin = QSpinBox()
-        self._tile_size_spin.setRange(128, 2048)
-        self._tile_size_spin.setValue(512)
-        self._tile_size_spin.setSingleStep(128)
-        memory_layout.addRow("Tile size:", self._tile_size_spin)
-
-        perf_layout.addWidget(memory_group)
-
-        rendering_group = QGroupBox("Rendering")
-        rendering_layout = QFormLayout(rendering_group)
-
-        self._use_gpu_check = QCheckBox("Use GPU acceleration")
-        self._use_gpu_check.setChecked(True)
-        rendering_layout.addRow("", self._use_gpu_check)
-
-        self._threads_spin = QSpinBox()
-        self._threads_spin.setRange(1, 32)
-        self._threads_spin.setValue(4)
-        rendering_layout.addRow("Worker threads:", self._threads_spin)
-
-        perf_layout.addWidget(rendering_group)
-        perf_layout.addStretch()
-
-        tabs.addTab(perf_widget, "Performance")
-
-        # Keyboard tab
-        keyboard_widget = QWidget()
-        keyboard_layout = QVBoxLayout(keyboard_widget)
-
-        shortcuts_group = QGroupBox("Keyboard Shortcuts")
-        shortcuts_layout = QFormLayout(shortcuts_group)
-
-        self._pan_key_combo = QComboBox()
-        self._pan_key_combo.addItems(["Arrow Keys", "WASD", "HJKL"])
-        shortcuts_layout.addRow("Pan:", self._pan_key_combo)
-
-        self._zoom_key_combo = QComboBox()
-        self._zoom_key_combo.addItems(["+/-", "Scroll Wheel", "Ctrl+Scroll"])
-        shortcuts_layout.addRow("Zoom:", self._zoom_key_combo)
-
-        keyboard_layout.addWidget(shortcuts_group)
-        keyboard_layout.addStretch()
-
-        tabs.addTab(keyboard_widget, "Keyboard")
-
-        layout.addWidget(tabs)
-
-        # Button row
-        button_layout = QHBoxLayout()
-
-        reset_btn = QPushButton("Reset to Defaults")
-        reset_btn.clicked.connect(self._reset_defaults)
-        button_layout.addWidget(reset_btn)
-
-        button_layout.addStretch()
-
-        apply_btn = QPushButton("Apply")
-        apply_btn.clicked.connect(self._apply)
-        button_layout.addWidget(apply_btn)
-
-        ok_btn = QPushButton("OK")
-        ok_btn.clicked.connect(self._ok)
-        button_layout.addWidget(ok_btn)
-
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.clicked.connect(self.reject)
-        button_layout.addWidget(cancel_btn)
-
-        layout.addLayout(button_layout)
-
-    def _browse_directory(self, line_edit: QLineEdit) -> None:
-        """Open directory browser.
-
-        Args:
-            line_edit: Line edit to populate with selected path.
-        """
-        directory = QFileDialog.getExistingDirectory(self, "Select Directory")
-        if directory:
-            line_edit.setText(directory)
-
-    def _choose_nan_color(self) -> None:
-        """Open the colour picker for the blank/Inf/NaN colour."""
-        color = QColorDialog.getColor(self._nan_color, self, "Choose Blank/Inf/NaN Color")
-        if color.isValid():
-            self._nan_color = color
-            self._update_nan_color_button()
-
-    def _update_nan_color_button(self) -> None:
-        """Show the chosen blank colour on its button."""
-        self._nan_color_btn.setStyleSheet(
-            f"background-color: {self._nan_color.name()}; border: 1px solid black;"
+    def _bindings_page(self) -> QWidget:
+        """The keyboard-shortcut editor (M9-33)."""
+        page = QWidget()
+        column = QVBoxLayout(page)
+        column.addWidget(
+            QLabel(
+                "Click a shortcut and type the keys you want. Clearing one leaves "
+                "the command with no shortcut, which is a legitimate thing to want."
+            )
         )
 
-    def _choose_bg_color(self) -> None:
-        """Open color picker for background color."""
-        color = QColorDialog.getColor(self._bg_color, self, "Choose Background Color")
-        if color.isValid():
-            self._bg_color = color
-            self._update_bg_color_button()
+        table = QTableWidget(len(bindings_module.BINDINGS), 2)
+        table.setHorizontalHeaderLabels(["Command", "Shortcut"])
+        table.verticalHeader().setVisible(False)
+        table.horizontalHeader().setStretchLastSection(True)
+        for row, binding in enumerate(bindings_module.BINDINGS):
+            name = QTableWidgetItem(binding.label)
+            name.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            table.setItem(row, 0, name)
+            editor = QKeySequenceEdit(QKeySequence(binding.default))
+            self.shortcut_editors[binding.name] = editor
+            table.setCellWidget(row, 1, editor)
+        table.resizeColumnsToContents()
+        column.addWidget(table)
+        self.shortcut_table = table
 
-    def _update_bg_color_button(self) -> None:
-        """Update the background color button appearance."""
-        self._bg_color_btn.setStyleSheet(
-            f"background-color: {self._bg_color.name()}; border: 1px solid gray;"
-        )
+        self._conflicts = QLabel()
+        self._conflicts.setWordWrap(True)
+        column.addWidget(self._conflicts)
 
-    def _reset_defaults(self) -> None:
-        """Reset all settings to defaults."""
-        self._restore_session_check.setChecked(False)
-        self._check_updates_check.setChecked(True)
-        self._recent_files_spin.setValue(10)
-        self._data_dir_edit.clear()
-        self._export_dir_edit.clear()
-        self._prompt_hdu_check.setChecked(True)
-        self._autoload_regions_check.setChecked(True)
-        self._theme_combo.setCurrentText("System")
-        self._bg_color = QColor(0, 0, 0)
-        self._nan_color = QColor(255, 255, 255)
-        self._update_bg_color_button()
-        self._update_nan_color_button()
-        self._anti_alias_check.setChecked(True)
-        self._default_scale_combo.setCurrentText("Linear")
-        self._default_cmap_combo.setCurrentText("gray")
-        self._default_clip_combo.setCurrentText("ZScale")
-        self._cache_size_spin.setValue(1000)
-        self._tile_size_spin.setValue(512)
-        self._use_gpu_check.setChecked(True)
-        self._threads_spin.setValue(4)
+        reset = QPushButton("Restore Default Shortcuts")
+        reset.clicked.connect(self.restore_shortcuts)
+        column.addWidget(reset)
+        return page
 
-    def _get_settings(self) -> dict:
-        """Get current preference settings.
+    def show_topic(self, row: int) -> None:
+        """Show the chosen topic's page."""
+        item = self.topics.item(row)
+        if item is None:
+            return
+        for topic, page in self._pages.items():
+            page.setVisible(topic == item.text())
 
-        Returns:
-            Dictionary of preference settings.
-        """
-        return {
-            "restore_session": self._restore_session_check.isChecked(),
-            "check_updates": self._check_updates_check.isChecked(),
-            "recent_files_count": self._recent_files_spin.value(),
-            "data_directory": self._data_dir_edit.text(),
-            "export_directory": self._export_dir_edit.text(),
-            "prompt_for_hdu": self._prompt_hdu_check.isChecked(),
-            "autoload_fits_regions": self._autoload_regions_check.isChecked(),
-            "theme": self._theme_combo.currentText(),
-            "background_color": self._bg_color.name(),
-            "nan_color": self._nan_color.name(),
-            "anti_aliasing": self._anti_alias_check.isChecked(),
-            "default_scale": self._default_scale_combo.currentText(),
-            "default_colormap": self._default_cmap_combo.currentText(),
-            "default_clip": self._default_clip_combo.currentText(),
-            "cache_size_mb": self._cache_size_spin.value(),
-            "tile_size": self._tile_size_spin.value(),
-            "use_gpu": self._use_gpu_check.isChecked(),
-            "worker_threads": self._threads_spin.value(),
-            "pan_keys": self._pan_key_combo.currentText(),
-            "zoom_keys": self._zoom_key_combo.currentText(),
-        }
+    # -- reading and writing ----------------------------------------------------
 
-    def _apply(self) -> None:
-        """Apply current settings."""
-        self.preferences_changed.emit(self._get_settings())
+    def _choose(self, key: str) -> None:
+        """Pick a colour."""
+        chosen = QColorDialog.getColor(self._colors.get(key, QColor()), self, "Choose Color")
+        if chosen.isValid():
+            self._colors[key] = chosen
+            editor = self.editors.get(key)
+            if isinstance(editor, QPushButton):
+                self._paint(editor, chosen)
 
-    def _ok(self) -> None:
-        """Apply settings and close dialog."""
-        self._apply()
-        self.accept()
+    @staticmethod
+    def _paint(button: QPushButton, color: QColor) -> None:
+        """Show a colour on its button."""
+        button.setStyleSheet(f"background-color: {color.name()}; border: 1px solid black;")
+        button.setText(color.name())
 
     def load_preferences(self, prefs: dict[str, Any]) -> None:
-        """Load preferences into the dialog.
+        """Fill the dialog in.
 
         Args:
-            prefs: Dictionary of preference values.
+            prefs: The values to show. Anything the table does not know is
+                ignored rather than refused, so an old preferences file
+                does not stop the dialog opening.
         """
-        if "restore_session" in prefs:
-            self._restore_session_check.setChecked(prefs["restore_session"])
-        if "check_updates" in prefs:
-            self._check_updates_check.setChecked(prefs["check_updates"])
-        if "recent_files_count" in prefs:
-            self._recent_files_spin.setValue(prefs["recent_files_count"])
-        if "data_directory" in prefs:
-            self._data_dir_edit.setText(prefs["data_directory"])
-        if "export_directory" in prefs:
-            self._export_dir_edit.setText(prefs["export_directory"])
-        if "prompt_for_hdu" in prefs:
-            self._prompt_hdu_check.setChecked(bool(prefs["prompt_for_hdu"]))
-        if "autoload_fits_regions" in prefs:
-            self._autoload_regions_check.setChecked(bool(prefs["autoload_fits_regions"]))
-        if "theme" in prefs:
-            self._theme_combo.setCurrentText(prefs["theme"])
-        if "background_color" in prefs:
-            self._bg_color = QColor(prefs["background_color"])
-            self._update_bg_color_button()
-        if "nan_color" in prefs:
-            self._nan_color = QColor(prefs["nan_color"])
-            self._update_nan_color_button()
-        if "anti_aliasing" in prefs:
-            self._anti_alias_check.setChecked(prefs["anti_aliasing"])
-        if "default_scale" in prefs:
-            self._default_scale_combo.setCurrentText(prefs["default_scale"])
-        if "default_colormap" in prefs:
-            self._default_cmap_combo.setCurrentText(prefs["default_colormap"])
-        if "default_clip" in prefs:
-            self._default_clip_combo.setCurrentText(prefs["default_clip"])
-        if "cache_size_mb" in prefs:
-            self._cache_size_spin.setValue(prefs["cache_size_mb"])
-        if "tile_size" in prefs:
-            self._tile_size_spin.setValue(prefs["tile_size"])
-        if "use_gpu" in prefs:
-            self._use_gpu_check.setChecked(prefs["use_gpu"])
-        if "worker_threads" in prefs:
-            self._threads_spin.setValue(prefs["worker_threads"])
+        table = preference_defs.by_key()
+        for key, value in prefs.items():
+            preference = table.get(key)
+            editor = self.editors.get(key)
+            if preference is None or editor is None:
+                continue
+            self._set(preference, editor, value)
+
+        shortcuts = {name: prefs.get(bindings_module.PREFIX + name) for name in self.shortcut_editors}
+        for name, editor in self.shortcut_editors.items():
+            wanted = shortcuts.get(name)
+            if wanted is not None:
+                editor.setKeySequence(QKeySequence(str(wanted)))
+        self.check_conflicts()
+
+    def _set(self, preference, editor: QWidget, value: Any) -> None:
+        """Put one value in its control."""
+        if preference.kind == "bool" and isinstance(editor, QCheckBox):
+            editor.setChecked(bool(value))
+        elif preference.kind == "int" and isinstance(editor, QSpinBox):
+            editor.setValue(int(value))
+        elif preference.kind == "float" and isinstance(editor, QDoubleSpinBox):
+            editor.setValue(float(value))
+        elif preference.kind == "choice" and isinstance(editor, QComboBox):
+            editor.setCurrentText(str(value))
+        elif preference.kind == "color" and isinstance(editor, QPushButton):
+            color = QColor(str(value))
+            if color.isValid():
+                self._colors[preference.key] = color
+                self._paint(editor, color)
+        elif isinstance(editor, QLineEdit):
+            editor.setText("" if value is None else str(value))
+
+    def values(self) -> dict[str, Any]:
+        """Every preference as the dialog now has it."""
+        found: dict[str, Any] = {}
+        for preference in preference_defs.PREFERENCES:
+            editor = self.editors.get(preference.key)
+            if editor is None:
+                continue
+            if preference.kind == "bool":
+                found[preference.key] = editor.isChecked()
+            elif preference.kind in ("int", "float"):
+                found[preference.key] = editor.value()
+            elif preference.kind == "choice":
+                found[preference.key] = editor.currentText()
+            elif preference.kind == "color":
+                found[preference.key] = self._colors[preference.key].name()
+            else:
+                found[preference.key] = editor.text()
+
+        for name, editor in self.shortcut_editors.items():
+            found[bindings_module.PREFIX + name] = editor.keySequence().toString()
+        return found
+
+    #: Kept under its old name, which the Edit controller and its tests use.
+    def _get_settings(self) -> dict[str, Any]:
+        """Every preference as the dialog now has it."""
+        return self.values()
+
+    # -- the buttons ---------------------------------------------------------------
+
+    def check_conflicts(self) -> dict[str, list[str]]:
+        """Say which shortcuts two commands are both asking for.
+
+        Two commands on one combination means one of them never fires, and
+        which one is Qt's business rather than the user's.
+        """
+        shortcuts = {name: editor.keySequence().toString() for name, editor in self.shortcut_editors.items()}
+        clashes = bindings_module.conflicts(shortcuts)
+        labels = bindings_module.by_name()
+        if clashes:
+            lines = [
+                f"{shortcut} is wanted by "
+                + " and ".join(labels[name].label for name in names if name in labels)
+                for shortcut, names in clashes.items()
+            ]
+            self._conflicts.setText("Conflicts: " + "; ".join(lines))
+        else:
+            self._conflicts.setText("")
+        return clashes
+
+    def apply(self) -> None:
+        """Hand the settings over without closing."""
+        self.check_conflicts()
+        self.preferences_changed.emit(self.values())
+
+    def save(self) -> None:
+        """Hand them over and close, as DS9's Save does."""
+        self.apply()
+        self.accept()
+
+    def restore_defaults(self) -> None:
+        """Put every control back to its default."""
+        self.load_preferences({**preference_defs.defaults(), **bindings_module.defaults()})
+
+    def restore_shortcuts(self) -> None:
+        """Put the shortcuts back, leaving everything else alone."""
+        for name, shortcut in bindings_module.defaults().items():
+            editor = self.shortcut_editors.get(name.removeprefix(bindings_module.PREFIX))
+            if editor is not None:
+                editor.setKeySequence(QKeySequence(shortcut))
+        self.check_conflicts()

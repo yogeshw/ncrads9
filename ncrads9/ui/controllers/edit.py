@@ -39,6 +39,8 @@ from PyQt6.QtWidgets import QApplication
 
 from ...regions.base_region import BaseRegion
 from ...rendering.scale_algorithms import ScaleAlgorithm
+from ...utils import preference_defs
+from .. import bindings
 from ..dialogs.preferences_dialog import PreferencesDialog
 from ..themes.dark import DarkTheme
 from ..themes.default import DefaultTheme
@@ -46,21 +48,12 @@ from ..themes.native import NativeTheme
 from .base import Controller
 
 #: Preference key -> default, and the full set the dialog round-trips.
+#: The table in `utils/preference_defs.py` is the definition; this is that
+#: table's defaults plus the keyboard shortcuts', so nothing has to be
+#: listed twice.
 PREFERENCE_DEFAULTS: dict[str, object] = {
-    "use_gpu": True,
-    "tile_size": 512,
-    "cache_size_mb": 1000,
-    "background_color": "#000000",
-    #: DS9's Blank/Inf/NaN colour (`pds9(nan)` in `ds9.tcl:157`), which is
-    #: also what a cropped-out pixel is painted in.
-    "nan_color": "#ffffff",
-    "default_scale": "Linear",
-    "default_colormap": "gray",
-    "anti_aliasing": True,
-    "theme": "System",
-    #: Ask which HDU to load when a file has more than one displayable one.
-    #: DS9 never asks; see ui/dialogs/open_dialog.py.
-    "prompt_for_hdu": True,
+    **preference_defs.defaults(),
+    **bindings.defaults(),
 }
 
 #: Image pixels a pasted region is shifted by, so it does not hide the
@@ -309,6 +302,16 @@ class EditController(Controller):
 
         window._apply_background_color(prefs.get("background_color", "#000000"))
         window.nan_color = str(prefs.get("nan_color", "#ffffff"))
+
+        # The keyboard shortcuts, which are preferences like everything
+        # else as of M9-33.
+        shortcuts = {
+            key.removeprefix(bindings.PREFIX): str(value)
+            for key, value in prefs.items()
+            if key.startswith(bindings.PREFIX)
+        }
+        if shortcuts:
+            bindings.apply(self.menu, shortcuts)
 
         default_scale = prefs.get("default_scale", "Linear")
         if default_scale in DEFAULT_SCALES:
