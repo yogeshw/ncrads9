@@ -16,13 +16,31 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
-Image servers package for accessing astronomical image archives.
+The image servers DS9 fetches cutouts from.
+
+Nine of them, each with its own CGI and its own idea of how to ask
+(`servers.py`), one transport that fetches and checks the reply
+(`fetch.py`), and a Simple Image Access client for the one that needs it.
 
 Author: Yogesh Wadadekar
 """
 
+from . import fetch, servers
+from .fetch import ImageRequest, ImageServerError, retrieve
+from .servers import SERVERS, ImageServer, Protocol, SizeUnit, Survey, by_name
 from .sia_client import SIAClient
 
 __all__ = [
+    "SERVERS",
+    "ImageRequest",
+    "ImageServer",
+    "ImageServerError",
+    "Protocol",
     "SIAClient",
+    "SizeUnit",
+    "Survey",
+    "by_name",
+    "fetch",
+    "retrieve",
+    "servers",
 ]

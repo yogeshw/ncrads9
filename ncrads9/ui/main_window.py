@@ -59,6 +59,7 @@ from .controllers.edit import EditController
 from .controllers.file import FileController
 from .controllers.frame import FrameController
 from .controllers.help import HelpController
+from .controllers.image_servers import ImageServerController
 from .controllers.region import RegionController
 from .controllers.scale import ScaleController
 from .controllers.view import ViewController
@@ -265,6 +266,7 @@ class MainWindow(QMainWindow):
         # window, but reads as a Frame everywhere else in the codebase.
         self.frame_controller = FrameController(self)
         self.help = HelpController(self)
+        self.image_servers = ImageServerController(self)
         self.edit = EditController(self)
         self.file = FileController(self)
         self.region = RegionController(self)
@@ -284,6 +286,7 @@ class MainWindow(QMainWindow):
             self.edit,
             self.frame_controller,
             self.help,
+            self.image_servers,
             self.file,
             self.region,
             self.scale,
@@ -334,6 +337,7 @@ class MainWindow(QMainWindow):
         self.analysis_tasks.connect()
         self.bin.connect()
         self.catalog.connect()
+        self.image_servers.connect()
 
         self.menu_bar.action_fits_header.triggered.connect(self.file.show_header)
         self.menu_bar.action_plot_tool_line.triggered.connect(

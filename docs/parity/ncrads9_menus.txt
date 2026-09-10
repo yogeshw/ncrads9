@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 870 (776 excluding separators)
+# entries: 878 (784 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -812,7 +812,15 @@
 .analysis|command|Smooth Parameters
 .analysis|separator|---
 .analysis|cascade|Image Servers
-.analysis.imageservers|command|2MASS Image
+.analysis.imageservers|command|DSS (SAO)
+.analysis.imageservers|command|DSS (ESO)
+.analysis.imageservers|command|DSS (STScI)
+.analysis.imageservers|command|2MASS (IPAC)
+.analysis.imageservers|command|SDSS
+.analysis.imageservers|command|SkyView (HEASARC)
+.analysis.imageservers|command|VLA (NRAO)
+.analysis.imageservers|command|NVSS (NRAO)
+.analysis.imageservers|command|VLSS (NRAO)
 .analysis|cascade|Catalogs
 .analysis.catalogs|cascade|Database
 .analysis.catalogs.database|command|NED

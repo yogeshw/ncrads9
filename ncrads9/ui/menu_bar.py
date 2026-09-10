@@ -28,6 +28,7 @@ from ..catalogs.servers import SECTIONS as CATALOG_SECTIONS
 from ..catalogs.servers import in_section as catalogs_in_section
 from ..colormaps.bundled import CATEGORIES, colormap_label
 from ..core.bin_table import BUFFER_SIZES, DEFAULT_BUFFER_SIZE
+from ..image_servers.servers import SERVERS as IMAGE_SERVERS
 from ..regions.region_template import bundled_templates
 from .layout.view_state import DEFAULT_INFO_FIELDS, WCS_SUFFIXES
 
@@ -1712,8 +1713,14 @@ class MenuBar(QMenuBar):
 
         self.analysis_menu.addSeparator()
         self.analysis_image_servers_menu: QMenu = self.analysis_menu.addMenu("Image &Servers")
-        self.action_analysis_2mass: QAction = QAction("2MASS &Image...", self)
-        self.analysis_image_servers_menu.addAction(self.action_analysis_2mass)
+        #: Image server name -> its action.
+        self.image_server_actions: dict[str, QAction] = {}
+        for server in IMAGE_SERVERS:
+            action = QAction(f"{server.label}...", self)
+            self.analysis_image_servers_menu.addAction(action)
+            self.image_server_actions[server.name] = action
+        # Kept as a name of its own: the VO menu and the XPA reach it.
+        self.action_analysis_2mass: QAction = self.image_server_actions["twomass"]
         self.analysis_catalogs_menu: QMenu = self.analysis_menu.addMenu("&Catalogs")
         self._fill_catalogs_menu(self.analysis_catalogs_menu)
         # Kept as a name of its own: the VO menu and the XPA both reach it.
