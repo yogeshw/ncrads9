@@ -21,7 +21,15 @@ Catalog query and display module for ncrads9.
 Author: Yogesh Wadadekar
 """
 
-from . import catalog_file, catalog_match, catalog_query, catalog_search, servers
+from . import (
+    catalog_file,
+    catalog_match,
+    catalog_query,
+    catalog_search,
+    footprints,
+    servers,
+    vo_registry,
+)
 from .catalog_base import CatalogBase
 from .catalog_set import CatalogSet, LoadedCatalog, Symbol
 from .cone_search import ConeSearch
@@ -35,6 +43,8 @@ __all__ = [
     "catalog_file",
     "catalog_match",
     "catalog_search",
+    "footprints",
+    "vo_registry",
     "catalog_query",
     "servers",
     "CatalogSet",

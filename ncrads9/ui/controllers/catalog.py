@@ -40,6 +40,7 @@ from ...catalogs import (
     catalog_match,
     catalog_query,
     catalog_search,
+    footprints,
     servers,
 )
 from ...catalogs.catalog_set import CatalogSet, LoadedCatalog
@@ -50,6 +51,17 @@ from .base import Controller
 
 #: The radius a menu query uses, in arcseconds. DS9's `pcat(loc)`.
 DEFAULT_RADIUS_ARCSEC = 500.0
+
+#: The colour footprint outlines are drawn in.
+FOOTPRINT_COLOR = "yellow"
+
+#: The tag every footprint outline carries, so Clear All can find them.
+FOOTPRINT_TAG = "footprint"
+
+
+def _footprint_tag(name: str) -> str:
+    """The tag outlines from one server carry."""
+    return f"{FOOTPRINT_TAG}:{name}"
 
 
 class CatalogController(Controller):
@@ -73,6 +85,8 @@ class CatalogController(Controller):
         #: How the catalogue *search* fetches. Replaced in tests, like
         #: `transport`; `None` means the real client.
         self.search_fetcher = None
+        #: How footprint queries fetch, likewise.
+        self.footprint_fetcher = None
         #: The search dialog, kept so it is not collected while shown.
         self._search_dialog = None
 
@@ -87,6 +101,10 @@ class CatalogController(Controller):
         menu.action_catalog_search.triggered.connect(lambda _checked=False: self.search())
         menu.action_catalog_match.triggered.connect(lambda _checked=False: self.show_match_dialog())
         menu.action_catalog_tool.triggered.connect(lambda _checked=False: self.show_tool())
+
+        for name, action in menu.footprint_actions.items():
+            action.triggered.connect(lambda _checked=False, key=name: self.query_footprints(key))
+        menu.action_footprint_clear_all.triggered.connect(lambda _checked=False: self.clear_footprints())
 
     def attach(self, viewer) -> None:
         """Hook up a newly built viewer's catalogue layer.
@@ -520,6 +538,105 @@ class CatalogController(Controller):
         count = self.catalogs.clear()
         self.refresh_overlay()
         self.status(f"Cleared {count} catalog{'s' if count != 1 else ''}")
+
+    # -- footprint servers (M8-20) ---------------------------------------------
+
+    def query_footprints(
+        self,
+        name: str,
+        radius_arcmin: float = footprints.DEFAULT_RADIUS_ARCMIN,
+    ) -> LoadedCatalog | None:
+        """Ask a footprint server what covers the frame's centre.
+
+        The observations load as a catalogue -- filterable and listable
+        like any other -- and their outlines are drawn as polygon regions,
+        which is what DS9's `fpreg.tcl` does with them.
+        """
+        server = footprints.by_name(name)
+        if server is None:
+            self.status(f"No such footprint server: {name}", 3000)
+            return None
+
+        center = self.frame_center()
+        if center is None:
+            self.status("This frame has no WCS, so there is nothing to search around", 4000)
+            return None
+
+        request = footprints.FootprintRequest(
+            server=server,
+            longitude=float(center.ra.deg),
+            latitude=float(center.dec.deg),
+            radius_arcmin=radius_arcmin,
+        )
+        self.status(f"Asking {server.label}...")
+        result = footprints.query(request, fetcher=self.footprint_fetcher)
+        self.status(result.message, 5000)
+        if result.table is None:
+            return None
+
+        loaded = self.add(
+            LoadedCatalog(name=server.label, table=result.table, source=f"footprint:{server.name}")
+        )
+        self.draw_footprints(server.name, result.polygons)
+        return loaded
+
+    def draw_footprints(self, name: str, polygons) -> int:
+        """Draw footprint outlines as polygon regions.
+
+        Tagged with the server's name, so Clear All can find them again --
+        an outline is a region once drawn, and there is no other way to
+        tell it from one the user made.
+
+        Returns:
+            How many were drawn.
+        """
+        frame = self.frame
+        handler = getattr(frame, "wcs_handler", None) if frame else None
+        if frame is None or handler is None or not getattr(handler, "is_valid", False):
+            return 0
+
+        from ...regions.shapes.polygon import Polygon
+
+        drawn = 0
+        for outline in polygons:
+            vertices = []
+            for longitude, latitude in outline:
+                try:
+                    x, y = handler.world_to_pixel(longitude, latitude)
+                except Exception:
+                    continue
+                vertices.append((float(x), float(y)))
+            if len(vertices) < 3:
+                continue
+            frame.regions.append(
+                Polygon(vertices=vertices, color=FOOTPRINT_COLOR, tags=[_footprint_tag(name)])
+            )
+            drawn += 1
+
+        self.window.region.refresh_overlay()
+        return drawn
+
+    def clear_footprints(self) -> None:
+        """Remove every footprint outline and catalogue, DS9's Clear All."""
+        frame = self.frame
+        removed = 0
+        if frame is not None:
+            before = len(frame.regions)
+            frame.regions = [
+                region
+                for region in frame.regions
+                if not any(tag.startswith(FOOTPRINT_TAG) for tag in region.tags)
+            ]
+            removed = before - len(frame.regions)
+            self.window.region.refresh_overlay()
+
+        names = [entry.name for entry in self.catalogs if entry.source.startswith("footprint:")]
+        for entry_name in names:
+            entry = self.catalogs.by_name(entry_name)
+            if entry is not None:
+                self.clear(entry)
+
+        self.status(f"Cleared {removed} footprint outline{'s' if removed != 1 else ''}")
 
     # -- the overlay -----------------------------------------------------------------
 

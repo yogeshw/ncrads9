@@ -40,8 +40,11 @@ from urllib.parse import unquote, urlparse
 import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.table import Table
+from PyQt6.QtCore import QUrl
+from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QColorDialog, QDialog, QInputDialog
 
+from ...catalogs import vo_registry
 from ...catalogs.vizier import VizierCatalog
 from ...communication.samp import SAMPClient
 from ...frames.frame import Frame
@@ -52,11 +55,27 @@ from ...regions.shapes.circle import Circle
 from ...regions.shapes.ellipse import Ellipse
 from ...regions.shapes.point import Point
 from ..dialogs.vo_query_dialog import VOQueryDialog
+from ..dialogs.vo_registry_dialog import VORegistryDialog
 from .base import Controller
+
+#: The Chandra archive's own page for one observation.
+CHANDRA_OBSID_URL = "https://cda.harvard.edu/chaser/startViewer.do?menuItem=details&obsid="
 
 
 class VOController(Controller):
     """Owns the VO menu."""
+
+    def __init__(self, window) -> None:
+        """
+        Args:
+            window: The main window, as every controller takes.
+        """
+        super().__init__(window)
+        #: How registry queries fetch. Replaced in tests; `None` is the
+        #: real client.
+        self.registry_fetcher = None
+        #: The registry browser, kept so it is not collected while shown.
+        self._registry_dialog = None
 
     def connect(self) -> None:
         """Wire the VO menu, and the Analysis entries that duplicate it."""
@@ -71,6 +90,14 @@ class VOController(Controller):
 
         # DS9 puts these under Analysis; both routes reach the same method.
         menu.action_analysis_2mass.triggered.connect(self.query_2mass_image)
+        menu.action_vo_registry.triggered.connect(lambda _checked=False: self.show_registry())
+
+        for name, action in menu.archive_actions.items():
+            action.triggered.connect(lambda _checked=False, key=name: self.open_archive(key))
+        menu.action_archive_chandra_obsid.triggered.connect(lambda _checked=False: self.chandra_by_obsid())
+        menu.action_archive_chandra_cone.triggered.connect(
+            lambda _checked=False: self.window.catalog.query_footprints("fpcxc")
+        )
         menu.action_analysis_vizier.triggered.connect(self.query_vizier_catalog)
         menu.action_catalog_tool.triggered.connect(self.query_vizier_catalog)
         menu.action_virtual_observatory.triggered.connect(self.query_vizier_catalog)
@@ -104,6 +131,124 @@ class VOController(Controller):
             self.status("Loaded SIAP image into new frame", 3000)
         except Exception as e:
             self.status(f"SIAP load error: {e}", 3000)
+
+    # -- the Archives menu (M8-19) -------------------------------------------
+
+    def open_archive(self, name: str) -> bool:
+        """Open one of the archive web links.
+
+        DS9's own handlers for these do not exist in 8.x -- the entries are
+        there and do nothing -- so these are the services' current URLs.
+
+        Returns:
+            Whether there was such a link.
+        """
+        from ..menu_bar import ARCHIVE_LINKS
+
+        for _group, entries in ARCHIVE_LINKS:
+            for entry_name, label, url in entries:
+                if entry_name == name:
+                    QDesktopServices.openUrl(QUrl(url))
+                    self.status(f"Opened {label.replace('&', '')}")
+                    return True
+        self.status(f"No such archive: {name}", 3000)
+        return False
+
+    def chandra_by_obsid(self, obsid: str | None = None) -> str | None:
+        """Open the Chandra archive on one observation.
+
+        DS9 searches the archive by ObsId and offers the result; this opens
+        the archive's own page for it, which is the same information and
+        does not need a private protocol.
+
+        Returns:
+            The ObsId opened, or None if the user cancelled.
+        """
+        if obsid is None:
+            obsid, accepted = QInputDialog.getText(self.window, "Chandra Public Archive", "Observation ID:")
+            if not accepted or not obsid.strip():
+                return None
+
+        obsid = obsid.strip()
+        if not obsid.isdigit():
+            self.status(f"{obsid!r} is not an observation ID", 3000)
+            return None
+
+        QDesktopServices.openUrl(QUrl(f"{CHANDRA_OBSID_URL}{obsid}"))
+        self.status(f"Opened Chandra ObsId {obsid}")
+        return obsid
+
+    # -- the VO registry browser (M8-21) ---------------------------------------
+
+    def show_registry(self):
+        """Open the registry browser, or raise the open one."""
+        existing = getattr(self, "_registry_dialog", None)
+        if existing is not None:
+            existing.raise_()
+            existing.activateWindow()
+            return existing
+
+        dialog = VORegistryDialog(self.frame_center(), self.window)
+        dialog.discovery_requested.connect(
+            lambda kind, words, d=dialog: d.show_result(
+                vo_registry.discover(kind, words, fetcher=self.registry_fetcher)
+            )
+        )
+        dialog.query_requested.connect(
+            lambda service, longitude, latitude, radius, d=dialog: self.query_vo_service(
+                service, longitude, latitude, radius, d
+            )
+        )
+        dialog.finished.connect(lambda _result: setattr(self, "_registry_dialog", None))
+        self._registry_dialog = dialog
+        dialog.show()
+        return dialog
+
+    def frame_center(self) -> tuple[float, float] | None:
+        """The frame's centre in degrees, or None with no WCS."""
+        frame = self.frame
+        handler = getattr(frame, "wcs_handler", None) if frame else None
+        data = getattr(frame, "image_data", None) if frame else None
+        if handler is None or not getattr(handler, "is_valid", False) or data is None:
+            return None
+        try:
+            longitude, latitude = handler.pixel_to_world(data.shape[1] / 2.0, data.shape[0] / 2.0)
+        except Exception:
+            return None
+        return (float(longitude), float(latitude))
+
+    def query_vo_service(
+        self,
+        service,
+        longitude: float,
+        latitude: float,
+        radius: float,
+        dialog=None,
+    ):
+        """Query one discovered service and load what it returns.
+
+        A cone search becomes a catalogue; an image or spectrum service
+        returns a list of files, which is also a catalogue -- the links are
+        rows, and the catalog window is the place to read them.
+        """
+        table, message = vo_registry.query_service(
+            service, longitude, latitude, radius, fetcher=self.registry_fetcher
+        )
+        self.status(message, 5000)
+        if dialog is not None:
+            dialog.set_message(message)
+        if table is None:
+            return None
+
+        from ...catalogs.catalog_set import LoadedCatalog
+
+        return self.window.catalog.add(
+            LoadedCatalog(
+                name=service.title or service.url,
+                table=table,
+                source=f"{service.kind.value}:{service.url}",
+            )
+        )
 
     def query_vizier_catalog(self) -> None:
         """Query VizieR and overlay catalog sources."""

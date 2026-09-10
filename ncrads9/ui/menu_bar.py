@@ -24,6 +24,7 @@ Author: Yogesh Wadadekar
 from PyQt6.QtGui import QAction, QActionGroup, QKeySequence
 from PyQt6.QtWidgets import QMenu, QMenuBar, QWidget
 
+from ..catalogs.footprints import SERVERS as FOOTPRINT_SERVERS
 from ..catalogs.servers import SECTIONS as CATALOG_SECTIONS
 from ..catalogs.servers import in_section as catalogs_in_section
 from ..colormaps.bundled import CATEGORIES, colormap_label
@@ -54,6 +55,27 @@ REGION_SHAPES: tuple[tuple[str, str], ...] = (
     ("panda", "Pa&nda"),
     ("epanda", "Epa&nda"),
     ("bpanda", "Bpand&a"),
+)
+
+#: The archive web links DS9's Archives menu offers, grouped as it groups
+#: them. DS9's own handlers for these (`HVArchSIMBADSAO` and friends) do not
+#: exist in 8.x -- the entries are there and do nothing -- so the endpoints
+#: here are the services' current ones.
+ARCHIVE_LINKS: tuple[tuple[str, tuple[tuple[str, str, str], ...]], ...] = (
+    (
+        "SIMBAD",
+        (
+            ("simbad_sao", "&SAO", "https://simbad.cfa.harvard.edu/simbad/"),
+            ("simbad_cds", "&CDS", "https://simbad.u-strasbg.fr/simbad/"),
+        ),
+    ),
+    (
+        "ADS",
+        (
+            ("ads_sao", "&SAO", "https://ui.adsabs.harvard.edu/"),
+            ("ads_cds", "&CDS", "https://cdsads.u-strasbg.fr/"),
+        ),
+    ),
 )
 
 #: DS9's three Auto Plot toggles, under Region -> Region Parameters.
@@ -1564,6 +1586,9 @@ class MenuBar(QMenuBar):
         self.action_catalog_vizier: QAction = QAction("&VizieR...", self)
         self.catalog_menu.addAction(self.action_catalog_vizier)
 
+        self.action_vo_registry: QAction = QAction("&Registry Browser...", self)
+        self.vo_menu.addAction(self.action_vo_registry)
+
         self.samp_menu: QMenu = self.vo_menu.addMenu("&SAMP")
         self.action_samp_connect: QAction = QAction("&Connect", self)
         self.samp_menu.addAction(self.action_samp_connect)
@@ -1738,6 +1763,33 @@ class MenuBar(QMenuBar):
         self.analysis_catalogs_menu.addAction(self.action_catalog_clear_all)
 
         self.analysis_menu.addSeparator()
+        archives_menu = self.analysis_menu.addMenu("&Archives")
+        self.action_archive_chandra_obsid: QAction = QAction("Chandra Public Archive by &ObsId...", self)
+        archives_menu.addAction(self.action_archive_chandra_obsid)
+        self.action_archive_chandra_cone: QAction = QAction("Chandra Public Archive by &Cone Search...", self)
+        archives_menu.addAction(self.action_archive_chandra_cone)
+        archives_menu.addSeparator()
+
+        #: Archive web link name -> its action.
+        self.archive_actions: dict[str, QAction] = {}
+        for group, entries in ARCHIVE_LINKS:
+            submenu = archives_menu.addMenu(group)
+            for name, label, _url in entries:
+                action = QAction(label, self)
+                submenu.addAction(action)
+                self.archive_actions[name] = action
+
+        footprints_menu = self.analysis_menu.addMenu("&Footprint Servers")
+        #: Footprint server name -> its action.
+        self.footprint_actions: dict[str, QAction] = {}
+        for server in FOOTPRINT_SERVERS:
+            action = QAction(f"{server.label}...", self)
+            footprints_menu.addAction(action)
+            self.footprint_actions[server.name] = action
+        footprints_menu.addSeparator()
+        self.action_footprint_clear_all: QAction = QAction("&Clear All", self)
+        footprints_menu.addAction(self.action_footprint_clear_all)
+
         self.action_catalog_tool: QAction = QAction("Catalog &Tool", self)
         self.analysis_menu.addAction(self.action_catalog_tool)
         self.analysis_plot_tool_menu: QMenu = self.analysis_menu.addMenu("P&lot Tool")

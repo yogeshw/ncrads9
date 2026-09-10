@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 878 (784 excluding separators)
+# entries: 894 (798 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -757,6 +757,7 @@
 .vo.siap|command|2MASS Image
 .vo|cascade|Catalog
 .vo.catalog|command|VizieR
+.vo|command|Registry Browser
 .vo|cascade|SAMP
 .vo.samp|command|Connect
 .vo.samp|command|Disconnect
@@ -875,6 +876,21 @@
 .analysis.catalogs|command|Match Catalogs
 .analysis.catalogs|command|Clear All Catalogs
 .analysis|separator|---
+.analysis|cascade|Archives
+.analysis.archives|command|Chandra Public Archive by ObsId
+.analysis.archives|command|Chandra Public Archive by Cone Search
+.analysis.archives|separator|---
+.analysis.archives|cascade|SIMBAD
+.analysis.archives.simbad|command|SAO
+.analysis.archives.simbad|command|CDS
+.analysis.archives|cascade|ADS
+.analysis.archives.ads|command|SAO
+.analysis.archives.ads|command|CDS
+.analysis|cascade|Footprint Servers
+.analysis.footprintservers|command|Chandra (NASA/CXC)
+.analysis.footprintservers|command|Hubble Legacy Archive (STScI)
+.analysis.footprintservers|separator|---
+.analysis.footprintservers|command|Clear All
 .analysis|command|Catalog Tool
 .analysis|cascade|Plot Tool
 .analysis.plottool|command|Line
