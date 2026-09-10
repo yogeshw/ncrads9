@@ -40,6 +40,7 @@ class GLImageViewerWithRegions(QWidget):
     mouse_clicked = pyqtSignal(int, int, int)
     contrast_changed = pyqtSignal(float, float)
     region_created = pyqtSignal(object)
+    region_activated = pyqtSignal(object)
     region_selected = pyqtSignal(object)
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -72,6 +73,7 @@ class GLImageViewerWithRegions(QWidget):
         self.gl_canvas.zoom_changed.connect(lambda _: self._update_overlay_transform())
         self.gl_canvas.pan_changed.connect(lambda *_: self._update_overlay_transform())
         self.region_overlay.region_created.connect(self.region_created)
+        self.region_overlay.region_activated.connect(self.region_activated)
         self.region_overlay.region_selected.connect(self.region_selected)
 
         self.set_region_mode(RegionMode.NONE)

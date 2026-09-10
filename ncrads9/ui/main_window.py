@@ -416,6 +416,7 @@ class MainWindow(QMainWindow):
         viewer.mouse_clicked.connect(self._on_image_clicked)
         viewer.contrast_changed.connect(self.color.on_contrast_changed)
         viewer.region_created.connect(self.region.on_created)
+        viewer.region_activated.connect(self.region.show_information)
         viewer.region_selected.connect(self.region.on_selected)
         if hasattr(viewer, "gl_canvas"):
             viewer.gl_canvas.pan_changed.connect(lambda *_: self.zoom.update_panner_rect())

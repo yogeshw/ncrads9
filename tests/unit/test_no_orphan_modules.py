@@ -98,7 +98,6 @@ PENDING_ADOPTION: dict[str, str] = {
     # nothing needs this. Delete, not adopt.
     "ui.dialogs.save_dialog": "delete -- superseded by the Save as submenu",
     # Widgets with no host yet.
-    "ui.dialogs.region_dialog": "M6-7",
     "ui.widgets.region_list": "M6-15",
     "ui.widgets.color_picker": "M6-10",
     "ui.widgets.scale_widget": "M5-8",

@@ -163,6 +163,7 @@ class RegionOverlay(QWidget):
 
     region_created = pyqtSignal(object)  # Emits the new BaseRegion
     region_selected = pyqtSignal(object)  # Emits the selected BaseRegion
+    region_activated = pyqtSignal(object)  # Emits a double-clicked BaseRegion
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -835,7 +836,19 @@ class RegionOverlay(QWidget):
             event.accept()
 
     def mouseDoubleClickEvent(self, event) -> None:
-        """Handle double click to finalize polygon."""
+        """Close a vertex list, or open a region's Get Information dialog."""
+        if self.mode == RegionMode.NONE and event.button() == Qt.MouseButton.LeftButton:
+            # DS9 opens the region's dialog on a double click, which is how
+            # most people reach it -- the menu entry is the other way.
+            image_point = self._widget_to_image_coords(event.position())
+            for region in reversed(self.regions):
+                if region.contains(image_point.x(), image_point.y()):
+                    self._select(region)
+                    self.region_activated.emit(region)
+                    self.update()
+                    event.accept()
+                    return
+
         if self.mode in _VERTEX_MODES and event.button() == Qt.MouseButton.LeftButton:
             self._finalize(self.mode, self.current_points)
             self.current_points = []

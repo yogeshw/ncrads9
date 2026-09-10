@@ -41,6 +41,7 @@ class ImageViewerWithRegions(QWidget):
 
     # Region signals
     region_created = pyqtSignal(object)
+    region_activated = pyqtSignal(object)
     region_selected = pyqtSignal(object)
 
     def __init__(self, parent=None):
@@ -67,6 +68,7 @@ class ImageViewerWithRegions(QWidget):
         self.image_viewer.mouse_clicked.connect(self.mouse_clicked)
         self.image_viewer.contrast_changed.connect(self.contrast_changed)
         self.region_overlay.region_created.connect(self.region_created)
+        self.region_overlay.region_activated.connect(self.region_activated)
         self.region_overlay.region_selected.connect(self.region_selected)
 
         # Start in non-interactive mode so mouse events reach the image viewer

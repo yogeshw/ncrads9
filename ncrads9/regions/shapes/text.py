@@ -52,19 +52,23 @@ class Text(BaseRegion):
             tags: Optional list of tags for grouping regions.
         """
         super().__init__(center, color, width, font, label, tags, **kwargs)
-        self._label = label
         self._angle = angle
 
     @property
     def label(self) -> str:
-        """Get the text label."""
-        return self._label
+        """The string this region displays.
+
+        A view onto `text`, not a copy of it: a text region *is* its text,
+        and holding the string twice let the two drift apart -- setting
+        `text` changed what was drawn but not what was written to a region
+        file, which the Get Information dialog does both of.
+        """
+        return self.text
 
     @label.setter
     def label(self, value: str) -> None:
-        """Set the text label."""
-        self._label = value
-        self._text = value
+        """Set the string this region displays."""
+        self.text = value
 
     @property
     def angle(self) -> float:
@@ -96,7 +100,7 @@ class Text(BaseRegion):
             True if the point is within the text bounding box.
         """
         cx, cy = self.center
-        text_width = len(self._label) * 8
+        text_width = len(self.text) * 8
         text_height = 12
         return abs(x - cx) <= text_width / 2 and abs(y - cy) <= text_height / 2
 
@@ -128,8 +132,8 @@ class Text(BaseRegion):
             The text as a DS9 format string.
         """
         cx, cy = self.center
-        return f"text({cx},{cy}) # text={{{self._label}}}"
+        return f"text({cx},{cy}) # text={{{self.text}}}"
 
     def __repr__(self) -> str:
         """Return a string representation of the text."""
-        return f"Text(center={self.center}, label={self._label!r})"
+        return f"Text(center={self.center}, label={self.text!r})"

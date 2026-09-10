@@ -45,6 +45,7 @@ from ...regions.base_region import BaseRegion
 from ...regions.region_formats import RegionFormat, dropped_shapes
 from ...regions.region_parser import RegionParser
 from ...regions.region_writer import RegionWriter
+from ..dialogs.region_dialog import RegionDialog
 from ..menu_bar import (
     DEFAULT_REGION_COLOR,
     DEFAULT_REGION_FONT,
@@ -99,6 +100,11 @@ class RegionController(Controller):
             "font_size": DEFAULT_REGION_FONT_SIZE,
         }
 
+        #: Open Get Information dialogs, keyed by the region's id. A
+        #: modeless dialog nothing holds a reference to is collected the
+        #: moment it is shown, so it must be kept somewhere.
+        self._dialogs: dict[int, RegionDialog] = {}
+
     def connect(self) -> None:
         """Wire the Region menu."""
         menu = self.menu
@@ -126,8 +132,11 @@ class RegionController(Controller):
         menu.action_region_list.triggered.connect(self.list_regions)
         menu.action_region_delete_all.triggered.connect(self.clear_regions)
 
+        # Through a lambda: `triggered` hands its `checked` bool to the
+        # first argument, which would arrive as the region to show.
+        menu.action_region_info.triggered.connect(lambda _checked=False: self.show_information())
+
         for action, milestone in (
-            (menu.action_region_info, "M6-7"),
             (menu.action_region_composite, "M6-17"),
             (menu.action_region_template, "M6-18"),
             (menu.action_region_centroid, "M6-20"),
@@ -232,6 +241,54 @@ class RegionController(Controller):
             if hasattr(region, attribute):
                 setattr(region, attribute, value)
         return region
+
+    # -- Get Information (M6-7) ----------------------------------------------
+
+    def show_information(self, region: BaseRegion | None = None) -> None:
+        """Open DS9's Get Information dialog on one region.
+
+        Args:
+            region: The region to show. Defaults to the selection -- and to
+                the whole selection, since DS9 opens one dialog per selected
+                region rather than making the user pick one.
+        """
+        chosen = [region] if region is not None else self.selection()
+        if not chosen:
+            self.status("Select a region first", 3000)
+            return
+        for target in chosen:
+            self._open_information(target)
+
+    def _open_information(self, region: BaseRegion) -> None:
+        """Open, remember and show one region's dialog.
+
+        The dialog is kept in `self._dialogs` because a modeless dialog with
+        no reference is garbage collected the moment this returns, which
+        shows as a window that flashes and vanishes.
+        """
+        existing = self._dialogs.get(id(region))
+        if existing is not None:
+            existing.load()
+            existing.raise_()
+            existing.activateWindow()
+            return
+
+        frame = self.frame
+        dialog = RegionDialog(region, getattr(frame, "wcs_handler", None), self.window)
+        dialog.region_changed.connect(lambda _region: self.refresh_overlay())
+        dialog.region_deleted.connect(self._delete_one)
+        dialog.finished.connect(lambda _result, key=id(region): self._dialogs.pop(key, None))
+        self._dialogs[id(region)] = dialog
+        dialog.show()
+
+    def _delete_one(self, region: BaseRegion) -> None:
+        """Delete one region, from its own dialog."""
+        frame = self.frame
+        if frame is None or region not in frame.regions:
+            return
+        frame.regions.remove(region)
+        self.refresh_overlay()
+        self.status(f"Deleted {describe(region)}")
 
     # -- selection operations (M6-14, M6-15) ---------------------------------
 

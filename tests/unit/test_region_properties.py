@@ -465,3 +465,47 @@ def test_saving_reports_what_a_format_cannot_hold(main_window, tmp_path, monkeyp
     main_window.region.save_regions()
     assert "cannot hold line" in main_window.status_bar.currentMessage()
     assert "line(" not in path.read_text()
+
+
+# -- Get Information, from the menu (M6-7) -----------------------------------
+
+
+def test_get_information_with_nothing_selected_says_so(main_window):
+    main_window.region.select_none()
+    main_window.menu_bar.action_region_info.trigger()
+    assert "Select a region first" in main_window.status_bar.currentMessage()
+
+
+def test_get_information_opens_one_dialog_per_selected_region(main_window):
+    """DS9 opens a dialog for each, rather than making you pick one."""
+    main_window.region.select_all()
+    main_window.menu_bar.action_region_info.trigger()
+    assert len(main_window.region._dialogs) == 3
+    for dialog in list(main_window.region._dialogs.values()):
+        dialog.close()
+
+
+def test_asking_twice_reuses_the_same_dialog(main_window):
+    region = main_window.frame_manager.current_frame.regions[0]
+    main_window.region.show_information(region)
+    first = next(iter(main_window.region._dialogs.values()))
+    main_window.region.show_information(region)
+    assert list(main_window.region._dialogs.values()) == [first]
+    first.close()
+
+
+def test_closing_a_dialog_forgets_it(main_window):
+    region = main_window.frame_manager.current_frame.regions[0]
+    main_window.region.show_information(region)
+    next(iter(main_window.region._dialogs.values())).close()
+    assert main_window.region._dialogs == {}
+
+
+def test_deleting_from_the_dialog_removes_the_region(main_window):
+    frame = main_window.frame_manager.current_frame
+    region = frame.regions[0]
+    main_window.region.show_information(region)
+    dialog = main_window.region._dialogs[id(region)]
+    dialog._delete()
+    assert region not in frame.regions
+    assert len(frame.regions) == 2
