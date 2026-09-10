@@ -1725,6 +1725,8 @@ class MenuBar(QMenuBar):
         self.analysis_catalogs_menu.addSeparator()
         self.action_catalog_load: QAction = QAction("&Load Catalog...", self)
         self.analysis_catalogs_menu.addAction(self.action_catalog_load)
+        self.action_catalog_match: QAction = QAction("&Match Catalogs...", self)
+        self.analysis_catalogs_menu.addAction(self.action_catalog_match)
         self.action_catalog_clear_all: QAction = QAction("&Clear All Catalogs", self)
         self.analysis_catalogs_menu.addAction(self.action_catalog_clear_all)
 

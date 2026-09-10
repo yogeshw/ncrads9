@@ -35,9 +35,17 @@ import astropy.units as u
 from astropy.coordinates import SkyCoord
 from PyQt6.QtWidgets import QFileDialog, QInputDialog
 
-from ...catalogs import catalog_file, catalog_query, servers
+from ...catalogs import (
+    catalog_file,
+    catalog_match,
+    catalog_query,
+    catalog_search,
+    servers,
+)
 from ...catalogs.catalog_set import CatalogSet, LoadedCatalog
+from ..dialogs.catalog_search_dialog import CatalogSearchDialog
 from ..dialogs.catalog_window import CatalogWindow
+from ..dialogs.symbol_editor_dialog import SymbolEditorDialog
 from .base import Controller
 
 #: The radius a menu query uses, in arcseconds. DS9's `pcat(loc)`.
@@ -62,6 +70,11 @@ class CatalogController(Controller):
         self.transport = None
         #: Which VizieR mirror to ask.
         self.mirror = servers.DEFAULT_MIRROR
+        #: How the catalogue *search* fetches. Replaced in tests, like
+        #: `transport`; `None` means the real client.
+        self.search_fetcher = None
+        #: The search dialog, kept so it is not collected while shown.
+        self._search_dialog = None
 
     def connect(self) -> None:
         """Wire every catalogue on the menu, plus load and clear."""
@@ -72,6 +85,7 @@ class CatalogController(Controller):
         menu.action_catalog_load.triggered.connect(lambda _checked=False: self.load_file())
         menu.action_catalog_clear_all.triggered.connect(lambda _checked=False: self.clear_all())
         menu.action_catalog_search.triggered.connect(lambda _checked=False: self.search())
+        menu.action_catalog_match.triggered.connect(lambda _checked=False: self.show_match_dialog())
         menu.action_catalog_tool.triggered.connect(lambda _checked=False: self.show_tool())
 
     def attach(self, viewer) -> None:
@@ -168,8 +182,54 @@ class CatalogController(Controller):
         return loaded
 
     def search(self) -> None:
-        """DS9's Search for Catalogs, which M8-10 implements."""
-        self.status("Searching for catalogs arrives in M8-10", 3000)
+        """Open DS9's Search for Catalogs dialog (M8-10)."""
+        existing = getattr(self, "_search_dialog", None)
+        if existing is not None:
+            existing.raise_()
+            existing.activateWindow()
+            return
+
+        dialog = CatalogSearchDialog(self.mirror, self.window)
+        dialog.search_requested.connect(
+            lambda request, d=dialog: d.show_result(
+                catalog_search.search(request, fetcher=self.search_fetcher)
+            )
+        )
+        dialog.catalog_chosen.connect(self.query_identifier)
+        dialog.finished.connect(lambda _result: setattr(self, "_search_dialog", None))
+        self._search_dialog = dialog
+        dialog.show()
+
+    def query_identifier(self, identifier: str) -> LoadedCatalog | None:
+        """Query a VizieR catalogue by identifier, from the search results.
+
+        Not on DS9's menu, so it has no `catXXX` name; a server entry is
+        made for it on the spot.
+        """
+        center = self.frame_center()
+        if center is None:
+            self.status("This frame has no WCS, so there is nothing to search around", 4000)
+            return None
+
+        server = servers.CatalogServer(
+            label=identifier,
+            name=f"cat:{identifier}",
+            service=servers.Service.CDS,
+            identifier=identifier,
+            section="",
+        )
+        request = catalog_query.QueryRequest(
+            server=server,
+            center=center,
+            radius=DEFAULT_RADIUS_ARCSEC * u.arcsec,
+            mirror=self.mirror,
+        )
+        self.status(f"Querying {identifier}...")
+        result = catalog_query.run(request, transport=self.transport)
+        self.status(result.message, 4000)
+        if result.table is None:
+            return None
+        return self.add(LoadedCatalog(name=identifier, table=result.table, source=f"cds:{identifier}"))
 
     # -- the catalogues on the frame ----------------------------------------------
 
@@ -344,8 +404,101 @@ class CatalogController(Controller):
         self.status(f"Copied {made} catalog symbol{'s' if made != 1 else ''} to regions")
 
     def edit_symbols(self, catalog: LoadedCatalog) -> None:
-        """DS9's symbol editor, which M8-3 implements."""
-        self.status("The symbol editor arrives in M8-3", 3000)
+        """Open DS9's symbol editor on one catalogue (M8-3)."""
+        dialog = SymbolEditorDialog(catalog.symbols, catalog.columns, self.window)
+        dialog.symbols_changed.connect(lambda symbols, target=catalog: self._apply_symbols(target, symbols))
+        dialog.exec()
+
+    def _apply_symbols(self, catalog: LoadedCatalog, symbols) -> None:
+        """Take the edited rules and redraw."""
+        catalog.symbols = list(symbols)
+        self.refresh_overlay()
+        self.status(f"{catalog.name}: {len(symbols)} symbol rule{'s' if len(symbols) != 1 else ''}")
+
+    # -- matching two catalogues (M8-6) -----------------------------------------
+
+    def match(
+        self,
+        first: str,
+        second: str,
+        radius_arcsec: float = catalog_match.DEFAULT_RADIUS_ARCSEC,
+        function: str = "1and2",
+        columns: str = "1and2",
+        unique: bool = True,
+    ) -> LoadedCatalog | None:
+        """Match two loaded catalogues, DS9's Catalog Match.
+
+        Args:
+            first: The first catalogue's name.
+            second: The second's.
+            radius_arcsec: How close two rows must be.
+            function: `1and2`, `1not2` or `2not1`.
+            columns: For `1and2`, `1and2` for both catalogues' columns or
+                `1only` for the first's.
+            unique: Whether each row may appear once only.
+
+        Returns:
+            The match, loaded as a catalogue of its own, or None.
+        """
+        left = self.catalogs.by_name(first)
+        right = self.catalogs.by_name(second)
+        if left is None or right is None:
+            self.status("Two loaded catalogs are needed to match", 3000)
+            return None
+
+        try:
+            matched = catalog_match.match(left.table, right.table, radius_arcsec, function, columns, unique)
+        except catalog_match.MatchError as exc:
+            self.status(str(exc), 4000)
+            return None
+
+        if not len(matched):
+            self.status(f"No matches between {first} and {second}", 4000)
+            return None
+
+        return self.add(
+            LoadedCatalog(
+                name=f"{first} {function} {second}",
+                table=matched,
+                source=f"match:{radius_arcsec:g}arcsec",
+            )
+        )
+
+    def show_match_dialog(self) -> None:
+        """Ask which two catalogues to match, and with what radius."""
+        names = [entry.name for entry in self.catalogs]
+        if len(names) < 2:
+            self.status("Load two catalogs to match them", 3000)
+            return
+
+        first, accepted = QInputDialog.getItem(
+            self.window, "Catalog Match", "First catalog:", names, 0, False
+        )
+        if not accepted:
+            return
+        second, accepted = QInputDialog.getItem(
+            self.window, "Catalog Match", "Second catalog:", names, 1, False
+        )
+        if not accepted:
+            return
+        radius, accepted = QInputDialog.getDouble(
+            self.window,
+            "Catalog Match",
+            "Radius (arcsec):",
+            catalog_match.DEFAULT_RADIUS_ARCSEC,
+            0.01,
+            3600.0,
+            2,
+        )
+        if not accepted:
+            return
+        functions = [choice.value for choice in catalog_match.MatchFunction]
+        function, accepted = QInputDialog.getItem(
+            self.window, "Catalog Match", "Function:", functions, 0, False
+        )
+        if not accepted:
+            return
+        self.match(first, second, radius, function)
 
     def clear(self, catalog: LoadedCatalog) -> None:
         """Remove one catalogue."""

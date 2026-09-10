@@ -619,3 +619,344 @@ def test_the_symbols_follow_a_frame_change(main_window):
     before = len(main_window.image_viewer.catalog_overlay.symbols)
     main_window.catalog.sync()
     assert len(main_window.image_viewer.catalog_overlay.symbols) == before
+
+
+# -- the symbol editor (M8-3) ------------------------------------------------------
+
+
+@pytest.fixture
+def editor(qapp):
+    from ncrads9.ui.dialogs.symbol_editor_dialog import SymbolEditorDialog
+
+    made = SymbolEditorDialog(
+        [Symbol(condition="$Jmag>10", color="red", shape="box point"), Symbol(color="cyan")],
+        ["RA", "Dec", "Jmag"],
+    )
+    yield made
+    made.close()
+
+
+def test_the_editor_shows_a_row_per_rule(editor):
+    assert editor._table.rowCount() == 2
+
+
+def test_the_editor_reads_its_rules_back(editor):
+    rules = editor.gather()
+    assert [(rule.condition, rule.color, rule.shape) for rule in rules] == [
+        ("$Jmag>10", "red", "box point"),
+        ("", "cyan", "circle point"),
+    ]
+
+
+def test_the_editor_edits_a_copy(qapp):
+    """Cancel has to really cancel."""
+    from ncrads9.ui.dialogs.symbol_editor_dialog import SymbolEditorDialog
+
+    original = [Symbol(color="red")]
+    dialog = SymbolEditorDialog(original)
+    dialog.symbols[0].color = "blue"
+    assert original[0].color == "red"
+    dialog.close()
+
+
+def test_adding_and_removing_rules(editor):
+    editor.buttons["add"].click()
+    assert editor._table.rowCount() == 3
+    editor._table.selectRow(0)
+    editor.buttons["remove"].click()
+    assert editor._table.rowCount() == 2
+
+
+def test_the_last_rule_cannot_be_removed(qapp):
+    """A catalogue with no rules draws nothing and offers no way back."""
+    from ncrads9.ui.dialogs.symbol_editor_dialog import SymbolEditorDialog
+
+    dialog = SymbolEditorDialog([Symbol(color="red")])
+    dialog._table.selectRow(0)
+    dialog.buttons["remove"].click()
+    assert len(dialog.symbols) == 1
+    dialog.close()
+
+
+def test_reordering_changes_which_rule_wins(editor):
+    """The order of the rules is the whole point."""
+    editor._table.selectRow(0)
+    editor.buttons["down"].click()
+    assert [rule.color for rule in editor.gather()] == ["cyan", "red"]
+
+
+def test_moving_past_the_end_does_nothing(editor):
+    editor._table.selectRow(1)
+    editor.buttons["down"].click()
+    assert [rule.color for rule in editor.gather()] == ["red", "cyan"]
+
+
+def test_the_editor_announces_its_rules(editor):
+    seen = []
+    editor.symbols_changed.connect(seen.append)
+    editor.apply()
+    assert len(seen) == 1 and len(seen[0]) == 2
+
+
+def test_the_editor_saves_and_loads(editor, tmp_path, monkeypatch):
+    from PyQt6.QtWidgets import QFileDialog
+
+    path = tmp_path / "rules.sym"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: (str(path), "")))
+    editor.buttons["save"].click()
+
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(lambda *a, **k: (str(path), "")))
+    editor.symbols = [Symbol(color="green")]
+    editor.reload()
+    editor.buttons["load"].click()
+    assert [rule.color for rule in editor.symbols] == ["red", "cyan"]
+
+
+def test_editing_symbols_from_the_window_redraws(main_window, monkeypatch):
+    from ncrads9.ui.controllers import catalog as controller_module
+
+    class Accepted(controller_module.SymbolEditorDialog):
+        def exec(self):
+            self.symbols_changed.emit([Symbol(condition="1", color="magenta")])
+            return 1
+
+    monkeypatch.setattr(controller_module, "SymbolEditorDialog", Accepted)
+    main_window.menu_bar.catalog_actions["catgaia"].trigger()
+    catalog = main_window.catalog.catalogs.catalogs[0]
+    main_window.catalog.edit_symbols(catalog)
+
+    assert [rule.color for rule in catalog.symbols] == ["magenta"]
+    assert all(symbol.color == "magenta" for symbol in main_window.image_viewer.catalog_overlay.symbols)
+
+
+# -- matching (M8-6) ---------------------------------------------------------------------
+
+
+@pytest.fixture
+def pair() -> tuple[Table, Table]:
+    first = Table({"RA": [150.000, 150.010, 150.020], "DEC": [2.0, 2.0, 2.0], "Jmag": [9.0, 10.0, 11.0]})
+    second = Table({"RA": [150.0001, 150.0102, 150.500], "DEC": [2.0, 2.0, 2.0], "Kmag": [8.0, 9.0, 10.0]})
+    return (first, second)
+
+
+def test_matching_finds_the_pairs_within_the_radius(pair):
+    from ncrads9.catalogs.catalog_match import match
+
+    matched = match(*pair, radius=5.0)
+    assert len(matched) == 2
+    assert "separation" in matched.colnames
+
+
+def test_both_catalogues_columns_are_prefixed(pair):
+    """Both have an RA; joining without a prefix keeps one of them."""
+    from ncrads9.catalogs.catalog_match import match
+
+    matched = match(*pair, radius=5.0)
+    assert "1_RA" in matched.colnames
+    assert "2_RA" in matched.colnames
+
+
+def test_first_only_columns(pair):
+    from ncrads9.catalogs.catalog_match import MatchReturn, match
+
+    matched = match(*pair, radius=5.0, columns=MatchReturn.FIRST)
+    assert matched.colnames == ["RA", "DEC", "Jmag", "separation"]
+
+
+def test_one_not_two(pair):
+    from ncrads9.catalogs.catalog_match import MatchFunction, match
+
+    unmatched = match(*pair, radius=5.0, function=MatchFunction.FIRST_ONLY)
+    assert len(unmatched) == 1
+    assert unmatched["Jmag"][0] == pytest.approx(11.0)
+
+
+def test_two_not_one(pair):
+    from ncrads9.catalogs.catalog_match import MatchFunction, match
+
+    unmatched = match(*pair, radius=5.0, function=MatchFunction.SECOND_ONLY)
+    assert len(unmatched) == 1
+    assert unmatched["Kmag"][0] == pytest.approx(10.0)
+
+
+def test_unique_keeps_one_pair_per_row():
+    """A crowded field gives a row per pair otherwise: one star five times."""
+    from ncrads9.catalogs.catalog_match import match
+
+    first = Table({"RA": [150.0], "DEC": [2.0]})
+    crowd = Table({"RA": [150.0, 150.0001, 150.0002], "DEC": [2.0, 2.0, 2.0]})
+    assert len(match(first, crowd, 5.0, unique=False)) == 3
+    assert len(match(first, crowd, 5.0, unique=True)) == 1
+
+
+def test_unique_keeps_the_closest_counterpart():
+    from ncrads9.catalogs.catalog_match import match
+
+    first = Table({"RA": [150.0], "DEC": [2.0]})
+    crowd = Table({"RA": [150.0004, 150.0001], "DEC": [2.0, 2.0], "id": [1.0, 2.0]})
+    matched = match(first, crowd, 5.0, unique=True)
+    assert matched["2_id"][0] == pytest.approx(2.0)
+
+
+def test_an_empty_match_still_has_its_columns(pair):
+    """The caller has nothing to show otherwise, and no way to say what was
+    asked."""
+    from ncrads9.catalogs.catalog_match import match
+
+    far = Table({"RA": [10.0], "DEC": [80.0]})
+    matched = match(pair[0], far, radius=1.0)
+    assert len(matched) == 0
+    assert "1_RA" in matched.colnames
+
+
+def test_matching_needs_positions():
+    from ncrads9.catalogs.catalog_match import MatchError, match
+
+    with pytest.raises(MatchError, match="no sky positions"):
+        match(Table({"Jmag": [1.0]}), Table({"RA": [1.0], "DEC": [2.0]}))
+
+
+def test_matching_from_the_controller(main_window, rows):
+    main_window.menu_bar.catalog_actions["catgaia"].trigger()
+    main_window.menu_bar.catalog_actions["catsimbad"].trigger()
+    names = [entry.name for entry in main_window.catalog.catalogs]
+
+    matched = main_window.catalog.match(names[0], names[1], radius_arcsec=5.0)
+    assert matched is not None
+    assert len(main_window.catalog.catalogs) == 3
+    assert "1and2" in matched.name
+
+
+def test_matching_needs_two_loaded_catalogues(main_window):
+    assert main_window.catalog.match("nope", "also nope") is None
+    assert "Two loaded catalogs" in main_window.status_bar.currentMessage()
+
+
+def test_a_match_with_no_pairs_is_reported(main_window, monkeypatch):
+    main_window.menu_bar.catalog_actions["catgaia"].trigger()
+    main_window.catalog.transport = lambda request: Table({"_RAJ2000": [10.0], "_DEJ2000": [80.0]})
+    main_window.menu_bar.catalog_actions["catsimbad"].trigger()
+    names = [entry.name for entry in main_window.catalog.catalogs]
+
+    assert main_window.catalog.match(names[0], names[1], radius_arcsec=1.0) is None
+    assert "No matches" in main_window.status_bar.currentMessage()
+
+
+# -- searching for catalogues (M8-10) --------------------------------------------------
+
+
+def test_the_search_query_is_ds9s():
+    """`CATCDSSrch` in `catcdssrchdialog.tcl:310`."""
+    from ncrads9.catalogs.catalog_search import SearchRequest
+
+    query = SearchRequest(source="I/345", words="gaia", wavelength="optical").query()
+    assert query.startswith("-meta&")
+    assert "-out.form=VOTable" in query
+    assert "-source=I%2F345" in query
+    assert "-kw.Wavelength=optical" in query
+
+
+def test_a_keyword_of_none_is_not_a_filter():
+    from ncrads9.catalogs.catalog_search import SearchRequest
+
+    assert "-kw.Mission" not in SearchRequest(words="x", mission="none").query()
+
+
+def test_a_search_with_no_terms_is_refused():
+    """It is a download of twenty thousand descriptions and no way to read them."""
+    from ncrads9.catalogs.catalog_search import SearchRequest, search
+
+    assert search(SearchRequest()).message == "Enter something to search for"
+
+
+def test_ds9s_keyword_lists_are_transcribed():
+    from ncrads9.catalogs.catalog_search import ASTRONOMY, MISSIONS, WAVELENGTHS
+
+    assert WAVELENGTHS == ("Radio", "IR", "optical", "UV", "EUV", "X-ray", "Gamma-ray")
+    assert "Chandra" in MISSIONS and "XMM" in MISSIONS
+    assert "SuperNovae_Remnants" in ASTRONOMY
+
+
+def test_a_search_reads_a_votable_reply():
+    from ncrads9.catalogs.catalog_search import SearchRequest, search
+
+    votable = """<?xml version="1.0"?>
+<VOTABLE version="1.3" xmlns="http://www.ivoa.net/xml/VOTable/v1.3">
+<RESOURCE><TABLE>
+<FIELD name="name" datatype="char" arraysize="*"/>
+<FIELD name="title" datatype="char" arraysize="*"/>
+<DATA><TABLEDATA>
+<TR><TD>I/345/gaia2</TD><TD>Gaia DR2</TD></TR>
+<TR><TD>I/337/gaia</TD><TD>Gaia DR1</TD></TR>
+</TABLEDATA></DATA>
+</TABLE></RESOURCE></VOTABLE>"""
+
+    result = search(SearchRequest(words="gaia"), fetcher=lambda url, timeout: votable)
+    assert result.found == [("I/345/gaia2", "Gaia DR2"), ("I/337/gaia", "Gaia DR1")]
+    assert "2 catalogs found" in result.message
+
+
+def test_a_search_that_finds_nothing_says_so():
+    from ncrads9.catalogs.catalog_search import SearchRequest, search
+
+    empty = '<?xml version="1.0"?><VOTABLE><RESOURCE/></VOTABLE>'
+    assert search(SearchRequest(words="x"), fetcher=lambda u, t: empty).message == "No catalogs found"
+
+
+def test_an_unreadable_reply_is_reported():
+    from ncrads9.catalogs.catalog_search import SearchRequest, search
+
+    result = search(SearchRequest(words="x"), fetcher=lambda u, t: "not xml at all")
+    assert "could not read" in result.message
+
+
+def test_a_search_failure_is_reported_not_raised():
+    from ncrads9.catalogs.catalog_search import SearchRequest, search
+
+    def broken(url, timeout):
+        raise RuntimeError("down")
+
+    assert "down" in search(SearchRequest(words="x"), fetcher=broken).message
+
+
+def test_the_fetcher_refuses_a_non_http_url():
+    from ncrads9.catalogs.catalog_search import SearchError, fetch
+
+    with pytest.raises(SearchError, match="not an http URL"):
+        fetch("file:///etc/passwd")
+
+
+def test_the_search_dialog_builds_a_request(qapp):
+    from ncrads9.ui.dialogs.catalog_search_dialog import CatalogSearchDialog
+
+    dialog = CatalogSearchDialog()
+    dialog._words.setText("gamma ray burst")
+    dialog._wavelength.setCurrentText("X-ray")
+    request = dialog.build_request()
+    assert request.words == "gamma ray burst"
+    assert request.wavelength == "X-ray"
+    dialog.close()
+
+
+def test_the_search_dialog_shows_and_chooses_a_result(qapp):
+    from ncrads9.catalogs.catalog_search import SearchResult
+    from ncrads9.ui.dialogs.catalog_search_dialog import CatalogSearchDialog
+
+    dialog = CatalogSearchDialog()
+    dialog.show_result(SearchResult(message="2 found", found=[("I/345", "Gaia"), ("V/147", "SDSS")]))
+    assert dialog._results.rowCount() == 2
+
+    chosen = []
+    dialog.catalog_chosen.connect(chosen.append)
+    dialog._results.selectRow(1)
+    dialog.choose()
+    assert chosen == ["V/147"]
+    dialog.close()
+
+
+def test_choosing_a_searched_catalogue_queries_it(main_window):
+    """It is not on DS9's menu, so it has no `catXXX` name."""
+    loaded = main_window.catalog.query_identifier("I/345/gaia2")
+    assert loaded is not None
+    assert loaded.name == "I/345/gaia2"
+    assert "cds:I/345/gaia2" in loaded.source

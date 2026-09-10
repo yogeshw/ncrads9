@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 869 (775 excluding separators)
+# entries: 870 (776 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -864,6 +864,7 @@
 .analysis.catalogs|command|Search for Catalogs
 .analysis.catalogs|separator|---
 .analysis.catalogs|command|Load Catalog
+.analysis.catalogs|command|Match Catalogs
 .analysis.catalogs|command|Clear All Catalogs
 .analysis|separator|---
 .analysis|command|Catalog Tool
