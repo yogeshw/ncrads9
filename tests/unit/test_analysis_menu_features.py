@@ -86,9 +86,11 @@ def test_smoothing_pipeline_updates_display_data(main_window: MainWindow):
 
 
 def test_grid_settings_enable_grid_action(main_window: MainWindow):
-    main_window.analysis.apply_grid_settings({"coord_system": "WCS", "show_labels": True})
+    from ncrads9.grid import GridConfig
+
+    main_window.analysis.apply_grid_settings(GridConfig(visible=True))
     assert main_window.menu_bar.action_coordinate_grid.isChecked()
-    assert main_window._grid_settings is not None
+    assert main_window.analysis.grid_config.visible is True
 
 
 def test_graph_visibility_controls(main_window: MainWindow):

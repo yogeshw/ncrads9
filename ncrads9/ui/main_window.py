@@ -157,7 +157,6 @@ class MainWindow(QMainWindow):
             "preserve_nan": True,
             "normalize": True,
         }
-        self._grid_settings: dict | None = None
         self._analysis_command_log = False
         self._analysis_command_entries: list[str] = []
         self._analysis_mask_mode = "disabled"

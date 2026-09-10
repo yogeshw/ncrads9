@@ -61,6 +61,7 @@ from ...analysis.plot import PlotState, PlotStyle
 from ...analysis.radial_profile import RadialProfile
 from ...analysis.smooth import boxcar_smooth, gaussian_smooth, tophat_smooth
 from ...frames.frame import Frame
+from ...grid import GridConfig, GridRenderer
 from ..dialogs.contour_dialog import ContourDialog
 from ..dialogs.grid_dialog import GridDialog
 from ..dialogs.histogram_dialog import HistogramDialog
@@ -87,6 +88,11 @@ class AnalysisController(Controller):
         #: is collected the moment it is shown. Per instance, not per class:
         #: a shared set would outlive the window that opened them.
         self._plots: set[PlotWindow] = set()
+
+        #: What the coordinate grid looks like, and the renderer that works
+        #: out where its lines go.
+        self.grid_config = GridConfig()
+        self._grid_renderer = GridRenderer(config=self.grid_config)
 
     def connect(self) -> None:
         """Wire the Analysis and Bin menus."""
@@ -275,33 +281,64 @@ class AnalysisController(Controller):
         return smoothed
 
     def set_grid(self, checked: bool) -> None:
-        """Toggle coordinate grid overlay."""
-        self.refresh_overlays()
-        self.status(
-            "Coordinate grid enabled" if checked else "Coordinate grid disabled",
-            2000,
-        )
+        """Show or hide the coordinate grid, DS9's Coordinate Grid toggle."""
+        self.grid_config.visible = bool(checked)
+        self.refresh_grid()
+        if checked and not self._grid_renderer_usable():
+            self.status("This frame has no WCS, so there is no coordinate grid", 3500)
+        else:
+            self.status("Coordinate grid enabled" if checked else "Coordinate grid disabled", 2000)
         self.log_command(f"grid {'on' if checked else 'off'}")
 
+    def _grid_renderer_usable(self) -> bool:
+        """Whether the current frame has a WCS to draw a grid through."""
+        frame = self.frame
+        handler = getattr(frame, "wcs_handler", None) if frame else None
+        return bool(handler is not None and getattr(handler, "is_valid", False))
+
+    def refresh_grid(self) -> None:
+        """Recompute the graticule and hand it to the overlay.
+
+        Called on a zoom, a pan, a frame change and every settings change:
+        the grid is in image coordinates, so panning does not change it,
+        but loading a different frame changes the WCS and therefore all of
+        it.
+        """
+        overlay = getattr(self.viewer, "contour_overlay", None)
+        if overlay is None or not hasattr(overlay, "set_grid_geometry"):
+            # Fall back to the plain visibility flag, which is all an older
+            # viewer understands.
+            if hasattr(self.viewer, "set_grid"):
+                self.viewer.set_grid(self.grid_config.visible, None)
+            return
+
+        frame = self.frame
+        data = getattr(frame, "image_data", None) if frame else None
+        renderer = self._grid_renderer
+        renderer.wcs = getattr(frame, "wcs_handler", None) if frame else None
+        renderer.config = self.grid_config
+
+        geometry = None
+        if self.grid_config.visible and data is not None:
+            geometry = renderer.compute(int(data.shape[1]), int(data.shape[0]))
+
+        overlay.set_grid_geometry(geometry, self.grid_config)
+        if hasattr(self.viewer, "set_grid"):
+            self.viewer.set_grid(self.grid_config.visible, None)
+
     def show_grid_dialog(self) -> None:
-        """Show coordinate grid parameters dialog."""
-        dialog = GridDialog(self.window)
-        if self.window._grid_settings:
-            dialog._coord_combo.setCurrentText(self.window._grid_settings.get("coord_system", "WCS"))
-            dialog._format_combo.setCurrentText(self.window._grid_settings.get("label_format", "Sexagesimal"))
-            dialog._auto_spacing_check.setChecked(self.window._grid_settings.get("auto_spacing", True))
-            dialog._ra_spacing_spin.setValue(float(self.window._grid_settings.get("ra_spacing", 1.0)))
-            dialog._dec_spacing_spin.setValue(float(self.window._grid_settings.get("dec_spacing", 1.0)))
+        """Show DS9's Coordinate Grid Parameters dialog."""
+        dialog = GridDialog(self.grid_config, self.window)
         dialog.grid_changed.connect(self.apply_grid_settings)
         dialog.exec()
 
-    def apply_grid_settings(self, settings: dict) -> None:
-        """Store coordinate grid settings."""
-        self.window._grid_settings = settings
+    def apply_grid_settings(self, config) -> None:
+        """Take the settings the dialog chose and redraw."""
+        self.grid_config = config
         self.menu.action_coordinate_grid.blockSignals(True)
-        self.menu.action_coordinate_grid.setChecked(True)
+        self.menu.action_coordinate_grid.setChecked(config.visible)
         self.menu.action_coordinate_grid.blockSignals(False)
-        self.refresh_overlays()
+        self.refresh_grid()
         self.log_command("grid params")
         self.status("Updated coordinate grid parameters", 2000)
 
@@ -439,11 +476,7 @@ class AnalysisController(Controller):
 
     def refresh_overlays(self) -> None:
         """Apply grid/crosshair overlay states to the active viewer."""
-        if hasattr(self.viewer, "set_grid"):
-            self.viewer.set_grid(
-                self.menu.action_coordinate_grid.isChecked(),
-                self.window._grid_settings,
-            )
+        self.refresh_grid()
         if hasattr(self.viewer, "set_crosshair"):
             position = (
                 (float(self.window._last_mouse_pos[0]), float(self.window._last_mouse_pos[1]))

@@ -14,14 +14,56 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Grid package for WCS grid rendering and labeling.
+"""
+DS9's coordinate grid: what it looks like, where its lines go, how its
+numbers are written.
+
+`ast_wrapper.py` used to sit here, a shim over Starlink AST that was never
+called and that made the grid depend on an optional C library. The geometry
+is computed from `astropy.wcs`'s own transforms instead (M7-10).
 
 Author: Yogesh Wadadekar
 """
 
-from .ast_wrapper import ASTWrapper
-from .grid_config import GridConfig
-from .grid_labels import GridLabels
-from .grid_renderer import GridRenderer
+from .grid_config import (
+    COLORS,
+    ELEMENTS,
+    FONTS,
+    LINE_ELEMENTS,
+    LINE_STYLES,
+    GridConfig,
+    GridElement,
+    GridType,
+    Placement,
+)
+from .grid_labels import (
+    Label,
+    LabelPosition,
+    NumericFormat,
+    default_format,
+    format_coordinate,
+    nice_spacing,
+    parse_format,
+)
+from .grid_renderer import GridGeometry, GridRenderer
 
-__all__ = ["GridRenderer", "GridLabels", "GridConfig", "ASTWrapper"]
+__all__ = [
+    "COLORS",
+    "ELEMENTS",
+    "FONTS",
+    "LINE_ELEMENTS",
+    "LINE_STYLES",
+    "GridConfig",
+    "GridElement",
+    "GridGeometry",
+    "GridRenderer",
+    "GridType",
+    "Label",
+    "LabelPosition",
+    "NumericFormat",
+    "Placement",
+    "default_format",
+    "format_coordinate",
+    "nice_spacing",
+    "parse_format",
+]

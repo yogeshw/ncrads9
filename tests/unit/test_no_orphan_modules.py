@@ -49,10 +49,6 @@ ENTRY_POINTS = ("ncrads9.app", "ncrads9.__main__")
 PENDING_ADOPTION: dict[str, str] = {
     # M7 -- analysis platform.
     "analysis.pixel_table": "M7-26",
-    "grid.grid_config": "M7-13",
-    "grid.grid_labels": "M7-12",
-    "grid.grid_renderer": "M7-10",
-    "grid.ast_wrapper": "M7-10 (deletes it)",
     # M8 -- catalogs, image servers, VO.
     "catalogs.catalog_display": "M8-2",
     "catalogs.catalog_table": "M8-5",

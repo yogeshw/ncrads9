@@ -157,13 +157,21 @@ class WCSHandler:
         return world
 
     def world_to_pixel(
-        self, ra: float | NDArray, dec: float | NDArray
+        self, longitude: float | NDArray, latitude: float | NDArray
     ) -> tuple[float | NDArray, float | NDArray]:
         """Convert world coordinates to pixel coordinates.
 
+        The inverse of `pixel_to_world`, and in the same frame: whatever the
+        WCS declares, which is not always equatorial. Building a
+        `SkyCoord(ra=, dec=)` here instead assumed ICRS, so a galactic or
+        ecliptic WCS was misprojected -- silently, since the transform still
+        returns numbers. A coordinate grid over a galactic image drew
+        nothing at all, which is how this was found.
+
         Args:
-            ra: Right Ascension in degrees.
-            dec: Declination in degrees.
+            longitude: Longitude in degrees, in the WCS's own frame --
+                Right Ascension for an equatorial one.
+            latitude: Latitude in degrees, likewise.
 
         Returns:
             Tuple of (x, y) pixel coordinates.
@@ -174,8 +182,10 @@ class WCSHandler:
         if self._wcs is None:
             raise ValueError("WCS not initialized")
 
-        coord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg)
-        x, y = self._wcs.world_to_pixel(coord)
+        # `wcs_world2pix` works in the WCS's own axes and needs no frame at
+        # all, which is exactly right here; `world_to_pixel` would want a
+        # SkyCoord and therefore a frame to build it in.
+        x, y = self._wcs.wcs_world2pix(longitude, latitude, 0)
         return x, y
 
     def get_pixel_scale(self) -> float | None:

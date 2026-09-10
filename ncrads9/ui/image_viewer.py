@@ -40,7 +40,13 @@ class ImageViewer(QLabel):
         super().__init__(parent)
 
         self.setMouseTracking(True)
-        self.setScaledContents(True)
+        # Deliberately NOT `setScaledContents(True)`. That stretches the
+        # pixmap to fill the label, and the label is sized by the layout,
+        # not by `resize` -- so an image in a viewport of a different aspect
+        # ratio was drawn distorted, and every overlay (regions, contours,
+        # the coordinate grid) drew in the correct uniform transform and
+        # therefore did not line up with the picture underneath it. The
+        # pixmap is scaled to the zoom here instead, and centred.
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # Set size policy to expand in both directions
@@ -55,6 +61,10 @@ class ImageViewer(QLabel):
         #: Image pixels per pixel of the shown array, under DS9's Block.
         self._block_factor: int = 1
         self._transform_cache_key: tuple[int, float, bool, bool] | None = None
+        #: The zoom the displayed pixmap was scaled to, so an unchanged zoom
+        #: does not rescale it on every repaint.
+        self._scaled_cache_key: tuple[int, float] | None = None
+        self._scaled_pixmap: QPixmap | None = None
         self._zoom = 1.0
         self._rotation = 0.0
         self._flip_x = False
@@ -122,7 +132,16 @@ class ImageViewer(QLabel):
             return
 
         scaled_size = self._pixmap.size() * self._zoom
-        self.setPixmap(self._pixmap)
+        scaled_key = (int(self._pixmap.cacheKey()), float(self._zoom))
+        if scaled_key != self._scaled_cache_key or self._scaled_pixmap is None:
+            self._scaled_pixmap = self._pixmap.scaled(
+                scaled_size,
+                Qt.AspectRatioMode.IgnoreAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self._scaled_cache_key = scaled_key
+
+        self.setPixmap(self._scaled_pixmap)
         self.resize(scaled_size)
 
     def zoom_in(self) -> None:
