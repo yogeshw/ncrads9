@@ -453,6 +453,40 @@ class MenuBar(QMenuBar):
 
         self.file_menu.addSeparator()
 
+        # DS9's File -> SAMP and SAMP Hub submenus (`mfile.tcl`). The VO
+        # menu's own SAMP entries stay where they are: those are the
+        # marker settings for an incoming table, which is a different job.
+        self.samp_file_menu: QMenu = self.file_menu.addMenu("SA&MP")
+        self.action_samp_file_connect: QAction = QAction("&Connect", self)
+        self.samp_file_menu.addAction(self.action_samp_file_connect)
+        self.action_samp_file_disconnect: QAction = QAction("&Disconnect", self)
+        self.samp_file_menu.addAction(self.action_samp_file_disconnect)
+        self.samp_file_menu.addSeparator()
+
+        #: What can be broadcast -> its submenu, so a client list can be
+        #: added under each as DS9 does.
+        self.samp_broadcast_menus: dict[str, QMenu] = {}
+        #: What can be broadcast -> its Broadcast action.
+        self.samp_broadcast_actions: dict[str, QAction] = {}
+        for name, label in (("image", "&Image"), ("table", "&Table")):
+            submenu = self.samp_file_menu.addMenu(label)
+            action = QAction("&Broadcast", self)
+            submenu.addAction(action)
+            submenu.addSeparator()
+            self.samp_broadcast_menus[name] = submenu
+            self.samp_broadcast_actions[name] = action
+
+        self.samp_hub_menu: QMenu = self.file_menu.addMenu("SAMP &Hub")
+        self.action_samp_hub_information: QAction = QAction("&Information", self)
+        self.samp_hub_menu.addAction(self.action_samp_hub_information)
+        self.samp_hub_menu.addSeparator()
+        self.action_samp_hub_start: QAction = QAction("&Start", self)
+        self.samp_hub_menu.addAction(self.action_samp_hub_start)
+        self.action_samp_hub_stop: QAction = QAction("Sto&p", self)
+        self.samp_hub_menu.addAction(self.action_samp_hub_stop)
+
+        self.file_menu.addSeparator()
+
         # DS9's File -> XPA submenu (`mfile.tcl`).
         self.xpa_menu: QMenu = self.file_menu.addMenu("&XPA")
         self.action_xpa_information: QAction = QAction("&Information", self)

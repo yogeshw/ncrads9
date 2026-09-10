@@ -1129,9 +1129,20 @@ Depends on M2, M3.
       `ui/controllers/xpa.py`. Information is the only reason anyone opens the submenu: it
       says the name to address, the address, whether it is connected, and how many access
       points there are, with the whole list behind the details button.
-- [ ] **M9-27** (M) SAMP: broadcast image and broadcast table; the SAMP Hub UI
+- [x] **M9-27** (M) SAMP: broadcast image and broadcast table; the SAMP Hub UI
       (Information / Start / Stop) over the existing `samp_hub.py`.
-- [ ] **M9-28** (M) SAMP web hub.
+      `ui/controllers/samp.py`, and DS9's two File submenus. The registered clients appear
+      under Image and Table, so an image can go to Topcat and not to Aladin; Broadcast sends
+      to everything. SAMP passes a *URL*, so a frame with no file behind it -- an array over
+      XPA, a mosaic in memory -- has nothing to send and says so rather than sending a broken
+      URL; the same for a catalogue queried from a server and never saved. The VO menu's own
+      SAMP entries stay where they are: those are the marker settings for an *incoming* table.
+      The `samp` XPA point covers connect, disconnect, image, table and hub.
+- [x] **M9-28** (M) SAMP web hub. `samp_hub.py` already took `web_profile`; the hub is started
+      with it on, since a browser-based tool can only join over the web profile, and it can be
+      turned off from the controller or over XPA (`samp hub web no`). Information says which.
+      The hub is stopped on a clean exit, so it does not outlive the application holding its
+      port.
 - [ ] **M9-29** (M) IIS / IRAF `imexam`: adopt `communication/iis/iis_server.py`; the `iis` and
       `iexam` XPA points.
 - [ ] **M9-30** (S) Shared-memory loading (`shm`).

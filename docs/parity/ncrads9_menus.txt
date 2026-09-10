@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 993 (875 excluding separators)
+# entries: 1009 (886 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -98,6 +98,22 @@
 .file|cascade|Preserve During Load
 .file.preserveduringload|checkbutton|Pan
 .file.preserveduringload|checkbutton|Region
+.file|separator|---
+.file|cascade|SAMP
+.file.samp|command|Connect
+.file.samp|command|Disconnect
+.file.samp|separator|---
+.file.samp|cascade|Image
+.file.samp.image|command|Broadcast
+.file.samp.image|separator|---
+.file.samp|cascade|Table
+.file.samp.table|command|Broadcast
+.file.samp.table|separator|---
+.file|cascade|SAMP Hub
+.file.samphub|command|Information
+.file.samphub|separator|---
+.file.samphub|command|Start
+.file.samphub|command|Stop
 .file|separator|---
 .file|cascade|XPA
 .file.xpa|command|Information

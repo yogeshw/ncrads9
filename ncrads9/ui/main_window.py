@@ -310,6 +310,7 @@ class MainWindow(QMainWindow):
         self.notes.connect()
         self.prism.connect()
         self.session.connect()
+        self.samp.connect()
         self.xpa.connect()
         self.image_servers.connect()
 
@@ -584,4 +585,5 @@ class MainWindow(QMainWindow):
             self._samp_client.disconnect()
             self._samp_connected = False
         self.session.clean_exit()
+        self.samp.clean_exit()
         super().closeEvent(event)

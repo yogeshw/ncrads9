@@ -1327,6 +1327,12 @@ TOOL_WINDOW_POINTS: tuple[AccessPoint, ...] = (
         summary="the footprint tool",
     ),
     AccessPoint("vo", set=_show_window("vo.show_dialog"), summary="the virtual observatory tool"),
+    AccessPoint(
+        "samp",
+        get=lambda window: _samp_text(window),
+        set=lambda window, args: _samp(window, args),
+        summary="SAMP: connect, disconnect, broadcast, hub start|stop",
+    ),
     AccessPoint("prefs", set=_show_window("edit.show_preferences"), summary="the preferences dialog"),
     AccessPoint("about", get=lambda window: _about(window), summary="what this is"),
     AccessPoint("version", get=lambda window: _version(window), summary="the version"),
@@ -1399,3 +1405,41 @@ def _crosshair(window, args: list[str]) -> str | None:
         window.crosshair.match(words[1].lower() if len(words) > 1 else "wcs")
         return None
     return _cursor(window, words)
+
+
+def _samp_text(window) -> str:
+    """What `xpaget samp` answers: whether we are connected, and to what."""
+    return window.samp.information()
+
+
+def _samp(window, args: list[str]) -> str | None:
+    """`samp connect|disconnect|image|table|hub start|stop`."""
+    words = [str(word).lower() for word in args]
+    if not words:
+        return "connect, disconnect, image, table or hub is needed"
+
+    controller = window.samp
+    if words[0] == "connect":
+        return None if controller.connect_hub() else "could not connect to a SAMP hub"
+    if words[0] == "disconnect":
+        controller.disconnect_hub()
+        return None
+    if words[0] in ("image", "table"):
+        # `samp image broadcast` and `samp image <client>`, as DS9 has it.
+        recipient = None
+        if len(words) > 1 and words[1] != "broadcast":
+            recipient = str(args[1])
+        return None if controller.broadcast(words[0], recipient) else f"the {words[0]} was not sent"
+    if words[0] == "hub":
+        what = words[1] if len(words) > 1 else "start"
+        if what == "start":
+            return None if controller.start_hub() else "the hub could not be started"
+        if what == "stop":
+            controller.stop_hub()
+            return None
+        if what in ("web", "webprofile"):
+            wanted = as_bool(words[2]) if len(words) > 2 else True
+            controller.web_profile = bool(wanted)
+            return None
+        return f"{what} is not a hub command"
+    return f"{args[0]} is not a SAMP command"

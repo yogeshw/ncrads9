@@ -42,6 +42,7 @@ from .notes import NotesController
 from .pointer import PointerController
 from .prism import PrismController
 from .region import RegionController
+from .samp import SAMPController
 from .scale import ScaleController
 from .session import SessionController
 from .undo import UndoController
@@ -89,6 +90,7 @@ CONTROLLERS: tuple[tuple[str, type], ...] = (
     ("pointer", PointerController),
     ("prism", PrismController),
     ("region", RegionController),
+    ("samp", SAMPController),
     ("scale", ScaleController),
     ("session", SessionController),
     ("undo", UndoController),
