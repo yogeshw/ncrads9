@@ -227,16 +227,8 @@ class SessionController(Controller):
             else:
                 self.problems.append(f"{path.name} is no longer there")
         elif key and key in arrays:
-            # Data with no file behind it: put the pixels straight on the
-            # frame, which is what the loader would have left there.
-            data = np.asarray(arrays[key])
-            frame = self.frames.current_frame
-            if frame is not None:
-                frame.image_data = data
-                frame.original_image_data = data
-                self.window.z1 = None
-                self.window.z2 = None
-                loaded = True
+            # Data with no file behind it, from the backup's own directory.
+            loaded = self.window.display.load_array(arrays[key], name=key) is not None
 
         frame = self.frames.current_frame
         if frame is None:

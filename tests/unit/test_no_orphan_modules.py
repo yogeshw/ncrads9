@@ -53,19 +53,8 @@ PENDING_ADOPTION: dict[str, str] = {
     "catalogs.sdss": "M8-17",
     # M9 -- remaining subsystems.
     "communication.iis.iis_server": "M9-29",
-    "io.array_reader": "M9-13",
-    "io.envi_reader": "M9-13",
-    "io.nrrd_reader": "M9-13",
-    # A strict subset of core/fits_handler.py, which is the one the loader
-    # uses and which M4 gave the extension model to. Delete, not adopt.
-    "io.fits_reader": "delete -- superseded by core.fits_handler",
     "io.eps_writer": "M9-14",
-    "io.gif_writer": "M9-14",
-    "io.jpeg_writer": "M9-14",
-    "io.png_writer": "M9-14",
-    "io.tiff_writer": "M9-14",
     "io.pdf_writer": "M9-20",
-    "io.mpeg_writer": "M9-15",
     "printing.page_setup": "M9-19",
     "printing.postscript": "M9-18",
     "printing.print_engine": "M9-20",

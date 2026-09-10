@@ -107,9 +107,19 @@ class NRRDReader:
         return data
 
     def _get_dtype(self) -> np.dtype[Any]:
-        """Get numpy dtype from header."""
+        """The numpy type the pixels are in, byte order included.
+
+        NRRD records the byte order in its header and a file written on one
+        machine is read on another, so ignoring it -- which this did until
+        M9-13 -- turns every value into nonsense on half the machines that
+        read it, with the array's shape still perfectly right.
+        """
         type_str = self._header.get("type", "float")
-        return self.DTYPE_MAP.get(type_str, np.dtype("float32"))
+        dtype = self.DTYPE_MAP.get(type_str, np.dtype("float32"))
+        if dtype.itemsize == 1:
+            return dtype
+        endian = self._header.get("endian", "big").strip().lower()
+        return dtype.newbyteorder("<" if endian.startswith("little") else ">")
 
     def _get_sizes(self) -> tuple[int, ...]:
         """Get array dimensions from header."""

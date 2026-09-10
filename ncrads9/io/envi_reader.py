@@ -91,7 +91,13 @@ class ENVIReader:
         dtype_code = int(self._header.get("data type", 4))
         interleave = self._header.get("interleave", "bsq").lower()
 
-        dtype = self.DTYPE_MAP.get(dtype_code, np.float32)
+        dtype = np.dtype(self.DTYPE_MAP.get(dtype_code, np.float32))
+        if dtype.itemsize > 1:
+            # `byte order` is 0 for little-endian and 1 for big. Ignoring it
+            # -- which this did until M9-13 -- reads every value wrong while
+            # the array's shape stays right, which is how it went unnoticed.
+            big_endian = str(self._header.get("byte order", "1")).strip() != "0"
+            dtype = dtype.newbyteorder(">" if big_endian else "<")
 
         data_path = self._get_data_path()
         data = np.fromfile(data_path, dtype=dtype)

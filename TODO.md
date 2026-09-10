@@ -981,12 +981,35 @@ Depends on M2, M3.
       DS9's policy exactly: on by default, every five minutes, written to `~/.ncrads9.auto`,
       deleted on a clean exit, and offered back on the next start -- which only happens after
       a crash, since a clean exit removes it. Both the switch and the interval are preferences.
-- [ ] **M9-13** (M) Import: Array, NRRD, ENVI, RGB/HSV/HLS Array, GIF, TIFF, JPEG, PNG — adopt
-      `io/{array,nrrd,envi}_reader.py`.
-- [ ] **M9-14** (M) Export: the same 10 formats — adopt `io/*_writer.py`; keep the existing
-      screen-grab export as `Save Image`.
-- [ ] **M9-15** (M) Create Movie: adopt `io/mpeg_writer.py`; frame/slice/3D-rotation sequences
-      (DS9 `movie.tcl`).
+- [x] **M9-13** (M) Import: Array, NRRD, ENVI, RGB/HSV/HLS Array, GIF, TIFF, JPEG, PNG — adopt
+      `io/{array,nrrd,envi}_reader.py`. DS9's Import cascade, its Slice sub-cascade included.
+      `array_reader.py` gained DS9's whole array specification -- both syntaxes,
+      `[xdim=..,bitpix=..,skip=..,arch=..]` and `[array(r256:4l)]`, and the `$DS9_ARRAY`
+      default -- because a raw array has no header and the dimensions have to come from
+      somewhere; `ui/dialogs/array_dialog.py` asks when the filename does not say.
+      `io/raster.py` reads a picture as data, flipping the rows: a picture counts them from
+      the top and FITS from the bottom, and a photograph imported without the flip is
+      displayed upside down and re-exported right way up, which is how that mistake hides.
+      **Bug found:** `nrrd_reader.py` and `envi_reader.py` both ignored the byte order their
+      own headers record, so a file written on a big-endian machine read as nonsense on a
+      little-endian one with the array's shape still perfectly right. Both now honour it.
+- [x] **M9-14** (M) Export: the same 10 formats — adopt `io/*_writer.py`; keep the existing
+      screen-grab export as `Save Image`. `io/nrrd_writer.py` and `io/envi_writer.py` are new;
+      the four raster formats go through `io/raster.py`. The two directions are not
+      symmetrical, and DS9's menu is why: Import reads a picture *as data*, Export writes the
+      frame *as a picture*, colormap and stretch already applied, because a GIF has no room
+      for a stretch. Save Image's four raster entries now write too, leaving only EPS for
+      M9-18. Our single `Export...` action and its dialog are gone -- DS9 has ten formats each
+      way and one entry could not say which -- and the button bar's `export` button, which
+      pointed at it, is now an import/export pair as DS9's own File bar has.
+- [x] **M9-15** (M) Create Movie: adopt `io/mpeg_writer.py`; frame/slice/3D-rotation sequences
+      (DS9 `movie.tcl`). `io/movie.py` and `ui/dialogs/movie_dialog.py`, with DS9's four
+      groups of choices. Frames and slices are live; the 3D-rotation sequence says it needs
+      M9-21, which is where the 3D frame arrives. The animated GIF goes through Pillow, which
+      is already a dependency; the MPEG needs ffmpeg, which is not, so its absence is reported
+      and the radio button disabled rather than the movie failing at the end. A fade is made
+      as extra blended images, so both formats treat it as ordinary frames, and frames of
+      different sizes are padded into the largest rather than the movie being refused.
 - [ ] **M9-16** (S) Notes window (`File → Notes`).
 - [ ] **M9-17** (S) Preserve During Load → Pan / Region.
 

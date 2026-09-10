@@ -108,7 +108,12 @@ CATEGORIES: tuple[tuple[str, tuple[ButtonSpec, ...]], ...] = (
             _menu("save", "action_save"),
             _menu("save as", "action_save_as"),
             _menu("header", "action_fits_header"),
-            _menu("export", "action_export"),
+            # DS9's own File bar carries one button per import format
+            # (`mfile.tcl:512`); ours carries the first of them, since the
+            # single `Export...` action this used to point at is gone --
+            # M9-13 replaced it with DS9's ten-format cascades.
+            _menu("import array", "action_import_array"),
+            _menu("export array", "action_export_array"),
             _menu("print", "action_print"),
             _menu("prefs", "action_preferences"),
             _menu("exit", "action_exit"),

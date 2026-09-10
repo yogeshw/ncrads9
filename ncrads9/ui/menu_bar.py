@@ -98,6 +98,26 @@ REGION_COLORS: tuple[str, ...] = (
 )
 DEFAULT_REGION_COLOR = "green"
 
+#: DS9's four raster formats, in the order Import and Export list them.
+RASTER_ENTRIES: tuple[tuple[str, str], ...] = (
+    ("gif", "&GIF"),
+    ("tiff", "&TIFF"),
+    ("jpeg", "&JPEG"),
+    ("png", "&PNG"),
+)
+
+#: DS9's Import and Export cascades hold the same ten formats in the same
+#: three groups (`mfile.tcl`), so one table describes both.
+IMPORT_ENTRIES: tuple[tuple[tuple[str, str], ...], ...] = (
+    (("array", "&Array"), ("nrrd", "&NRRD"), ("envi", "&ENVI")),
+    (
+        ("rgb_array", "&RGB Array"),
+        ("hsv_array", "&HSV Array"),
+        ("hls_array", "&HLS Array"),
+    ),
+    RASTER_ENTRIES,
+)
+
 #: The line widths DS9's Region -> Width cascade offers.
 REGION_WIDTHS: tuple[int, ...] = (1, 2, 3, 4)
 
@@ -364,8 +384,39 @@ class MenuBar(QMenuBar):
             self.save_image_actions[name] = action
             setattr(self, f"action_save_image_{name}", action)
 
-        self.action_export: QAction = QAction("&Export...", self)
-        self.file_menu.addAction(self.action_export)
+        # DS9's Import and Export cascades (`mfile.tcl`), which replaced a
+        # single `Export...` of ours: DS9 has ten formats each way, and one
+        # entry could not say which.
+        self.import_menu: QMenu = self.file_menu.addMenu("&Import")
+        self.import_slice_menu: QMenu = self.import_menu.addMenu("S&lice")
+        #: Import format name -> its action.
+        self.import_actions: dict[str, QAction] = {}
+        for name, label in RASTER_ENTRIES:
+            action = QAction(label, self)
+            self.import_slice_menu.addAction(action)
+            self.import_actions[f"slice_{name}"] = action
+        self.import_menu.addSeparator()
+        for group in IMPORT_ENTRIES:
+            for name, label in group:
+                action = QAction(label, self)
+                self.import_menu.addAction(action)
+                self.import_actions[name] = action
+                setattr(self, f"action_import_{name}", action)
+            self.import_menu.addSeparator()
+
+        self.export_menu: QMenu = self.file_menu.addMenu("&Export")
+        #: Export format name -> its action.
+        self.export_actions: dict[str, QAction] = {}
+        for group in IMPORT_ENTRIES:
+            for name, label in group:
+                action = QAction(label, self)
+                self.export_menu.addAction(action)
+                self.export_actions[name] = action
+                setattr(self, f"action_export_{name}", action)
+            self.export_menu.addSeparator()
+
+        self.action_create_movie: QAction = QAction("Create &Movie...", self)
+        self.file_menu.addAction(self.action_create_movie)
 
         self.file_menu.addSeparator()
 

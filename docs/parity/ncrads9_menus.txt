@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 945 (839 excluding separators)
+# entries: 979 (866 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -52,7 +52,41 @@
 .file.saveimage|command|TIFF
 .file.saveimage|command|JPEG
 .file.saveimage|command|PNG
-.file|command|Export
+.file|cascade|Import
+.file.import|cascade|Slice
+.file.import.slice|command|GIF
+.file.import.slice|command|TIFF
+.file.import.slice|command|JPEG
+.file.import.slice|command|PNG
+.file.import|separator|---
+.file.import|command|Array
+.file.import|command|NRRD
+.file.import|command|ENVI
+.file.import|separator|---
+.file.import|command|RGB Array
+.file.import|command|HSV Array
+.file.import|command|HLS Array
+.file.import|separator|---
+.file.import|command|GIF
+.file.import|command|TIFF
+.file.import|command|JPEG
+.file.import|command|PNG
+.file.import|separator|---
+.file|cascade|Export
+.file.export|command|Array
+.file.export|command|NRRD
+.file.export|command|ENVI
+.file.export|separator|---
+.file.export|command|RGB Array
+.file.export|command|HSV Array
+.file.export|command|HLS Array
+.file.export|separator|---
+.file.export|command|GIF
+.file.export|command|TIFF
+.file.export|command|JPEG
+.file.export|command|PNG
+.file.export|separator|---
+.file|command|Create Movie
 .file|separator|---
 .file|command|Backup
 .file|command|Restore

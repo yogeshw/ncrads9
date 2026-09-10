@@ -44,6 +44,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+import numpy as np
 from astropy.io import fits
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QImage, QPixmap
@@ -55,9 +56,13 @@ from ...core.file_spec import FileSpec
 from ...core.file_spec import parse as parse_file_spec
 from ...core.fits_handler import FITSHandler
 from ...core.mosaic import MosaicKind
+from ...io import array_reader, envi_writer, movie, nrrd_writer, raster
+from ...io.envi_reader import ENVIReader
 from ...io.fits_writer import FITSWriter
+from ...io.nrrd_reader import NRRDReader
 from ...rendering.scale_algorithms import apply_scale, compute_zscale_limits
-from ..dialogs.export_dialog import ExportDialog
+from ..dialogs.array_dialog import ArrayDialog
+from ..dialogs.movie_dialog import MovieDialog
 from ..dialogs.open_dialog import HDUChoice, OpenDialog
 from .base import Controller
 
@@ -87,13 +92,16 @@ MOSAIC_LOADERS: dict[str, tuple[MosaicKind, bool]] = {
     "mosaic_wfpc2": (MosaicKind.WFPC2, False),
 }
 
-#: `Save Image` formats that M4 does not write, and the milestone that does.
+#: `Save Image` formats nothing writes yet, and the milestone that does.
 DEFERRED_IMAGE_FORMATS: dict[str, str] = {
     "eps": "M9-18",
-    "gif": "M9-14",
-    "tiff": "M9-14",
-    "jpeg": "M9-14",
-    "png": "M9-14",
+}
+
+#: What the Import and Export cascades' colour entries make of a frame.
+COLOUR_ARRAYS: dict[str, str] = {
+    "rgb_array": "rgb",
+    "hsv_array": "hsv",
+    "hls_array": "hls",
 }
 
 #: How long to wait for a URL before giving up, in seconds.
@@ -108,7 +116,11 @@ class FileController(Controller):
         self.menu.action_open.triggered.connect(self.open_file)
         self.menu.action_save.triggered.connect(self.save_file)
         self.menu.action_save_as.triggered.connect(self.save_file_as)
-        self.menu.action_export.triggered.connect(self.export_image)
+        self.menu.action_create_movie.triggered.connect(lambda _checked=False: self.create_movie())
+        for name, action in self.menu.import_actions.items():
+            action.triggered.connect(lambda _checked=False, key=name: self.import_file(key))
+        for name, action in self.menu.export_actions.items():
+            action.triggered.connect(lambda _checked=False, key=name: self.export_file(key))
         self.menu.action_print.triggered.connect(self.print_image)
         self.menu.action_exit.triggered.connect(self.window.close)
 
@@ -544,8 +556,6 @@ class FileController(Controller):
                 )
             _space, as_cube = COLOUR_LOADERS[writer]
             if as_cube:
-                import numpy as np
-
                 fits_writer.add_image(np.stack(channels, axis=0), header=header)
             else:
                 for name, channel in zip(fits_loaders.RGB_CHANNELS, channels, strict=True):
@@ -579,6 +589,10 @@ class FileController(Controller):
             self.status("No image to save")
             return
 
+        if image_format in raster.FORMATS:
+            self._save_image_raster(image_format, pixmap)
+            return
+
         filepath, _ = QFileDialog.getSaveFileName(self.window, "Save Image as FITS", "", FITS_SAVE_FILTER)
         if not filepath:
             return
@@ -588,10 +602,221 @@ class FileController(Controller):
         except Exception as exc:
             self._report(f"Could not save the rendered image to\n{filepath}", exc)
 
+    def _save_image_raster(self, image_format: str, pixmap: QPixmap, path: str | None = None) -> bool:
+        """Write the rendered view as one of DS9's four raster formats."""
+        if path is None:
+            path, _ = QFileDialog.getSaveFileName(
+                self.window,
+                f"Save Image as {image_format.upper()}",
+                "",
+                raster.file_filter(image_format),
+            )
+        if not path:
+            return False
+        try:
+            raster.write(path, self._pixmap_rgb(pixmap), image_format)
+        except Exception as exc:
+            self._report(f"Could not save the rendered image to\n{path}", exc)
+            return False
+        self.status(f"Saved the rendered image to {Path(path).name}", 3000)
+        return True
+
+    @staticmethod
+    def _pixmap_rgb(pixmap: QPixmap) -> np.ndarray:
+        """A pixmap as a (height, width, 3) byte array, rows from the bottom.
+
+        `constBits` borrows Qt's own memory, which goes when the QImage
+        does, so the rows are copied out before that can happen.
+        """
+        image = pixmap.toImage().convertToFormat(QImage.Format.Format_RGB888)
+        width, height = image.width(), image.height()
+        buffer = image.constBits()
+        buffer.setsize(height * image.bytesPerLine())
+        rows = np.frombuffer(buffer, dtype=np.uint8).reshape(height, image.bytesPerLine()).copy()
+        return rows[:, : width * 3].reshape(height, width, 3)[::-1]
+
+    # -- Import and Export (M9-13, M9-14) ------------------------------------------
+
+    def import_file(self, name: str, path: str | None = None) -> bool:
+        """One entry of DS9's Import cascade.
+
+        Import reads a file *as data*: its pixels become the frame's array,
+        so they can be scaled, measured and have regions drawn on them.
+
+        Args:
+            name: One of `MenuBar.import_actions`' keys.
+            path: The file, or None to ask.
+
+        Returns:
+            Whether anything was loaded.
+        """
+        base = name.removeprefix("slice_")
+        if path is None:
+            path = self._ask_import(base)
+        if not path:
+            return False
+
+        try:
+            data, label = self._read_import(base, path)
+        except Exception as exc:
+            self._report(f"Could not import\n{path}", exc)
+            return False
+        if data is None:
+            return False
+
+        frame_type = COLOUR_ARRAYS.get(base)
+        if frame_type is not None:
+            self.window.frame_controller.new_frame_of_type(frame_type)
+        loaded = self.window.display.load_array(data, name=label, frame_type=frame_type)
+        return loaded is not None
+
+    def _ask_import(self, base: str) -> str:
+        """The Open dialog for one import format."""
+        if base in raster.FORMATS:
+            chosen, _ = QFileDialog.getOpenFileName(
+                self.window, f"Import {base.upper()}", "", raster.file_filter(base)
+            )
+            return chosen
+        filters = {
+            "array": "Array files (*.arr *.raw *.dat *.bin);;All files (*)",
+            "rgb_array": "Array files (*.arr *.raw *.dat *.bin);;All files (*)",
+            "hsv_array": "Array files (*.arr *.raw *.dat *.bin);;All files (*)",
+            "hls_array": "Array files (*.arr *.raw *.dat *.bin);;All files (*)",
+            "nrrd": "NRRD files (*.nrrd *.nhdr);;All files (*)",
+            "envi": "ENVI files (*.hdr *.img *.dat *.raw);;All files (*)",
+        }
+        chosen, _ = QFileDialog.getOpenFileName(
+            self.window, f"Import {base}", "", filters.get(base, "All files (*)")
+        )
+        return chosen
+
+    def _read_import(self, base: str, path: str) -> tuple[np.ndarray | None, str]:
+        """Read one import format. Returns (data, what to call it)."""
+        if base in raster.FORMATS:
+            colour = False
+            return (raster.read(path, colour=colour), Path(path).name)
+
+        if base == "nrrd":
+            return (NRRDReader(path).read_data(), Path(path).name)
+        if base == "envi":
+            return (ENVIReader(path).read_data(), Path(path).name)
+
+        # An array of any kind: the dimensions have to come from somewhere.
+        target, embedded = array_reader.split_spec(path)
+        spec = None
+        if embedded:
+            spec = array_reader.parse_spec(embedded)
+        else:
+            spec = array_reader.environment_spec()
+            chosen = ArrayDialog(spec, self.window).choose()
+            if chosen is None:
+                return (None, "")
+            spec = chosen
+        data = array_reader.read(target, spec)
+        if base in COLOUR_ARRAYS and data.ndim == 3 and data.shape[0] != 3:
+            self.status("A colour array needs three planes", 3500)
+            return (None, "")
+        return (data, target.name)
+
+    def export_file(self, name: str, path: str | None = None) -> bool:
+        """One entry of DS9's Export cascade.
+
+        Export writes the frame *as* its format: the data itself for the
+        array kinds, and the rendered picture for the raster kinds, because
+        a GIF has no room for a stretch.
+
+        Args:
+            name: One of `MenuBar.export_actions`' keys.
+            path: The file, or None to ask.
+
+        Returns:
+            Whether anything was written.
+        """
+        frame = self.frame
+        data = getattr(frame, "image_data", None) if frame is not None else None
+        if data is None:
+            self.status("No image to export")
+            return False
+
+        if name in raster.FORMATS:
+            pixmap = self.current_pixmap()
+            if pixmap is None:
+                self.status("No image to export")
+                return False
+            if path is None:
+                path, _ = QFileDialog.getSaveFileName(
+                    self.window, f"Export {name.upper()}", "", raster.file_filter(name)
+                )
+            if not path:
+                return False
+            try:
+                raster.write(path, self._pixmap_rgb(pixmap), name)
+            except Exception as exc:
+                self._report(f"Could not export to\n{path}", exc)
+                return False
+            self.status(f"Exported {name.upper()} to {Path(path).name}", 3000)
+            return True
+
+        if path is None:
+            path, _ = QFileDialog.getSaveFileName(
+                self.window, f"Export {name.replace('_', ' ')}", "", "All files (*)"
+            )
+        if not path:
+            return False
+
+        big_endian = True
+        if name in ("array", "nrrd", "envi") or name in COLOUR_ARRAYS:
+            dialog = ArrayDialog(None, self.window, exporting=True)
+            chosen = dialog.choose()
+            if chosen is None:
+                return False
+            big_endian = chosen.big_endian
+
+        try:
+            self._write_export(name, path, data, big_endian)
+        except Exception as exc:
+            self._report(f"Could not export to\n{path}", exc)
+            return False
+        return True
+
+    def _write_export(self, name: str, path: str, data, big_endian: bool) -> None:
+        """Write one of the data export formats."""
+        if name == "nrrd":
+            nrrd_writer.write(path, data, big_endian=big_endian)
+            self.status(f"Exported NRRD to {Path(path).name}", 3000)
+            return
+        if name == "envi":
+            _target, header = envi_writer.write(path, data, big_endian=big_endian)
+            self.status(f"Exported ENVI to {Path(path).name} and {header.name}", 4000)
+            return
+
+        if name in COLOUR_ARRAYS:
+            data = self._colour_planes(data)
+        spec = array_reader.write(path, data, big_endian=big_endian)
+        # A raw array carries no header, so the only way the user gets the
+        # numbers back is if we tell them now.
+        self.status(
+            f"Exported array to {Path(path).name} -- read it back with "
+            f"[xdim={spec.xdim},ydim={spec.ydim},zdim={spec.zdim},bitpix={spec.bitpix}]",
+            8000,
+        )
+
+    def _colour_planes(self, data):
+        """The three planes a colour array export writes.
+
+        An RGB frame has its own three channels; any other frame has one
+        plane, which goes out three times so the file is still a valid
+        colour array rather than a silent single-channel one.
+        """
+        frame = self.frame
+        if frame is not None and frame.frame_type in ("rgb", "hsv", "hls"):
+            channels = [frame.rgb_channels.get(channel) for channel in ("red", "green", "blue")]
+            if all(channel is not None for channel in channels):
+                return np.stack([np.asarray(channel) for channel in channels])
+        return np.repeat(np.asarray(data)[None, :, :], 3, axis=0)
+
     def _write_rendered_fits(self, path: Path, pixmap: QPixmap) -> None:
         """Write a rendered pixmap as a three-plane FITS cube."""
-        import numpy as np
-
         image = pixmap.toImage().convertToFormat(QImage.Format.Format_RGB888)
         width, height = image.width(), image.height()
         buffer = image.constBits()
@@ -645,16 +870,107 @@ class FileController(Controller):
         qimage = QImage(rgb.data, width, height, 3 * width, QImage.Format.Format_RGB888)
         return QPixmap.fromImage(qimage)
 
-    def export_image(self) -> None:
-        """Export the current view as a raster image."""
-        pixmap = self.current_pixmap()
-        if pixmap is None:
-            self.status("No image to export")
-            return
+    # -- Create Movie (M9-15) ------------------------------------------------------
 
-        dialog = ExportDialog(pixmap, self.window)
-        if dialog.exec():
-            self.status(f"Exported to {dialog.export_path}", 3000)
+    def create_movie(self, path: str | None = None, settings: dict | None = None) -> bool:
+        """DS9's File -> Create Movie.
+
+        Args:
+            path: The file to write, or None to ask.
+            settings: What to make, as `MovieDialog.settings` returns.
+                None asks.
+
+        Returns:
+            Whether a movie was written.
+        """
+        frame = self.frame
+        if frame is None or frame.image_data is None:
+            self.status("No image to make a movie of")
+            return False
+
+        handler = self.window.frame_controller.cube_handler(frame)
+        depth = handler.depth(frame.axis_order) if handler is not None else 1
+
+        if settings is None:
+            chosen = MovieDialog(self.window, is_cube=depth > 1).choose()
+            if chosen is None:
+                return False
+            settings = chosen
+
+        if settings.get("action") == "3d":
+            self.status("A 3D movie needs the 3D frame of M9-21", 3500)
+            return False
+
+        images = self._slice_images(depth) if settings.get("action") == "slice" else self._frame_images()
+        if not images:
+            self.status("Nothing to make a movie of")
+            return False
+
+        if path is None:
+            kind = settings.get("type", "gif")
+            path, _ = QFileDialog.getSaveFileName(
+                self.window,
+                "Create Movie",
+                "",
+                (
+                    "Animated GIF (*.gif);;All files (*)"
+                    if kind == "gif"
+                    else "MPEG (*.mpg *.mp4);;All files (*)"
+                ),
+            )
+        if not path:
+            return False
+
+        try:
+            movie.write(
+                path,
+                images,
+                movie_type=settings.get("type", "gif"),
+                transition=settings.get("transition", "blink"),
+                delay=int(settings.get("delay", movie.DEFAULT_DELAY)),
+            )
+        except movie.MovieError as exc:
+            self.status(f"Could not make the movie: {exc}", 5000)
+            return False
+        except Exception as exc:
+            self._report(f"Could not write the movie to\n{path}", exc)
+            return False
+
+        self.status(f"Wrote {len(images)} frame(s) to {Path(path).name}", 4000)
+        return True
+
+    def _frame_images(self) -> list:
+        """One rendered image per active frame, for a frames movie."""
+        rendered = []
+        for index in self.window.frame_controller.active_indices():
+            frame = self.frames.frames[index]
+            image = self.window.display.render_frame_rgb(frame)
+            if image is not None:
+                rendered.append(image)
+        return movie.frames_of(rendered)
+
+    def _slice_images(self, depth: int) -> list:
+        """One rendered image per slice of the current cube.
+
+        The slice on screen is put back afterwards: making a movie should
+        not move the view.
+        """
+        controller = self.window.frame_controller
+        frame = self.frame
+        if frame is None:
+            return []
+        was = frame.slice_index
+
+        rendered = []
+        try:
+            for index in range(max(1, depth)):
+                controller.set_slice(index)
+                image = self.window.display.render_frame_rgb(self.frame)
+                if image is not None:
+                    rendered.append(image)
+        finally:
+            controller.set_slice(was)
+        return movie.frames_of(rendered)
 
     def print_image(self) -> None:
         """Print the current view.

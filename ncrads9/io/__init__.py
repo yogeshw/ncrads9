@@ -1,4 +1,4 @@
-# NCRADS9 - NCRA DS9 Visualization Tool
+# NCRADS9 - NCRA DS9-like FITS Viewer
 # Copyright (C) 2026 Yogesh Wadadekar
 #
 # This program is free software: you can redistribute it and/or modify
@@ -15,37 +15,32 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
-IO module for NCRADS9.
+Reading and writing everything that is not a FITS image.
 
-Provides readers and writers for various file formats.
-
-Author: Yogesh Wadadekar
+`eps_writer` and `pdf_writer` are deliberately not imported here: nothing
+reaches them until M9-18 and M9-20 give them a Print dialog, and importing
+them would hide that from the no-orphan-modules guard.
 """
 
-from .array_reader import ArrayReader
+from .array_reader import ArraySpec, ArraySpecError
 from .envi_reader import ENVIReader
-from .eps_writer import EPSWriter
-from .fits_reader import FITSReader
 from .fits_writer import FITSWriter
 from .gif_writer import GIFWriter
 from .jpeg_writer import JPEGWriter
 from .mpeg_writer import MPEGWriter
 from .nrrd_reader import NRRDReader
-from .pdf_writer import PDFWriter
 from .png_writer import PNGWriter
 from .tiff_writer import TIFFWriter
 
 __all__ = [
-    "FITSReader",
-    "FITSWriter",
-    "ArrayReader",
+    "ArraySpec",
+    "ArraySpecError",
     "ENVIReader",
-    "NRRDReader",
+    "FITSWriter",
     "GIFWriter",
-    "MPEGWriter",
-    "PNGWriter",
     "JPEGWriter",
+    "MPEGWriter",
+    "NRRDReader",
+    "PNGWriter",
     "TIFFWriter",
-    "EPSWriter",
-    "PDFWriter",
 ]

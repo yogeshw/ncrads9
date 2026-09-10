@@ -22,6 +22,7 @@ Author: Yogesh Wadadekar
 
 from .analysis_param_dialog import AnalysisParamDialog
 from .analysis_text_dialog import AnalysisTextDialog
+from .array_dialog import ArrayDialog
 from .centroid_dialog import CentroidDialog
 from .colormap_dialog import ColormapDialog
 from .contour_dialog import ContourDialog
@@ -30,6 +31,7 @@ from .grid_dialog import GridDialog
 from .group_dialog import GroupDialog
 from .header_dialog import HeaderDialog
 from .mask_dialog import MaskDialog
+from .movie_dialog import MovieDialog
 from .open_dialog import OpenDialog
 from .pan_zoom_rotate_dialog import PanZoomRotateDialog
 from .preferences_dialog import PreferencesDialog
@@ -57,6 +59,8 @@ __all__ = [
     "RegionPlotDialog",
     "RegionStatisticsDialog",
     "PreferencesDialog",
+    "ArrayDialog",
     "CropParametersDialog",
+    "MovieDialog",
     "PanZoomRotateDialog",
 ]

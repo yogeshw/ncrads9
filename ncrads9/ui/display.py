@@ -383,6 +383,74 @@ class DisplayPipeline:
             stats_msg += " (WCS available)"
         self.status(stats_msg, 3000)
 
+    def load_array(
+        self,
+        data: NDArray[np.floating],
+        name: str = "array",
+        header: dict | None = None,
+        frame_type: str | None = None,
+    ) -> Frame | None:
+        """Put an array on the current frame, with no file behind it.
+
+        What Import reads and what a restored backup's sidecar holds: pixels
+        that never came from a FITS file, and so have no path, no extension
+        and no WCS. Everything else -- the scale, the colormap, the zoom to
+        fit, the panels -- happens exactly as it does for a file, because
+        from here down nothing cares where the numbers came from.
+
+        Args:
+            data: The pixels. A three-plane cube becomes an RGB frame.
+            name: What to call it in the title and the status bar.
+            header: Anything worth keeping as a header.
+            frame_type: The frame type to set, for a colour import.
+
+        Returns:
+            The frame it went on, or None if there was no data.
+        """
+        array = np.asarray(data, dtype=np.float32)
+        if array.size == 0:
+            return None
+
+        frame = self.frames.current_frame
+        if frame is None:
+            frame = self.frames.new_frame()
+            self.window._active_frame_ids.add(frame.frame_id)
+
+        old_handler = frame.fits_handler
+        if old_handler is not None:
+            try:
+                old_handler.close()
+            except Exception:
+                pass
+        frame.fits_handler = None
+        frame.filepath = None
+        frame.file_spec = None
+        frame.hdu_index = None
+        frame.image = None
+        frame.wcs_handler = WCSHandler(None)
+        frame.header = header or {}
+        frame.image_data = array
+        frame.original_image_data = array
+        frame.z1 = None
+        frame.z2 = None
+        if frame_type is not None:
+            frame.frame_type = frame_type
+
+        self.window.z1 = None
+        self.window.z2 = None
+        if hasattr(self.viewer, "reset_contrast_brightness"):
+            self.viewer.reset_contrast_brightness()
+
+        frame_info = f"Frame {self.frames.current_index + 1}/{self.frames.num_frames}"
+        self.window.setWindowTitle(f"NCRADS9 - {name} [{frame_info}]")
+
+        self.display()
+        self.window.zoom.zoom_fit()
+        shape = array.shape
+        self.status_bar.update_image_info(shape[-1], shape[-2] if array.ndim > 1 else 1)
+        self.status(f"Loaded {name}: {shape[-1]}x{shape[-2]} pixels, {array.dtype}", 3000)
+        return frame
+
     def push_block_factor(self, frame: Frame) -> None:
         """Tell the viewer how many image pixels one displayed pixel holds.
 
