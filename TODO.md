@@ -1074,8 +1074,25 @@ Depends on M2, M3.
       `match`, `reset`, `open` and `close`. The view is captured in the backup, per frame.
 
 ### Undo/redo
-- [ ] **M9-24** (L) Command-pattern undo stack covering region edits, view changes, colormap
+- [x] **M9-24** (L) Command-pattern undo stack covering region edits, view changes, colormap
       changes and frame operations; wire `action_undo`/`action_redo`/cut/copy/paste.
+      `utils/undo.py` is the stack -- a named command, an undo and a redo, to a depth -- and
+      `ui/controllers/undo.py` records commands as a *before* and an *after* snapshot taken
+      around whatever changed, one `with` at the call site rather than an undo method grown
+      on every operation. A snapshot of a frame's regions is a few hundred bytes; a parallel
+      implementation of every edit is the thing that goes out of date the first time an edit
+      gains a field. Cut, copy and paste were already live (M6-14).
+      Covered: region create, delete, delete-all, reorder and drag; zoom, rotation and
+      orientation; the colormap; and the illustrate layer's deletes. **Not covered, and
+      recorded as such:** anything with data behind it -- loading a file, binning a table,
+      deleting a frame. Those are megabytes rather than snapshots, and DS9 does not undo them
+      either. **Beyond DS9:** DS9 has one Undo, no Redo, and only for the last region or
+      illustrate edit; ours is a stack of a hundred with Redo, which our Edit menu already
+      had an entry for.
+      Two traps the tests pin down: an undo must not record itself, or the undo becomes
+      undoable and nothing settles; and an undone zoom has to be pushed back to the *viewer*,
+      which holds the zoom, or the next thing that persists the view writes the screen's value
+      back over the frame's.
 
 ### Communication
 - [ ] **M9-25** (L) Grow XPA from 23 to DS9's 143 access points. Use

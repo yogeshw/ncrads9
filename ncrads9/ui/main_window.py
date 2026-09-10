@@ -278,6 +278,7 @@ class MainWindow(QMainWindow):
         """Connect menu actions to their handlers."""
         self.file.connect()
         self.edit.connect()
+        self.undo.connect()
         self.view.connect()
 
         # Frame menu
@@ -395,6 +396,9 @@ class MainWindow(QMainWindow):
         viewer.region_activated.connect(self.region.show_information)
         self.catalog.attach(viewer)
         viewer.region_selected.connect(self.region.on_selected)
+        # A region drag has to be recorded from its two ends, which a
+        # signal per gesture cannot do; see RegionController.on_edit.
+        viewer.region_overlay.edit_notifier = self.region.on_edit
         if hasattr(viewer, "gl_canvas"):
             viewer.gl_canvas.pan_changed.connect(lambda *_: self.zoom.update_panner_rect())
             viewer.gl_canvas.zoom_changed.connect(lambda *_: self.zoom.update_panner_rect())

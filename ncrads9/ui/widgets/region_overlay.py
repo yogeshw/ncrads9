@@ -204,6 +204,10 @@ class RegionOverlay(QWidget):
         #: the host viewer, for the same reason `pick_handler` is: only this
         #: overlay takes mouse events.
         self.illustrate_handler = None
+        #: Called with "begin" when a region is grabbed and "finish" when
+        #: it is let go, so the controller can record the move for undo. A
+        #: drag spans two events, which a context manager cannot.
+        self.edit_notifier = None
         #: Which resize handle is being dragged, if any. `None` means the
         #: drag is a move (or nothing at all); an index means a reshape.
         self.dragging_handle: int | None = None
@@ -713,6 +717,11 @@ class RegionOverlay(QWidget):
             button = "left" if event.buttons() & Qt.MouseButton.LeftButton else "none"
         return bool(handler(phase, event.position(), button))
 
+    def _notify_edit(self, phase: str) -> None:
+        """Tell the controller a region edit started or finished."""
+        if self.edit_notifier is not None:
+            self.edit_notifier(phase)
+
     def _dispatch(self, event, phase: str) -> bool:
         """Give one mouse event to the active pointer mode, if there is one.
 
@@ -763,12 +772,14 @@ class RegionOverlay(QWidget):
             if self._rotate_handle_at(img_point):
                 self.rotating = True
                 self.drag_start = img_point
+                self._notify_edit("begin")
                 event.accept()
                 return
             handle = self._handle_at(img_point)
             if handle is not None:
                 self.dragging_handle = handle
                 self.drag_start = img_point
+                self._notify_edit("begin")
                 event.accept()
                 return
 
@@ -776,6 +787,7 @@ class RegionOverlay(QWidget):
                 if region.contains(img_point.x(), img_point.y()):
                     self._select(region)
                     self.drag_start = img_point
+                    self._notify_edit("begin")
                     self.region_selected.emit(region)
                     self.update()
                     event.accept()
@@ -903,6 +915,8 @@ class RegionOverlay(QWidget):
             return
 
         if self.mode == RegionMode.NONE:
+            if self.drag_start is not None:
+                self._notify_edit("finish")
             self.drag_start = None
             self.dragging_handle = None
             self.rotating = False

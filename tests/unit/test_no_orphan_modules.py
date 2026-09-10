@@ -69,7 +69,7 @@ PENDING_ADOPTION: dict[str, str] = {
     "utils.math_utils": "M5-1",
     # Was expected to load the buttonbar's icons. DS9's buttonbar is text,
     # so M3-3's is too, and this has no caller until the icon bars land.
-    "utils.resources": "M9-24",
+    "utils.resources": "an icon bar, if one is ever wanted",
     "utils.threading": "M8-13",
 }
 

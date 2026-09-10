@@ -105,8 +105,6 @@ class EditController(Controller):
     def connect(self) -> None:
         """Wire the Edit menu."""
         self.menu.action_preferences.triggered.connect(self.show_preferences)
-        self.menu.action_undo.triggered.connect(lambda: self.status("Undo not implemented"))
-        self.menu.action_redo.triggered.connect(lambda: self.status("Redo not implemented"))
         self.menu.action_cut.triggered.connect(self.cut)
         self.menu.action_copy.triggered.connect(self.copy)
         self.menu.action_paste.triggered.connect(self.paste)

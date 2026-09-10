@@ -112,9 +112,10 @@ class ZoomController(Controller):
 
     def set_zoom(self, zoom: float) -> None:
         """Set an explicit zoom level."""
-        self.viewer.zoom_to(zoom)
-        self.status_bar.update_zoom(self.viewer.get_zoom())
-        self.window.frame_controller.persist_view_state()
+        with self.window.undo.view("Zoom"):
+            self.viewer.zoom_to(zoom)
+            self.status_bar.update_zoom(self.viewer.get_zoom())
+            self.window.frame_controller.persist_view_state()
         self.sync()
         self.window.frame_controller.apply_locks()
         self.update_panner_rect()
@@ -195,9 +196,10 @@ class ZoomController(Controller):
         frame = self.require_frame()
         if frame is None:
             return
-        frame.flip_x, frame.flip_y = orientation_to_flags(orientation)
-        self._reapply_transform(frame)
-        self.window.frame_controller.persist_view_state()
+        with self.window.undo.view("Orientation"):
+            frame.flip_x, frame.flip_y = orientation_to_flags(orientation)
+            self._reapply_transform(frame)
+            self.window.frame_controller.persist_view_state()
         self.sync()
         self.window.frame_controller.apply_locks()
         self.status(f"Orientation: {orientation}", 1500)
@@ -207,9 +209,10 @@ class ZoomController(Controller):
         frame = self.require_frame()
         if frame is None:
             return
-        frame.rotation = normalize_rotation(degrees)
-        self._reapply_transform(frame)
-        self.window.frame_controller.persist_view_state()
+        with self.window.undo.view("Rotation"):
+            frame.rotation = normalize_rotation(degrees)
+            self._reapply_transform(frame)
+            self.window.frame_controller.persist_view_state()
         self.sync()
         self.window.frame_controller.apply_locks()
         self.status(f"Rotation: {frame.rotation:.2f} degrees", 1500)

@@ -162,8 +162,9 @@ class ColorController(Controller):
             self.status(f"Unsupported colormap: {colormap}")
             return
 
-        self.window.current_colormap = cmap_name
-        self.window.frame_controller.persist_view_state()
+        with self.window.undo.colors(f"Colormap {cmap_name}"):
+            self.window.current_colormap = cmap_name
+            self.window.frame_controller.persist_view_state()
         self.sync()
 
         if cmap_name in BUTTON_LABELS:

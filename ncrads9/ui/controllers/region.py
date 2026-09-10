@@ -774,8 +774,9 @@ class RegionController(Controller):
             self.status("No regions selected")
             return
 
-        rest = [region for region in frame.regions if region not in chosen]
-        frame.regions = (rest + chosen) if to_front else (chosen + rest)
+        with self.window.undo.regions("Reorder Regions"):
+            rest = [region for region in frame.regions if region not in chosen]
+            frame.regions = (rest + chosen) if to_front else (chosen + rest)
         self.refresh_overlay()
         self.status(f"Moved {len(chosen)} regions to the {'front' if to_front else 'back'}")
 
@@ -789,7 +790,8 @@ class RegionController(Controller):
 
         protected = [region for region in chosen if not getattr(region, "can_delete", True)]
         deletable = [region for region in chosen if getattr(region, "can_delete", True)]
-        frame.regions = [region for region in frame.regions if region not in deletable]
+        with self.window.undo.regions("Delete Regions"):
+            frame.regions = [region for region in frame.regions if region not in deletable]
         self.refresh_overlay()
 
         message = f"Deleted {len(deletable)} regions"
@@ -891,7 +893,8 @@ class RegionController(Controller):
         frame = self.frame
         if frame is not None:
             protected = [r for r in frame.regions if not getattr(r, "can_delete", True)]
-            frame.regions = list(protected)
+            with self.window.undo.regions("Delete All Regions"):
+                frame.regions = list(protected)
             # SAMP markers are regenerated from stored positions, so drop
             # those too or they would reappear on the next refresh.
             self.window._samp_catalog_sources.pop(frame.frame_id, None)
@@ -911,7 +914,8 @@ class RegionController(Controller):
         """Record a region the user just drew on the current frame."""
         frame = self.frame
         if frame is not None:
-            frame.regions.append(self.apply_defaults(region))
+            with self.window.undo.regions(f"Create {describe(region)}"):
+                frame.regions.append(self.apply_defaults(region))
         self.status(f"Created {describe(region)} region")
         if self.auto_centroid:
             # DS9's Auto Centroid: a region dropped near a source snaps onto
@@ -919,6 +923,23 @@ class RegionController(Controller):
             self.centroid([region])
         if self._auto:
             self._auto_open(region)
+
+    def on_edit(self, phase: str) -> None:
+        """Record a region drag, which spans a press and a release.
+
+        A context manager cannot hold a snapshot across two mouse events,
+        so the two ends are taken here: `begin` opens one and `finish`
+        closes it, and a drag that changed nothing records nothing.
+        """
+        undo = self.window.undo
+        if phase == "begin":
+            self._edit = undo.regions("Move Region")
+            self._edit.__enter__()
+            return
+        pending = getattr(self, "_edit", None)
+        if pending is not None:
+            self._edit = None
+            pending.__exit__(None, None, None)
 
     def on_selected(self, region: BaseRegion) -> None:
         """Report the region the user just clicked."""

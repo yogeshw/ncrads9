@@ -214,13 +214,15 @@ class IllustrateController(Controller):
 
     def delete_selection(self) -> None:
         """Remove the selected illustrations."""
-        count = self.layer.delete_selection()
+        with self.window.undo.illustrations("Delete Illustrations"):
+            count = self.layer.delete_selection()
         self.refresh()
         self.status(f"Deleted {count} illustration(s)" if count else "Nothing selected", 2000)
 
     def delete_all(self) -> None:
         """Remove every illustration."""
-        count = self.layer.clear()
+        with self.window.undo.illustrations("Delete All Illustrations"):
+            count = self.layer.clear()
         self.refresh()
         self.status(f"Deleted {count} illustration(s)" if count else "Nothing to delete", 2000)
 
