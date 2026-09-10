@@ -579,55 +579,122 @@ rather than an edit. Overall menu parity **50% -> 66%**, tests **811 -> 1086**, 
 Depends on M1, M2.
 
 ### Missing shapes
-- [ ] **M6-1** (S) `regions/shapes/segment.py`.
-- [ ] **M6-2** (M) `regions/shapes/epanda.py` (elliptical panda).
-- [ ] **M6-3** (M) `regions/shapes/bpanda.py` (box panda).
+- [x] **M6-1** (S) `regions/shapes/segment.py`.
+- [x] **M6-2** (M) `regions/shapes/epanda.py` (elliptical panda).
+- [x] **M6-3** (M) `regions/shapes/bpanda.py` (box panda).
 
 ### Interactive creation and editing
-- [ ] **M6-4** (L) Extend `RegionMode` and the overlay's creation gestures from 6 to all 19
+- [x] **M6-4** (L) Extend `RegionMode` and the overlay's creation gestures from 6 to all 19
       shapes: annulus, ellipse annulus, box annulus, panda, epanda, bpanda, vector, ruler,
       compass, projection, segment, text, composite.
-- [ ] **M6-5** (M) Point glyphs: circle, box, diamond, cross, x, arrow, boxcircle + size.
-- [ ] **M6-6** (L) Selection handles: resize, rotate, and per-shape parameter handles
+- [x] **M6-5** (M) Point glyphs: circle, box, diamond, cross, x, arrow, boxcircle + size.
+- [x] **M6-6** (L) Selection handles: resize, rotate, and per-shape parameter handles
       (annulus radii, panda angles, vector length/angle).
-- [ ] **M6-7** (M) Per-shape "Get Information" dialog with coordinate-system and format menus,
+- [x] **M6-7** (M) Per-shape "Get Information" dialog with coordinate-system and format menus,
       matching DS9's marker dialogs.
 
 ### Properties
-- [ ] **M6-8** (M) Property flags: include/exclude, source/background,
+- [x] **M6-8** (M) Property flags: include/exclude, source/background,
       fixed-in-size, can-edit, can-move, can-rotate, can-delete. Enforce them in the overlay.
-- [ ] **M6-9** (S) `dash` and `fill` rendering properties.
-- [ ] **M6-10** (S) Region Colour / Width / Font submenus, applied to selection and as new-region
+- [x] **M6-9** (S) `dash` and `fill` rendering properties.
+- [x] **M6-10** (S) Region Colour / Width / Font submenus, applied to selection and as new-region
       defaults.
 
 ### File formats
-- [ ] **M6-11** (L) Parser: add every shape missing from
+- [x] **M6-11** (L) Parser: add every shape missing from
       `regions/region_parser.py:_create_region()` — ellipse annulus, box annulus, panda, epanda,
       bpanda, vector, ruler, compass, projection, segment, composite, and the `n=` /
       multi-radius annulus forms.
-- [ ] **M6-12** (M) Writer: emit every shape and every property, in ds9/ciao/saotng/funtools/xy
+- [x] **M6-12** (M) Writer: emit every shape and every property, in ds9/ciao/saotng/funtools/xy
       formats and each coordinate system.
-- [ ] **M6-13** (M) Round-trip test driven by the shape examples in
+- [x] **M6-13** (M) Round-trip test driven by the shape examples in
       `.tmp_sao_ds9/ds9/doc/ref/region.html` — parse, write, reparse, assert identity.
 
 ### Management
-- [ ] **M6-14** (M) Selection ops: All, None, Invert, Front, Back, Move to Front, Move to Back.
-- [ ] **M6-15** (S) Save Selection, List Selection, Delete Selection; List (all).
-- [ ] **M6-16** (M) Groups: adopt `regions/group_manager.py`; New Group + Groups dialog.
-- [ ] **M6-17** (M) Composite regions: Create / Dissolve.
-- [ ] **M6-18** (M) Templates: WCS-independent Open / Save.
-- [ ] **M6-19** (S) Bundle DS9's instrument FOV templates (Chandra, XMM, MMT, HEASARC from
+- [x] **M6-14** (M) Selection ops: All, None, Invert, Front, Back, Move to Front, Move to Back.
+- [x] **M6-15** (S) Save Selection, List Selection, Delete Selection; List (all).
+- [x] **M6-16** (M) Groups: adopt `regions/group_manager.py`; New Group + Groups dialog.
+- [x] **M6-17** (M) Composite regions: Create / Dissolve.
+- [x] **M6-18** (M) Templates: WCS-independent Open / Save.
+- [x] **M6-19** (S) Bundle DS9's instrument FOV templates (Chandra, XMM, MMT, HEASARC from
       `.tmp_sao_ds9/ds9/template/`) under an Instrument FOV submenu.
-- [ ] **M6-20** (M) Centroid: adopt `analysis/centroid.py`; Centroid + Centroid Parameters
+- [x] **M6-20** (M) Centroid: adopt `analysis/centroid.py`; Centroid + Centroid Parameters
       (iterations, radius).
-- [ ] **M6-21** (S) Autoload FITS regions on open (preference).
+- [x] **M6-21** (S) Autoload FITS regions on open (preference).
 
 ### Region-driven analysis
-- [ ] **M6-22** (M) Statistics from a region — adopt `analysis/statistics.py`.
-- [ ] **M6-23** (M) Histogram from a region — adopt `analysis/histogram.py`.
-- [ ] **M6-24** (M) Radial profile from an annulus/panda.
-- [ ] **M6-25** (M) Plot 2D (projection cut) and Plot 3D (cube slice through a region).
-- [ ] **M6-26** (S) Auto Plot 2D / Auto Plot 3D / Auto Statistics / Auto Centroid toggles.
+- [x] **M6-22** (M) Statistics from a region — adopt `analysis/statistics.py`.
+- [x] **M6-23** (M) Histogram from a region — adopt `analysis/histogram.py`.
+- [x] **M6-24** (M) Radial profile from an annulus/panda.
+- [x] **M6-25** (M) Plot 2D (projection cut) and Plot 3D (cube slice through a region).
+- [x] **M6-26** (S) Auto Plot 2D / Auto Plot 3D / Auto Statistics / Auto Centroid toggles.
+
+### Deviations from the plan as written
+
+* **Nineteen shapes, not twenty.** PLAN.md and this file both said twenty. DS9's Region
+  Descriptions table lists nineteen (`ds9/doc/ref/region.html`): circle, ellipse, box, polygon,
+  point, line, vector, segment, text, ruler, compass, projection, annulus, ellipse annulus, box
+  annulus, panda, epanda, bpanda, composite. A test counts them from that table so the number
+  cannot drift again. Eighteen of them are drawable; a composite is made from regions that already
+  exist, so it has no gesture of its own.
+* **M6-16 did not adopt `regions/group_manager.py`; it replaced it.** The module keyed group
+  membership on positions in the region list, which deleting a region, loading a second file, or
+  M6-14's own Move to Front each silently corrupt. DS9 has no group object at all -- a group is
+  the set of regions carrying a tag -- so the module is now tag-backed, and membership survives a
+  round trip through a region file.
+* **M6-7 did not adopt `ui/dialogs/region_dialog.py` either.** It edited a plain dict of nine
+  hardcoded shape names and could not describe an annulus, a panda or a segment. The rewrite reads
+  its fields off each shape's own constructor, so a shape cannot gain a parameter the dialog does
+  not show.
+* **M6-22 and M6-23 did adopt theirs.** `analysis/statistics.py` and `analysis/histogram.py` both
+  already took a pixel mask, which is exactly what a region is.
+* **The Region menu gained two cascades the plan did not mention**, because DS9 has them and the
+  entries had nowhere else to live: Composite Region (Create/Dissolve, `mregion.tcl:143`) and
+  Region Parameters (Show, Show Text, the three Auto Plot toggles, Auto Centroid and Centroid
+  Parameters, `mregion.tcl:78`).
+* **`mmt/megacam/megacam-amp-guide.tpl` has an unclosed parenthesis in DS9's own file**
+  (`# composite(0,0,0|| composite=1`). Its 149 members load as ordinary regions rather than as a
+  composite, which draws the same thing. The other twenty-two templates parse exactly.
+* **DS9's per-region analysis is reachable from the region's own dialog, as in DS9, and not from
+  the Analysis menu.** The whole-frame Statistics and Histogram entries there are untouched.
+
+### Bugs found and fixed on the way
+
+* **Six parts of DS9's own region format could not be parsed**, found by trying to read DS9's
+  twenty-three bundled instrument templates: only one of them parsed at all. Unit suffixes (`16"`,
+  `3'`); whitespace as a parameter separator, which DS9's own documentation gives
+  (`circle 100 100 10`); a coordinate system sharing the line (`image; circle 100 100 10`); shapes
+  written behind a `#`, which is how DS9 writes text, vector, ruler, compass, projection and
+  segment; `||`, which marks a composite member; and `wcs0`, the template system.
+* **Eleven of the nineteen shapes drew a four-pixel tick and nothing else** -- the annuli, the
+  three pandas, the vector, the ruler, the projection, the compass, the segment and the composite
+  all fell through the renderer to its final `else`.
+* **A composite drew none of its children.** It is its children.
+* **A text region was drawn twice**, once as the shape and once again as its own label.
+* **`Text` held its string twice**, in `_label` and in `BaseRegion.text`. Setting one changed what
+  was drawn but not what was written to a region file, which the Get Information dialog does both
+  of. `label` is now a view onto `text`.
+* **`# composite(x,y,angle)` was thrown away with the comments**, so a composite never parsed.
+* **Multiple `tag=` properties collapsed to one**, which would have lost every group but the last.
+* **A point's size was dropped**: `point=diamond 15` was cut at the space.
+* **Selection handles were drawn but inert**, and eleven shapes reported nothing but their centre
+  to draw them at, so there was nothing to make draggable.
+* **`main_window.py` reached 604 lines** when the region defaults were put on the window; the M2
+  guard caught it and they moved to the controller.
+* **The statistics mask counted a ten-pixel box as eleven columns wide**, a 28% overstatement of
+  the area every surface brightness is divided by. The mask is half-open on the upper edge;
+  `contains` stays inclusive, because that is hit-testing rather than area.
+* **A composite's centre is the mean of its members**, so converting it when placing a template
+  put the Chandra field of view at a NaN.
+* **Three type errors surfaced in `analysis/` once it was reachable**: an integer contour
+  coordinate returned where floats were promised, a rank-any shape assigned to a two-tuple, and a
+  numpy index used unconverted.
+* **A test that triggered every selection action hung the suite forever**: Save Selection opens a
+  file dialog and List Selection a message box, and a modal dialog under the offscreen platform
+  waits for a click that never comes.
+* **Reading a rendered canvas through `np.frombuffer(QImage.constBits())` borrows Qt's memory**,
+  which is freed when the QImage goes out of scope. It segfaulted in a script and handed back
+  stale pixels in a test.
 
 ---
 

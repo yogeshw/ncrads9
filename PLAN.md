@@ -556,13 +556,18 @@ Ship DS9's 168 `.sao`/`.lut` colormaps with the full category submenus. Colour t
 pointer mode. Separate Block (non-destructive display transform) from Bin, and implement true
 FITS bin-table binning with the Binning Parameters dialog.
 
-### M6 — Regions to parity (14 d)
+### M6 — Regions to parity (14 d) — **done**
 All 19 shapes creatable and editable with handles; 7 point glyphs; full property set
 (include/exclude, source/background, fixed/edit/move/rotate/delete, dash, fill);
 parser/writer round-trip for every shape in every supported format; selection operations;
 groups; composite create/dissolve; templates and the bundled instrument FOVs; centroid;
 per-shape Get Information dialog; region-driven marker analysis (radial profile, histogram,
 statistics, plot2d/3d).
+
+Region menu parity went from 6 entries to 118, matching 54 of DS9's 69 labels. The shapes are
+nineteen, not the twenty this plan first said; see the M6 deviations in TODO.md, along with two
+modules the plan said to adopt and that were rewritten instead, because what they held could not
+have worked.
 
 ### M7 — Analysis platform (12 d)
 The `.ds9.ans` engine (all four task types, the full macro set, `$text`/`$plot`/`$image` sinks,

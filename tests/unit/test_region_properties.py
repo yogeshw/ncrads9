@@ -554,3 +554,28 @@ def test_the_groups_dialog_opens_and_is_kept(main_window):
     assert main_window.region._group_dialog is not None
     main_window.region._group_dialog.close()
     assert main_window.region._group_dialog is None
+
+
+# -- point glyphs (M6-5) ------------------------------------------------------
+
+
+def test_every_ds9_point_glyph_draws_something(qapp):
+    from ncrads9.regions.shapes.point import Point
+
+    assert len(Point.SHAPES) == 7
+    for glyph in Point.SHAPES:
+        assert int(_ink(_render([_parse(f"point(50,50) # point={glyph}")])).sum()) > 10, glyph
+
+
+def test_the_seven_glyphs_are_seven_different_marks(qapp):
+    """Seven names that all drew a circle would be one glyph with seven names."""
+    from ncrads9.regions.shapes.point import Point
+
+    drawn = {glyph: _render([_parse(f"point(50,50) # point={glyph}")]).tobytes() for glyph in Point.SHAPES}
+    assert len(set(drawn.values())) == len(Point.SHAPES)
+
+
+def test_a_points_size_is_honoured(qapp):
+    small = _ink(_render([_parse("point(50,50) # point=circle 5")])).sum()
+    large = _ink(_render([_parse("point(50,50) # point=circle 30")])).sum()
+    assert large > small * 2
