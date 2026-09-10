@@ -31,6 +31,11 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ...analysis.cut_graph import GraphSettings, cut, scaled
+
+#: How many grid cells across and down, when DS9's grid is on.
+GRID_DIVISIONS = 4
+
 
 class HorizontalGraphWidget(QWidget):
     """Widget for displaying horizontal pixel profile graph."""
@@ -40,6 +45,8 @@ class HorizontalGraphWidget(QWidget):
         super().__init__(parent)
         self._data: NDArray[np.float64] | None = None
         self._cursor_x: int | None = None
+        #: The grid and log settings, shared with the panel that owns this.
+        self.settings = GraphSettings()
         self.setMinimumSize(200, 100)
 
     def set_data(self, data: NDArray[np.float64], cursor_x: int) -> None:
@@ -53,6 +60,16 @@ class HorizontalGraphWidget(QWidget):
         self._data = data
         self._cursor_x = cursor_x
         self.update()
+
+    def _draw_grid(self, painter: QPainter, margin: int, width: int, height: int) -> None:
+        """Draw DS9's grid: four lines each way behind the curve."""
+        painter.setPen(QPen(QColor(70, 70, 70), 1, Qt.PenStyle.DotLine))
+        for step in range(1, GRID_DIVISIONS):
+            fraction = step / GRID_DIVISIONS
+            y = int(height - margin - fraction * (height - 2 * margin))
+            painter.drawLine(margin, y, width - margin, y)
+            x = int(margin + fraction * (width - 2 * margin))
+            painter.drawLine(x, margin, x, height - margin)
 
     def paintEvent(self, event: object | None) -> None:
         """Paint the graph."""
@@ -70,13 +87,15 @@ class HorizontalGraphWidget(QWidget):
         height = self.height()
         margin = 10
 
-        # Calculate scaling
-        data_min = np.nanmin(self._data)
-        data_max = np.nanmax(self._data)
-        data_range = data_max - data_min if data_max > data_min else 1.0
-
+        # 0..1 against the cut's own range, on a log axis when asked
+        # for; a value the axis cannot show comes back NaN and is drawn
+        # as a gap rather than as zero.
+        fractions = scaled(self._data, self.settings.log)
         x_scale = (width - 2 * margin) / len(self._data)
-        y_scale = (height - 2 * margin) / data_range
+        plot_height = height - 2 * margin
+
+        if self.settings.grid:
+            self._draw_grid(painter, margin, width, height)
 
         # Draw axes
         painter.setPen(QPen(QColor(100, 100, 100), 1))
@@ -87,14 +106,16 @@ class HorizontalGraphWidget(QWidget):
         painter.setPen(QPen(QColor(0, 200, 255), 2))
         path = QPainterPath()
 
-        for i, value in enumerate(self._data):
-            if np.isnan(value):
+        started = False
+        for i, fraction in enumerate(fractions):
+            if np.isnan(fraction):
+                started = False
                 continue
             x = margin + i * x_scale
-            y = height - margin - (value - data_min) * y_scale
-
-            if i == 0 or np.isnan(self._data[i - 1]):
+            y = height - margin - fraction * plot_height
+            if not started:
                 path.moveTo(x, y)
+                started = True
             else:
                 path.lineTo(x, y)
 
@@ -124,6 +145,11 @@ class HorizontalGraph(QWidget):
 
         self._current_image: NDArray[np.float64] | None = None
         self._current_y: int = 0
+        #: The column the cursor is in, kept so a changed setting can
+        #: re-cut without waiting for the pointer to move again.
+        self._current_x: int = 0
+        #: DS9's Graph menu, which the `graph` access point sets.
+        self.settings = GraphSettings()
 
         self._setup_ui()
 
@@ -138,7 +164,9 @@ class HorizontalGraph(QWidget):
 
         # Graph widget
         self._graph_widget = HorizontalGraphWidget()
+        self._graph_widget.settings = self.settings
         layout.addWidget(self._graph_widget)
+        self._apply_size()
 
     def set_image(self, image: NDArray[np.float64]) -> None:
         """
@@ -164,10 +192,56 @@ class HorizontalGraph(QWidget):
         ix = int(x)
         h, w = self._current_image.shape[:2]
 
-        if 0 <= iy < h:
-            self._current_y = iy
-            row_data = self._current_image[iy, :]
-            self._graph_widget.set_data(row_data, ix)
-            self._info_label.setText(f"Y: {iy}")
-        else:
+        values = cut(self._current_image, "horizontal", iy, self.settings)
+        if values is None:
             self._info_label.setText("Y: ---")
+            return
+        self._current_y = iy
+        self._graph_widget.set_data(values, ix)
+        self._info_label.setText(self._describe(iy))
+
+    def _describe(self, index: int) -> str:
+        """The label above the graph: where the cut is, and how thick."""
+        if self.settings.thickness > 1:
+            return f"Y: {index} ({self.settings.thickness} {self.settings.method})"
+        return f"Y: {index}"
+
+    def _apply_size(self) -> None:
+        """Fix the across-the-cut dimension to DS9's `graph size`."""
+        self.setFixedHeight(self.settings.size)
+
+    def _redraw(self) -> None:
+        """Re-cut and repaint after a setting changed."""
+        self.update_cursor_position(self._current_x, self._current_y)
+        self._graph_widget.update()
+
+    def set_grid(self, shown: bool) -> None:
+        """Draw grid lines behind the curve, DS9's `graph grid`."""
+        self.settings.grid = bool(shown)
+        self._graph_widget.update()
+
+    def set_log(self, log: bool) -> None:
+        """Draw the value axis logarithmically, DS9's `graph log`."""
+        self.settings.log = bool(log)
+        self._graph_widget.update()
+
+    def set_method(self, method: str) -> None:
+        """Average or sum a thick cut, DS9's `graph method`.
+
+        Raises:
+            ValueError: If the method is neither.
+        """
+        if method not in ("average", "sum"):
+            raise ValueError(f"a cut is averaged or summed, not {method!r}")
+        self.settings.method = method
+        self._redraw()
+
+    def set_thickness(self, thickness: int) -> None:
+        """How many rows or columns the cut covers, DS9's `graph thickness`."""
+        self.settings.with_thickness(thickness)
+        self._redraw()
+
+    def set_size(self, size: int) -> None:
+        """How big the panel is, DS9's `graph size`."""
+        self.settings.with_size(size)
+        self._apply_size()

@@ -70,6 +70,9 @@ class ImageRequest:
         longitude, latitude: Where, in degrees.
         width, height: How big, in the server's own size unit.
         survey: Which survey, or empty for the server's default.
+        pixels: How big the returned image should be, for a server that
+            takes that separately from the sky size. SkyView is the only
+            one; None leaves it at that server's own default.
         timeout: How long to wait.
     """
 
@@ -79,11 +82,14 @@ class ImageRequest:
     width: float
     height: float
     survey: str = ""
+    pixels: tuple[int, int] | None = None
     timeout: float = DEFAULT_TIMEOUT
 
     def url(self) -> str:
         """The URL this request would fetch."""
-        return self.server.query(self.longitude, self.latitude, self.width, self.height, self.survey)
+        return self.server.query(
+            self.longitude, self.latitude, self.width, self.height, self.survey, self.pixels
+        )
 
 
 #: A transport: called with (url, timeout), returning the response bytes.

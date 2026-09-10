@@ -808,6 +808,68 @@ class FrameController(Controller):
         dialog.set_depth(handler.depth(frame.axis_order), frame.slice_index)
         self.update_cube_coordinate()
 
+    @staticmethod
+    def _channel_problem(frame, channel: str) -> str | None:
+        """Why `channel` cannot be used on `frame`, or None.
+
+        Every frame carries an `rgb_channels` dict, empty or not, so its
+        presence says nothing about whether the frame is a colour one --
+        the frame's type is what says that.
+        """
+        if frame is None:
+            return "there is no frame"
+        if frame.frame_type not in ("rgb", "hsv", "hls"):
+            return f"the current frame is {frame.frame_type}, which has no colour channels"
+        if channel not in frame.rgb_channels:
+            return f"{channel} is not a channel of this frame: {', '.join(frame.rgb_channels)}"
+        return None
+
+    def set_channel(self, channel: str) -> str | None:
+        """Make one channel of a colour frame the current one.
+
+        What DS9's `rgb red`, `hsv value` and `hls lightness` do, and what
+        the RGB dialog's Current Channel radios do; the window's scale and
+        limits follow the channel, since they are per-channel.
+
+        Args:
+            channel: A channel of the current frame.
+
+        Returns:
+            None, or what was wrong.
+        """
+        frame = self.frames.current_frame
+        problem = self._channel_problem(frame, channel)
+        if problem:
+            return problem
+
+        self.persist_view_state()
+        frame.rgb_current_channel = channel
+        self.window.display.sync_rgb_scalar_view(frame)
+        self.window.display.sync_view_state_from_channel(frame)
+        self.apply_view_state(frame)
+        self.window.display.display()
+        self.status(f"Current channel: {channel}")
+        return None
+
+    def set_channel_visible(self, channel: str, visible: bool) -> str | None:
+        """Draw or hide one channel of a colour frame.
+
+        DS9's `rgb view red no` and `view rgb red no`, which are the same
+        setting reached from two access points.
+
+        Returns:
+            None, or what was wrong.
+        """
+        frame = self.frames.current_frame
+        problem = self._channel_problem(frame, channel)
+        if problem:
+            return problem
+
+        frame.rgb_view[channel] = bool(visible)
+        self.window.display.display()
+        self.status(f"{channel.capitalize()}: {'shown' if visible else 'hidden'}")
+        return None
+
     def show_rgb_dialog(self) -> None:
         """Show DS9-style RGB channel dialog."""
         self.persist_view_state()

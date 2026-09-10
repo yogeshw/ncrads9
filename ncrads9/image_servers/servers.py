@@ -101,6 +101,9 @@ class ImageServer:
     protocol: Protocol = Protocol.DIRECT
     surveys: tuple[Survey, ...] = ()
     build: Callable[..., list[tuple[str, str]]] = field(default=lambda **kwargs: [])
+    #: Whether the server takes an output size in pixels separately from
+    #: the sky size, which only SkyView does.
+    takes_pixels: bool = False
 
     def default_survey(self) -> str:
         """The survey a query uses when none is chosen."""
@@ -113,6 +116,7 @@ class ImageServer:
         width: float,
         height: float,
         survey: str = "",
+        pixels: tuple[int, int] | None = None,
     ) -> str:
         """The full URL for one cutout.
 
@@ -122,6 +126,9 @@ class ImageServer:
             width: The cutout width, in this server's `size_unit`.
             height: Its height.
             survey: Which survey, or empty for the default.
+            pixels: How big the returned image should be, for the servers
+                that take that separately from the sky size. SkyView is
+                the only one, and DS9 gives it its own `pixels` rule.
 
         Returns:
             The URL to fetch.
@@ -133,6 +140,7 @@ class ImageServer:
             width=width,
             height=height,
             survey=chosen,
+            pixels=pixels or (SKYVIEW_PIXELS, SKYVIEW_PIXELS),
         )
         endpoint = self.url.format(survey=chosen)
         separator = "&" if "?" in endpoint else "?"
@@ -146,7 +154,7 @@ class ImageServer:
 # particular about both.
 
 
-def _sao(longitude, latitude, width, height, survey):
+def _sao(longitude, latitude, width, height, survey, **_rest):
     """SAO's DSS at CfA (`sao.tcl:102`). Sizes in arcminutes."""
     return [
         ("r", f"{longitude:g}"),
@@ -158,7 +166,7 @@ def _sao(longitude, latitude, width, height, survey):
     ]
 
 
-def _eso(longitude, latitude, width, height, survey):
+def _eso(longitude, latitude, width, height, survey, **_rest):
     """ESO's DSS (`eso.tcl:105`). Sizes in arcminutes."""
     return [
         ("ra", f"{longitude:g}"),
@@ -171,7 +179,7 @@ def _eso(longitude, latitude, width, height, survey):
     ]
 
 
-def _stsci(longitude, latitude, width, height, survey):
+def _stsci(longitude, latitude, width, height, survey, **_rest):
     """STScI's DSS (`stsci.tcl:120`). Sizes in arcminutes."""
     return [
         ("r", f"{longitude:g}"),
@@ -185,23 +193,24 @@ def _stsci(longitude, latitude, width, height, survey):
     ]
 
 
-def _skyview(longitude, latitude, width, height, survey):
+def _skyview(longitude, latitude, width, height, survey, pixels=None, **_rest):
     """SkyView (`skyview.tcl:574`).
 
     Position is one comma-separated pair and Size likewise, and Pixels is
     the output image's dimensions rather than the sky size -- which is why
-    this server's `size_unit` is degrees and its pixel count is fixed here.
+    this server's `size_unit` is degrees and its pixel count is a separate
+    argument, as DS9's `skyview pixels <w> <h>` rule is.
     """
     return [
         ("Position", f"{longitude:g},{latitude:g}"),
         ("Survey", survey),
         ("Size", f"{width:g},{height:g}"),
-        ("Pixels", f"{SKYVIEW_PIXELS},{SKYVIEW_PIXELS}"),
+        ("Pixels", "{},{}".format(*(pixels or (SKYVIEW_PIXELS, SKYVIEW_PIXELS)))),
         ("Return", "FITS"),
     ]
 
 
-def _vla(longitude, latitude, width, height, survey):
+def _vla(longitude, latitude, width, height, survey, **_rest):
     """The VLA cutout servers (`vla.tcl:111`).
 
     RA and Dec go in one `RA` parameter separated by a space, and the
@@ -218,7 +227,7 @@ def _vla(longitude, latitude, width, height, survey):
     ]
 
 
-def _nvss(longitude, latitude, width, height, survey):
+def _nvss(longitude, latitude, width, height, survey, **_rest):
     """NVSS (`nvss.tcl:95`). Sizes in degrees, cells in arcseconds."""
     return [
         ("submit", "Submit!"),
@@ -234,7 +243,7 @@ def _nvss(longitude, latitude, width, height, survey):
     ]
 
 
-def _vlss(longitude, latitude, width, height, survey):
+def _vlss(longitude, latitude, width, height, survey, **_rest):
     """VLSS (`vlss.tcl:95`), which differs from NVSS in its cell size."""
     return [
         ("submit", "Submit"),
@@ -249,7 +258,7 @@ def _vlss(longitude, latitude, width, height, survey):
     ]
 
 
-def _twomass(longitude, latitude, width, height, survey):
+def _twomass(longitude, latitude, width, height, survey, **_rest):
     """2MASS at IPAC (`2mass.tcl:102`).
 
     `objstr` takes a position as text, and `size` is in arcseconds -- the
@@ -262,7 +271,7 @@ def _twomass(longitude, latitude, width, height, survey):
     ]
 
 
-def _sia(longitude, latitude, width, height, survey):
+def _sia(longitude, latitude, width, height, survey, **_rest):
     """A Simple Image Access query, which is what SDSS's FITS images take.
 
     `POS` is a comma-separated pair and `SIZE` a sky size in degrees; the
@@ -388,6 +397,7 @@ SERVERS: tuple[ImageServer, ...] = (
         size_unit=SizeUnit.DEGREES,
         surveys=SKYVIEW_SURVEYS,
         build=_skyview,
+        takes_pixels=True,
     ),
     ImageServer(
         name="vla",
