@@ -1160,7 +1160,14 @@ Depends on M2, M3.
       cursor read likewise. Ours is always a button: a key event needs the keyboard grab DS9's
       cursor mode takes, and an unattended reply of the current position is more useful to
       `imexam` than a socket that never answers. The event word is accepted and ignored.
-- [ ] **M9-30** (S) Shared-memory loading (`shm`).
+- [x] **M9-30** (S) Shared-memory loading (`shm`). `io/shared_memory.py`, and the `shm` access
+      point: a FITS file or a raw array read straight out of a segment, so a pipeline can hand
+      us an image without touching a disk. **Deviation:** DS9 takes a *System V* segment by key
+      or shmid, and Python's standard library has no System V shared memory at all. Ours reads
+      a POSIX segment by name always -- which is what a program written this decade would
+      offer -- and a System V one only when the optional `sysv_ipc` package is installed,
+      saying so plainly when it is not. Refusing to read anything without a C extension would
+      be worse than reading the kind we can.
 
 ### Polish
 - [ ] **M9-31** (M) i18n: extract all UI strings, add Qt translation files for DS9's 8 locales

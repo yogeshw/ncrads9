@@ -1328,6 +1328,12 @@ TOOL_WINDOW_POINTS: tuple[AccessPoint, ...] = (
     ),
     AccessPoint("vo", set=_show_window("vo.show_dialog"), summary="the virtual observatory tool"),
     AccessPoint(
+        "shm",
+        get=lambda window: _shm_text(window),
+        set=lambda window, args: _shm(window, args),
+        summary="load an image out of shared memory",
+    ),
+    AccessPoint(
         "iis",
         get=lambda window: _iis_text(window),
         set=lambda window, args: _iis(window, args),
@@ -1527,3 +1533,57 @@ def examine(window, args: list[str]) -> str:
         return window.iis.examine("data", width=width, height=height)
 
     return window.iis.examine(macro=" ".join(str(word) for word in args))
+
+
+def _shm_text(window) -> str:
+    """What `xpaget shm` answers: which kinds of segment can be read."""
+    from ...io import shared_memory
+
+    kinds = shared_memory.available()
+    return "\n".join(f"{name} {on_off(value)}" for name, value in sorted(kinds.items()))
+
+
+def _shm(window, args: list[str]) -> str | None:
+    """`shm [key|shmid|name] <id> [fits|<array spec>]`.
+
+    DS9's grammar with one addition: `name`, for a POSIX segment, since
+    that is the kind Python can always read. See `io/shared_memory.py`.
+    """
+    from ...io import shared_memory
+
+    words = [str(word) for word in args]
+    if not words:
+        return "a segment is needed"
+
+    # DS9 puts the payload kind first -- `shm fits key 102` -- and allows
+    # it to be left out.
+    payload = "fits"
+    if words[0].lower() in ("fits", "array"):
+        payload = words[0].lower()
+        words = words[1:]
+
+    kind = "name"
+    if words and words[0].lower() in shared_memory.KINDS:
+        kind = words[0].lower()
+        words = words[1:]
+    if not words:
+        return "a segment is needed"
+
+    identifier = words[0]
+    rest = words[1:]
+
+    try:
+        if payload == "array":
+            if not rest:
+                return "a raw array needs its dimensions"
+            data = shared_memory.read_array(identifier, rest[0], kind)
+        else:
+            data = shared_memory.read_fits(identifier, kind)
+    except shared_memory.SharedMemoryError as exc:
+        return str(exc)
+    except Exception as exc:
+        return f"cannot read {identifier}: {exc}"
+
+    name = rest[-1] if payload == "fits" and rest else f"shm:{identifier}"
+    window.display.load_array(data, name=str(name))
+    return None
