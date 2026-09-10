@@ -70,6 +70,9 @@ class GLImageViewerWithRegions(QWidget):
         self.contour_overlay = ContourOverlay(self.gl_canvas)
         # Catalogue symbols are a layer of their own, as in DS9.
         self.catalog_overlay = CatalogOverlay(self.gl_canvas)
+        # Topmost, because it owns the mouse -- see the plain viewer.
+        self.region_overlay.raise_()
+        self.region_overlay.pick_handler = self.catalog_overlay.pick
 
         self.gl_canvas.cursor_moved.connect(self._on_cursor_moved)
         self.gl_canvas.mouse_clicked.connect(self._on_mouse_clicked)

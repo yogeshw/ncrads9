@@ -69,10 +69,12 @@ class CatalogOverlay(OverlayTransformMixin, QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        # Clicks are wanted -- that is the two-way selection sync -- but a
-        # click on no symbol must reach the region overlay underneath, so
-        # `mousePressEvent` ignores the ones it does not use.
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        # Transparent to the mouse, and picking happens through `pick`
+        # instead. An overlay that took clicks would take *all* of them:
+        # this is the topmost child, and a Qt event it ignores goes to the
+        # parent, not to the sibling overlay underneath -- so the region
+        # overlay would never see a click at all.
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.setMouseTracking(False)
         self.init_transform()
 
@@ -142,20 +144,22 @@ class CatalogOverlay(OverlayTransformMixin, QWidget):
                 best = symbol
         return best
 
-    def mousePressEvent(self, event) -> None:
-        """Pick a symbol, or pass the click on to the layer below."""
-        if event.button() != Qt.MouseButton.LeftButton or not self._symbols:
-            event.ignore()
-            return
+    def pick(self, point: QPointF) -> bool:
+        """Select the symbol at a widget position, if there is one.
 
-        symbol = self.symbol_at(event.position())
+        Called by whichever layer owns the mouse, rather than from an event
+        of this widget's own.
+
+        Returns:
+            Whether a symbol was there.
+        """
+        if not self._symbols:
+            return False
+        symbol = self.symbol_at(point)
         if symbol is None:
-            # Not ours: the region overlay and the viewer want it.
-            event.ignore()
-            return
-
+            return False
         self.symbol_picked.emit(self._owner, symbol.row)
-        event.accept()
+        return True
 
     # -- drawing ----------------------------------------------------------------
 

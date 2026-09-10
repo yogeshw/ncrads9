@@ -66,6 +66,12 @@ class ImageViewerWithRegions(QWidget):
         # Catalogue symbols are a layer of their own, as in DS9: not
         # regions, not saved with them, not deleted by Region -> Delete All.
         self.catalog_overlay = CatalogOverlay(self.image_viewer)
+        # Topmost, because it owns the mouse: a Qt event a child ignores
+        # goes to the parent, not to a sibling, so whichever overlay is on
+        # top has to be the one that dispatches.
+        self.region_overlay.raise_()
+        self.catalog_overlay.pick_handler = None
+        self.region_overlay.pick_handler = self.catalog_overlay.pick
 
         # Connect signals
         self.image_viewer.mouse_moved.connect(self.mouse_moved)
@@ -104,11 +110,12 @@ class ImageViewerWithRegions(QWidget):
         """Set region drawing mode."""
         self.region_overlay.set_mode(mode)
 
-        # Enable/disable mouse events based on mode
-        if mode == RegionMode.NONE:
-            self.region_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        else:
-            self.region_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        # The overlay keeps the mouse in every mode. It used to be made
+        # transparent in RegionMode.NONE so a click could fall through to
+        # the viewer and pan -- which also meant an existing region could
+        # not be selected, moved, resized or opened, since those all happen
+        # in that mode. It ignores the clicks it does not want instead,
+        # which reaches the viewer just the same.
 
     def set_contours(self, contours, levels, style) -> None:
         """Set contour paths and styling."""

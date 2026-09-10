@@ -33,7 +33,7 @@ Author: Yogesh Wadadekar
 import math
 from enum import Enum
 
-from PyQt6.QtCore import QPointF, Qt, pyqtSignal
+from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import QPainter
 from PyQt6.QtWidgets import QWidget
 
@@ -190,6 +190,15 @@ class RegionOverlay(QWidget):
         # For moving/editing
         self.selected_region: BaseRegion | None = None
         self.drag_start: QPointF | None = None
+        #: The pointer mode's handler, when a mode other than pointer or
+        #: region is active. This overlay is the topmost child and the only
+        #: one taking mouse events, so every mode is dispatched from here
+        #: -- a second overlay taking clicks would take all of them.
+        self.pointer_handler = None
+        #: Called with a widget position when a click in pointer mode hits
+        #: no region; returns True if something else consumed it. The
+        #: catalogue layer installs this.
+        self.pick_handler = None
         #: Which resize handle is being dragged, if any. `None` means the
         #: drag is a move (or nothing at all); an index means a reshape.
         self.dragging_handle: int | None = None
@@ -682,8 +691,40 @@ class RegionOverlay(QWidget):
 
     # -- mouse --------------------------------------------------------------
 
+    # -- pointer modes (M9-1 ... M9-5) ---------------------------------------
+
+    def _dispatch(self, event, phase: str) -> bool:
+        """Give one mouse event to the active pointer mode, if there is one.
+
+        Returns:
+            Whether the mode used it. A mode that did not is a click that
+            should reach whatever is underneath.
+        """
+        handler = self.pointer_handler
+        if handler is None:
+            return False
+
+        point = self._widget_to_image_coords(event.position())
+        button = "left" if event.button() == Qt.MouseButton.LeftButton else "right"
+        if phase == "press":
+            used = handler.press(point.x(), point.y(), button)
+        elif phase == "move":
+            used = handler.move(point.x(), point.y())
+        else:
+            used = handler.release(point.x(), point.y())
+        if handler.draws_band:
+            self.update()
+        return bool(used)
+
     def mousePressEvent(self, event) -> None:
-        """Handle mouse press for region drawing."""
+        """Handle a press: the pointer mode first, then regions."""
+        if self.pointer_handler is not None:
+            if self._dispatch(event, "press"):
+                event.accept()
+            else:
+                event.ignore()
+            return
+
         if event.button() in (Qt.MouseButton.RightButton, Qt.MouseButton.MiddleButton):
             event.ignore()
             return
@@ -716,11 +757,18 @@ class RegionOverlay(QWidget):
                     event.accept()
                     return
 
-            # Clicked on empty space - deselect
+            # Nothing of ours under the cursor: the catalogue layer may
+            # have a symbol there, and it cannot take the click itself.
+            if self.pick_handler is not None and self.pick_handler(event.position()):
+                event.accept()
+                return
+
             if self.selected_region:
                 self._select(None)
                 self.update()
-            event.accept()
+            # Ignored, not accepted: a click on bare image belongs to the
+            # viewer underneath, which pans with it.
+            event.ignore()
             return
 
         # Drawing mode
@@ -748,7 +796,14 @@ class RegionOverlay(QWidget):
             event.accept()
 
     def mouseMoveEvent(self, event) -> None:
-        """Handle mouse move for region preview or editing."""
+        """Handle a drag: the pointer mode first, then regions."""
+        if self.pointer_handler is not None:
+            if self._dispatch(event, "move"):
+                event.accept()
+            else:
+                event.ignore()
+            return
+
         if event.buttons() & (Qt.MouseButton.RightButton | Qt.MouseButton.MiddleButton):
             event.ignore()
             return
@@ -796,7 +851,14 @@ class RegionOverlay(QWidget):
             event.accept()
 
     def mouseReleaseEvent(self, event) -> None:
-        """Handle mouse release to finalize region."""
+        """Handle a release: the pointer mode first, then regions."""
+        if self.pointer_handler is not None:
+            if self._dispatch(event, "release"):
+                event.accept()
+            else:
+                event.ignore()
+            return
+
         # Right-click closes a polygon, so it has to reach the branch below.
         # Every other right or middle release belongs to the viewer underneath
         # (pan, context menu), so pass those through untouched.
@@ -864,6 +926,14 @@ class RegionOverlay(QWidget):
         """Paint regions on overlay."""
         painter = QPainter(self)
         self.renderer.render(painter, self.regions, self._to_widget)
+
+        band = None if self.pointer_handler is None else self.pointer_handler.rubber_band
+        if band is not None:
+            x0, y0, x1, y1 = band
+            first = self._to_widget(x0, y0)
+            second = self._to_widget(x1, y1)
+            painter.setPen(self.renderer.preview_pen())
+            painter.drawRect(QRectF(first, second))
 
         if self.is_drawing and self.current_points:
             self.renderer.render_preview(

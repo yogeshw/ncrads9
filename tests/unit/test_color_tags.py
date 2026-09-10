@@ -352,10 +352,11 @@ def test_choosing_a_mode_records_and_ticks_it(main_window):
 
 
 def test_a_deferred_mode_says_its_milestone(main_window):
+    """Only 3D and illustrate are still waiting; the rest work now."""
     from ncrads9.ui.controllers.edit import DEFERRED_MODES
 
-    main_window.edit.set_mode("crop")
-    assert DEFERRED_MODES["crop"] in main_window.status_bar.currentMessage()
+    main_window.edit.set_mode("3d")
+    assert DEFERRED_MODES["3d"] in main_window.status_bar.currentMessage()
 
 
 def test_an_unknown_mode_is_reported(main_window):
