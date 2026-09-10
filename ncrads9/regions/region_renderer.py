@@ -80,6 +80,9 @@ SELECTION_COLOR = QColor(255, 255, 0)
 #: Side length, in widget pixels, of a selection handle.
 HANDLE_SIZE = 6
 
+#: How far past a region's own extent its rotate handle sits, in pixels.
+ROTATE_OFFSET = 14.0
+
 
 def resolve_color(name: str) -> QColor:
     """Return a QColor for a DS9 colour name, falling back to green."""
@@ -249,6 +252,7 @@ class RegionRenderer:
 
         if getattr(region, "selected", False):
             self._draw_handles(painter, region, to_widget)
+            self._draw_rotate_handle(painter, region, to_widget)
 
     def _draw_exclusion(
         self,
@@ -654,20 +658,63 @@ class RegionRenderer:
 
     @staticmethod
     def handle_points(region: BaseRegion) -> Sequence[tuple[float, float]]:
-        """Return a region's control points, in image coordinates.
+        """A region's control points, in image coordinates.
 
-        M6 makes these draggable; for now they only indicate selection.
+        Dragging one of these is how a region is resized, so every shape
+        needs them: a shape that returns only its centre can be moved but
+        never reshaped. What a drag then means depends on the shape --
+        `RegionOverlay` moves a vertex for a polygon, an end for a line, and
+        scales everything else about its centre.
         """
         if isinstance(region, Polygon):
             return list(region.vertices)
-        if isinstance(region, Line):
+        if isinstance(region, Segment):
+            return list(region.points)
+        if isinstance(region, (Line, Ruler, Projection)):
             return [region.start, region.end]
+        if isinstance(region, Vector):
+            angle = math.radians(region.angle)
+            x, y = region.start
+            return [
+                (x, y),
+                (x + region.length * math.cos(angle), y + region.length * math.sin(angle)),
+            ]
         if isinstance(region, Circle):
             cx, cy = region.center
             return [(cx + region.radius, cy)]
+        if isinstance(region, Annulus):
+            cx, cy = region.center
+            return [(cx + region.inner_radius, cy), (cx + region.outer_radius, cy)]
+        if isinstance(region, Compass):
+            cx, cy = region.center
+            return [(cx + region.length, cy)]
         if isinstance(region, Ellipse):
             cx, cy = region.center
             return [(cx + region.semi_major, cy), (cx, cy + region.semi_minor)]
+        if isinstance(region, EllipseAnnulus):
+            cx, cy = region.center
+            return [
+                (cx + region.inner_semi_major, cy),
+                (cx + region.outer_semi_major, cy),
+                (cx, cy + region.outer_semi_minor),
+            ]
+        if isinstance(region, Panda):
+            cx, cy = region.center
+            return [(cx + region.inner_radius, cy), (cx + region.outer_radius, cy)]
+        if isinstance(region, (Epanda, Bpanda)):
+            cx, cy = region.center
+            return [
+                (cx + region.inner_major, cy),
+                (cx + region.outer_major, cy),
+                (cx, cy + region.outer_minor),
+            ]
+        if isinstance(region, BoxAnnulus):
+            cx, cy = region.center
+            return [
+                (cx + region.inner_width / 2.0, cy),
+                (cx + region.outer_width / 2.0, cy),
+                (cx, cy + region.outer_height / 2.0),
+            ]
         if isinstance(region, Box):
             cx, cy = region.center
             half_w, half_h = region.width_box / 2.0, region.height_box / 2.0
@@ -678,6 +725,37 @@ class RegionRenderer:
                 (cx - half_w, cy + half_h),
             ]
         return [region.center]
+
+    @staticmethod
+    def rotate_handle(region: BaseRegion) -> tuple[float, float] | None:
+        """Where a selected region's rotate handle sits, if it has one.
+
+        Only the shapes with an angle of their own get one, and only when
+        `rotate=1`: offering a handle that cannot turn the shape is worse
+        than offering none. It sits `ROTATE_OFFSET` beyond the topmost
+        resize handle so the two cannot be grabbed by mistake.
+        """
+        if not hasattr(region, "angle") or not getattr(region, "can_rotate", True):
+            return None
+        cx, cy = region.center
+        reach = max(
+            (abs(y - cy) for _x, y in RegionRenderer.handle_points(region)),
+            default=0.0,
+        )
+        return (cx, cy + reach + ROTATE_OFFSET)
+
+    def _draw_rotate_handle(self, painter: QPainter, region: BaseRegion, to_widget: ToWidget) -> None:
+        """Draw the rotate handle as a circle, so it reads as not-a-corner."""
+        point = self.rotate_handle(region)
+        if point is None:
+            return
+        painter.save()
+        painter.setPen(QPen(SELECTION_COLOR, 1))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        centre = to_widget(*point)
+        painter.drawLine(to_widget(*region.center), centre)
+        painter.drawEllipse(centre, HANDLE_SIZE / 2, HANDLE_SIZE / 2)
+        painter.restore()
 
     # -- drawing preview ----------------------------------------------------
 

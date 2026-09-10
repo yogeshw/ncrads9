@@ -21,7 +21,8 @@ from __future__ import annotations
 import math
 
 import pytest
-from PyQt6.QtCore import QPointF
+from PyQt6.QtCore import QEvent, QPointF, Qt
+from PyQt6.QtGui import QMouseEvent
 
 from ncrads9.regions.shapes.annulus import Annulus
 from ncrads9.regions.shapes.box import Box
@@ -172,3 +173,161 @@ def test_a_finished_gesture_reaches_the_frame(overlay, mode):
     assert overlay._finalize(mode, list(GESTURE)) is True
     assert len(seen) == 1
     assert seen[0] in overlay.regions
+
+
+# -- selection handles (M6-6) ------------------------------------------------
+
+
+def _grab(overlay, region, index: int, to: QPointF) -> None:
+    """Select `region` and drag its handle `index` to `to`."""
+    overlay._select(region)
+    overlay.dragging_handle = index
+    overlay._drag_handle(index, to)
+
+
+@pytest.mark.parametrize("mode", list(EXPECTED))
+def test_every_shape_offers_a_handle_to_resize_by(overlay, mode):
+    """A shape with only a centre handle can be moved but never reshaped."""
+    region = overlay._build_region(mode, list(GESTURE))
+    handles = overlay.renderer.handle_points(region)
+    assert handles
+    if mode in (RegionMode.POINT, RegionMode.TEXT):
+        return  # These have no extent of their own to drag.
+    assert list(handles) != [region.center], mode
+
+
+def test_dragging_a_circles_handle_resizes_it(overlay):
+    circle = Circle(center=(50, 50), radius=10)
+    _grab(overlay, circle, 0, QPointF(80, 50))
+    assert circle.radius == pytest.approx(30.0)
+    assert circle.center == (50.0, 50.0)
+
+
+def test_an_annulus_keeps_the_ratio_of_its_radii(overlay):
+    """Scaling goes through the shape's own resize, so both radii follow."""
+    annulus = Annulus(center=(50, 50), inner_radius=5, outer_radius=10)
+    _grab(overlay, annulus, 1, QPointF(70, 50))
+    assert annulus.outer_radius == pytest.approx(20.0)
+    assert annulus.inner_radius == pytest.approx(10.0)
+
+
+def test_dragging_a_polygon_vertex_moves_only_that_vertex(overlay):
+    polygon = Polygon(vertices=[(0, 0), (10, 0), (10, 10)])
+    _grab(overlay, polygon, 1, QPointF(30, 5))
+    assert polygon.vertices[1] == (30.0, 5.0)
+    assert polygon.vertices[0] == (0.0, 0.0)
+
+
+def test_dragging_a_segment_vertex_moves_only_that_vertex(overlay):
+    segment = Segment(points=[(0, 0), (10, 0), (10, 10)])
+    _grab(overlay, segment, 2, QPointF(4, 9))
+    assert segment.points[2] == (4.0, 9.0)
+
+
+def test_dragging_a_lines_end_moves_that_end(overlay):
+    line = Line(start=(0, 0), end=(10, 10))
+    _grab(overlay, line, 1, QPointF(20, 5))
+    assert line.end == (20.0, 5.0)
+    assert line.start == (0.0, 0.0)
+
+
+def test_dragging_a_vectors_head_swings_it_round(overlay):
+    vector = Vector(start=(0, 0), length=10, angle=0)
+    _grab(overlay, vector, 1, QPointF(0, 20))
+    assert vector.length == pytest.approx(20.0)
+    assert vector.angle == pytest.approx(90.0)
+
+
+def test_a_handle_drag_to_the_centre_is_ignored(overlay):
+    """Scaling to nothing leaves no handle to drag the shape back out by."""
+    circle = Circle(center=(50, 50), radius=10)
+    _grab(overlay, circle, 0, QPointF(50, 50))
+    assert circle.radius == pytest.approx(10.0)
+
+
+def test_a_region_that_forbids_editing_has_no_grabbable_handle(overlay):
+    circle = Circle(center=(50, 50), radius=10)
+    circle.can_edit = False
+    overlay._select(circle)
+    assert overlay._handle_at(QPointF(60, 50)) is None
+
+
+def test_a_handle_is_grabbed_by_its_screen_distance(overlay):
+    """In image coordinates a handle is ungrabbable zoomed out and huge in."""
+    circle = Circle(center=(50, 50), radius=10)
+    overlay._select(circle)
+    overlay.zoom = 8.0
+    assert overlay._handle_at(QPointF(60, 50)) == 0
+    # One image pixel away is eight screen pixels at this zoom: too far.
+    assert overlay._handle_at(QPointF(62, 50)) is None
+
+
+# -- rotating ----------------------------------------------------------------
+
+
+def test_only_shapes_with_an_angle_offer_a_rotate_handle(overlay):
+    assert overlay.renderer.rotate_handle(Box(center=(0, 0), width_box=4, height_box=2)) is not None
+    assert overlay.renderer.rotate_handle(Circle(center=(0, 0), radius=4)) is None
+
+
+def test_a_region_that_forbids_rotating_has_no_rotate_handle(overlay):
+    box = Box(center=(0, 0), width_box=4, height_box=2)
+    box.can_rotate = False
+    assert overlay.renderer.rotate_handle(box) is None
+
+
+def test_the_rotate_handle_sits_clear_of_the_resize_ones(overlay):
+    """Overlapping handles cannot be told apart by a mouse."""
+    box = Box(center=(0, 0), width_box=10, height_box=6)
+    _x, y = overlay.renderer.rotate_handle(box)
+    assert y > max(hy for _hx, hy in overlay.renderer.handle_points(box))
+
+
+def test_dragging_the_rotate_handle_turns_the_region(overlay):
+    box = Box(center=(0, 0), width_box=10, height_box=6, angle=0)
+    overlay._select(box)
+    overlay.rotating = True
+    overlay._rotate_to(QPointF(20, 0))
+    # The handle starts due north, so pulling it east is a quarter turn back.
+    assert box.angle == pytest.approx(-90.0)
+
+
+def test_rotating_is_refused_when_the_region_forbids_it(overlay):
+    box = Box(center=(0, 0), width_box=10, height_box=6, angle=30)
+    box.can_rotate = False
+    overlay._select(box)
+    overlay._rotate_to(QPointF(20, 0))
+    assert box.angle == pytest.approx(30.0)
+
+
+# -- the whole gesture, through the event handlers ---------------------------
+
+
+def _mouse(kind, point: QPointF, button=Qt.MouseButton.LeftButton):
+    return QMouseEvent(kind, point, point, button, button, Qt.KeyboardModifier.NoModifier)
+
+
+def test_a_press_and_drag_on_a_handle_resizes_through_the_events(overlay):
+    """The pieces above are only useful if the mouse actually reaches them."""
+    circle = Circle(center=(50, 50), radius=10)
+    overlay.manager.add_region(circle)
+    overlay._select(circle)
+    overlay.mode = RegionMode.NONE
+
+    overlay.mousePressEvent(_mouse(QEvent.Type.MouseButtonPress, overlay._to_widget(60, 50)))
+    assert overlay.dragging_handle == 0
+    overlay.mouseMoveEvent(_mouse(QEvent.Type.MouseMove, overlay._to_widget(90, 50)))
+    assert circle.radius == pytest.approx(40.0)
+    overlay.mouseReleaseEvent(_mouse(QEvent.Type.MouseButtonRelease, overlay._to_widget(90, 50)))
+    assert overlay.dragging_handle is None
+
+
+def test_a_press_away_from_a_handle_still_selects(overlay):
+    """Handle grabbing must not swallow ordinary clicks."""
+    circle = Circle(center=(50, 50), radius=10)
+    overlay.manager.add_region(circle)
+    overlay.mode = RegionMode.NONE
+
+    overlay.mousePressEvent(_mouse(QEvent.Type.MouseButtonPress, overlay._to_widget(50, 50)))
+    assert overlay.dragging_handle is None
+    assert overlay.selected_region is circle

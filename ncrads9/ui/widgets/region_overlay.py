@@ -39,7 +39,7 @@ from PyQt6.QtWidgets import QWidget
 
 from ...regions.base_region import BaseRegion
 from ...regions.region_manager import RegionManager
-from ...regions.region_renderer import RegionRenderer
+from ...regions.region_renderer import HANDLE_SIZE, RegionRenderer
 from ...regions.shapes.annulus import Annulus
 from ...regions.shapes.box import Box
 from ...regions.shapes.box_annulus import BoxAnnulus
@@ -148,6 +148,15 @@ PANDA_ANNULI = 1
 #: A new text region's label, which Get Information can then change.
 DEFAULT_TEXT = "Text"
 
+#: How near a handle the cursor must come to grab it, in widget pixels --
+#: a little wider than the handle itself, because a six-pixel square is a
+#: small target for a mouse.
+HANDLE_GRAB = HANDLE_SIZE + 2.0
+
+#: The smallest extent a drag may scale a region to. Below this the shape
+#: would collapse to a point with no handle left to drag it back out by.
+MINIMUM_EXTENT = 1e-6
+
 
 class RegionOverlay(QWidget):
     """Overlay widget for drawing and displaying regions."""
@@ -180,6 +189,11 @@ class RegionOverlay(QWidget):
         # For moving/editing
         self.selected_region: BaseRegion | None = None
         self.drag_start: QPointF | None = None
+        #: Which resize handle is being dragged, if any. `None` means the
+        #: drag is a move (or nothing at all); an index means a reshape.
+        self.dragging_handle: int | None = None
+        #: True while the rotate handle is being dragged.
+        self.rotating: bool = False
 
     # -- region collection --------------------------------------------------
 
@@ -539,6 +553,124 @@ class RegionOverlay(QWidget):
         self.region_created.emit(region)
         return True
 
+    # -- handles (M6-6) ------------------------------------------------------
+
+    def _handle_at(self, point: QPointF) -> int | None:
+        """Which resize handle of the selected region `point` grabs.
+
+        The tolerance is in *widget* pixels, not image ones: a handle is a
+        six-pixel square on the screen whatever the zoom, so hit-testing in
+        image coordinates would make handles impossible to grab when zoomed
+        out and grabbable from across the frame when zoomed in.
+        """
+        region = self.selected_region
+        if region is None or not region.can_edit:
+            return None
+        widget_point = self._image_to_widget_coords(point)
+        for index, (x, y) in enumerate(self.renderer.handle_points(region)):
+            handle = self._to_widget(x, y)
+            if math.hypot(handle.x() - widget_point.x(), handle.y() - widget_point.y()) <= HANDLE_GRAB:
+                return index
+        return None
+
+    def _rotate_handle_at(self, point: QPointF) -> bool:
+        """Whether `point` grabs the selected region's rotate handle."""
+        region = self.selected_region
+        if region is None or not region.can_edit:
+            return False
+        target = self.renderer.rotate_handle(region)
+        if target is None:
+            return False
+        widget_point = self._image_to_widget_coords(point)
+        handle = self._to_widget(*target)
+        return math.hypot(handle.x() - widget_point.x(), handle.y() - widget_point.y()) <= HANDLE_GRAB
+
+    def _drag_handle(self, index: int, point: QPointF) -> None:
+        """Reshape the selected region by dragging one of its handles.
+
+        What the drag means depends on the shape, and the three cases are
+        the same three the drawing gestures use:
+
+          a polygon or segment  the dragged vertex follows the cursor
+          a line-like shape     the dragged end follows the cursor
+          everything else       the shape scales about its centre
+
+        Scaling goes through each shape's own `resize`, so a shape with two
+        radii keeps their ratio rather than needing a rule here.
+        """
+        region = self.selected_region
+        if region is None:
+            return
+
+        if isinstance(region, (Polygon, Segment)):
+            self._move_vertex(region, index, point)
+            return
+        if isinstance(region, (Line, Ruler, Projection)):
+            if index == 0:
+                region.start = (point.x(), point.y())
+            else:
+                region.end = (point.x(), point.y())
+            return
+        if isinstance(region, Vector):
+            self._drag_vector(region, index, point)
+            return
+
+        self._scale_to(region, index, point)
+
+    @staticmethod
+    def _move_vertex(region, index: int, point: QPointF) -> None:
+        """Put one vertex of a polygon or segment under the cursor."""
+        if isinstance(region, Polygon):
+            vertices = list(region.vertices)
+            vertices[index] = (point.x(), point.y())
+            region.vertices = vertices
+        else:
+            points = list(region.points)
+            points[index] = (point.x(), point.y())
+            region.points = points
+
+    @staticmethod
+    def _drag_vector(region: Vector, index: int, point: QPointF) -> None:
+        """Move a vector's tail, or swing its head round."""
+        if index == 0:
+            region.start = (point.x(), point.y())
+            return
+        x, y = region.start
+        dx, dy = point.x() - x, point.y() - y
+        region.length = math.hypot(dx, dy)
+        region.angle = math.degrees(math.atan2(dy, dx))
+
+    def _scale_to(self, region: BaseRegion, index: int, point: QPointF) -> None:
+        """Scale a region so its dragged handle lands under the cursor."""
+        handles = self.renderer.handle_points(region)
+        if index >= len(handles):
+            return
+        cx, cy = region.center
+        hx, hy = handles[index]
+        reach = math.hypot(hx - cx, hy - cy)
+        wanted = math.hypot(point.x() - cx, point.y() - cy)
+        if reach < MINIMUM_EXTENT or wanted < MINIMUM_EXTENT:
+            # Scaling to (or from) nothing would collapse the region to a
+            # point it could never be dragged back out of.
+            return
+        factor = wanted / reach
+        region.resize(factor, factor)
+
+    def _rotate_to(self, point: QPointF) -> None:
+        """Turn the selected region so its rotate handle faces the cursor.
+
+        The handle starts due north of the centre, so the angle a drag means
+        is the bearing of the cursor less that quarter turn.
+        """
+        region = self.selected_region
+        if region is None or not region.can_rotate:
+            return
+        cx, cy = region.center
+        dx, dy = point.x() - cx, point.y() - cy
+        if math.hypot(dx, dy) < MINIMUM_EXTENT:
+            return
+        region.angle = math.degrees(math.atan2(dy, dx)) - 90.0
+
     def _select(self, region: BaseRegion | None) -> None:
         """Make `region` the selection, clearing any previous one."""
         if self.selected_region is not None:
@@ -558,6 +690,22 @@ class RegionOverlay(QWidget):
         if self.mode == RegionMode.NONE:
             # Selection mode - check if clicking on existing region
             img_point = self._widget_to_image_coords(event.position())
+
+            # A handle of the current selection wins over anything under it:
+            # the handles of a small region sit on top of larger ones, and
+            # grabbing one has to reshape rather than select what is behind.
+            if self._rotate_handle_at(img_point):
+                self.rotating = True
+                self.drag_start = img_point
+                event.accept()
+                return
+            handle = self._handle_at(img_point)
+            if handle is not None:
+                self.dragging_handle = handle
+                self.drag_start = img_point
+                event.accept()
+                return
+
             for region in reversed(self.regions):  # Check from top
                 if region.contains(img_point.x(), img_point.y()):
                     self._select(region)
@@ -605,12 +753,24 @@ class RegionOverlay(QWidget):
             return
 
         if not self.is_drawing and self.mode == RegionMode.NONE:
+            img_point = self._widget_to_image_coords(event.position())
+
+            if self.rotating:
+                self._rotate_to(img_point)
+                self.update()
+                event.accept()
+                return
+            if self.dragging_handle is not None:
+                self._drag_handle(self.dragging_handle, img_point)
+                self.update()
+                event.accept()
+                return
+
             # Moving selected region
             if self.selected_region and self.drag_start:
                 if not self.selected_region.can_move:
                     event.accept()
                     return
-                img_point = self._widget_to_image_coords(event.position())
                 self.selected_region.move(
                     img_point.x() - self.drag_start.x(),
                     img_point.y() - self.drag_start.y(),
@@ -649,6 +809,8 @@ class RegionOverlay(QWidget):
 
         if self.mode == RegionMode.NONE:
             self.drag_start = None
+            self.dragging_handle = None
+            self.rotating = False
             event.accept()
             return
 
