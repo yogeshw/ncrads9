@@ -36,16 +36,28 @@ import math
 from collections.abc import Callable, Iterable, Sequence
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
-from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
+from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPolygonF
 
 from .base_region import BaseRegion
+from .shapes.annulus import Annulus
 from .shapes.box import Box
+from .shapes.box_annulus import BoxAnnulus
+from .shapes.bpanda import Bpanda
 from .shapes.circle import Circle
+from .shapes.compass import Compass
+from .shapes.composite import Composite
 from .shapes.ellipse import Ellipse
+from .shapes.ellipse_annulus import EllipseAnnulus
+from .shapes.epanda import Epanda
 from .shapes.line import Line
+from .shapes.panda import Panda
 from .shapes.point import Point
 from .shapes.polygon import Polygon
+from .shapes.projection import Projection
+from .shapes.ruler import Ruler
+from .shapes.segment import Segment
 from .shapes.text import Text
+from .shapes.vector import Vector
 
 #: Maps one image-coordinate point to one widget-coordinate point.
 ToWidget = Callable[[float, float], QPointF]
@@ -94,6 +106,29 @@ def parse_font(spec: str) -> QFont:
     return font
 
 
+#: How opaque a filled region is, out of 255. Translucent so the data
+#: underneath stays readable, which is the point of an overlay.
+FILL_ALPHA = 60
+
+#: The diagonal DS9 strikes through an excluded region.
+EXCLUSION_COLOR = QColor(255, 0, 0)
+EXCLUSION_SIZE = 8.0
+
+#: Half-length of the cross drawn for a shape with no outline.
+CENTRE_TICK = 4.0
+
+#: A vector's arrow head, in widget pixels and radians.
+ARROW_LENGTH = 10.0
+ARROW_SPREAD = math.radians(25.0)
+
+
+def _steps(inner: float, outer: float, count: int) -> list[float]:
+    """`count` evenly spaced radii from inner to outer, both included."""
+    if count < 1:
+        return [inner, outer]
+    return [inner + (outer - inner) * index / count for index in range(count + 1)]
+
+
 class RegionRenderer:
     """Draws regions and in-progress previews onto a QPainter."""
 
@@ -122,6 +157,37 @@ class RegionRenderer:
         """Pen for the dashed shape that follows the cursor while drawing."""
         return QPen(SELECTION_COLOR, 1, Qt.PenStyle.DashLine)
 
+    @staticmethod
+    def _fixed_transform(region: BaseRegion, to_widget: ToWidget) -> ToWidget:
+        """A transform that places the region but does not scale it.
+
+        The centre still goes where the image says; everything measured from
+        it is treated as widget pixels, so a `fixed` region is the same size
+        on screen however far the image is zoomed.
+        """
+        origin = to_widget(*region.center)
+        cx, cy = region.center
+
+        def transform(x: float, y: float) -> QPointF:
+            # Screen y grows downward where image y grows up, so the offset
+            # is negated to keep a fixed shape the right way up.
+            return QPointF(origin.x() + (x - cx), origin.y() - (y - cy))
+
+        return transform
+
+    def brush_for(self, region: BaseRegion) -> QBrush:
+        """The brush for a region, honouring DS9's `fill` property.
+
+        DS9 fills a closed shape with its own colour when `fill=1`. The fill
+        is translucent here so the data underneath stays readable, which is
+        the point of drawing a region over an image at all.
+        """
+        if not getattr(region, "fill", False):
+            return QBrush(Qt.BrushStyle.NoBrush)
+        color = QColor(resolve_color(region.color))
+        color.setAlpha(FILL_ALPHA)
+        return QBrush(color)
+
     # -- whole-list rendering ----------------------------------------------
 
     def render(
@@ -143,15 +209,182 @@ class RegionRenderer:
         region: BaseRegion,
         to_widget: ToWidget,
     ) -> None:
-        """Draw one region, its label, and its handles if selected."""
-        painter.setPen(self.pen_for(region))
-        self._draw_shape(painter, region, to_widget)
+        """Draw one region, its label, and its handles if selected.
 
-        if self.show_labels and region.text:
+        A region marked `fixed` keeps its size on the screen rather than in
+        the image, so it stays legible at any zoom -- DS9's "fixed in size".
+        That is done by drawing it through a transform that ignores the
+        zoom, which is why `to_widget` is replaced rather than every shape
+        being told about the property.
+        """
+        if getattr(region, "fixed", False):
+            to_widget = self._fixed_transform(region, to_widget)
+
+        painter.setPen(self.pen_for(region))
+        painter.setBrush(self.brush_for(region))
+        self._draw_shape(painter, region, to_widget)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+
+        if not region.include:
+            # DS9 strikes an excluded region through, so include and exclude
+            # can be told apart at a glance.
+            self._draw_exclusion(painter, region, to_widget)
+
+        # A Text region *is* its label, drawn by `_draw_shape`; drawing
+        # `region.text` as well put the same string on the canvas twice.
+        if self.show_labels and region.text and not isinstance(region, Text):
             self._draw_label(painter, region, to_widget)
 
         if getattr(region, "selected", False):
             self._draw_handles(painter, region, to_widget)
+
+    def _draw_exclusion(
+        self,
+        painter: QPainter,
+        region: BaseRegion,
+        to_widget: ToWidget,
+    ) -> None:
+        """Strike a diagonal through an excluded region, as DS9 does."""
+        center = to_widget(*region.center)
+        pen = QPen(EXCLUSION_COLOR, max(1, region.width))
+        painter.save()
+        painter.setPen(pen)
+        painter.drawLine(
+            QPointF(center.x() - EXCLUSION_SIZE, center.y() + EXCLUSION_SIZE),
+            QPointF(center.x() + EXCLUSION_SIZE, center.y() - EXCLUSION_SIZE),
+        )
+        painter.restore()
+
+    def _draw_centre_tick(self, painter: QPainter, center: QPointF) -> None:
+        """A small cross, for a shape with no outline of its own."""
+        painter.drawLine(
+            QPointF(center.x() - CENTRE_TICK, center.y()),
+            QPointF(center.x() + CENTRE_TICK, center.y()),
+        )
+        painter.drawLine(
+            QPointF(center.x(), center.y() - CENTRE_TICK),
+            QPointF(center.x(), center.y() + CENTRE_TICK),
+        )
+
+    def _draw_panda(self, painter: QPainter, region: Panda, to_widget: ToWidget) -> None:
+        """A panda: concentric circles crossed by radial spokes."""
+        radii = _steps(region.inner_radius, region.outer_radius, region.num_radii)
+        for radius in radii:
+            painter.drawEllipse(
+                to_widget(*region.center), *self._radii(region.center, radius, radius, to_widget)
+            )
+        self._draw_spokes(
+            painter,
+            region.center,
+            region.start_angle,
+            region.stop_angle,
+            region.num_angles,
+            region.inner_radius,
+            region.outer_radius,
+            0.0,
+            to_widget,
+        )
+
+    def _draw_panda_variant(self, painter: QPainter, region: Epanda | Bpanda, to_widget: ToWidget) -> None:
+        """An epanda or a bpanda: the same, with elliptical or box annuli."""
+        majors = _steps(region.inner_major, region.outer_major, region.num_radii)
+        minors = _steps(region.inner_minor, region.outer_minor, region.num_radii)
+        box = type(region).__name__.lower().startswith("b")
+        for major, minor in zip(majors, minors, strict=True):
+            if box:
+                self._draw_rotated_box(painter, region.center, major * 2, minor * 2, region.angle, to_widget)
+            else:
+                self._draw_rotated_ellipse(painter, region.center, major, minor, region.angle, to_widget)
+        self._draw_spokes(
+            painter,
+            region.center,
+            region.start_angle,
+            region.stop_angle,
+            region.num_angles,
+            min(region.inner_major, region.inner_minor),
+            max(region.outer_major, region.outer_minor),
+            region.angle,
+            to_widget,
+        )
+
+    def _draw_spokes(
+        self,
+        painter: QPainter,
+        center: tuple[float, float],
+        start: float,
+        stop: float,
+        count: int,
+        inner: float,
+        outer: float,
+        rotation: float,
+        to_widget: ToWidget,
+    ) -> None:
+        """The radial dividers between a panda's wedges."""
+        if count < 1:
+            return
+        span = stop - start
+        # A full circle's first and last spoke coincide, so one is dropped.
+        edges = count if abs(span) >= 360.0 else count + 1
+        cx, cy = center
+        for index in range(edges):
+            angle = math.radians(rotation + start + span * index / count)
+            painter.drawLine(
+                to_widget(cx + inner * math.cos(angle), cy + inner * math.sin(angle)),
+                to_widget(cx + outer * math.cos(angle), cy + outer * math.sin(angle)),
+            )
+
+    def _draw_vector(self, painter: QPainter, region: Vector, to_widget: ToWidget) -> None:
+        """A line with an arrow head, if the vector asks for one."""
+        cx, cy = region.start
+        angle = math.radians(region.angle)
+        tip = (cx + region.length * math.cos(angle), cy + region.length * math.sin(angle))
+        start, end = to_widget(cx, cy), to_widget(*tip)
+        painter.drawLine(start, end)
+        if not getattr(region, "arrow", True):
+            return
+
+        # The head is drawn in widget space, so it stays the same size at
+        # any zoom -- which is what makes it readable when zoomed out.
+        screen_angle = math.atan2(end.y() - start.y(), end.x() - start.x())
+        for side in (-1, 1):
+            wing = screen_angle + side * ARROW_SPREAD
+            painter.drawLine(
+                end,
+                QPointF(
+                    end.x() - ARROW_LENGTH * math.cos(wing),
+                    end.y() - ARROW_LENGTH * math.sin(wing),
+                ),
+            )
+
+    def _draw_projection_rails(self, painter: QPainter, region: Projection, to_widget: ToWidget) -> None:
+        """The two rails marking a projection's width."""
+        (x1, y1), (x2, y2) = region.start, region.end
+        length = math.hypot(x2 - x1, y2 - y1)
+        if length <= 0:
+            return
+        half = region.projection_width / 2.0
+        nx, ny = -(y2 - y1) / length * half, (x2 - x1) / length * half
+        for sign in (-1, 1):
+            painter.drawLine(
+                to_widget(x1 + sign * nx, y1 + sign * ny),
+                to_widget(x2 + sign * nx, y2 + sign * ny),
+            )
+
+    def _draw_compass(self, painter: QPainter, region: Compass, to_widget: ToWidget) -> None:
+        """Two labelled arms, north and east."""
+        cx, cy = region.center
+        origin = to_widget(cx, cy)
+        for angle, label in (
+            (region.north_angle, "N"),
+            (region.east_angle, "E"),
+        ):
+            radians = math.radians(angle)
+            tip = to_widget(
+                cx + region.length * math.cos(radians),
+                cy + region.length * math.sin(radians),
+            )
+            painter.drawLine(origin, tip)
+            painter.drawText(QPointF(tip.x() + 2, tip.y() - 2), label)
 
     # -- per-shape painting -------------------------------------------------
 
@@ -206,9 +439,59 @@ class RegionRenderer:
             painter.setFont(parse_font(region.font))
             painter.drawText(to_widget(*region.center), region.label)
 
+        elif isinstance(region, Segment):
+            if len(region.points) >= 2:
+                # An open path: a polyline, not a polygon.
+                painter.drawPolyline(QPolygonF([to_widget(x, y) for x, y in region.points]))
+
+        elif isinstance(region, Annulus):
+            for radius in (region.inner_radius, region.outer_radius):
+                painter.drawEllipse(
+                    to_widget(*region.center), *self._radii(region.center, radius, radius, to_widget)
+                )
+
+        elif isinstance(region, EllipseAnnulus):
+            for major, minor in (
+                (region.inner_semi_major, region.inner_semi_minor),
+                (region.outer_semi_major, region.outer_semi_minor),
+            ):
+                self._draw_rotated_ellipse(painter, region.center, major, minor, region.angle, to_widget)
+
+        elif isinstance(region, BoxAnnulus):
+            for width, height in (
+                (region.inner_width, region.inner_height),
+                (region.outer_width, region.outer_height),
+            ):
+                self._draw_rotated_box(painter, region.center, width, height, region.angle, to_widget)
+
+        elif isinstance(region, Panda):
+            self._draw_panda(painter, region, to_widget)
+
+        elif isinstance(region, (Epanda, Bpanda)):
+            self._draw_panda_variant(painter, region, to_widget)
+
+        elif isinstance(region, Vector):
+            self._draw_vector(painter, region, to_widget)
+
+        elif isinstance(region, (Ruler, Projection)):
+            # Both are a line between two points; the projection adds its
+            # width as a pair of rails.
+            start, end = to_widget(*region.start), to_widget(*region.end)
+            painter.drawLine(start, end)
+            if isinstance(region, Projection):
+                self._draw_projection_rails(painter, region, to_widget)
+
+        elif isinstance(region, Compass):
+            self._draw_compass(painter, region, to_widget)
+
+        elif isinstance(region, Composite):
+            # A composite is drawn by its children; a cross marks its origin
+            # so an empty one is still visible and selectable.
+            self._draw_centre_tick(painter, to_widget(*region.center))
+
         else:
-            # Shapes without a painter yet (annulus, panda, ruler, ...) get a
-            # centre tick so they are at least visible. M6 draws them properly.
+            # Anything with no painter of its own gets a centre tick, so a
+            # shape added later is visible before it is drawn properly.
             center = to_widget(*region.center)
             painter.drawLine(
                 QPointF(center.x() - 4, center.y()),
