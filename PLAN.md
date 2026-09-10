@@ -18,7 +18,7 @@ was verified against actual source, not inferred from documentation.
 | Menu entries (excl. separators) | 526 | 286, all wired |
 | XPA access points | 143 | 23 |
 | Colormaps | 23 built-in + 168 bundled `.sao`/`.lut` files | 23 built-in, 0 bundled files |
-| Region/marker shapes | 20 shapes + 7 point glyphs | 16 classes, 8 parseable, **6 interactively creatable** |
+| Region/marker shapes | 19 shapes + 7 point glyphs<sup>†</sup> | 16 classes, 8 parseable, **6 interactively creatable** |
 | Region file formats | ds9, ciao, saotng, funtools, xy, pros, XML | ds9, ciao, saotng, funtools, xy (parse only) |
 | UI locales | 8 (`cs da de es fr ja pt zh`) | 0 |
 | Tests | — | 533 tests, all passing, 48.3% coverage (69 with 1 failure before M0) |
@@ -42,6 +42,13 @@ At the end of M0 that reports **166 of DS9's 433 comparable menu labels present 
 behaviour; §5 is the feature-level inventory.
 
 ---
+
+<sup>†</sup> This table first said 20 shapes. DS9's Region Descriptions table
+(`ds9/doc/ref/region.html`) lists **19**: Circle, Ellipse, Box, Polygon,
+Point, Line, Vector, Segment, Text, Ruler, Compass, Projection, Annulus,
+Ellipse Annulus, Box Annulus, Panda, Epanda, Bpanda and Composite. Corrected
+in M6, where a test counts them out of the reference itself so the figure
+cannot drift again.
 
 ## 2. What already works well
 
@@ -550,7 +557,7 @@ pointer mode. Separate Block (non-destructive display transform) from Bin, and i
 FITS bin-table binning with the Binning Parameters dialog.
 
 ### M6 — Regions to parity (14 d)
-All 20 shapes creatable and editable with handles; 7 point glyphs; full property set
+All 19 shapes creatable and editable with handles; 7 point glyphs; full property set
 (include/exclude, source/background, fixed/edit/move/rotate/delete, dash, fill);
 parser/writer round-trip for every shape in every supported format; selection operations;
 groups; composite create/dissolve; templates and the bundled instrument FOVs; centroid;

@@ -50,14 +50,6 @@ PENDING_ADOPTION: dict[str, str] = {
     # M6 -- regions to parity. The shapes exist but the overlay cannot yet
     # create them, and group_manager backs the Groups dialog.
     "regions.group_manager": "M6-16",
-    "regions.shapes.box_annulus": "M6-4",
-    "regions.shapes.compass": "M6-4",
-    "regions.shapes.composite": "M6-17",
-    "regions.shapes.ellipse_annulus": "M6-4",
-    "regions.shapes.panda": "M6-4",
-    "regions.shapes.projection": "M6-4",
-    "regions.shapes.ruler": "M6-4",
-    "regions.shapes.vector": "M6-4",
     "analysis.centroid": "M6-20",
     "analysis.statistics": "M6-22",
     "analysis.histogram": "M6-23",
@@ -246,12 +238,12 @@ def test_pending_modules_exist(module):
 def test_orphan_count_does_not_grow():
     """A ratchet on the headline number from PLAN.md §3.1.
 
-    M1 brought the orphan count down from 116 to 71, M3 to 60, and M4 to 56
-    by adopting the cube handler, the cube panel, the FITS writer and the
-    open dialog. Raise this ceiling only
+    M1 brought the orphan count down from 116 to 71, M3 to 60, M4 to 56 and
+    M6 to 48 -- the last by making every shape DS9 documents parseable, which
+    reached eight shape modules at once. Raise this ceiling only
     when a milestone deliberately adds an unreachable module -- never to make
     a failing run pass.
     """
-    assert len(ORPHANS) <= 56, (
-        f"{len(ORPHANS)} orphan modules; the M4 baseline is 56. " "New unreachable code needs a reason."
+    assert len(ORPHANS) <= 48, (
+        f"{len(ORPHANS)} orphan modules; the M6 baseline is 48. " "New unreachable code needs a reason."
     )

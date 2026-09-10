@@ -584,7 +584,7 @@ Depends on M1, M2.
 - [ ] **M6-3** (M) `regions/shapes/bpanda.py` (box panda).
 
 ### Interactive creation and editing
-- [ ] **M6-4** (L) Extend `RegionMode` and the overlay's creation gestures from 6 to all 20
+- [ ] **M6-4** (L) Extend `RegionMode` and the overlay's creation gestures from 6 to all 19
       shapes: annulus, ellipse annulus, box annulus, panda, epanda, bpanda, vector, ruler,
       compass, projection, segment, text, composite.
 - [ ] **M6-5** (M) Point glyphs: circle, box, diamond, cross, x, arrow, boxcircle + size.

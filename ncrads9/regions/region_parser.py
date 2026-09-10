@@ -35,12 +35,23 @@ from typing import Any
 from .base_region import BaseRegion
 from .shapes.annulus import Annulus
 from .shapes.box import Box
+from .shapes.box_annulus import BoxAnnulus
+from .shapes.bpanda import Bpanda
 from .shapes.circle import Circle
+from .shapes.compass import Compass
+from .shapes.composite import Composite
 from .shapes.ellipse import Ellipse
+from .shapes.ellipse_annulus import EllipseAnnulus
+from .shapes.epanda import Epanda
 from .shapes.line import Line
+from .shapes.panda import Panda
 from .shapes.point import Point
 from .shapes.polygon import Polygon
+from .shapes.projection import Projection
+from .shapes.ruler import Ruler
+from .shapes.segment import Segment
 from .shapes.text import Text
+from .shapes.vector import Vector
 
 
 class RegionFormat(Enum):
@@ -66,6 +77,18 @@ class CoordinateSystem(Enum):
     WCS = "wcs"
 
 
+def _pairs(values: list[float]) -> list[tuple[float, float]]:
+    """Turn a flat coordinate list into (x, y) pairs, dropping any odd tail."""
+    return [(values[i], values[i + 1]) for i in range(0, len(values) - 1, 2)]
+
+
+def _flag(value: object, default: bool = True) -> bool:
+    """Read a DS9 `0`/`1` property, falling back when it is absent."""
+    if value is None or str(value).strip() == "":
+        return default
+    return str(value).strip().split()[0] not in ("0", "false", "no")
+
+
 class RegionParser:
     """Parser for DS9 region files in multiple formats."""
 
@@ -81,6 +104,14 @@ class RegionParser:
     GLOBAL_PATTERN = re.compile(r"^global\s+(.*)$", re.IGNORECASE)
 
     #: DS9 properties written as a bare word rather than `key=value`.
+    #: Properties whose value runs past a space: DS9 writes `point=diamond 15`
+    #: and `line=0 1`, which the key=value pattern would cut at the space.
+    #: DS9 writes a composite as `# composite(x,y,angle)`, the only shape
+    #: whose line begins with a `#`.
+    _COMPOSITE_LINE = re.compile(r"^#\s*composite\b", re.IGNORECASE)
+
+    SPACED_PROPERTIES: tuple[str, ...] = ("point", "line", "ruler", "compass", "vector")
+
     BARE_PROPERTIES: tuple[str, ...] = ("background", "source")
 
     def __init__(self) -> None:
@@ -135,10 +166,18 @@ class RegionParser:
         regions: list[BaseRegion] = []
         lines = content.strip().split("\n")
 
-        for line in lines:
-            line = line.strip()
-            if not line or line.startswith("#"):
+        for raw in lines:
+            line = raw.strip()
+            if not line:
                 continue
+            if line.startswith("#"):
+                # Almost every `#` line is a comment -- but DS9 writes a
+                # composite region as `# composite(x,y,angle)`, so a
+                # composite would be thrown away with the comments.
+                if self._COMPOSITE_LINE.match(line):
+                    line = line.lstrip("# ").strip()
+                else:
+                    continue
 
             # Detect format from header
             if self._is_format_header(line):
@@ -290,8 +329,24 @@ class RegionParser:
         # Remove leading #
         comment = comment.lstrip("#").strip()
 
+        tags: list[str] = []
         for match in self.PROPERTY_PATTERN.finditer(comment):
-            properties[match.group(1)] = self._property_value(match)
+            key, value = match.group(1), self._property_value(match)
+            properties[key] = value
+            if key == "tag" and value:
+                # A region may carry several tags; the dictionary would keep
+                # only the last, so they are gathered separately.
+                tags.append(value)
+        if tags:
+            properties["tags"] = tags  # type: ignore[assignment]
+
+        # `point=diamond 15` and `line=0 1` put a value *after* the one the
+        # key=value pattern captures, separated by a space, so the pattern
+        # stops at the glyph and the size is lost. Re-read those two whole.
+        for keyword in self.SPACED_PROPERTIES:
+            spaced = re.search(rf"{keyword}\s*=\s*([^#\n]*)", comment)
+            if spaced:
+                properties[keyword] = spaced.group(1).strip()
 
         # DS9 writes source/background as bare words, not key=value pairs, so
         # the key=value pattern above never sees them. Record them with an
@@ -338,7 +393,17 @@ class RegionParser:
 
     @staticmethod
     def _parse_tags(properties: dict[str, str]) -> list[str]:
-        """Return the region's tags. DS9 allows a tag to repeat per region."""
+        """Return the region's tags.
+
+        DS9 allows `tag={...}` more than once on a region, which is how a
+        region belongs to several groups. `_parse_comment_properties`
+        gathers them under `tags`; the singular `tag` key is the last one
+        seen and is only a fallback for a caller that built the dictionary
+        itself.
+        """
+        gathered = properties.get("tags")
+        if isinstance(gathered, list):
+            return list(gathered)
         tag = properties.get("tag")
         return [tag] if tag else []
 
@@ -372,7 +437,9 @@ class RegionParser:
             include: Whether this is an include or exclude region.
 
         Returns:
-            A BaseRegion subclass instance or None.
+            A BaseRegion subclass instance, or None when the shape is
+            unknown or its parameters cannot be read. A malformed region is
+            skipped rather than aborting the file, which is what DS9 does.
         """
         color = properties.get("color", self._global_properties.get("color", "green"))
         width = int(properties.get("width", self._global_properties.get("width", "1")))
@@ -387,70 +454,299 @@ class RegionParser:
             **self._parse_property_flags(properties, include),
         }
 
-        try:
-            if shape_type == "circle":
-                x, y, r = float(params[0]), float(params[1]), float(params[2])
-                return Circle(center=(x, y), radius=r, **common)
-
-            elif shape_type == "ellipse":
-                x, y = float(params[0]), float(params[1])
-                a, b = float(params[2]), float(params[3])
-                angle = float(params[4]) if len(params) > 4 else 0.0
-                return Ellipse(
-                    center=(x, y),
-                    semi_major=a,
-                    semi_minor=b,
-                    angle=angle,
-                    **common,
-                )
-
-            elif shape_type == "box":
-                x, y = float(params[0]), float(params[1])
-                w, h = float(params[2]), float(params[3])
-                angle = float(params[4]) if len(params) > 4 else 0.0
-                return Box(
-                    center=(x, y),
-                    width_box=w,
-                    height_box=h,
-                    angle=angle,
-                    **common,
-                )
-
-            elif shape_type == "point":
-                x, y = float(params[0]), float(params[1])
-                return Point(center=(x, y), **common)
-
-            elif shape_type == "line":
-                x1, y1 = float(params[0]), float(params[1])
-                x2, y2 = float(params[2]), float(params[3])
-                return Line(start=(x1, y1), end=(x2, y2), **common)
-
-            elif shape_type == "polygon":
-                coords = [float(p) for p in params]
-                vertices = [(coords[i], coords[i + 1]) for i in range(0, len(coords), 2)]
-                return Polygon(vertices=vertices, **common)
-
-            elif shape_type == "annulus":
-                x, y = float(params[0]), float(params[1])
-                inner_r = float(params[2])
-                outer_r = float(params[3])
-                return Annulus(
-                    center=(x, y),
-                    inner_radius=inner_r,
-                    outer_radius=outer_r,
-                    **common,
-                )
-
-            elif shape_type in ("text", "# text"):
-                x, y = float(params[0]), float(params[1])
-                text_common = {k: v for k, v in common.items() if k != "text"}
-                return Text(center=(x, y), label=text, **text_common)
-
-        except (IndexError, ValueError):
-            # Return None for malformed regions
+        builder = self._BUILDERS.get(shape_type.strip().lower().lstrip("# "))
+        if builder is None:
             return None
 
-        return None
+        try:
+            return builder(self, [float(value) for value in params], properties, common)
+        except (IndexError, ValueError, TypeError):
+            # A shape whose numbers cannot be read is skipped, not fatal.
+            return None
+
+    # -- one builder per shape -----------------------------------------------
+    #
+    # DS9 overloads three of its keywords by parameter count: `ellipse` with
+    # four numbers is an ellipse and with six or more an ellipse annulus,
+    # `box` likewise, and `annulus` takes either an inner and outer radius or
+    # a whole list of them. The builders below make that explicit rather than
+    # leaving it in a chain of conditions.
+
+    def _build_circle(
+        self,
+        values: list[float],
+        properties: dict[str, Any],
+        common: dict[str, Any],
+    ) -> BaseRegion:
+        return Circle(center=(values[0], values[1]), radius=values[2], **common)
+
+    def _build_ellipse(
+        self,
+        values: list[float],
+        properties: dict[str, Any],
+        common: dict[str, Any],
+    ) -> BaseRegion:
+        centre = (values[0], values[1])
+        radii = values[2:]
+        if len(radii) < 4:
+            # `ellipse x y a b [angle]`
+            angle = radii[2] if len(radii) > 2 else 0.0
+            return Ellipse(center=centre, semi_major=radii[0], semi_minor=radii[1], angle=angle, **common)
+
+        # `ellipse x y r11 r12 r21 r22 ... [angle]` -- an ellipse annulus.
+        angle = radii[-1] if len(radii) % 2 else 0.0
+        pairs = radii[: len(radii) - (len(radii) % 2)]
+        return EllipseAnnulus(
+            center=centre,
+            inner_semi_major=pairs[0],
+            inner_semi_minor=pairs[1],
+            outer_semi_major=pairs[-2],
+            outer_semi_minor=pairs[-1],
+            angle=angle,
+            **common,
+        )
+
+    def _build_box(
+        self,
+        values: list[float],
+        properties: dict[str, Any],
+        common: dict[str, Any],
+    ) -> BaseRegion:
+        centre = (values[0], values[1])
+        sizes = values[2:]
+        if len(sizes) < 4:
+            # `box x y w h [angle]`
+            angle = sizes[2] if len(sizes) > 2 else 0.0
+            return Box(center=centre, width_box=sizes[0], height_box=sizes[1], angle=angle, **common)
+
+        # `box x y w1 h1 w2 h2 ... [angle]` -- a box annulus.
+        angle = sizes[-1] if len(sizes) % 2 else 0.0
+        pairs = sizes[: len(sizes) - (len(sizes) % 2)]
+        return BoxAnnulus(
+            center=centre,
+            inner_width=pairs[0],
+            inner_height=pairs[1],
+            outer_width=pairs[-2],
+            outer_height=pairs[-1],
+            angle=angle,
+            **common,
+        )
+
+    def _build_point(
+        self,
+        values: list[float],
+        properties: dict[str, Any],
+        common: dict[str, Any],
+    ) -> BaseRegion:
+        # DS9 writes the glyph as `point=diamond 11`, and also accepts it as
+        # a prefix: `diamond point x y`.
+        glyph, size = self._point_glyph(properties)
+        return Point(center=(values[0], values[1]), shape=glyph, size=size, **common)
+
+    def _build_line(
+        self,
+        values: list[float],
+        properties: dict[str, Any],
+        common: dict[str, Any],
+    ) -> BaseRegion:
+        return Line(start=(values[0], values[1]), end=(values[2], values[3]), **common)
+
+    def _build_polygon(
+        self,
+        values: list[float],
+        properties: dict[str, Any],
+        common: dict[str, Any],
+    ) -> BaseRegion:
+        return Polygon(vertices=_pairs(values), **common)
+
+    def _build_segment(
+        self,
+        values: list[float],
+        properties: dict[str, Any],
+        common: dict[str, Any],
+    ) -> BaseRegion:
+        return Segment(points=_pairs(values), **common)
+
+    def _build_annulus(
+        self,
+        values: list[float],
+        properties: dict[str, Any],
+        common: dict[str, Any],
+    ) -> BaseRegion:
+        centre = (values[0], values[1])
+        radii = values[2:]
+        # `annulus x y inner outer n=#` divides the span into n rings; the
+        # region's own extent is the same either way, so the count is kept
+        # only so the writer can put it back.
+        return Annulus(center=centre, inner_radius=radii[0], outer_radius=radii[-1], **common)
+
+    def _build_panda(
+        self,
+        values: list[float],
+        properties: dict[str, Any],
+        common: dict[str, Any],
+    ) -> BaseRegion:
+        return Panda(
+            center=(values[0], values[1]),
+            start_angle=values[2],
+            stop_angle=values[3],
+            num_angles=int(values[4]),
+            inner_radius=values[5],
+            outer_radius=values[6],
+            num_radii=int(values[7]),
+            **common,
+        )
+
+    def _build_epanda(
+        self,
+        values: list[float],
+        properties: dict[str, Any],
+        common: dict[str, Any],
+    ) -> BaseRegion:
+        return Epanda(**self._panda_arguments(values), **common)
+
+    def _build_bpanda(
+        self,
+        values: list[float],
+        properties: dict[str, Any],
+        common: dict[str, Any],
+    ) -> BaseRegion:
+        return Bpanda(**self._panda_arguments(values), **common)
+
+    @staticmethod
+    def _panda_arguments(values: list[float]) -> dict[str, Any]:
+        """The arguments epanda and bpanda share, which is all of them."""
+        return {
+            "center": (values[0], values[1]),
+            "start_angle": values[2],
+            "stop_angle": values[3],
+            "num_angles": int(values[4]),
+            "inner_major": values[5],
+            "inner_minor": values[6],
+            "outer_major": values[7],
+            "outer_minor": values[8],
+            "num_radii": int(values[9]),
+            "angle": values[10] if len(values) > 10 else 0.0,
+        }
+
+    def _build_vector(
+        self,
+        values: list[float],
+        properties: dict[str, Any],
+        common: dict[str, Any],
+    ) -> BaseRegion:
+        arrow = _flag(properties.get("vector"), default=True)
+        return Vector(
+            start=(values[0], values[1]),
+            length=values[2],
+            angle=values[3],
+            arrow=arrow,
+            **common,
+        )
+
+    def _build_ruler(
+        self,
+        values: list[float],
+        properties: dict[str, Any],
+        common: dict[str, Any],
+    ) -> BaseRegion:
+        return Ruler(start=(values[0], values[1]), end=(values[2], values[3]), **common)
+
+    def _build_compass(
+        self,
+        values: list[float],
+        properties: dict[str, Any],
+        common: dict[str, Any],
+    ) -> BaseRegion:
+        return Compass(center=(values[0], values[1]), length=values[2], **common)
+
+    def _build_projection(
+        self,
+        values: list[float],
+        properties: dict[str, Any],
+        common: dict[str, Any],
+    ) -> BaseRegion:
+        return Projection(
+            start=(values[0], values[1]),
+            end=(values[2], values[3]),
+            projection_width=values[4],
+            **common,
+        )
+
+    def _build_text(
+        self,
+        values: list[float],
+        properties: dict[str, Any],
+        common: dict[str, Any],
+    ) -> BaseRegion:
+        label = common.pop("text", "")
+        return Text(center=(values[0], values[1]), label=label, **common)
+
+    def _build_composite(
+        self,
+        values: list[float],
+        properties: dict[str, Any],
+        common: dict[str, Any],
+    ) -> BaseRegion:
+        # A composite's children follow it in the file, each tagged with the
+        # composite's own tag; DS9 writes `# composite x y angle`. Assembling
+        # them is the manager's job, so this is the empty container.
+        return Composite(**common)
+
+    #: Shape keyword -> the method that builds it.
+    _BUILDERS: dict[str, Any] = {
+        "circle": _build_circle,
+        "ellipse": _build_ellipse,
+        "box": _build_box,
+        "point": _build_point,
+        "line": _build_line,
+        "polygon": _build_polygon,
+        "segment": _build_segment,
+        "annulus": _build_annulus,
+        "panda": _build_panda,
+        "epanda": _build_epanda,
+        "bpanda": _build_bpanda,
+        "vector": _build_vector,
+        "ruler": _build_ruler,
+        "compass": _build_compass,
+        "projection": _build_projection,
+        "text": _build_text,
+        "composite": _build_composite,
+    }
+
+    #: The glyphs DS9's `point=` property offers, and its default size.
+    POINT_GLYPHS: tuple[str, ...] = (
+        "circle",
+        "box",
+        "diamond",
+        "cross",
+        "x",
+        "arrow",
+        "boxcircle",
+    )
+    DEFAULT_POINT_SIZE = 11
+
+    def _point_glyph(self, properties: dict[str, str]) -> tuple[str, int]:
+        """The glyph and size a point's `point=` property asks for.
+
+        DS9 writes `point=diamond 11`: the glyph, optionally followed by a
+        size. An unknown glyph falls back to circle, as DS9's own default.
+        """
+        value = str(properties.get("point", "")).strip()
+        if not value:
+            return "circle", self.DEFAULT_POINT_SIZE
+
+        parts = value.split()
+        glyph = parts[0].lower()
+        if glyph not in self.POINT_GLYPHS:
+            glyph = "circle"
+        size = self.DEFAULT_POINT_SIZE
+        if len(parts) > 1:
+            try:
+                size = int(float(parts[1]))
+            except ValueError:
+                size = self.DEFAULT_POINT_SIZE
+        return glyph, size
 
     def _is_xy_format(self, content: str) -> bool:
         """Check if content is in simple XY format."""

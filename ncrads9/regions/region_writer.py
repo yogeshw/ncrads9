@@ -15,7 +15,13 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
-Region writer for DS9 format files.
+Region writer: DS9's own format, and the four others it exports.
+
+`region_formats.py` holds what each format can and cannot express; this
+writes it. Only DS9's own format carries properties, so everything else is
+the shape line alone, with an exclude written as a leading `-` and any shape
+the format has no equivalent for dropped -- silently, as DS9 drops it, with
+`region_formats.dropped_shapes` there for a caller that wants to say so.
 
 Author: Yogesh Wadadekar
 """
@@ -23,6 +29,14 @@ Author: Yogesh Wadadekar
 from pathlib import Path
 
 from .base_region import BaseRegion
+from .region_formats import (
+    FORMAT_HEADERS,
+    FORMATS_WITH_PROPERTIES,
+    RegionFormat,
+    is_writable,
+    shape_keyword,
+    translate,
+)
 
 
 class RegionWriter:
@@ -35,6 +49,7 @@ class RegionWriter:
         self,
         coordinate_system: str = "image",
         global_properties: dict[str, str] | None = None,
+        region_format: RegionFormat | str = RegionFormat.DS9,
     ) -> None:
         """
         Initialize the region writer.
@@ -42,9 +57,34 @@ class RegionWriter:
         Args:
             coordinate_system: The coordinate system to use (image, fk5, etc.).
             global_properties: Optional global properties for regions.
+            region_format: Which format to write. A string is accepted, so
+                the Region menu and the XPA `regions` access point can pass
+                DS9's own spelling straight through.
+
+        Raises:
+            ValueError: If `region_format` names no known format.
         """
         self._coordinate_system = coordinate_system
         self._global_properties = global_properties or {}
+        self._format = (
+            region_format
+            if isinstance(region_format, RegionFormat)
+            else RegionFormat(str(region_format).strip().lower())
+        )
+
+    @property
+    def region_format(self) -> RegionFormat:
+        """The format being written."""
+        return self._format
+
+    @region_format.setter
+    def region_format(self, value: RegionFormat | str) -> None:
+        """Set the format.
+
+        Raises:
+            ValueError: If the value names no known format.
+        """
+        self._format = value if isinstance(value, RegionFormat) else RegionFormat(str(value).strip().lower())
 
     @property
     def coordinate_system(self) -> str:
@@ -91,25 +131,34 @@ class RegionWriter:
         Returns:
             The regions as a DS9 format string.
         """
+        if self._format is RegionFormat.XY:
+            return self._to_xy(regions)
+
         lines: list[str] = []
 
         if include_header:
-            lines.append(self.DS9_HEADER)
+            header = FORMAT_HEADERS.get(self._format, self.DS9_HEADER)
+            if header:
+                lines.append(header)
 
-        # Add global properties if present
-        if self._global_properties:
-            global_line = self._format_global_properties()
-            lines.append(global_line)
+        # Global properties are a DS9 idea; no other format has them.
+        if self._global_properties and self._format in FORMATS_WITH_PROPERTIES:
+            lines.append(self._format_global_properties())
 
         # Add coordinate system
         lines.append(self._coordinate_system)
 
-        # Add each region
         for region in regions:
-            region_str = self._format_region(region)
-            lines.append(region_str)
+            if not is_writable(region, self._format):
+                # DS9 drops what a format cannot express, without comment.
+                continue
+            lines.append(self._format_region(region))
 
         return "\n".join(lines)
+
+    def _to_xy(self, regions: list[BaseRegion]) -> str:
+        """One `x y` per line, which is all the X Y format holds."""
+        return "\n".join(f"{x:g} {y:g}" for x, y in (region.center for region in regions))
 
     def _format_global_properties(self) -> str:
         """Format global properties as a DS9 global line."""
@@ -135,7 +184,19 @@ class RegionWriter:
         # text, ruler) already carry a `# ...` tail of their own, so the
         # property tokens have to merge into that comment rather than start a
         # second one -- two `#` on a line would make the second unparseable.
-        region_str = region.prefix + region.to_ds9_string()
+        shape = region.to_ds9_string()
+        if self._format not in FORMATS_WITH_PROPERTIES:
+            # Everything but DS9's own format is the shape alone: no
+            # properties, no trailing comment, and a shape renamed if the
+            # format calls it something else.
+            shape = shape.split("#", 1)[0].strip()
+            keyword = shape_keyword(region)
+            renamed = translate(keyword, self._format)
+            if renamed != keyword:
+                shape = renamed + shape[len(keyword) :]
+            return region.prefix + shape
+
+        region_str = region.prefix + shape
 
         properties = self._format_region_properties(region)
         if not properties:
@@ -164,9 +225,11 @@ class RegionWriter:
         if region.width != 1:
             props.append(f"width={region.width}")
 
-        # Add text if present
+        # Add text if present. DS9's own advice: "Strings may be quoted with
+        # " or ' or {}. For best results, use {}." -- braces survive a text
+        # containing either quote character.
         if region.text:
-            props.append(f'text="{region.text}"')
+            props.append(f"text={{{region.text}}}")
 
         # Add font if not default
         if region.font != "helvetica 10 normal roman":
