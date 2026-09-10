@@ -558,7 +558,7 @@ def test_the_plot_tool_menu_entries_open_a_window(main_window, action, style):
 def test_closing_a_plot_window_forgets_it(main_window):
     main_window.menu_bar.action_plot_tool_line.trigger()
     next(iter(main_window.analysis._plots)).close()
-    assert main_window.analysis._plots == set()
+    assert main_window.analysis._plots == []
 
 
 def test_each_controller_keeps_its_own_plot_windows(main_window):
@@ -567,4 +567,4 @@ def test_each_controller_keeps_its_own_plot_windows(main_window):
 
     other = AnalysisController(main_window)
     main_window.menu_bar.action_plot_tool_line.trigger()
-    assert other._plots == set()
+    assert other._plots == []

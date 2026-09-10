@@ -846,6 +846,68 @@ class RegionController(Controller):
             self.show_frame_regions(frame)
         self.status(f"Loaded {len(regions)} regions from {filepath}", 3000)
 
+    def load_file(self, filepath: str, append: bool = False) -> str | None:
+        """Load a region file without asking, as XPA's `region load` does.
+
+        Args:
+            filepath: What to read.
+            append: Whether to add to what is there rather than replace it.
+
+        Returns:
+            None on success, or a message saying what went wrong.
+        """
+        try:
+            regions = RegionParser().parse_file(filepath)
+        except Exception as exc:
+            return f"Error loading regions: {exc}"
+
+        frame = self.frame
+        if frame is None:
+            return "No frame to load regions into"
+        with self.window.undo.regions("Load Regions"):
+            frame.regions = [*frame.regions, *regions] if append else list(regions)
+        self.show_frame_regions(frame)
+        self.status(f"Loaded {len(regions)} regions from {filepath}", 3000)
+        return None
+
+    def save_file(
+        self,
+        filepath: str,
+        selected_only: bool = False,
+        region_format: RegionFormat | str | None = None,
+    ) -> str | None:
+        """Write regions to a file without asking, as `region save` does.
+
+        Args:
+            filepath: Where to write.
+            selected_only: Whether to write only the selection.
+            region_format: Which format to write. None takes whatever
+                `xpaset ds9 region format` last chose, DS9's own default
+                being its own format.
+
+        Returns:
+            None on success, or a message saying what went wrong.
+        """
+        regions = self.selection() if selected_only else self._regions()
+        if not regions:
+            return "No regions to save"
+        if region_format is None:
+            region_format = self.window.preferences.get("region_format", RegionFormat.DS9.value)
+        try:
+            RegionWriter(
+                coordinate_system=self.window.coord_context.frame.value,
+                region_format=RegionFormat(region_format),
+            ).write_file(regions, filepath)
+        except (OSError, ValueError) as exc:
+            return f"Error saving regions: {exc}"
+        self.status(f"Saved {len(regions)} regions to {filepath}", 3000)
+        return None
+
+    def listing(self, selected_only: bool = False) -> str:
+        """The regions as DS9 writes them, which `xpaget regions` answers."""
+        regions = self.selection() if selected_only else self._regions()
+        return RegionWriter(coordinate_system=self.window.coord_context.frame.value).to_string(regions)
+
     def save_regions(self) -> None:
         """Write the current frame's regions to a DS9 region file."""
         regions = self._regions()

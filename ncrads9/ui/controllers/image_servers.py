@@ -30,6 +30,7 @@ Author: Yogesh Wadadekar
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from ...image_servers import fetch as fetch_module
@@ -52,6 +53,9 @@ class ImageServerController(Controller):
         self.transport = None
         #: The dialogs open, by server name, so they are not collected.
         self._dialogs: dict[str, ImageServerDialog] = {}
+        #: What DS9's `save`, `frame` and `update` hold per server, which
+        #: only XPA sets: the dialog has no controls for them.
+        self.settings: dict[str, dict[str, str]] = {}
 
     def connect(self) -> None:
         """Wire every image server on the menu."""
@@ -96,6 +100,10 @@ class ImageServerController(Controller):
         dialog.show()
         return dialog
 
+    def options(self, name: str) -> dict[str, str]:
+        """One server's `save`/`frame`/`update` settings, DS9's defaults."""
+        return self.settings.setdefault(name, {"save": "no", "frame": "new", "update": "frame"})
+
     def resolve(self, name: str, dialog: ImageServerDialog) -> None:
         """Resolve an object name to coordinates and fill the dialog in."""
         from astropy.coordinates import SkyCoord
@@ -117,12 +125,35 @@ class ImageServerController(Controller):
         height: float,
         survey: str = "",
         dialog: ImageServerDialog | None = None,
+        new_frame: bool | None = None,
+        save: bool | None = None,
+        pixels: tuple[int, int] | None = None,
     ) -> Path | None:
-        """Fetch a cutout and load it into a new frame.
+        """Fetch a cutout and load it.
+
+        Args:
+            server: Which server.
+            longitude, latitude: Where, in degrees.
+            width, height: How big, in the server's unit.
+            survey: Which survey, where the server offers a choice.
+            dialog: The dialog to report back into, if there is one.
+            new_frame: Whether to load into a new frame. None takes the
+                server's `frame new|current` setting, which is DS9's.
+            save: Whether to keep the file in the working directory rather
+                than the temporary one. None takes the server's setting.
+            pixels: The output image size, for a server that takes one --
+                SkyView alone. None reads it off the dialog.
 
         Returns:
             The file loaded, or None if the fetch failed.
         """
+        options = self.options(server.name)
+        if new_frame is None:
+            new_frame = options["frame"] != "current"
+        if save is None:
+            save = options["save"] == "yes"
+        if pixels is None and dialog is not None:
+            pixels = dialog.pixels()
         request = fetch_module.ImageRequest(
             server=server,
             longitude=longitude,
@@ -130,6 +161,7 @@ class ImageServerController(Controller):
             width=width,
             height=height,
             survey=survey,
+            pixels=pixels,
         )
         self.status(f"Retrieving from {server.label}...")
 
@@ -141,8 +173,19 @@ class ImageServerController(Controller):
                 dialog.set_message(str(exc))
             return None
 
+        if save:
+            # DS9's `save yes`: keep the download where the user can find
+            # it again, rather than in the temporary directory.
+            kept = Path.cwd() / path.name
+            try:
+                shutil.copy2(path, kept)
+                path = kept
+            except OSError as exc:
+                self.status(f"{server.label} was fetched but could not be saved: {exc}", 6000)
+
         try:
-            self.window.frame_controller.new_frame()
+            if new_frame:
+                self.window.frame_controller.new_frame()
             self.window.display.load_fits(str(path))
         except Exception as exc:
             self.status(f"{server.label} returned an image that will not load: {exc}", 6000)

@@ -232,6 +232,51 @@ class AnalysisTaskController(Controller):
         self.files.clear()
         self.status(f"Cleared {count} analysis task{'s' if count != 1 else ''}")
 
+    def loaded_tasks(self) -> list[Task]:
+        """Every task loaded, in the order DS9 numbers them.
+
+        DS9's `analysis` access point numbers tasks "as they are loaded,
+        starting with 0", which is the order the files were read in and,
+        within a file, the order it declares them.
+        """
+        tasks: list[Task] = []
+        for found in self.files:
+            tasks.extend(found.tasks())
+        return tasks
+
+    def run_named(self, reference: str, sync: bool = False) -> str | None:
+        """Run one task by its number or its label, DS9's `analysis task`.
+
+        Args:
+            reference: A number, counting from zero as DS9 does, or a
+                task's label.
+            sync: Wait for it, as an XPA caller may want to.
+
+        Returns:
+            None if it ran, or what was wrong.
+        """
+        tasks = self.loaded_tasks()
+        if not tasks:
+            return "no analysis tasks are loaded"
+
+        wanted = reference.strip()
+        if wanted.isdigit():
+            index = int(wanted)
+            if not 0 <= index < len(tasks):
+                return f"there is no task {index}; {len(tasks)} are loaded"
+            self.run(tasks[index], sync=sync)
+            return None
+
+        for task in tasks:
+            if task.label == wanted:
+                self.run(task, sync=sync)
+                return None
+        return f"no analysis task is called {wanted!r}"
+
+    def show_text_window(self, title: str = "Analysis", body: str = "") -> AnalysisTextDialog:
+        """Open the text window, DS9's `analysis text`."""
+        return self._show_text(title, body)
+
     # -- building the menu -------------------------------------------------------
 
     def _install(self, loaded: AnalysisFile) -> None:

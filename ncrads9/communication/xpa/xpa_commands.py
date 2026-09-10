@@ -72,7 +72,6 @@ class XPACommands:
             "scale": self._handle_scale,
             "cmap": self._handle_cmap,
             "colorbar": self._handle_colorbar,
-            "regions": self._handle_regions,
             "wcs": self._handle_wcs,
             "save": self._handle_save,
             "exit": self._handle_exit,
@@ -137,6 +136,9 @@ class XPACommands:
         Returns:
             Response dictionary with status and result/message.
         """
+        # DS9 registers a handful of its points twice, once in each case
+        # -- `3d` and `3D` are the same command -- so the name is lowered
+        # and registered once.
         name = command.lower()
         handler = self._command_handlers.get(name)
 
@@ -186,12 +188,14 @@ class XPACommands:
                     args = [access_points.on_off(found) if isinstance(found, bool) else str(found)]
                     break
 
-        getting = bool(params.get("get")) and not args
+        asked_to_read = bool(params.get("get"))
+        if asked_to_read and point.query is not None:
+            # A read that takes arguments: `xpaget ds9 dsssao size`,
+            # `xpaget ds9 iexam coordinate image`. Without this, an
+            # argument would make every read look like a write.
+            return {"status": "ok", "result": point.query(self.viewer, args)}
 
-        if point.name in ("iexam",):
-            # `xpaget ds9 iexam key coordinate image`: a read that takes
-            # arguments, which is unusual enough to name.
-            return {"status": "ok", "result": access_points.examine(self.viewer, args)}
+        getting = asked_to_read and not args
 
         if getting or (point.set is None and point.get is not None):
             if point.get is None:
@@ -577,27 +581,6 @@ class XPACommands:
         if state is not None:
             result = "yes" if state.colorbar else "no"
         return {"status": "ok", "result": result}
-
-    def _handle_regions(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle region commands.
-
-        Args:
-            params: Command parameters including 'action', 'data'.
-
-        Returns:
-            Response dictionary.
-        """
-        viewer_error = self._require_viewer()
-        if viewer_error:
-            return viewer_error
-
-        action = str(params.get("action", self._first_arg(params, "get"))).lower()
-        if action in {"delete", "clear"}:
-            self.viewer.region.clear_regions()
-            return {"status": "ok", "result": "Regions deleted"}
-        frame = self.viewer.frame_manager.current_frame
-        count = len(frame.regions) if frame else 0
-        return {"status": "ok", "result": str(count)}
 
     def _handle_wcs(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle WCS commands.

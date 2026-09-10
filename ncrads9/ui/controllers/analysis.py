@@ -101,7 +101,11 @@ class AnalysisController(Controller):
         #: Open plot windows. A modeless window nothing holds a reference to
         #: is collected the moment it is shown. Per instance, not per class:
         #: a shared set would outlive the window that opened them.
-        self._plots: set[PlotWindow] = set()
+        # A list, not a set: DS9's `plot` access point acts on "the last
+        # plot created", which needs an order.
+        self._plots: list[PlotWindow] = []
+        #: Which plot `xpaset ds9 plot ...` acts on, DS9's `plot current`.
+        self._current_plot: PlotWindow | None = None
 
         #: DS9's mask layer: a second FITS image painted over the first.
         #: `None` until one is opened, which is what "no mask" means. On
@@ -580,8 +584,7 @@ class AnalysisController(Controller):
         analysis task's `$plot` output lands in.
         """
         window = PlotWindow(PlotState(style=style), self.window)
-        window.finished.connect(lambda _result, w=window: self._plots.discard(w))
-        self._plots.add(window)
+        self._remember_plot(window)
         window.show()
         self.status(f"Plot Tool: {style.value}")
         return window
@@ -589,10 +592,48 @@ class AnalysisController(Controller):
     def show_plot(self, state: PlotState) -> PlotWindow:
         """Open a plot window on data that already exists."""
         window = PlotWindow(state, self.window)
-        window.finished.connect(lambda _result, w=window: self._plots.discard(w))
-        self._plots.add(window)
+        self._remember_plot(window)
         window.show()
         return window
+
+    def _remember_plot(self, window: PlotWindow) -> None:
+        """Keep a plot window alive and make it the current one."""
+        window.finished.connect(lambda _result, w=window: self._forget_plot(w))
+        self._plots.append(window)
+        self._current_plot = window
+
+    def _forget_plot(self, window: PlotWindow) -> None:
+        """Drop a closed plot window, and pick another as current."""
+        if window in self._plots:
+            self._plots.remove(window)
+        if self._current_plot is window:
+            self._current_plot = self._plots[-1] if self._plots else None
+
+    def current_plot(self) -> PlotWindow | None:
+        """The plot DS9's `plot` access point acts on: the last one made."""
+        return self._current_plot
+
+    def plots(self) -> list[PlotWindow]:
+        """Every plot window open, oldest first."""
+        return list(self._plots)
+
+    def set_current_plot(self, reference: str) -> bool:
+        """Make one plot current by its number or its title, DS9's `current`.
+
+        Returns:
+            Whether one was found.
+        """
+        if reference.isdigit():
+            index = int(reference) - 1
+            if 0 <= index < len(self._plots):
+                self._current_plot = self._plots[index]
+                return True
+            return False
+        for window in self._plots:
+            if window.state.title == reference:
+                self._current_plot = window
+                return True
+        return False
 
     def open_web_browser(self) -> None:
         """Open a browser URL from the Analysis menu."""

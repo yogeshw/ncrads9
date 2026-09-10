@@ -280,21 +280,29 @@ class FileController(Controller):
 
     # -- Open as -------------------------------------------------------------
 
-    def open_as(self, loader: str) -> None:
+    def open_as(self, loader: str, filepath: str | None = None) -> str | None:
         """Handle one entry of DS9's `Open as` submenu.
 
         Args:
             loader: The entry's name, as `MenuBar.open_as_actions` keys it.
+            filepath: What to open. The menu leaves this out and is asked;
+                XPA's `rgbcube`, `mosaic` and the rest name the file, and
+                asking a script for a filename would hang it.
+
+        Returns:
+            None if it opened, or what went wrong. The menu ignores this;
+            XPA reports it.
         """
         if loader == "url":
             self.open_url()
-            return
+            return None
 
-        filepath, _ = QFileDialog.getOpenFileName(
-            self.window, f"Open as {loader.replace('_', ' ')}", "", FITS_FILTER
-        )
+        if filepath is None:
+            filepath, _ = QFileDialog.getOpenFileName(
+                self.window, f"Open as {loader.replace('_', ' ')}", "", FITS_FILTER
+            )
         if not filepath:
-            return
+            return None
 
         try:
             spec = parse_file_spec(filepath)
@@ -310,8 +318,11 @@ class FileController(Controller):
                 self.load_mosaic(spec, *MOSAIC_LOADERS[loader])
             else:
                 self.status(f"Unknown loader: {loader}", 3000)
+                return f"unknown loader: {loader}"
         except Exception as exc:
             self._report(f"Could not open {Path(filepath).name} as {loader}", exc)
+            return f"could not open {Path(filepath).name} as {loader}: {exc}"
+        return None
 
     def load_slice(self, spec: FileSpec) -> None:
         """Load one slice of a cube as a plain 2D image."""
@@ -400,25 +411,40 @@ class FileController(Controller):
             f"{verb} {kind.value} mosaic: {mosaic.data.shape[1]}x{mosaic.data.shape[0]} pixels",
         )
 
-    def open_url(self) -> None:
-        """Download a FITS file and open it (DS9: `Open as -> URL`)."""
-        url, ok = QInputDialog.getText(self.window, "Open URL", "FITS URL:")
-        if not ok or not url.strip():
-            return
+    def open_url(self, url: str | None = None) -> str | None:
+        """Download a FITS file and open it (DS9: `Open as -> URL`).
+
+        Args:
+            url: What to fetch. The menu leaves this out and is asked for
+                it; XPA's `url` point names it, and asking a script for a
+                URL would hang it.
+
+        Returns:
+            None if it opened, or what went wrong.
+        """
+        if url is None:
+            typed, ok = QInputDialog.getText(self.window, "Open URL", "FITS URL:")
+            if not ok or not typed.strip():
+                return None
+            url = typed
         url = url.strip()
+        if not url:
+            return "a URL is needed"
 
         self.status(f"Downloading {url}...", 0)
         try:
             path = self._download(url)
         except (urllib.error.URLError, OSError, ValueError) as exc:
             self._report(f"Could not download\n{url}", exc)
-            return
+            return f"could not download {url}: {exc}"
 
         try:
             self.window.display.load_fits(str(path))
-            self.status(f"Opened {url}", 3000)
         except Exception as exc:
             self._report(f"Downloaded {url} but could not load it", exc)
+            return f"downloaded {url} but could not load it: {exc}"
+        self.status(f"Opened {url}", 3000)
+        return None
 
     def _download(self, url: str) -> Path:
         """Fetch a URL into a temporary file.
@@ -641,6 +667,21 @@ class FileController(Controller):
 
         fits_writer.write(overwrite=True)
         self.status(f"Saved {writer.replace('_', ' ')} to {path}", 3000)
+
+    def save_fits_to(self, path: str) -> str | None:
+        """Write the current frame as FITS without asking, DS9's `savefits`.
+
+        Returns:
+            None on success, or what went wrong.
+        """
+        frame = self.frames.current_frame
+        if frame is None or frame.image_data is None:
+            return "nothing to save; the frame is empty"
+        try:
+            self._write_as(Path(path), "image", frame)
+        except Exception as exc:
+            return f"could not write {path}: {exc}"
+        return None
 
     def save_image(self, image_format: str) -> None:
         """Handle one entry of DS9's `Save Image` submenu.

@@ -41,6 +41,7 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from matplotlib.ticker import FormatStrFormatter, ScalarFormatter
 from matplotlib.widgets import RectangleSelector
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QActionGroup
 from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
 from PyQt6.QtWidgets import (
@@ -450,6 +451,22 @@ class PlotWindow(QDialog):
         self._build_data_menu()
         self.draw()
 
+    def add_dataset_from(self, text: str, data_format: str = "xy", name: str = "Data") -> Dataset:
+        """Add a dataset from columns of numbers without asking for them.
+
+        What `xpaset ds9 plot load <file> xy` calls; `load_data` is the
+        menu entry that asks for the file and the format first.
+
+        Raises:
+            PlotDataError: If nothing in the text was a point.
+        """
+        dataset = self.state.load_data(text, data_format, name=name)
+        self.current_dataset = self.state.datasets.index(dataset)
+        self.zoom_stack.reset()
+        self._build_data_menu()
+        self.draw()
+        return dataset
+
     def save_data(self) -> None:
         """Write the current dataset back out as columns."""
         if not self.state.datasets:
@@ -671,10 +688,16 @@ def _bar_width(x: list[float]) -> float:
     return (min(gaps) * BAR_WIDTH_FRACTION) if gaps else BAR_WIDTH_FRACTION
 
 
-def _show_text(parent: QWidget, title: str, body: str) -> None:
-    """Show some text in a plain modeless window."""
+def _show_text(parent: QWidget, title: str, body: str) -> QDialog:
+    """Show some text in a plain modeless window.
+
+    Modeless as the name says: it used to `exec()`, which blocked the
+    plot window behind it and made `xpaset ds9 plot stats yes` wait for
+    someone to close a window they could not see.
+    """
     dialog = QDialog(parent)
     dialog.setWindowTitle(title)
+    dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
     dialog.resize(560, 420)
     layout = QVBoxLayout(dialog)
     view = QPlainTextEdit(body)
@@ -683,7 +706,8 @@ def _show_text(parent: QWidget, title: str, body: str) -> None:
     buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
     buttons.rejected.connect(dialog.reject)
     layout.addWidget(buttons)
-    dialog.exec()
+    dialog.show()
+    return dialog
 
 
 class AxisRangeDialog(QDialog):

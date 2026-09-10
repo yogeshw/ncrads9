@@ -1095,10 +1095,11 @@ Depends on M2, M3.
       back over the frame's.
 
 ### Communication
-- [~] **M9-25** (L) Grow XPA from 23 to DS9's 143 access points. Use
+- [x] **M9-25** (L) Grow XPA from 23 to DS9's 143 access points. Use
       `.tmp_sao_ds9/ds9/library/xpa.tcl` as the specification and
       `.tmp_sao_ds9/ds9/parsers/*` for each point's grammar.
-      **109 of DS9's 145 names answer now, up from 24.** `communication/xpa/access_points.py`
+      **All 143 of DS9's distinct names answer now, up from 24** (145 registrations: DS9
+      registers `3d`/`3D` and `iexam`/`imexam` twice each, and the lookup lowers the name). `communication/xpa/access_points.py`
       is a *table* rather than a method per point: DS9's points are almost all the same shape
       -- read something the application knows, or hand an argument to something it does -- and
       145 near-identical methods would be a fifth of the codebase. The ones with real grammars
@@ -1111,9 +1112,35 @@ Depends on M2, M3.
       savempeg`; (d) tools -- `notes pixeltable illustrate nameserver catalog cat footprint fp
       vo prefs`; (e) app -- `width height iconify raise lower nan preserve mode cursor
       crosshair cd pagesetup psprint print sleep update header about version`.
-      Still to do: `analysis` beyond its current handler, `samp vo sia skyview dss* 2mass nvss
-      vla vlss` image-server points, `iis iexam imexam`, `shm memf sfits`, `console tcl source
-      theme threads precision graph data plot`.
+      Finished last: the image servers -- `dsssao dsseso dssstsci dss 2mass skyview vla nvss
+      vlss` share one grammar, so one helper builds all nine points from
+      `ds9/parsers/dssesoparser.tac`, which is also where the division between the rules that
+      fetch (a bare call, a name, a position, `update`) and the rules that only set (`size`,
+      `save`, `frame`, `survey`, `name clear`) comes from; then `analysis view graph data plot
+      region rgb hsv hls bin precision theme threads console tcl source bg background web xpa
+      savefits sfits memf sia pspagesetup`.
+      Two of DS9's reads take arguments -- `xpaget ds9 dsssao size`, `xpaget ds9 data image 3 3
+      2 2` -- which the table could not express: a point gained a `query`, and `iexam`, which
+      had been named in the dispatcher as the one exception, now goes through it like the rest.
+      **Three features had to be built before their access point could be honest**, rather than
+      reporting success and changing nothing:
+      * the cut graphs had no grid, no log axis, and read a single row -- DS9's `graph grid|log|
+        method|thickness|size`. `analysis/cut_graph.py` is the arithmetic (a thick cut averaged
+        or summed across its width, and the 0..1 mapping a log axis needs), apart from Qt so it
+        is testable; both panels draw from it.
+      * SkyView's output size in pixels was hard-coded at 512, so `skyview pixels 600 600` had
+        nowhere to go. It is now a query argument, a dialog field, and DS9's own rule.
+      * colour frames had no way to pick or hide a channel outside the RGB dialog:
+        `FrameController.set_channel` and `set_channel_visible`, which `rgb`, `hsv`, `hls` and
+        `view rgb red no` all reach.
+      **A dozen more dead points found, in four shapes**, all of which raised or hung: `rgbcube hsvcube
+      hlscube rgbimage hsvimage hlsimage srgbcube mosaic mecube multiframe` passed a filename
+      to `open_as`, which took none and opened a file dialog instead -- so every one of them
+      hung a script; `url` did the same through `open_url`; `sfits`/`memf` named a controller
+      method that does not exist; and the plot window's List Data and Statistics called `exec()`
+      under a docstring that said modeless, which blocked `plot stats yes` on a window the
+      caller could not see. `open_as` and `open_url` now take the path they are given and
+      return what went wrong instead of swallowing it.
       **Five bugs found in the 24 that existed**, all in points that reported success while
       doing nothing: `mode` echoed the mode back and never changed it; `cursor` and `crosshair`
       reported the last mouse position and could not move anything; `lock` echoed its argument;

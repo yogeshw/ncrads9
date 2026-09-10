@@ -734,7 +734,7 @@ def test_unplottable_output_is_shown_as_text_instead(main_window, tmp_path):
     main_window.analysis_tasks.load_commands(str(path))
 
     _run(main_window, "Broken")
-    assert main_window.analysis._plots == set()
+    assert main_window.analysis._plots == []
     assert "not numbers" in main_window.analysis_tasks._windows["Broken"].text()
 
 
