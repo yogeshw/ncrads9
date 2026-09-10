@@ -39,6 +39,8 @@ class Preferences:
         "window_geometry": None,
         "show_toolbar": True,
         "show_statusbar": True,
+        # DS9's Autoload FITS Regions, on by default as it is there.
+        "autoload_fits_regions": True,
     }
 
     def __init__(self, prefs_path: Path | str | None = None) -> None:

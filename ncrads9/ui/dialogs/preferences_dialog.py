@@ -128,6 +128,13 @@ class PreferencesDialog(QDialog):
             "the first extension that is one. Uncheck for that behaviour."
         )
         loading_layout.addRow(self._prompt_hdu_check)
+
+        self._autoload_regions_check = QCheckBox("Autoload FITS regions")
+        self._autoload_regions_check.setChecked(True)
+        self._autoload_regions_check.setToolTip(
+            "Load the regions in a file's REGION extension when it is opened, " "as DS9 does."
+        )
+        loading_layout.addRow(self._autoload_regions_check)
         general_layout.addWidget(loading_group)
 
         general_layout.addStretch()
@@ -295,6 +302,7 @@ class PreferencesDialog(QDialog):
         self._data_dir_edit.clear()
         self._export_dir_edit.clear()
         self._prompt_hdu_check.setChecked(True)
+        self._autoload_regions_check.setChecked(True)
         self._theme_combo.setCurrentText("System")
         self._bg_color = QColor(0, 0, 0)
         self._update_bg_color_button()
@@ -320,6 +328,7 @@ class PreferencesDialog(QDialog):
             "data_directory": self._data_dir_edit.text(),
             "export_directory": self._export_dir_edit.text(),
             "prompt_for_hdu": self._prompt_hdu_check.isChecked(),
+            "autoload_fits_regions": self._autoload_regions_check.isChecked(),
             "theme": self._theme_combo.currentText(),
             "background_color": self._bg_color.name(),
             "anti_aliasing": self._anti_alias_check.isChecked(),
@@ -361,6 +370,8 @@ class PreferencesDialog(QDialog):
             self._export_dir_edit.setText(prefs["export_directory"])
         if "prompt_for_hdu" in prefs:
             self._prompt_hdu_check.setChecked(bool(prefs["prompt_for_hdu"]))
+        if "autoload_fits_regions" in prefs:
+            self._autoload_regions_check.setChecked(bool(prefs["autoload_fits_regions"]))
         if "theme" in prefs:
             self._theme_combo.setCurrentText(prefs["theme"])
         if "background_color" in prefs:

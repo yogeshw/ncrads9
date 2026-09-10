@@ -57,6 +57,7 @@ from ..core.fits_handler import FITSHandler, HDUKind
 from ..core.wcs_handler import WCSHandler
 from ..frames.frame import Frame
 from ..frames.tile_layout import TileLayout
+from ..regions.fits_regions import has_region_extension, load_from_file
 from ..rendering.block import block_image
 from ..rendering.rgb_compositor import compose_rgb
 from ..rendering.scale_algorithms import ScaleAlgorithm, apply_scale
@@ -230,6 +231,33 @@ class DisplayPipeline:
         self.window.z2 = z2
         self.window.color.set_contrast_brightness(contrast, brightness)
 
+    def _autoload_regions(self, frame, fits_handler) -> None:
+        """Load the file's own regions, if it carries any and we are asked to.
+
+        DS9 opens `fits[REGION]` on every file it loads
+        (`ds9/library/fits.tcl:29`), controlled by its Autoload FITS Regions
+        preference, which is on by default. A file with no such extension is
+        the usual case and costs one name comparison.
+        """
+        if not bool(self.window.preferences.get("autoload_fits_regions", True)):
+            return
+
+        hdu_list = getattr(fits_handler, "hdu_list", None)
+        if not has_region_extension(hdu_list):
+            return
+
+        try:
+            found = load_from_file(hdu_list)
+        except Exception:
+            # A malformed REGION table must not stop the image loading.
+            return
+        if not found:
+            return
+
+        frame.regions = list(frame.regions) + found
+        self.window.region.show_frame_regions(frame)
+        self.status(f"Loaded {len(found)} region{'s' if len(found) != 1 else ''} from the file", 3000)
+
     def load_fits(self, filepath: str) -> None:
         """
         Load a FITS file, or one extension and section of one, into the
@@ -326,6 +354,8 @@ class DisplayPipeline:
             filename += f"[{spec.extension}]"
         frame_info = f"Frame {self.frames.current_index + 1}/{self.frames.num_frames}"
         self.window.setWindowTitle(f"NCRADS9 - {filename} [{frame_info}]")
+
+        self._autoload_regions(frame, fits_handler)
 
         # Display the image
         self.display()
