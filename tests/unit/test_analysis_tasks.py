@@ -18,6 +18,8 @@
 
 from __future__ import annotations
 
+import pathlib
+
 import pytest
 
 from ncrads9.analysis.macros import MacroContext, expand
@@ -559,3 +561,462 @@ def test_geturl_refuses_anything_but_http():
     from ncrads9.analysis.task_runner import fetch
 
     assert "http" in fetch("file:///etc/passwd").failure
+
+
+# -- wired to the menu (M7-4, M7-5, M7-7, M7-8) ---------------------------------------
+
+
+@pytest.fixture
+def main_window(qapp, monkeypatch):
+    import numpy as np
+
+    from ncrads9.ui.main_window import MainWindow
+    from ncrads9.utils.preferences import Preferences
+
+    monkeypatch.setattr(
+        Preferences,
+        "get",
+        lambda self, key, default=None: False if key == "use_gpu" else default,
+    )
+    window = MainWindow()
+    window._rebuild_image_viewer(False)
+    frame = window.frame_manager.current_frame
+    frame.image_data = np.arange(64 * 32, dtype=np.float32).reshape(32, 64)
+    frame.original_image_data = frame.image_data
+    yield window
+    for text in list(window.analysis_tasks._windows.values()):
+        text.close()
+    window.close()
+
+
+@pytest.fixture
+def loaded(main_window, tmp_path):
+    """A main window with the fixture analysis file loaded."""
+    path = tmp_path / "ds9.ans"
+    path.write_text(FIXTURE)
+    assert main_window.analysis_tasks.load_commands(str(path)) is True
+    return main_window
+
+
+def test_loading_a_file_puts_its_tasks_on_the_menu(loaded):
+    labels = [action.text() for action in loaded.menu_bar.analysis_menu.actions()]
+    assert "Counts" in labels
+    assert "Nested" in labels
+
+
+def test_an_hmenu_becomes_a_submenu(loaded):
+    submenu = next(
+        action.menu()
+        for action in loaded.menu_bar.analysis_menu.actions()
+        if action.menu() is not None and action.text() == "Nested"
+    )
+    assert [entry.text() for entry in submenu.actions() if entry.text()] == [
+        "Deeper",
+        "Deeper still",
+    ]
+
+
+def test_a_bind_task_becomes_a_keyboard_shortcut(loaded):
+    assert len(loaded.analysis_tasks._shortcuts) == 1
+
+
+def test_a_buttonbar_becomes_buttons(loaded):
+    from ncrads9.ui.button_bar import ANALYSIS_CATEGORY
+
+    assert len(loaded.button_bar._page_buttons.get(ANALYSIS_CATEGORY, [])) == 2
+
+
+def test_a_task_that_does_not_apply_is_greyed_not_hidden(loaded):
+    """A menu that changed shape with every file would be unlearnable."""
+    counts = next(action for action in loaded.menu_bar.analysis_menu.actions() if action.text() == "Counts")
+    # No file is loaded in this frame, and the task wants *.fits.
+    assert counts.isEnabled() is False
+
+    loaded.frame_manager.current_frame.filepath = pathlib.Path("/data/m51.fits")
+    loaded.analysis_tasks.sync()
+    assert counts.isEnabled() is True
+
+
+def test_clearing_takes_the_tasks_off_the_menu(loaded):
+    before = len(loaded.menu_bar.analysis_menu.actions())
+    loaded.menu_bar.action_clear_analysis_commands.trigger()
+    assert loaded.analysis_tasks.files == []
+    assert len(loaded.menu_bar.analysis_menu.actions()) < before
+    assert "Counts" not in [a.text() for a in loaded.menu_bar.analysis_menu.actions()]
+
+
+def test_a_file_that_will_not_parse_is_reported_not_loaded(main_window, tmp_path):
+    path = tmp_path / "bad.ans"
+    path.write_text("Task\n*\nmangle\necho hi\n")
+    assert main_window.analysis_tasks.load_commands(str(path)) is False
+    assert main_window.analysis_tasks.files == []
+    assert "unknown analysis command type" in main_window.status_bar.currentMessage()
+
+
+def test_a_missing_file_is_reported_not_fatal(main_window, tmp_path):
+    assert main_window.analysis_tasks.load_commands(str(tmp_path / "nope.ans")) is False
+
+
+# -- running through the menu -----------------------------------------------------------
+
+
+def _run(window, label: str):
+    """Run one loaded task synchronously and return its result."""
+    task = next(task for task in window.analysis_tasks.files[0].tasks() if task.label == label)
+    return window.analysis_tasks.run(task, sync=True)
+
+
+def test_a_menu_task_runs_and_its_text_appears(main_window, tmp_path):
+    path = tmp_path / "ds9.ans"
+    path.write_text('Say hello\n*\nmenu\necho "hello from a task" | $text\n')
+    main_window.analysis_tasks.load_commands(str(path))
+
+    result = _run(main_window, "Say hello")
+    assert result.ok
+    window = main_window.analysis_tasks._windows["Say hello"]
+    assert "hello from a task" in window.text()
+
+
+def test_running_a_task_twice_appends(main_window, tmp_path):
+    """Two runs in one window is how they get compared."""
+    path = tmp_path / "ds9.ans"
+    path.write_text("Count\n*\nmenu\necho 1 | $text\n")
+    main_window.analysis_tasks.load_commands(str(path))
+
+    _run(main_window, "Count")
+    _run(main_window, "Count")
+    assert main_window.analysis_tasks._windows["Count"].text().count("1") == 2
+
+
+def test_a_help_task_shows_its_message(loaded):
+    _run(loaded, "Fixture Help")
+    assert "blank line" in loaded.analysis_tasks._windows["Fixture Help"].text()
+
+
+def test_a_web_task_opens_a_url(loaded, monkeypatch):
+    from PyQt6.QtGui import QDesktopServices
+
+    opened = []
+    monkeypatch.setattr(QDesktopServices, "openUrl", staticmethod(lambda url: opened.append(url.toString())))
+    _run(loaded, "Docs")
+    assert opened == ["https://example.invalid/docs"]
+
+
+def test_a_plot_sink_opens_a_plot_window(main_window, tmp_path):
+    path = tmp_path / "ds9.ans"
+    path.write_text('Profile\n*\nmenu\nprintf "1 2\\n2 4\\n" | $plot(T,X,Y,xy)\n')
+    main_window.analysis_tasks.load_commands(str(path))
+
+    _run(main_window, "Profile")
+    assert len(main_window.analysis._plots) == 1
+    plot = next(iter(main_window.analysis._plots))
+    assert plot.state.title == "T"
+    assert plot.state.datasets[0].x == [1.0, 2.0]
+    plot.close()
+
+
+def test_a_plot_stdin_sink_reads_its_header(main_window, tmp_path):
+    path = tmp_path / "ds9.ans"
+    path.write_text('Profile\n*\nmenu\nprintf "Title {X Axis} {Y} xy\\n1 2\\n" | $plot(stdin)\n')
+    main_window.analysis_tasks.load_commands(str(path))
+
+    _run(main_window, "Profile")
+    plot = next(iter(main_window.analysis._plots))
+    assert plot.state.title == "Title"
+    assert plot.state.x_axis.label == "X Axis"
+    plot.close()
+
+
+def test_unplottable_output_is_shown_as_text_instead(main_window, tmp_path):
+    """Better than an empty plot window that says nothing."""
+    path = tmp_path / "ds9.ans"
+    path.write_text('Broken\n*\nmenu\necho "not numbers" | $plot\n')
+    main_window.analysis_tasks.load_commands(str(path))
+
+    _run(main_window, "Broken")
+    assert main_window.analysis._plots == set()
+    assert "not numbers" in main_window.analysis_tasks._windows["Broken"].text()
+
+
+def test_a_null_sink_shows_nothing(main_window, tmp_path):
+    path = tmp_path / "ds9.ans"
+    path.write_text("Quiet\n*\nmenu\necho noise | $null\n")
+    main_window.analysis_tasks.load_commands(str(path))
+
+    _run(main_window, "Quiet")
+    assert main_window.analysis_tasks._windows == {}
+
+
+def test_a_task_with_no_sink_still_shows_its_output(main_window, tmp_path):
+    """Silence would leave the user unsure it ran."""
+    path = tmp_path / "ds9.ans"
+    path.write_text("Bare\n*\nmenu\necho bare-output\n")
+    main_window.analysis_tasks.load_commands(str(path))
+
+    _run(main_window, "Bare")
+    assert "bare-output" in main_window.analysis_tasks._windows["Bare"].text()
+
+
+def test_a_failing_task_shows_its_errors(main_window, tmp_path):
+    path = tmp_path / "ds9.ans"
+    path.write_text("Fails\n*\nmenu\nls /no-such-path-xyz |& $text\n")
+    main_window.analysis_tasks.load_commands(str(path))
+
+    _run(main_window, "Fails")
+    assert "No such file" in main_window.analysis_tasks._windows["Fails"].text()
+
+
+def test_a_cancelled_prompt_runs_nothing(main_window, tmp_path, monkeypatch):
+    from PyQt6.QtWidgets import QInputDialog
+
+    monkeypatch.setattr(QInputDialog, "getText", staticmethod(lambda *a, **k: ("", False)))
+    path = tmp_path / "ds9.ans"
+    path.write_text("Asks\n*\nmenu\necho $entry(Anything) | $text\n")
+    main_window.analysis_tasks.load_commands(str(path))
+
+    assert _run(main_window, "Asks") is None
+    assert main_window.analysis_tasks._windows == {}
+    assert "cancelled" in main_window.status_bar.currentMessage()
+
+
+# -- the parameter dialog (M7-5) ---------------------------------------------------------
+
+
+def test_a_parameter_dialog_substitutes_its_values(loaded, monkeypatch, tmp_path):
+    from ncrads9.ui.dialogs import analysis_param_dialog
+
+    class Accepted(analysis_param_dialog.AnalysisParamDialog):
+        def exec(self):
+            return 1
+
+    monkeypatch.setattr("ncrads9.ui.controllers.analysis_tasks.AnalysisParamDialog", Accepted)
+    # A name of its own: DS9 resolves a duplicated `param` name to the
+    # first file that defined it (`AnalysisParam`, `analysisparam.tcl:13`),
+    # and the fixture already has a `sizes`.
+    path = tmp_path / "params.ans"
+    path.write_text(
+        "param aperture\n  radius entry {Radius} {7} {r}\nendparam\n"
+        "Aperture\n*\nmenu\n$param(aperture); echo radius=$radius | $text\n"
+    )
+    loaded.analysis_tasks.load_commands(str(path))
+    task = next(t for t in loaded.analysis_tasks.files[-1].tasks() if t.label == "Aperture")
+    result = loaded.analysis_tasks.run(task, sync=True)
+    assert result.output.strip() == "radius=7"
+
+
+def test_the_dialog_offers_every_widget_ds9_documents(qapp):
+    from ncrads9.ui.dialogs.analysis_param_dialog import AnalysisParamDialog
+
+    parsed = parse(
+        "param foo\n"
+        "  var1 entry {Variable 1} {default} {an entry}\n"
+        "  var2 text {Variable 2} {static} {text}\n"
+        "  var3 checkbox {Variable 3} 1 {a checkbox}\n"
+        "  var4 menu {Variable 4} {AAA|BBB|CCC} {a menu}\n"
+        "  var5 combobox {Variable 5} {XXX|YYY} {a combobox}\n"
+        "  var6 open {Variable 6} {in} {open}\n"
+        "  var7 save {Variable 7} {out} {save}\n"
+        "endparam\n"
+    )
+    dialog = AnalysisParamDialog(parsed.parameters["foo"])
+    assert dialog.values() == {
+        "var1": "default",
+        "var2": "static",
+        "var3": "1",
+        "var4": "AAA",
+        "var5": "XXX",
+        "var6": "in",
+        "var7": "out",
+    }
+
+
+def test_a_static_text_row_cannot_be_edited(qapp):
+    """DS9's `text` shows a value the command uses; it is not an entry."""
+    from ncrads9.ui.dialogs.analysis_param_dialog import AnalysisParamDialog
+
+    parsed = parse("param p\n  v text {V} {fixed} {}\nendparam\n")
+    dialog = AnalysisParamDialog(parsed.parameters["p"])
+    assert dialog._widgets["v"].isReadOnly() is True
+
+
+def test_a_menu_row_is_not_editable_but_a_combobox_is(qapp):
+    from ncrads9.ui.dialogs.analysis_param_dialog import AnalysisParamDialog
+
+    parsed = parse("param p\n  m menu {M} {A|B} {}\n  c combobox {C} {X|Y} {}\nendparam\n")
+    dialog = AnalysisParamDialog(parsed.parameters["p"])
+    assert dialog._widgets["m"].isEditable() is False
+    assert dialog._widgets["c"].isEditable() is True
+
+
+def test_a_parameter_default_may_contain_a_macro(qapp):
+    """DS9's own sample uses `{$filename}` and `{$width}` as defaults."""
+    from ncrads9.ui.dialogs.analysis_param_dialog import AnalysisParamDialog
+
+    parsed = parse("param p\n  v entry {V} {$width} {}\nendparam\n")
+    dialog = AnalysisParamDialog(parsed.parameters["p"], expand=lambda value: "512")
+    assert dialog.values()["v"] == "512"
+
+
+def test_a_tabbed_parameter_set_becomes_a_notebook(qapp):
+    from PyQt6.QtWidgets import QTabWidget
+
+    from ncrads9.ui.dialogs.analysis_param_dialog import AnalysisParamDialog
+
+    parsed = parse(FIXTURE)
+    dialog = AnalysisParamDialog(parsed.parameters["tabbed"])
+    assert dialog.findChild(QTabWidget) is not None
+
+
+# -- the macro context the window supplies ------------------------------------------------
+
+
+def test_the_context_reports_the_frames_dimensions(loaded):
+    task = loaded.analysis_tasks.files[0].tasks()[0]
+    context = loaded.analysis_tasks.context(task)
+    assert (context.width, context.height) == (64, 32)
+    assert context.bitpix == -32
+
+
+def test_the_context_reports_the_regions(loaded):
+    from ncrads9.regions.region_parser import RegionParser
+
+    loaded.frame_manager.current_frame.regions = RegionParser().parse_string("image\ncircle(10,10,5)\n")
+    task = loaded.analysis_tasks.files[0].tasks()[0]
+    assert "circle" in loaded.analysis_tasks.context(task).regions("")
+
+
+def test_the_regions_macro_honours_a_property_filter(loaded):
+    from ncrads9.regions.region_parser import RegionParser
+
+    loaded.frame_manager.current_frame.regions = RegionParser().parse_string(
+        "image\ncircle(10,10,5)\n-box(20,20,4,4)\n"
+    )
+    task = loaded.analysis_tasks.files[0].tasks()[0]
+    context = loaded.analysis_tasks.context(task)
+    assert "box" not in context.regions("include")
+    assert "circle" not in context.regions("exclude")
+
+
+def test_the_regions_macro_honours_a_format(loaded):
+    from ncrads9.regions.region_parser import RegionParser
+
+    loaded.frame_manager.current_frame.regions = RegionParser().parse_string("image\ncircle(10,10,5)\n")
+    task = loaded.analysis_tasks.files[0].tasks()[0]
+    assert "circle" in loaded.analysis_tasks.context(task).regions("ciao")
+
+
+def test_a_bind_tasks_coordinates_come_from_the_event(loaded):
+    task = loaded.analysis_tasks.files[0].binds[0]
+    context = loaded.analysis_tasks.context(task, x=12.0, y=7.0)
+    assert context.coordinate("x", "image", "fk5", "degrees") == "12"
+    assert context.coordinate("y", "image", "fk5", "degrees") == "7"
+
+
+def test_the_value_macro_reads_the_pixel(loaded):
+    task = loaded.analysis_tasks.files[0].binds[0]
+    context = loaded.analysis_tasks.context(task, x=1.0, y=1.0)
+    assert context.value() == "0"
+
+
+def test_data_writes_the_frame_out_as_fits(loaded):
+    from astropy.io import fits
+
+    task = loaded.analysis_tasks.files[0].tasks()[0]
+    path = loaded.analysis_tasks.context(task).data_file()
+    assert path is not None
+    with fits.open(path) as opened:
+        assert opened[0].data.shape == (32, 64)
+
+
+# -- the startup search (M7-7) --------------------------------------------------------------
+
+
+def test_the_startup_search_looks_where_ds9_looks(monkeypatch, tmp_path):
+    from ncrads9.ui.controllers.analysis_tasks import AnalysisTaskController
+
+    home = tmp_path / "home"
+    work = tmp_path / "work"
+    (home / "bin").mkdir(parents=True)
+    work.mkdir()
+
+    (work / "ds9.ans").write_text("A\n*\nmenu\necho a\n")
+    (home / "ds9.analysis").write_text("B\n*\nmenu\necho b\n")
+    (home / "bin" / "extra.ds9").write_text("C\n*\nmenu\necho c\n")
+
+    monkeypatch.setattr("pathlib.Path.cwd", staticmethod(lambda: work))
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr("os.path.expanduser", lambda path: path.replace("~", str(home)))
+
+    found = [path.name for path in AnalysisTaskController.startup_files()]
+    assert "ds9.ans" in found
+    assert "ds9.analysis" in found
+    assert "extra.ds9" in found
+
+
+def test_the_startup_search_does_not_list_a_file_twice(monkeypatch, tmp_path):
+    """`.` and the working directory are the same place."""
+    from ncrads9.ui.controllers.analysis_tasks import AnalysisTaskController
+
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "one.ds9").write_text("A\n*\nmenu\necho a\n")
+
+    monkeypatch.setattr("pathlib.Path.cwd", staticmethod(lambda: work))
+    monkeypatch.chdir(work)
+    monkeypatch.setenv("HOME", str(tmp_path / "nohome"))
+    monkeypatch.setattr("os.path.expanduser", lambda path: path.replace("~", str(tmp_path / "nohome")))
+
+    found = AnalysisTaskController.startup_files()
+    assert len(found) == len({path.resolve() for path in found})
+
+
+def test_autoload_skips_a_file_it_cannot_parse(main_window, monkeypatch, tmp_path):
+    """One bad file in /usr/local/bin must not cost the rest."""
+    from ncrads9.ui.controllers.analysis_tasks import AnalysisTaskController
+
+    good = tmp_path / "good.ds9"
+    good.write_text("A\n*\nmenu\necho a | $text\n")
+    bad = tmp_path / "bad.ds9"
+    bad.write_text("B\n*\nmangle\necho b\n")
+
+    monkeypatch.setattr(AnalysisTaskController, "startup_files", staticmethod(lambda: [bad, good]))
+    assert main_window.analysis_tasks.autoload() == 1
+    assert len(main_window.analysis_tasks.files) == 1
+
+
+def test_the_preference_is_on_by_default():
+    from ncrads9.utils.preferences import Preferences
+
+    assert Preferences.DEFAULT_PREFS["autoload_analysis_files"] is True
+
+
+def test_a_duplicated_parameter_name_resolves_to_the_first_file(loaded, tmp_path, monkeypatch):
+    """DS9 breaks on the first match (`analysisparam.tcl:13`)."""
+    from ncrads9.ui.dialogs import analysis_param_dialog
+
+    class Accepted(analysis_param_dialog.AnalysisParamDialog):
+        def exec(self):
+            return 1
+
+    monkeypatch.setattr("ncrads9.ui.controllers.analysis_tasks.AnalysisParamDialog", Accepted)
+
+    path = tmp_path / "second.ans"
+    path.write_text(
+        "param sizes\n  radius entry {Radius} {99} {r}\nendparam\n"
+        "Later\n*\nmenu\n$param(sizes); echo radius=$radius | $text\n"
+    )
+    loaded.analysis_tasks.load_commands(str(path))
+    task = next(t for t in loaded.analysis_tasks.files[-1].tasks() if t.label == "Later")
+    # The fixture's `sizes` defines radius as 10, and it was loaded first.
+    assert loaded.analysis_tasks.run(task, sync=True).output.strip() == "radius=10"
+
+
+def test_analysis_buttons_do_not_share_the_analysis_menus_category(loaded):
+    """Sharing it would let Clear Analysis Commands delete built-in buttons."""
+    from ncrads9.ui.button_bar import ANALYSIS_CATEGORY
+
+    assert ANALYSIS_CATEGORY != "Analysis"
+    built_in = len(loaded.button_bar._page_buttons["Analysis"])
+    loaded.menu_bar.action_clear_analysis_commands.trigger()
+    assert len(loaded.button_bar._page_buttons["Analysis"]) == built_in
+    assert loaded.button_bar._page_buttons[ANALYSIS_CATEGORY] == []

@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 from numpy.typing import NDArray
 from PyQt6.QtCore import QSize, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QAction, QColor, QKeyEvent
+from PyQt6.QtGui import QColor, QKeyEvent
 from PyQt6.QtWidgets import (
     QMainWindow,
     QScrollArea,
@@ -50,6 +50,7 @@ from ..rendering.scale_limits import ScaleLimits
 from ..utils.preferences import Preferences
 from .button_bar import ButtonBar
 from .controllers.analysis import AnalysisController
+from .controllers.analysis_tasks import AnalysisTaskController
 from .controllers.base import Controller
 from .controllers.bin import BinController
 from .controllers.color import ColorController
@@ -159,7 +160,6 @@ class MainWindow(QMainWindow):
         self._grid_settings: dict | None = None
         self._analysis_command_log = False
         self._analysis_command_entries: list[str] = []
-        self._loaded_analysis_actions: list[QAction] = []
         self._analysis_mask_mode = "disabled"
         self._analysis_mask_min: float | None = None
         self._analysis_mask_max: float | None = None
@@ -260,6 +260,7 @@ class MainWindow(QMainWindow):
         self.display = DisplayPipeline(self)
 
         self.analysis = AnalysisController(self)
+        self.analysis_tasks = AnalysisTaskController(self)
         self.bin = BinController(self)
         self.color = ColorController(self)
         # Named `frame_controller`: `self.frame` would shadow nothing on the
@@ -278,6 +279,7 @@ class MainWindow(QMainWindow):
         #: Every controller, for broadcasting `sync()` on a frame change.
         self.controllers: tuple[Controller, ...] = (
             self.analysis,
+            self.analysis_tasks,
             self.bin,
             self.color,
             self.edit,
@@ -330,6 +332,7 @@ class MainWindow(QMainWindow):
 
         # Analysis and Bin menus
         self.analysis.connect()
+        self.analysis_tasks.connect()
         self.bin.connect()
 
         self.menu_bar.action_fits_header.triggered.connect(self.file.show_header)

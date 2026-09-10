@@ -93,6 +93,13 @@ def _cmd(label: str, family: str) -> ButtonSpec:
 #: Category name -> its buttons, in DS9's order. Categories match DS9's
 #: `CreateButtonsMajor` list, less Illustrate (an M9 feature NCRADS9 has none
 #: of) and with VO added, which DS9 spreads across File and Analysis.
+#: The category an analysis file's `button` tasks appear under. Not in
+#: `CATEGORIES`, because it exists only once a file declares a buttonbar --
+#: and deliberately not "Analysis", which is already the category mirroring
+#: the Analysis *menu*. Sharing it would mix the two and let Clear Analysis
+#: Commands delete the built-in buttons.
+ANALYSIS_CATEGORY = "Tasks"
+
 CATEGORIES: tuple[tuple[str, tuple[ButtonSpec, ...]], ...] = (
     (
         "File",
@@ -435,6 +442,53 @@ class ButtonBar(QWidget):
         return button
 
     # -- categories ----------------------------------------------------------
+
+    # -- analysis buttons (M7-2) ---------------------------------------------
+
+    def add_analysis_button(self, label: str, handler) -> QPushButton:
+        """Add a button for a `button` task from an analysis file.
+
+        DS9's `buttonbar` ... `endbuttonbar` puts these on a bar of their
+        own, which appears only once a file declares one -- a category with
+        no buttons in it is an empty page nobody can use.
+        """
+        page = self._pages.get(ANALYSIS_CATEGORY)
+        if page is None:
+            page = self._build_page(ANALYSIS_CATEGORY, ())
+            self._pages[ANALYSIS_CATEGORY] = page
+            self._stack.addWidget(page)
+            button = QPushButton(ANALYSIS_CATEGORY.lower())
+            button.setCheckable(True)
+            button.setFlat(True)
+            button.clicked.connect(lambda _checked=False: self.set_category(ANALYSIS_CATEGORY))
+            self._category_buttons[ANALYSIS_CATEGORY] = button
+            self._category_group.addButton(button)
+            self._grid_buttons(
+                self._category_row.layout(),
+                list(self._category_buttons.values()),
+                vertical=False,
+            )
+
+        button = QPushButton(label)
+        button.setFlat(True)
+        button.clicked.connect(lambda _checked=False: handler())
+        self._page_buttons.setdefault(ANALYSIS_CATEGORY, []).append(button)
+        self._grid_buttons(page.layout(), self._page_buttons[ANALYSIS_CATEGORY], vertical=self._vertical)
+        return button
+
+    def clear_analysis_buttons(self) -> int:
+        """Remove every analysis button, for Clear Analysis Commands.
+
+        Returns:
+            How many went.
+        """
+        buttons = self._page_buttons.get(ANALYSIS_CATEGORY, [])
+        count = len(buttons)
+        for button in buttons:
+            button.setParent(None)
+            button.deleteLater()
+        self._page_buttons[ANALYSIS_CATEGORY] = []
+        return count
 
     def set_category(self, name: str) -> None:
         """Show one category's buttons.

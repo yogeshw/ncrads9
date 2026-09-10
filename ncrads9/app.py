@@ -344,6 +344,16 @@ def apply_startup_cli(main_window: MainWindow, argv: Sequence[str]) -> None:
         if option == "rgb":
             rgb_requested = True
             continue
+        if option == "analysis":
+            # DS9: `-analysis <file>`, `-analysis load <file>`, and
+            # `-analysis clear`.
+            words = [word for word in args if word]
+            if words and words[0] == "clear":
+                main_window.analysis_tasks.clear_commands()
+            else:
+                for path in words[1:] if words[:1] == ["load"] else words:
+                    main_window.analysis_tasks.load_commands(path)
+            continue
         if option in {"red", "green", "blue"}:
             if args:
                 rgb_channel_paths[option] = args[0]
@@ -463,6 +473,14 @@ def run_application(argv: list[str]) -> int:
         )
         if not xpa_server.start():
             logger.warning("Failed to start XPA server on %s", xpa_server.address)
+
+    # DS9 loads the analysis files it finds at startup before it does
+    # anything a command line asked for, so a `-analysis` file's tasks come
+    # after the ones the environment already provides.
+    if bool(main_window.preferences.get("autoload_analysis_files", True)):
+        found = main_window.analysis_tasks.autoload()
+        if found:
+            logger.info("Loaded %d analysis file(s) at startup", found)
 
     # Apply startup files/options
     apply_startup_cli(main_window, argv)

@@ -47,11 +47,7 @@ ENTRY_POINTS = ("ncrads9.app", "ncrads9.__main__")
 #: writers, the theme definitions). Others are skeletons. `skeletons.md` says
 #: which is which.
 PENDING_ADOPTION: dict[str, str] = {
-    # M7 -- analysis platform. The task engine is written and tested; M7-4
-    # and M7-8 put it behind the Analysis menu, which is what reaches it.
-    # `task_file` is already reached, by the plot data reader's Tcl splitter.
-    "analysis.macros": "M7-8",
-    "analysis.task_runner": "M7-8",
+    # M7 -- analysis platform.
     "analysis.pixel_table": "M7-26",
     "grid.grid_config": "M7-13",
     "grid.grid_labels": "M7-12",

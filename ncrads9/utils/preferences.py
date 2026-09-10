@@ -41,6 +41,8 @@ class Preferences:
         "show_statusbar": True,
         # DS9's Autoload FITS Regions, on by default as it is there.
         "autoload_fits_regions": True,
+        # Whether to load `ds9.ans` and `*.ds9` at startup, as DS9 does.
+        "autoload_analysis_files": True,
     }
 
     def __init__(self, prefs_path: Path | str | None = None) -> None:

@@ -26,13 +26,9 @@ Absent, with the milestone that adds each:
 * A real WCS graticule. What `set_grid` toggles today is a *pixel* grid drawn
   in image coordinates by `contour_overlay`, not DS9's coordinate graticule
   with curved lines, tick marks and sexagesimal labels (PLAN.md §3.5, M7-10).
-* The `.ds9.ans` external-task engine. `load_commands` reads a homegrown
-  `label|command` format, not DS9's four task types, macro set and output
-  sinks (M7-1 to M7-9).
 * Mask *files*, with blend mode, colour and value range; only thresholding
   exists (M7-24).
-* The Plot Tool, catalog tool, image servers, archives and footprint servers
-  (M7-15, M8).
+* The catalog tool, image servers, archives and footprint servers (M8).
 
 `set_bin` is knowingly misnamed. DS9's Bin builds an image from a FITS bin
 table by binning two columns; this block-averages an image, which is DS9's
@@ -48,7 +44,7 @@ import numpy as np
 from astropy.coordinates import SkyCoord
 from numpy.typing import NDArray
 from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QAction, QColor, QDesktopServices
+from PyQt6.QtGui import QColor, QDesktopServices
 from PyQt6.QtWidgets import (
     QColorDialog,
     QDialog,
@@ -129,8 +125,6 @@ class AnalysisController(Controller):
         )
         menu.action_plot_tool_bar.triggered.connect(lambda _checked=False: self.open_plot_tool(PlotStyle.BAR))
 
-        menu.action_load_analysis_commands.triggered.connect(self.load_commands)
-        menu.action_clear_analysis_commands.triggered.connect(self.clear_commands)
         menu.action_web_browser.triggered.connect(self.open_web_browser)
 
     def sync_block_menu(self, factor: int) -> None:
@@ -538,80 +532,6 @@ class AnalysisController(Controller):
         self._plots.add(window)
         window.show()
         return window
-
-    def load_commands(self) -> None:
-        """Load simple external analysis commands into the Analysis menu."""
-        filepath, _ = QFileDialog.getOpenFileName(
-            self,
-            "Load Analysis Commands",
-            "",
-            "Analysis Command Files (*.ans *.analysis *.txt *.ds9);;All Files (*)",
-        )
-        if not filepath:
-            return
-
-        self.clear_commands(show_message=False)
-        loaded = 0
-        try:
-            with open(filepath, encoding="utf-8") as handle:
-                lines = handle.readlines()
-        except Exception as exc:
-            self.status(f"Failed to load analysis commands: {exc}", 3500)
-            return
-
-        for raw in lines:
-            line = raw.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "|" in line:
-                label, command = [part.strip() for part in line.split("|", 1)]
-            else:
-                label, command = line, line
-            if not label or not command:
-                continue
-            action = QAction(label, self.window)
-            action.triggered.connect(
-                lambda checked=False, cmd=command, title=label: self.execute_command(title, cmd)
-            )
-            self.menu.analysis_menu.insertAction(self.menu.action_load_analysis_commands, action)
-            self.window._loaded_analysis_actions.append(action)
-            loaded += 1
-
-        self.log_command(f"load_analysis_commands {loaded}")
-        self.status(f"Loaded {loaded} analysis commands", 3000)
-
-    def execute_command(self, title: str, command: str) -> None:
-        """Execute a simple loaded analysis command."""
-        cmd = command.strip()
-        self.log_command(f"run {title}: {cmd}")
-        if cmd.lower().startswith(("http://", "https://", "url:")):
-            target = cmd.split(":", 1)[1].strip() if cmd.lower().startswith("url:") else cmd
-            QDesktopServices.openUrl(QUrl(target))
-            self.status(f"Opened {title}", 2000)
-            return
-        if cmd.lower().startswith("open:"):
-            target = cmd.split(":", 1)[1].strip()
-            if target:
-                self.window.file.open_file(target)
-                return
-        if cmd.lower().startswith("message:"):
-            self.status(cmd.split(":", 1)[1].strip(), 3000)
-            return
-        self.status(f"{title}: {cmd}", 3000)
-
-    def clear_commands(self, show_message: bool = True) -> None:
-        """Clear previously loaded external analysis commands."""
-        if not self.window._loaded_analysis_actions:
-            if show_message:
-                self.status("No external analysis commands are currently loaded", 2500)
-            return
-        for action in self.window._loaded_analysis_actions:
-            self.menu.analysis_menu.removeAction(action)
-        cleared = len(self.window._loaded_analysis_actions)
-        self.window._loaded_analysis_actions = []
-        self.log_command(f"clear_analysis_commands {cleared}")
-        if show_message:
-            self.status(f"Cleared {cleared} analysis commands", 2500)
 
     def open_web_browser(self) -> None:
         """Open a browser URL from the Analysis menu."""

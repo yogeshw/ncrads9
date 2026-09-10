@@ -20,6 +20,8 @@ Dialog modules for NCRADS9.
 Author: Yogesh Wadadekar
 """
 
+from .analysis_param_dialog import AnalysisParamDialog
+from .analysis_text_dialog import AnalysisTextDialog
 from .centroid_dialog import CentroidDialog
 from .colormap_dialog import ColormapDialog
 from .contour_dialog import ContourDialog
@@ -45,6 +47,8 @@ __all__ = [
     "SmoothDialog",
     "ScaleDialog",
     "ColormapDialog",
+    "AnalysisParamDialog",
+    "AnalysisTextDialog",
     "CentroidDialog",
     "GroupDialog",
     "RegionDialog",

@@ -113,14 +113,15 @@ def test_analysis_mask_range(main_window: MainWindow):
 
 
 def test_load_and_clear_analysis_commands(main_window: MainWindow, tmp_path, monkeypatch):
-    command_file = tmp_path / "analysis_commands.txt"
-    command_file.write_text("Quick URL|https://example.com\n", encoding="utf-8")
+    """The real `.ds9.ans` format now; `test_analysis_tasks.py` covers it fully."""
+    command_file = tmp_path / "ds9.ans"
+    command_file.write_text("Quick echo\n*\nmenu\necho hi | $text\n", encoding="utf-8")
     monkeypatch.setattr(
         QFileDialog,
         "getOpenFileName",
         staticmethod(lambda *args, **kwargs: (str(command_file), "")),
     )
-    main_window.analysis.load_commands()
-    assert len(main_window._loaded_analysis_actions) == 1
-    main_window.analysis.clear_commands(show_message=False)
-    assert len(main_window._loaded_analysis_actions) == 0
+    main_window.menu_bar.action_load_analysis_commands.trigger()
+    assert len(main_window.analysis_tasks.files) == 1
+    main_window.menu_bar.action_clear_analysis_commands.trigger()
+    assert main_window.analysis_tasks.files == []
