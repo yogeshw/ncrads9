@@ -72,7 +72,6 @@ PASTE_OFFSET = 10.0
 #: are live.
 DEFERRED_MODES: dict[str, str] = {
     "3d": "M9-21",
-    "illustrate": "M9-6",
 }
 
 #: Where the applied theme's name is kept, so re-applying can be skipped.
@@ -142,6 +141,9 @@ class EditController(Controller):
         self.window.pointer.set_mode(mode)
         if mode != "crosshair":
             self.window.crosshair.set_enabled(False)
+        # The illustrate layer takes the mouse only in its own mode, so
+        # clicking the image elsewhere is not caught by an invisible drawing.
+        self.window.illustrate.set_editing(mode == "illustrate")
 
         if mode == "region":
             # Region mode is the drawing mode the Region menu already sets;
@@ -154,6 +156,9 @@ class EditController(Controller):
             # does something the moment it is chosen.
             self.window.crosshair.set_enabled(True)
             self.status("Edit mode: crosshair -- click to place the crosshair")
+            return
+        if mode == "illustrate":
+            self.status("Edit mode: illustrate -- drag to draw, click to select")
             return
 
         milestone = DEFERRED_MODES.get(mode)

@@ -297,6 +297,7 @@ class MainWindow(QMainWindow):
         self.catalog.connect()
         self.crop.connect()
         self.crosshair.connect()
+        self.illustrate.connect()
         self.image_servers.connect()
 
         self.menu_bar.action_fits_header.triggered.connect(self.file.show_header)
@@ -453,6 +454,9 @@ class MainWindow(QMainWindow):
         new_viewer = self._create_image_viewer(use_gpu)
         self.image_viewer = new_viewer
         self.scroll_area.setWidget(self.image_viewer)
+        # The illustrate layer outlives the widget it is drawn on, so point
+        # the new overlay at it rather than losing what was drawn.
+        self.illustrate.attach()
         if self.image_data is not None:
             self.display.display()
 

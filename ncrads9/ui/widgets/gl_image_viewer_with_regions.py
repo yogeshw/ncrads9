@@ -31,6 +31,7 @@ from ...rendering.gl_canvas import GLCanvas
 from ..view_transform import DisplayTransform
 from .catalog_overlay import CatalogOverlay
 from .contour_overlay import ContourOverlay
+from .illustrate_overlay import IllustrateOverlay
 from .region_overlay import RegionMode, RegionOverlay
 
 
@@ -70,9 +71,13 @@ class GLImageViewerWithRegions(QWidget):
         self.contour_overlay = ContourOverlay(self.gl_canvas)
         # Catalogue symbols are a layer of their own, as in DS9.
         self.catalog_overlay = CatalogOverlay(self.gl_canvas)
+        # The illustrate layer is drawn on the canvas rather than on the
+        # data, so it takes no transform and follows nothing.
+        self.illustrate_overlay = IllustrateOverlay(parent=self.gl_canvas)
         # Topmost, because it owns the mouse -- see the plain viewer.
         self.region_overlay.raise_()
         self.region_overlay.pick_handler = self.catalog_overlay.pick
+        self.region_overlay.illustrate_handler = self.illustrate_overlay.handle_event
 
         self.gl_canvas.cursor_moved.connect(self._on_cursor_moved)
         self.gl_canvas.mouse_clicked.connect(self._on_mouse_clicked)
@@ -314,6 +319,7 @@ class GLImageViewerWithRegions(QWidget):
         self.region_overlay.setGeometry(self.gl_canvas.geometry())
         self.contour_overlay.setGeometry(self.gl_canvas.geometry())
         self.catalog_overlay.setGeometry(self.gl_canvas.geometry())
+        self.illustrate_overlay.setGeometry(self.gl_canvas.geometry())
         self._update_overlay_transform()
 
     def _update_overlay_transform(self) -> None:

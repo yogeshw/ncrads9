@@ -29,6 +29,7 @@ from ...regions.base_region import BaseRegion
 from ..image_viewer import ImageViewer
 from .catalog_overlay import CatalogOverlay
 from .contour_overlay import ContourOverlay
+from .illustrate_overlay import IllustrateOverlay
 from .region_overlay import RegionMode, RegionOverlay
 
 
@@ -66,12 +67,16 @@ class ImageViewerWithRegions(QWidget):
         # Catalogue symbols are a layer of their own, as in DS9: not
         # regions, not saved with them, not deleted by Region -> Delete All.
         self.catalog_overlay = CatalogOverlay(self.image_viewer)
+        # The illustrate layer is drawn on the canvas rather than on the
+        # data, so it takes no transform and follows nothing.
+        self.illustrate_overlay = IllustrateOverlay(parent=self.image_viewer)
         # Topmost, because it owns the mouse: a Qt event a child ignores
         # goes to the parent, not to a sibling, so whichever overlay is on
         # top has to be the one that dispatches.
         self.region_overlay.raise_()
         self.catalog_overlay.pick_handler = None
         self.region_overlay.pick_handler = self.catalog_overlay.pick
+        self.region_overlay.illustrate_handler = self.illustrate_overlay.handle_event
 
         # Connect signals
         self.image_viewer.mouse_moved.connect(self.mouse_moved)
@@ -223,6 +228,7 @@ class ImageViewerWithRegions(QWidget):
         self.region_overlay.setGeometry(self.image_viewer.geometry())
         self.contour_overlay.setGeometry(self.image_viewer.geometry())
         self.catalog_overlay.setGeometry(self.image_viewer.geometry())
+        self.illustrate_overlay.setGeometry(self.image_viewer.geometry())
         self._update_overlay_transform()
 
     def _update_overlay_transform(self) -> None:

@@ -199,6 +199,11 @@ class RegionOverlay(QWidget):
         #: no region; returns True if something else consumed it. The
         #: catalogue layer installs this.
         self.pick_handler = None
+        #: Called with (phase, widget position, button) in illustrate mode;
+        #: returns True if the illustrate layer used the event. Installed by
+        #: the host viewer, for the same reason `pick_handler` is: only this
+        #: overlay takes mouse events.
+        self.illustrate_handler = None
         #: Which resize handle is being dragged, if any. `None` means the
         #: drag is a move (or nothing at all); an index means a reshape.
         self.dragging_handle: int | None = None
@@ -693,6 +698,21 @@ class RegionOverlay(QWidget):
 
     # -- pointer modes (M9-1 ... M9-5) ---------------------------------------
 
+    def _to_illustrate(self, event, phase: str) -> bool:
+        """Offer one mouse event to the illustrate layer.
+
+        Its coordinates are the canvas's, not the image's, so this hands the
+        widget position over untransformed -- an illustration stays where it
+        was put whatever the image does.
+        """
+        handler = self.illustrate_handler
+        if handler is None:
+            return False
+        button = "left" if event.button() == Qt.MouseButton.LeftButton else "right"
+        if phase == "move":
+            button = "left" if event.buttons() & Qt.MouseButton.LeftButton else "none"
+        return bool(handler(phase, event.position(), button))
+
     def _dispatch(self, event, phase: str) -> bool:
         """Give one mouse event to the active pointer mode, if there is one.
 
@@ -718,6 +738,10 @@ class RegionOverlay(QWidget):
 
     def mousePressEvent(self, event) -> None:
         """Handle a press: the pointer mode first, then regions."""
+        if self._to_illustrate(event, "press"):
+            event.accept()
+            return
+
         if self.pointer_handler is not None:
             if self._dispatch(event, "press"):
                 event.accept()
@@ -797,6 +821,10 @@ class RegionOverlay(QWidget):
 
     def mouseMoveEvent(self, event) -> None:
         """Handle a drag: the pointer mode first, then regions."""
+        if self._to_illustrate(event, "move"):
+            event.accept()
+            return
+
         if self.pointer_handler is not None:
             if self._dispatch(event, "move"):
                 event.accept()
@@ -852,6 +880,10 @@ class RegionOverlay(QWidget):
 
     def mouseReleaseEvent(self, event) -> None:
         """Handle a release: the pointer mode first, then regions."""
+        if self._to_illustrate(event, "release"):
+            event.accept()
+            return
+
         if self.pointer_handler is not None:
             if self._dispatch(event, "release"):
                 event.accept()

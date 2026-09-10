@@ -101,6 +101,21 @@ DEFAULT_REGION_COLOR = "green"
 #: The line widths DS9's Region -> Width cascade offers.
 REGION_WIDTHS: tuple[int, ...] = (1, 2, 3, 4)
 
+#: The shapes DS9's Illustrate -> Shape cascade offers, in its order
+#: (`millustrate.tcl:62`).
+ILLUSTRATE_SHAPES: tuple[str, ...] = (
+    "circle",
+    "ellipse",
+    "box",
+    "polygon",
+    "line",
+    "text",
+    "image",
+)
+
+#: What DS9 draws a new illustration in.
+DEFAULT_ILLUSTRATE_COLOR = "cyan"
+
 #: DS9's Region -> Properties cascade: the flags a region carries, with the
 #: value a new region takes.
 REGION_PROPERTIES: tuple[tuple[str, str, bool], ...] = (
@@ -278,6 +293,7 @@ class MenuBar(QMenuBar):
         self._setup_region_menu()
         self._setup_vo_menu()
         self._setup_wcs_menu()
+        self._setup_illustrate_menu()
         self._setup_analysis_menu()
         self._setup_help_menu()
 
@@ -1653,6 +1669,90 @@ class MenuBar(QMenuBar):
         self.action_show_direction_arrows: QAction = QAction("Show &Direction Arrows", self)
         self.action_show_direction_arrows.setCheckable(True)
         self.wcs_menu.addAction(self.action_show_direction_arrows)
+
+    def _setup_illustrate_menu(self) -> None:
+        """Set up the Illustrate menu (`millustrate.tcl`).
+
+        DS9 puts it between WCS and Analysis, and so do we.
+        """
+        self.illustrate_menu: QMenu = self.addMenu("&Illustrate")
+
+        self.action_illustrate_info: QAction = QAction("&Get Information", self)
+        self.illustrate_menu.addAction(self.action_illustrate_info)
+        self.illustrate_menu.addSeparator()
+
+        self.illustrate_shape_menu: QMenu = self.illustrate_menu.addMenu("&Shape")
+        shape_group = QActionGroup(self)
+        shape_group.setExclusive(True)
+        #: Shape name -> its action.
+        self.illustrate_shape_actions: dict[str, QAction] = {}
+        for name in ILLUSTRATE_SHAPES:
+            action = QAction(name.title(), self)
+            action.setCheckable(True)
+            action.setChecked(name == "circle")
+            shape_group.addAction(action)
+            self.illustrate_shape_menu.addAction(action)
+            self.illustrate_shape_actions[name] = action
+
+        self.illustrate_menu.addSeparator()
+
+        self.illustrate_color_menu: QMenu = self.illustrate_menu.addMenu("&Color")
+        color_group = QActionGroup(self)
+        color_group.setExclusive(True)
+        #: Colour name -> its action.
+        self.illustrate_color_actions: dict[str, QAction] = {}
+        for name in REGION_COLORS:
+            action = QAction(name.title(), self)
+            action.setCheckable(True)
+            action.setChecked(name == DEFAULT_ILLUSTRATE_COLOR)
+            color_group.addAction(action)
+            self.illustrate_color_menu.addAction(action)
+            self.illustrate_color_actions[name] = action
+
+        self.illustrate_width_menu: QMenu = self.illustrate_menu.addMenu("&Width")
+        width_group = QActionGroup(self)
+        width_group.setExclusive(True)
+        #: Line width -> its action.
+        self.illustrate_width_actions: dict[int, QAction] = {}
+        for value in REGION_WIDTHS:
+            action = QAction(str(value), self)
+            action.setCheckable(True)
+            action.setChecked(value == 1)
+            width_group.addAction(action)
+            self.illustrate_width_menu.addAction(action)
+            self.illustrate_width_actions[value] = action
+
+        self.illustrate_menu.addSeparator()
+
+        #: Command name -> its action, for everything the menu simply does.
+        self.illustrate_actions: dict[str, QAction] = {}
+        for group in (
+            (
+                ("all", "&All"),
+                ("none", "&None"),
+                ("invert", "&Invert"),
+                ("front", "&Front"),
+                ("back", "&Back"),
+            ),
+            (("move_front", "Move to &Front"), ("move_back", "Move to &Back")),
+            (
+                ("save_selection", "&Save Selection..."),
+                ("list_selection", "&List Selection"),
+                ("delete_selection", "&Delete Selection"),
+            ),
+            (("open", "&Open..."), ("save", "Sa&ve..."), ("list", "Lis&t")),
+            (("delete_all", "Delete A&ll"),),
+        ):
+            for name, label in group:
+                action = QAction(label, self)
+                self.illustrate_menu.addAction(action)
+                self.illustrate_actions[name] = action
+            self.illustrate_menu.addSeparator()
+
+        self.action_illustrate_show: QAction = QAction("Sho&w", self)
+        self.action_illustrate_show.setCheckable(True)
+        self.action_illustrate_show.setChecked(True)
+        self.illustrate_menu.addAction(self.action_illustrate_show)
 
     def _setup_analysis_menu(self) -> None:
         """Set up the Analysis menu."""

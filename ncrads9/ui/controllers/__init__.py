@@ -35,6 +35,7 @@ from .edit import EditController
 from .file import FileController
 from .frame import FrameController
 from .help import HelpController
+from .illustrate import IllustrateController
 from .image_servers import ImageServerController
 from .pointer import PointerController
 from .region import RegionController
@@ -75,6 +76,7 @@ CONTROLLERS: tuple[tuple[str, type], ...] = (
     ("file", FileController),
     ("frame_controller", FrameController),
     ("help", HelpController),
+    ("illustrate", IllustrateController),
     ("image_servers", ImageServerController),
     ("pointer", PointerController),
     ("region", RegionController),

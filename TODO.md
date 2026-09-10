@@ -911,13 +911,32 @@ Depends on M2.
 Depends on M2, M3.
 
 ### Pointer modes
-- [ ] **M9-1** (L) Crosshair mode: draggable crosshair, coordinate readout, and the horizontal/
+- [x] **M9-1** (L) Crosshair mode: draggable crosshair, coordinate readout, and the horizontal/
       vertical cut graphs driven by it; Crosshair Parameters dialog made functional; crosshair
-      match and lock across frames.
-- [ ] **M9-2** (M) Interactive Crop mode (rubber-band crop on the canvas), plus crop match/lock.
-- [ ] **M9-3** (M) Explicit Pan, Zoom and Rotate pointer modes.
-- [ ] **M9-4** (M) Examine mode (click to centre-and-zoom) and its parameters.
-- [ ] **M9-5** (S) Catalog and Footprint pointer modes (click a symbol to select its row).
+      match and lock across frames. `ui/controllers/crosshair.py`,
+      `ui/dialogs/crosshair_dialog.py`. Per frame, as DS9's is; drives the readout down the
+      window's own pointer path so the info panel, status bar, WCS display, magnifier and both
+      cut graphs stay on one code path; the lock matches through the sky, falling back to pixels
+      only without a usable WCS. Retired the window's `_crosshair_*` state, which made the
+      crosshair follow the pointer -- not what DS9's crosshair does -- and left two controllers
+      connected to Crosshair Parameters.
+- [x] **M9-2** (M) Interactive Crop mode (rubber-band crop on the canvas), plus crop match/lock.
+      `frames/crop.py`, `ui/controllers/crop.py`. A crop chooses the data displayed, not where
+      the view is looking: the old Crop Parameters zoomed and panned instead, which is what the
+      Zoom mode's rubber band is for. Blanked pixels drop out of the scale limits by themselves
+      (DS9's CROPSEC) and are painted in DS9's Blank/Inf/NaN colour, added as a preference here
+      because a crop over dark data was otherwise invisible.
+- [x] **M9-3** (M) Explicit Pan, Zoom and Rotate pointer modes. `ui/pointer_modes.py` decides
+      what a drag means over a `PointerTarget` protocol; `ui/controllers/pointer.py` carries it
+      out. The split is what makes every gesture testable without a display.
+- [x] **M9-4** (M) Examine mode (click to centre-and-zoom) and its parameters. Opens the spot in
+      a second frame at DS9's `pexamine(zoom)` of 4 (`examine.tcl:12`), leaving the first view
+      alone -- which is the point of examining.
+- [x] **M9-5** (S) Catalog and Footprint pointer modes (click a symbol to select its row). Needed
+      the overlay stack rebuilt first: two overlays were accepting mouse events, and a Qt event
+      a child ignores goes to its parent rather than to a sibling, so the topmost one ate every
+      click. The region overlay is now the only layer taking the mouse and offers a press that
+      hits no region to the catalogue layer.
 
 ### Illustrate layer
 - [ ] **M9-6** (L) `illustrate/` package: a non-WCS annotation layer with circle, ellipse, box,

@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 894 (798 excluding separators)
+# entries: 940 (836 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -776,6 +776,53 @@
 .wcs|checkbutton|Degrees
 .wcs|separator|---
 .wcs|checkbutton|Show Direction Arrows
+# Illustrate
+.illustrate|command|Get Information
+.illustrate|separator|---
+.illustrate|cascade|Shape
+.illustrate.shape|radiobutton|Circle
+.illustrate.shape|radiobutton|Ellipse
+.illustrate.shape|radiobutton|Box
+.illustrate.shape|radiobutton|Polygon
+.illustrate.shape|radiobutton|Line
+.illustrate.shape|radiobutton|Text
+.illustrate.shape|radiobutton|Image
+.illustrate|separator|---
+.illustrate|cascade|Color
+.illustrate.color|radiobutton|Black
+.illustrate.color|radiobutton|White
+.illustrate.color|radiobutton|Red
+.illustrate.color|radiobutton|Green
+.illustrate.color|radiobutton|Blue
+.illustrate.color|radiobutton|Cyan
+.illustrate.color|radiobutton|Magenta
+.illustrate.color|radiobutton|Yellow
+.illustrate|cascade|Width
+.illustrate.width|radiobutton|1
+.illustrate.width|radiobutton|2
+.illustrate.width|radiobutton|3
+.illustrate.width|radiobutton|4
+.illustrate|separator|---
+.illustrate|command|All
+.illustrate|command|None
+.illustrate|command|Invert
+.illustrate|command|Front
+.illustrate|command|Back
+.illustrate|separator|---
+.illustrate|command|Move to Front
+.illustrate|command|Move to Back
+.illustrate|separator|---
+.illustrate|command|Save Selection
+.illustrate|command|List Selection
+.illustrate|command|Delete Selection
+.illustrate|separator|---
+.illustrate|command|Open
+.illustrate|command|Save
+.illustrate|command|List
+.illustrate|separator|---
+.illustrate|command|Delete All
+.illustrate|separator|---
+.illustrate|checkbutton|Show
 # Analysis
 .analysis|command|Pixel Table
 .analysis|command|Name Resolution
