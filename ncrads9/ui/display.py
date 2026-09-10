@@ -583,6 +583,7 @@ class DisplayPipeline:
         else:
             scaled = apply_scale(image_data, self.window.current_scale, vmin=adjusted_z1, vmax=adjusted_z2)
             rgb_full = cmap.apply_normalized(scaled)
+            rgb_full = self.apply_mask_layer(rgb_full)
             display_rgb = np.ascontiguousarray(np.flipud(rgb_full))
 
             # Convert to QImage
@@ -894,6 +895,37 @@ class DisplayPipeline:
             self.colorbar_entries(frame, cmap, low, high),
             inverted=self.window.invert_colormap,
         )
+
+    def apply_mask_layer(self, rgb: NDArray[np.floating]) -> NDArray[np.floating]:
+        """Paint the loaded mask file over the coloured image (M7-24).
+
+        Applied after the colormap and before the QImage: a mask is a flat
+        colour laid on top, not a change to the data, so it must not go
+        through the scale or the colour table.
+        """
+        layer = getattr(self.window, "mask_layer", None)
+        settings = getattr(self.window, "mask_settings", None)
+        if layer is None or settings is None:
+            return rgb
+
+        from ..analysis import mask as mask_module
+
+        fitted = mask_module.align(layer, (rgb.shape[0], rgb.shape[1]))
+        chosen = mask_module.selected(fitted, settings)
+        if not chosen.any():
+            return rgb
+
+        # The colormap gives bytes; the blend works in 0..1.
+        as_float = np.asarray(rgb, dtype=np.float64)
+        scale = 255.0 if as_float.max() > 1.0 else 1.0
+        painted = mask_module.blend(
+            as_float / scale,
+            chosen,
+            mask_module.rgb(settings.color),
+            settings.alpha,
+            settings.blend,
+        )
+        return (painted * scale).astype(rgb.dtype)
 
     def display_image_data(self, frame: Frame) -> NDArray[np.floating]:
         """Return frame data after the display-level transforms.

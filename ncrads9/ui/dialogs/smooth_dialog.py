@@ -32,6 +32,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
 )
 
@@ -86,6 +87,29 @@ class SmoothDialog(QDialog):
 
         self._elliptical_check = QCheckBox("Use elliptical kernel")
         ellipse_layout.addRow("", self._elliptical_check)
+
+        # DS9's own four controls (`smooth.tcl:124`): a radius and a sigma
+        # for each axis. The axis ratio below is kept for the settings
+        # already saved with it.
+        self._major_radius_spin = QSpinBox()
+        self._major_radius_spin.setRange(1, 20)
+        self._major_radius_spin.setValue(3)
+        ellipse_layout.addRow("Major radius:", self._major_radius_spin)
+
+        self._minor_radius_spin = QSpinBox()
+        self._minor_radius_spin.setRange(1, 20)
+        self._minor_radius_spin.setValue(2)
+        ellipse_layout.addRow("Minor radius:", self._minor_radius_spin)
+
+        self._major_sigma_spin = QDoubleSpinBox()
+        self._major_sigma_spin.setRange(0.1, 20.0)
+        self._major_sigma_spin.setValue(2.0)
+        ellipse_layout.addRow("Major sigma:", self._major_sigma_spin)
+
+        self._minor_sigma_spin = QDoubleSpinBox()
+        self._minor_sigma_spin.setRange(0.1, 20.0)
+        self._minor_sigma_spin.setValue(1.0)
+        ellipse_layout.addRow("Minor sigma:", self._minor_sigma_spin)
 
         self._ratio_spin = QDoubleSpinBox()
         self._ratio_spin.setRange(0.1, 10.0)
@@ -174,6 +198,10 @@ class SmoothDialog(QDialog):
             "kernel_size": int(self._kernel_size_spin.value()),
             "elliptical": self._elliptical_check.isChecked(),
             "axis_ratio": self._ratio_spin.value(),
+            "major_radius": self._major_radius_spin.value(),
+            "minor_radius": self._minor_radius_spin.value(),
+            "major_sigma": self._major_sigma_spin.value(),
+            "minor_sigma": self._minor_sigma_spin.value(),
             "position_angle": self._angle_spin.value(),
             "preserve_nan": self._preserve_nan_check.isChecked(),
             "normalize": self._normalize_check.isChecked(),

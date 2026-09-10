@@ -24,6 +24,7 @@ Author: Yogesh Wadadekar
 import numpy as np
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QComboBox,
     QDialog,
     QHBoxLayout,
     QLabel,
@@ -34,12 +35,26 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ...analysis.pixel_table import PixelTable
+
+#: The table sizes DS9 offers (`ds9/library/pixel.tcl:72`).
+TABLE_SIZES: tuple[int, ...] = (3, 5, 7, 9)
+
+#: Which of them it opens at.
+DEFAULT_TABLE_SIZE = 5
+
 
 class PixelTableDialog(QDialog):
     """Dialog showing pixel values in a table."""
 
     def __init__(
-        self, image_data: np.ndarray, x: int, y: int, size: int = 11, parent: QWidget | None = None
+        self,
+        image_data: np.ndarray,
+        x: int,
+        y: int,
+        size: int = DEFAULT_TABLE_SIZE,
+        parent: QWidget | None = None,
+        wcs_handler=None,
     ) -> None:
         """
         Initialize the pixel table dialog.
@@ -48,8 +63,12 @@ class PixelTableDialog(QDialog):
             image_data: The image data.
             x: Center x coordinate.
             y: Center y coordinate.
-            size: Size of region to display (odd number).
+            size: One of DS9's sizes -- 3, 5, 7 or 9. Anything else falls
+                back to the default rather than being rounded, since a
+                4x4 table has no centre pixel to be a table *about*.
             parent: Optional parent widget.
+            wcs_handler: The frame's WCS, so the centre pixel can be
+                reported in sky coordinates as DS9 does.
         """
         # Pass None as parent to make dialog independent
         super().__init__(None)
@@ -66,7 +85,12 @@ class PixelTableDialog(QDialog):
         self.image_data = image_data
         self.center_x = x
         self.center_y = y
-        self.size = size if size % 2 == 1 else size + 1  # Ensure odd
+        self.size = size if size in TABLE_SIZES else DEFAULT_TABLE_SIZE
+        #: The reader `analysis/pixel_table.py` provides -- it already does
+        #: the bounds checking and the world-coordinate lookup, which this
+        #: dialog used to do again by hand (M7-26).
+        self.reader = PixelTable(image_data) if image_data is not None else None
+        self.wcs_handler = wcs_handler
 
         self.setWindowTitle("Pixel Table")
         self.setMinimumSize(600, 400)
@@ -79,9 +103,24 @@ class PixelTableDialog(QDialog):
         layout = QVBoxLayout()
 
         # Title
-        title = QLabel(f"Pixel Values at ({self.center_x}, {self.center_y})")
-        title.setStyleSheet("font-weight: bold; font-size: 14px;")
-        layout.addWidget(title)
+        self._title = QLabel()
+        self._title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        layout.addWidget(self._title)
+
+        #: The centre pixel's coordinates, in image and in sky.
+        self._coordinates = QLabel()
+        layout.addWidget(self._coordinates)
+
+        # DS9 offers 3x3 up to 9x9 (`pixel.tcl:72`).
+        size_row = QHBoxLayout()
+        size_row.addWidget(QLabel("Size:"))
+        self._size_combo = QComboBox()
+        self._size_combo.addItems([f"{size}x{size}" for size in TABLE_SIZES])
+        self._size_combo.setCurrentText(f"{self.size}x{self.size}")
+        self._size_combo.currentTextChanged.connect(self._on_size_changed)
+        size_row.addWidget(self._size_combo)
+        size_row.addStretch()
+        layout.addLayout(size_row)
 
         # Table widget
         self.table = QTableWidget()
@@ -100,38 +139,58 @@ class PixelTableDialog(QDialog):
         layout.addLayout(button_layout)
         self.setLayout(layout)
 
+    def _on_size_changed(self, label: str) -> None:
+        """Switch to another of DS9's table sizes."""
+        self.size = int(label.split("x")[0])
+        self.table.setColumnCount(self.size)
+        self.table.setRowCount(self.size)
+        self._populate_table()
+
+    def set_center(self, x: int, y: int) -> None:
+        """Move the table to another pixel, which is how DS9 tracks the cursor."""
+        self.center_x = int(x)
+        self.center_y = int(y)
+        self._populate_table()
+
     def _populate_table(self) -> None:
-        """Populate the table with pixel values."""
-        if self.image_data is None or self.image_data.size == 0:
+        """Fill the table from `PixelTable`, which does the bounds checking."""
+        self._title.setText(f"Pixel Values at ({self.center_x}, {self.center_y})")
+        self._coordinates.setText(self._describe_center())
+
+        if self.reader is None:
             return
 
         half = self.size // 2
-        height, width = self.image_data.shape
+        self.table.setHorizontalHeaderLabels(
+            [str(self.center_x - half + index) for index in range(self.size)]
+        )
+        self.table.setVerticalHeaderLabels([str(self.center_y - half + index) for index in range(self.size)])
 
-        # Set headers
-        col_headers = [str(self.center_x - half + i) for i in range(self.size)]
-        row_headers = [str(self.center_y - half + i) for i in range(self.size)]
-        self.table.setHorizontalHeaderLabels(col_headers)
-        self.table.setVerticalHeaderLabels(row_headers)
-
-        # Fill table
-        for i in range(self.size):
-            for j in range(self.size):
-                y = self.center_y - half + i
-                x = self.center_x - half + j
-
-                if 0 <= y < height and 0 <= x < width:
-                    value = self.image_data[y, x]
-                    item = QTableWidgetItem(f"{value:.6g}")
-
-                    # Highlight center pixel
-                    if i == half and j == half:
-                        item.setBackground(Qt.GlobalColor.yellow)
-                else:
-                    item = QTableWidgetItem("--")
-
+        values = self.reader.get_region(self.center_x, self.center_y, self.size)
+        for row in range(self.size):
+            for column in range(self.size):
+                value = values[row, column] if values.shape == (self.size, self.size) else np.nan
+                # A pixel off the edge of the image comes back as NaN, which
+                # reads as "--" rather than as a data value of nan.
+                text = "--" if not np.isfinite(value) else f"{value:.6g}"
+                item = QTableWidgetItem(text)
+                if row == half and column == half:
+                    item.setBackground(Qt.GlobalColor.yellow)
                 item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                self.table.setItem(i, j, item)
+                self.table.setItem(row, column, item)
 
-        # Resize columns to content
         self.table.resizeColumnsToContents()
+
+    def _describe_center(self) -> str:
+        """The centre pixel's coordinates, and its sky position if there is one."""
+        parts = [f"Image: {self.center_x} {self.center_y}"]
+        if self.reader is not None:
+            value = self.reader.get_pixel(self.center_x, self.center_y)
+            parts.append("Value: --" if value is None or not np.isfinite(value) else f"Value: {value:.6g}")
+        if self.wcs_handler is not None and getattr(self.wcs_handler, "is_valid", False):
+            try:
+                longitude, latitude = self.wcs_handler.pixel_to_world(self.center_x, self.center_y)
+                parts.append(f"WCS: {float(longitude):.6f} {float(latitude):.6f}")
+            except Exception:
+                pass
+        return "    ".join(parts)

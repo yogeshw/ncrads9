@@ -29,6 +29,7 @@ from .crop_parameters_dialog import CropParametersDialog
 from .grid_dialog import GridDialog
 from .group_dialog import GroupDialog
 from .header_dialog import HeaderDialog
+from .mask_dialog import MaskDialog
 from .open_dialog import OpenDialog
 from .pan_zoom_rotate_dialog import PanZoomRotateDialog
 from .preferences_dialog import PreferencesDialog
@@ -48,6 +49,7 @@ __all__ = [
     "ScaleDialog",
     "ColormapDialog",
     "AnalysisParamDialog",
+    "MaskDialog",
     "AnalysisTextDialog",
     "CentroidDialog",
     "GroupDialog",

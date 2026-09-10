@@ -104,15 +104,31 @@ class PixelTable:
         Returns
         -------
         NDArray
-            2D array of pixel values.
+            A `size` by `size` array, padded with NaN where the region runs
+            off the image. Clipping to what exists instead -- which this
+            did -- returns a smaller array whose centre is no longer the
+            centre, so a pixel table near a corner shows the wrong values
+            against the wrong coordinates.
         """
         half = size // 2
+        region = np.full((size, size), np.nan, dtype=np.float64)
+
         y_min = max(0, y_center - half)
         y_max = min(self.shape[0], y_center + half + 1)
         x_min = max(0, x_center - half)
         x_max = min(self.shape[1], x_center + half + 1)
+        if y_min >= y_max or x_min >= x_max:
+            return region
 
-        return self.data[y_min:y_max, x_min:x_max].copy()
+        # Where the surviving block sits within the padded square.
+        row_offset = y_min - (y_center - half)
+        column_offset = x_min - (x_center - half)
+        block = self.data[y_min:y_max, x_min:x_max]
+        region[
+            row_offset : row_offset + block.shape[0],
+            column_offset : column_offset + block.shape[1],
+        ] = block
+        return region
 
     def get_row(
         self,

@@ -25,22 +25,64 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy import ndimage
 
+#: DS9's two contour methods (`ds9/doc/ref/contour.html`, Contour Method).
+CONTOUR_METHODS: tuple[str, ...] = ("block", "smooth")
+
+#: What DS9 calls the smoothness when nothing says otherwise: evaluate the
+#: contour at every image pixel.
+DEFAULT_SMOOTHNESS = 1
+
+
+def _block_down(data: NDArray[np.floating], factor: int) -> NDArray[np.floating]:
+    """Average `data` down by an integer factor, DS9's BLOCK.
+
+    The trailing pixels that do not fill a whole block are dropped rather
+    than averaged with fewer: a partial block is brighter or fainter than
+    its neighbours for no physical reason, and it shows as a bright edge on
+    the last contour.
+    """
+    step = max(1, int(factor))
+    if step == 1:
+        return data
+    height = (data.shape[0] // step) * step
+    width = (data.shape[1] // step) * step
+    if height == 0 or width == 0:
+        return data
+    trimmed = data[:height, :width]
+    return trimmed.reshape(height // step, step, width // step, step).mean(axis=(1, 3))
+
 
 class ContourGenerator:
     """
     Class for generating contours from astronomical images.
+
+    DS9 offers two methods, and they are opposites in cost as well as in
+    effect (`ds9/doc/ref/contour.html`): BLOCK "blocks down the image, by
+    the smoothness factor, before contours are calculated", so a larger
+    smoothness is *faster* and coarser; SMOOTH "smooths the image before
+    calculating contours", so a larger smoothness is *slower* and rounder.
+    Blocking also means the contours come back in the blocked image's
+    coordinates, and have to be scaled back to the original -- which is
+    what `_scale` does, and what makes a blocked contour land on the data
+    it was computed from.
 
     Parameters
     ----------
     data : NDArray
         Input 2D image data.
     smooth : float, optional
-        Gaussian smoothing sigma to apply before contouring.
+        Gaussian smoothing sigma to apply before contouring. Kept for the
+        callers that predate `method`; `smoothness` is DS9's own control.
+    method : str
+        "block" or "smooth".
+    smoothness : int
+        DS9's smoothness factor: the block factor for BLOCK, the boxcar
+        width for SMOOTH. One means every pixel, and no change either way.
 
     Attributes
     ----------
     data : NDArray
-        The image data (possibly smoothed).
+        The image data, blocked or smoothed as the method asked.
     levels : list
         List of contour levels.
     contours : list
@@ -51,14 +93,39 @@ class ContourGenerator:
         self,
         data: NDArray[np.floating],
         smooth: float | None = None,
+        method: str = "block",
+        smoothness: int = DEFAULT_SMOOTHNESS,
     ) -> None:
-        if smooth is not None and smooth > 0:
-            self.data = ndimage.gaussian_filter(data, sigma=smooth)
-        else:
-            self.data = data.copy()
+        self.method = method if method in CONTOUR_METHODS else "block"
+        self.smoothness = max(1, int(smoothness))
+        #: How much the data was blocked down, so the contours can be
+        #: scaled back to the original image's coordinates.
+        self._block = 1
 
+        working = np.asarray(data, dtype=np.float64)
+        if smooth is not None and smooth > 0:
+            working = ndimage.gaussian_filter(working, sigma=smooth)
+
+        if self.smoothness > 1:
+            if self.method == "block":
+                working = _block_down(working, self.smoothness)
+                self._block = self.smoothness
+            else:
+                # A boxcar of the smoothness width, which is what "smooths
+                # the image" means here: a mean over that many pixels.
+                working = ndimage.uniform_filter(working, size=self.smoothness)
+
+        self.data = working
         self.levels: list[float] = []
         self.contours: list[list[NDArray[np.floating]]] = []
+
+    def _scale(self, path: NDArray[np.floating]) -> NDArray[np.floating]:
+        """Put a contour computed on blocked data back on the original grid."""
+        if self._block <= 1:
+            return path
+        # Pixel k of the blocked image covers pixels k*b .. k*b+b-1 of the
+        # original, whose centre is at k*b + (b-1)/2.
+        return path * float(self._block) + (self._block - 1) / 2.0
 
     def generate_levels(
         self,
@@ -161,7 +228,7 @@ class ContourGenerator:
         self.contours = []
         for level in self.levels:
             contour_paths = measure.find_contours(self.data, level)
-            self.contours.append(contour_paths)
+            self.contours.append([self._scale(path) for path in contour_paths])
 
         return self.contours
 

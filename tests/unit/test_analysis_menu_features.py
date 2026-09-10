@@ -103,9 +103,14 @@ def test_graph_visibility_controls(main_window: MainWindow):
 
 
 def test_analysis_mask_range(main_window: MainWindow):
-    main_window._analysis_mask_mode = "range"
-    main_window._analysis_mask_min = 0.0
-    main_window._analysis_mask_max = 1.0
+    """A mask is a FITS file now, not a threshold on the displayed data;
+    `test_mask_files.py` covers it fully."""
+    import numpy as np
+
+    from ncrads9.analysis.mask import MaskMode, MaskSettings
+
+    main_window.mask_layer = np.array([[-1.0, 0.5, 2.0, np.nan]], dtype=np.float64)
+    main_window.mask_settings = MaskSettings(mode=MaskMode.RANGE, low=0.0, high=1.0)
     data = np.array([[-1.0, 0.5, 2.0, np.nan]], dtype=np.float32)
     masked = main_window.analysis.apply_mask(data)
     assert np.isnan(masked[0, 0])

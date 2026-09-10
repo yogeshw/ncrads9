@@ -39,12 +39,16 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ...analysis.contour import CONTOUR_METHODS, DEFAULT_SMOOTHNESS
+
 
 class ContourDialog(QDialog):
     """Dialog for configuring contour overlay settings."""
 
     contours_changed = pyqtSignal(dict)
     contours_export_requested = pyqtSignal(dict)
+    #: DS9's File menu on this dialog: Open, Save, Copy and Paste Contours.
+    contours_file_requested = pyqtSignal(str)
 
     def __init__(self, parent: QDialog | None = None) -> None:
         """Initialize the contour dialog.
@@ -130,6 +134,23 @@ class ContourDialog(QDialog):
         self._line_style_combo.addItems(["Solid", "Dashed", "Dotted", "Dash-Dot"])
         appearance_layout.addRow("Line style:", self._line_style_combo)
 
+        self._contour_method_combo = QComboBox()
+        self._contour_method_combo.addItems(list(CONTOUR_METHODS))
+        self._contour_method_combo.setToolTip(
+            "BLOCK blocks the image down by the smoothness before contouring, so a "
+            "larger smoothness is faster and coarser. SMOOTH averages the image "
+            "first, so a larger smoothness is slower and rounder."
+        )
+        appearance_layout.addRow("Contour method:", self._contour_method_combo)
+
+        self._smoothness_spin = QSpinBox()
+        self._smoothness_spin.setRange(1, 32)
+        self._smoothness_spin.setValue(DEFAULT_SMOOTHNESS)
+        self._smoothness_spin.setToolTip(
+            "1 evaluates the contour at every image pixel; 2 at every other one."
+        )
+        appearance_layout.addRow("Smoothness:", self._smoothness_spin)
+
         self._smooth_check = QCheckBox("Smooth contours")
         self._smooth_check.toggled.connect(lambda checked: self._smooth_sigma_spin.setEnabled(checked))
         appearance_layout.addRow("", self._smooth_check)
@@ -145,6 +166,23 @@ class ContourDialog(QDialog):
         appearance_layout.addRow("", self._labels_check)
 
         layout.addWidget(appearance_group)
+
+        # DS9 puts these on this dialog's File menu (`contour.tcl:173`).
+        file_layout = QHBoxLayout()
+        #: File command name -> its button, so a test can press one.
+        self.file_buttons: dict[str, QPushButton] = {}
+        for name, label in (
+            ("open", "Open..."),
+            ("save", "Save..."),
+            ("copy", "Copy Contours"),
+            ("paste", "Paste Contours"),
+        ):
+            button = QPushButton(label)
+            button.clicked.connect(lambda _checked=False, key=name: self._file_command(key))
+            file_layout.addWidget(button)
+            self.file_buttons[name] = button
+        file_layout.addStretch()
+        layout.addLayout(file_layout)
 
         # Button row
         button_layout = QHBoxLayout()
@@ -167,6 +205,10 @@ class ContourDialog(QDialog):
         button_layout.addWidget(cancel_btn)
 
         layout.addLayout(button_layout)
+
+    def _file_command(self, name: str) -> None:
+        """Ask the controller for one of DS9's contour file commands."""
+        self.contours_file_requested.emit(name)
 
     def _on_method_changed(self, method: str) -> None:
         """Handle method selection change.
@@ -215,6 +257,8 @@ class ContourDialog(QDialog):
             "line_style": self._line_style_combo.currentText(),
             "smooth": self._smooth_check.isChecked(),
             "smooth_sigma": self._smooth_sigma_spin.value(),
+            "contour_method": self._contour_method_combo.currentText(),
+            "smoothness": self._smoothness_spin.value(),
             "show_labels": self._labels_check.isChecked(),
         }
 

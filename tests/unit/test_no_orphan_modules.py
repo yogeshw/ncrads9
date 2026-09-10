@@ -47,8 +47,6 @@ ENTRY_POINTS = ("ncrads9.app", "ncrads9.__main__")
 #: writers, the theme definitions). Others are skeletons. `skeletons.md` says
 #: which is which.
 PENDING_ADOPTION: dict[str, str] = {
-    # M7 -- analysis platform.
-    "analysis.pixel_table": "M7-26",
     # M8 -- catalogs, image servers, VO.
     "catalogs.catalog_display": "M8-2",
     "catalogs.catalog_table": "M8-5",

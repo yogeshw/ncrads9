@@ -40,11 +40,13 @@ Author: Yogesh Wadadekar
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 from astropy.coordinates import SkyCoord
 from numpy.typing import NDArray
 from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QColor, QDesktopServices
+from PyQt6.QtGui import QColor, QDesktopServices, QGuiApplication
 from PyQt6.QtWidgets import (
     QColorDialog,
     QDialog,
@@ -56,21 +58,32 @@ from PyQt6.QtWidgets import (
 )
 from scipy import ndimage
 
+from ...analysis import contour_file
+from ...analysis import mask as mask_module
 from ...analysis.contour import ContourGenerator
 from ...analysis.plot import PlotState, PlotStyle
 from ...analysis.radial_profile import RadialProfile
-from ...analysis.smooth import boxcar_smooth, gaussian_smooth, tophat_smooth
+from ...analysis.smooth import (
+    boxcar_smooth,
+    elliptical_gaussian_smooth,
+    gaussian_smooth,
+    tophat_smooth,
+)
 from ...frames.frame import Frame
 from ...grid import GridConfig, GridRenderer
 from ..dialogs.contour_dialog import ContourDialog
 from ..dialogs.grid_dialog import GridDialog
 from ..dialogs.histogram_dialog import HistogramDialog
+from ..dialogs.mask_dialog import MaskDialog
 from ..dialogs.pixel_table_dialog import PixelTableDialog
 from ..dialogs.plot_window import PlotWindow
 from ..dialogs.smooth_dialog import SmoothDialog
 from ..dialogs.statistics_dialog import StatisticsDialog
 from ..menu_bar import BLOCK_FACTORS
 from .base import Controller
+
+#: The filter DS9's contour Open and Save offer.
+CONTOUR_FILTER = "Contour Files (*.ctr *.con);;All Files (*)"
 
 #: The block factors the menu offers, imported so the two cannot diverge.
 
@@ -235,17 +248,21 @@ class AnalysisController(Controller):
         return self.apply_mask(display_data)
 
     def apply_mask(self, data: NDArray[np.floating]) -> NDArray[np.floating]:
-        """Apply analysis mask settings to image data."""
-        if self.window._analysis_mask_mode == "disabled":
+        """Blank the pixels the mask excludes, for the analysis tools.
+
+        The mask shows as a colour on the display; for statistics and a
+        histogram it has to actually remove pixels, which is what this does.
+        With no mask loaded the data is returned untouched.
+        """
+        layer = self.window.mask_layer
+        settings = self.window.mask_settings
+        if layer is None or settings is None or np.ndim(data) != 2:
             return data
+
+        fitted = mask_module.align(layer, (data.shape[0], data.shape[1]))
+        keep = mask_module.selected(fitted, settings)
         masked = np.array(data, copy=True, dtype=np.float32)
-        finite_mask = np.isfinite(masked)
-        keep_mask = finite_mask
-        if self.window._analysis_mask_mode == "range":
-            low = self.window._analysis_mask_min if self.window._analysis_mask_min is not None else -np.inf
-            high = self.window._analysis_mask_max if self.window._analysis_mask_max is not None else np.inf
-            keep_mask = finite_mask & (masked >= low) & (masked <= high)
-        masked[~keep_mask] = np.nan
+        masked[~keep] = np.nan
         return masked
 
     def apply_smoothing(self, data: NDArray[np.floating]) -> NDArray[np.floating]:
@@ -263,8 +280,20 @@ class AnalysisController(Controller):
         if kernel == "gaussian":
             sigma = float(settings.get("sigma", 2.0))
             if settings.get("elliptical"):
+                # DS9's elliptical Gaussian takes a position angle. Passing
+                # a pair of axis-aligned sigmas to `gaussian_smooth`, which
+                # is what this did, cannot express one -- so the dialog's
+                # Position angle field had no effect at all (M7-25).
                 axis_ratio = max(float(settings.get("axis_ratio", 1.0)), 0.1)
-                smoothed = gaussian_smooth(working, (sigma * axis_ratio, sigma))
+                major_radius = max(1, int(float(settings.get("kernel_size", 5)) / 2.0))
+                smoothed = elliptical_gaussian_smooth(
+                    working,
+                    major_radius=int(settings.get("major_radius", major_radius)),
+                    minor_radius=int(settings.get("minor_radius", max(1, round(major_radius * axis_ratio)))),
+                    major_sigma=float(settings.get("major_sigma", sigma)),
+                    minor_sigma=float(settings.get("minor_sigma", sigma * axis_ratio)),
+                    angle=float(settings.get("position_angle", 0.0)),
+                )
             else:
                 smoothed = gaussian_smooth(working, sigma)
         elif kernel == "boxcar":
@@ -343,67 +372,44 @@ class AnalysisController(Controller):
         self.status("Updated coordinate grid parameters", 2000)
 
     def show_mask_dialog(self) -> None:
-        """Show mask parameter controls for analysis tools."""
-        mode_labels = ["Disabled", "Finite Pixels Only", "Value Range"]
-        mode_map = {
-            "Disabled": "disabled",
-            "Finite Pixels Only": "finite",
-            "Value Range": "range",
-        }
-        current_label = next(
-            (label for label, mode in mode_map.items() if mode == self.window._analysis_mask_mode),
-            "Disabled",
+        """Show DS9's Mask Parameters dialog (M7-24)."""
+        dialog = MaskDialog(
+            self.window.mask_settings,
+            str(getattr(self.window, "mask_path", "") or ""),
+            self.window,
         )
-        choice, ok = QInputDialog.getItem(
-            self,
-            "Mask Parameters",
-            "Mask mode:",
-            mode_labels,
-            mode_labels.index(current_label),
-            False,
-        )
-        if not ok:
+        dialog.mask_changed.connect(self.apply_mask_settings)
+        dialog.mask_cleared.connect(self.clear_mask)
+        dialog.exec()
+
+    def apply_mask_settings(self, settings, path: str) -> None:
+        """Load a mask file if one was chosen, and redraw with the settings."""
+        self.window.mask_settings = settings
+        if path and path != getattr(self.window, "mask_path", None):
+            try:
+                self.window.mask_layer = mask_module.load(path)
+            except mask_module.MaskError as exc:
+                self.status(str(exc), 5000)
+                return
+            except OSError as exc:
+                self.status(f"Cannot read {Path(path).name}: {exc}", 5000)
+                return
+            self.window.mask_path = path
+
+        if self.window.mask_layer is None:
+            self.status("Open a mask file first", 3000)
             return
-        mode = mode_map[choice]
-        self.window._analysis_mask_mode = mode
-        if mode == "range":
-            min_default = (
-                self.window._analysis_mask_min if self.window._analysis_mask_min is not None else 0.0
-            )
-            max_default = (
-                self.window._analysis_mask_max if self.window._analysis_mask_max is not None else 1.0
-            )
-            min_val, ok_min = QInputDialog.getDouble(
-                self,
-                "Mask Parameters",
-                "Minimum value:",
-                float(min_default),
-                decimals=6,
-            )
-            if not ok_min:
-                return
-            max_val, ok_max = QInputDialog.getDouble(
-                self,
-                "Mask Parameters",
-                "Maximum value:",
-                float(max_default),
-                decimals=6,
-            )
-            if not ok_max:
-                return
-            if max_val < min_val:
-                min_val, max_val = max_val, min_val
-            self.window._analysis_mask_min = float(min_val)
-            self.window._analysis_mask_max = float(max_val)
-            self.status(
-                f"Mask range set to [{self.window._analysis_mask_min:.4g}, {self.window._analysis_mask_max:.4g}]",
-                3000,
-            )
-        else:
-            self.window._analysis_mask_min = None
-            self.window._analysis_mask_max = None
-            self.status(f"Mask mode: {choice}", 2500)
-        self.log_command(f"mask {mode}")
+
+        self.window.display.display()
+        self.log_command("mask params")
+        self.status(f"Mask: {settings.mode.value}, {settings.blend.value}")
+
+    def clear_mask(self) -> None:
+        """Remove the mask, DS9's Clear."""
+        self.window.mask_layer = None
+        self.window.mask_path = None
+        self.window.display.display()
+        self.status("Mask cleared")
 
     def show_crosshair_dialog(self) -> None:
         """Show crosshair parameter controls."""
@@ -703,6 +709,7 @@ class AnalysisController(Controller):
             dialog.load_settings(self.window._contour_settings)
         dialog.contours_changed.connect(self.apply_contours)
         dialog.contours_export_requested.connect(self.export_contours)
+        dialog.contours_file_requested.connect(self.contour_file_command)
         dialog.exec()
 
     def apply_contours(self, settings: dict) -> None:
@@ -752,7 +759,12 @@ class AnalysisController(Controller):
         contour_data = self.analysis_image_data(frame)
         settings = self.window._contour_settings
         smooth_sigma = settings.get("smooth_sigma", 1.0) if settings.get("smooth") else None
-        generator = ContourGenerator(contour_data, smooth=smooth_sigma)
+        generator = ContourGenerator(
+            contour_data,
+            smooth=smooth_sigma,
+            method=str(settings.get("contour_method", "block")),
+            smoothness=int(settings.get("smoothness", 1)),
+        )
 
         levels = self.contour_levels(generator, settings)
 
@@ -769,6 +781,123 @@ class AnalysisController(Controller):
         style = self.contour_style(settings)
         if hasattr(self.viewer, "set_contours"):
             self.viewer.set_contours(contour_paths, levels, style)
+
+    # -- contour files, copy and paste (M7-21, M7-22) ------------------------
+
+    def contour_file_command(self, name: str) -> None:
+        """Run one of DS9's contour File commands."""
+        handler = {
+            "open": self.load_contours,
+            "save": self.save_contours,
+            "copy": self.copy_contours,
+            "paste": self.paste_contours,
+        }.get(name)
+        if handler is None:
+            self.status(f"Unknown contour command: {name}", 3000)
+            return
+        handler()
+
+    def current_contour_set(self):
+        """The contours on screen, as a `ContourSet`, or None."""
+        paths = self.window._contour_paths
+        levels = self.window._contour_levels
+        if not paths or levels is None:
+            return None
+        settings = self.window._contour_settings or {}
+        return contour_file.from_paths(
+            paths,
+            levels,
+            system="image",
+            color=str(settings.get("color", contour_file.DEFAULT_COLOR)),
+            width=int(float(settings.get("line_width", 1)) or 1),
+            dash=str(settings.get("line_style", "Solid")).lower() != "solid",
+        )
+
+    def show_contour_set(self, contours) -> None:
+        """Put a loaded or pasted contour set on screen."""
+        self.window._contour_paths = contour_file.to_paths(contours)
+        self.window._contour_levels = contours.values
+        self.menu.action_contours.blockSignals(True)
+        self.menu.action_contours.setChecked(True)
+        self.menu.action_contours.blockSignals(False)
+
+        if hasattr(self.viewer, "set_contours"):
+            first = contours.levels[0] if contours.levels else None
+            style = (
+                QColor(first.color) if first else QColor(0, 255, 0),
+                float(first.width) if first else 1.0,
+                Qt.PenStyle.DashLine if (first and first.dash) else Qt.PenStyle.SolidLine,
+                False,
+            )
+            self.viewer.set_contours(self.window._contour_paths, contours.values, style)
+
+    def load_contours(self) -> None:
+        """Read a DS9 contour file and display it."""
+        path, _filter = QFileDialog.getOpenFileName(self.window, "Open Contours", "", CONTOUR_FILTER)
+        if not path:
+            return
+        try:
+            contours = contour_file.load(path)
+        except contour_file.ContourFileError as exc:
+            self.status(f"{Path(path).name}: {exc}", 5000)
+            return
+        except OSError as exc:
+            self.status(f"Cannot read {Path(path).name}: {exc}", 5000)
+            return
+
+        if not contours:
+            self.status(f"{Path(path).name} holds no contours", 3000)
+            return
+        self.show_contour_set(contours)
+        self.status(f"Loaded {len(contours)} contour levels from {Path(path).name}")
+
+    def save_contours(self) -> None:
+        """Write the contours on screen as a DS9 contour file."""
+        contours = self.current_contour_set()
+        if contours is None:
+            self.status("No contours to save", 3000)
+            return
+        path, _filter = QFileDialog.getSaveFileName(self.window, "Save Contours", "", CONTOUR_FILTER)
+        if not path:
+            return
+        try:
+            contour_file.save(path, contours)
+        except OSError as exc:
+            self.status(f"Cannot write {Path(path).name}: {exc}", 5000)
+            return
+        self.status(f"Saved {len(contours)} contour levels to {Path(path).name}")
+
+    def copy_contours(self) -> None:
+        """Copy the contours, DS9's Copy Contours.
+
+        They go to the clipboard in DS9's own file format, so a copy is
+        exactly a save and a paste exactly a load -- one thing to get right
+        rather than two, and the contours can be pasted into a text editor
+        as well as into another frame.
+        """
+        contours = self.current_contour_set()
+        if contours is None:
+            self.status("No contours to copy", 3000)
+            return
+        QGuiApplication.clipboard().setText(contour_file.to_text(contours))
+        self.status(f"Copied {len(contours)} contour levels")
+
+    def paste_contours(self) -> None:
+        """Paste contours into the current frame, DS9's Paste Contours."""
+        text = QGuiApplication.clipboard().text()
+        if not text.strip():
+            self.status("The clipboard is empty", 3000)
+            return
+        try:
+            contours = contour_file.parse(text)
+        except contour_file.ContourFileError as exc:
+            self.status(f"The clipboard does not hold contours: {exc}", 4000)
+            return
+        if not contours:
+            self.status("The clipboard does not hold contours", 3000)
+            return
+        self.show_contour_set(contours)
+        self.status(f"Pasted {len(contours)} contour levels")
 
     def contour_levels(self, generator: ContourGenerator, settings: dict) -> list:
         """Compute contour levels based on settings."""
@@ -891,6 +1020,13 @@ class AnalysisController(Controller):
         height, width = analysis_data.shape
         x, y = width // 2, height // 2
 
-        dialog = PixelTableDialog(analysis_data, x, y, size=11, parent=self.window)
+        frame = self.frames.current_frame
+        dialog = PixelTableDialog(
+            analysis_data,
+            x,
+            y,
+            parent=self.window,
+            wcs_handler=getattr(frame, "wcs_handler", None) if frame else None,
+        )
         dialog.exec()
         self.log_command("pixel_table")

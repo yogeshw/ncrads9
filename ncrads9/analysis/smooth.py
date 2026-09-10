@@ -59,6 +59,100 @@ def gaussian_smooth(
     return ndimage.gaussian_filter(data, sigma=sigma, mode=mode, cval=cval, truncate=truncate)
 
 
+def elliptical_gaussian_kernel(
+    major_radius: int,
+    minor_radius: int,
+    major_sigma: float,
+    minor_sigma: float,
+    angle: float = 0.0,
+) -> NDArray[np.floating]:
+    """
+    Build DS9's elliptical Gaussian kernel.
+
+    DS9's Smooth dialog offers four functions -- boxcar, tophat, Gaussian
+    and elliptical Gaussian -- and the last takes a major and a minor radius
+    and sigma plus a position angle (`ds9/library/smooth.tcl:124`). Its
+    diameter is "2*radius+1" in each direction, which is DS9's own note
+    beside the sliders: a kernel of even width has no centre pixel, and a
+    smoothed image would shift by half a pixel.
+
+    Parameters
+    ----------
+    major_radius : int
+        Half-width along the major axis, in pixels.
+    minor_radius : int
+        Half-width along the minor axis.
+    major_sigma : float
+        Gaussian sigma along the major axis.
+    minor_sigma : float
+        Sigma along the minor axis.
+    angle : float
+        Position angle of the major axis, in degrees anticlockwise from x.
+
+    Returns
+    -------
+    NDArray
+        The kernel, normalised to sum to one so smoothing preserves flux.
+    """
+    major_radius = max(1, int(major_radius))
+    minor_radius = max(1, int(minor_radius))
+    major_sigma = max(1e-6, float(major_sigma))
+    minor_sigma = max(1e-6, float(minor_sigma))
+
+    # The kernel is square and large enough for the ellipse at any angle:
+    # a kernel sized to the axes and then rotated would clip its own corners.
+    reach = max(major_radius, minor_radius)
+    offsets = np.arange(-reach, reach + 1, dtype=np.float64)
+    dx, dy = np.meshgrid(offsets, offsets)
+
+    radians = np.radians(float(angle))
+    cosine, sine = np.cos(radians), np.sin(radians)
+    along = dx * cosine + dy * sine
+    across = -dx * sine + dy * cosine
+
+    kernel = np.exp(-0.5 * ((along / major_sigma) ** 2 + (across / minor_sigma) ** 2))
+    # Outside the ellipse the kernel is cut off, which is what the two radii
+    # are for -- without it they would have no effect at all.
+    kernel[(along / major_radius) ** 2 + (across / minor_radius) ** 2 > 1.0] = 0.0
+
+    total = kernel.sum()
+    return kernel / total if total else kernel
+
+
+def elliptical_gaussian_smooth(
+    data: NDArray[np.floating],
+    major_radius: int = 3,
+    minor_radius: int = 2,
+    major_sigma: float = 1.5,
+    minor_sigma: float = 1.0,
+    angle: float = 0.0,
+    mode: str = "nearest",
+) -> NDArray[np.floating]:
+    """
+    Smooth an image with DS9's elliptical Gaussian.
+
+    Parameters
+    ----------
+    data : NDArray
+        Input 2D image data.
+    major_radius, minor_radius : int
+        The kernel's two half-widths, in pixels.
+    major_sigma, minor_sigma : float
+        Its two sigmas.
+    angle : float
+        The major axis's position angle, in degrees.
+    mode : str
+        Boundary mode, as `scipy.ndimage` takes it.
+
+    Returns
+    -------
+    NDArray
+        Smoothed image.
+    """
+    kernel = elliptical_gaussian_kernel(major_radius, minor_radius, major_sigma, minor_sigma, angle)
+    return ndimage.convolve(np.asarray(data, dtype=np.float64), kernel, mode=mode)
+
+
 def boxcar_smooth(
     data: NDArray[np.floating],
     size: int | tuple[int, int],

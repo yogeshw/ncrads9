@@ -32,6 +32,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..analysis.mask import MaskSettings
 from ..colormaps.colormap import Colormap
 from ..communication.samp import SAMPClient
 from ..coordinates.coord_system import CoordinateContext
@@ -159,9 +160,11 @@ class MainWindow(QMainWindow):
         }
         self._analysis_command_log = False
         self._analysis_command_entries: list[str] = []
-        self._analysis_mask_mode = "disabled"
-        self._analysis_mask_min: float | None = None
-        self._analysis_mask_max: float | None = None
+        #: DS9's mask layer: a second FITS image painted over the first.
+        #: `None` until one is opened, which is what "no mask" means.
+        self.mask_layer = None
+        self.mask_path: str | None = None
+        self.mask_settings = MaskSettings()
         # DS9's pointer mode: what a drag on the image does.
         self.edit_mode = "none"
         self._crosshair_enabled = False
