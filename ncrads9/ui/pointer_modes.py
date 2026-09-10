@@ -86,6 +86,9 @@ class PointerTarget(Protocol):
     def move_crosshair(self, x: float, y: float) -> None:
         """Put the crosshair at an image position."""
 
+    def turn_cube(self, dx: float, dy: float) -> None:
+        """Turn a 3D frame's cube by a drag, in image pixels."""
+
     def pick_at(self, x: float, y: float) -> bool:
         """Select whatever overlay symbol is at a position."""
 
@@ -209,6 +212,24 @@ class ZoomHandler(PointerHandler):
         return True
 
 
+class Turn3DHandler(PointerHandler):
+    """DS9's 3D mode: a drag turns the cube.
+
+    Sideways is azimuth and up-and-down is elevation, which is the way
+    round that makes a cube feel like an object rather than a dial.
+    """
+
+    name = "3d"
+
+    def move(self, x: float, y: float) -> bool:
+        """Turn by however far the cursor moved."""
+        if self._last is None:
+            return False
+        self.target.turn_cube(x - self._last[0], y - self._last[1])
+        self._last = (x, y)
+        return True
+
+
 class RotateHandler(PointerHandler):
     """DS9's rotate mode: a horizontal drag turns the view."""
 
@@ -305,6 +326,7 @@ HANDLERS: dict[str, type[PointerHandler]] = {
     "crop": CropHandler,
     "examine": ExamineHandler,
     "crosshair": CrosshairHandler,
+    "3d": Turn3DHandler,
 }
 
 

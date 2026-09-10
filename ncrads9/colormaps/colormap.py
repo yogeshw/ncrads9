@@ -105,6 +105,11 @@ class Colormap:
     def apply_normalized(self, data: NDArray[np.floating]) -> NDArray[np.uint8]:
         """Apply the colormap to data that is already normalized into [0, 1]."""
         normalized = np.asarray(data, dtype=np.float32)
+        # A blank pixel has no colour of its own -- the renderer paints
+        # those in the blank colour afterwards -- but it still has to
+        # survive the cast below, which warns and gives nonsense for NaN.
+        # A 3D frame is full of them: every ray that misses the cube.
+        normalized = np.nan_to_num(normalized, nan=0.0, posinf=1.0, neginf=0.0)
         normalized = np.clip(normalized, 0.0, 1.0)
         num_colors = len(self.colors)
         indices = (normalized * (num_colors - 1)).astype(np.int32)

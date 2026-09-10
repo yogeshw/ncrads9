@@ -150,6 +150,10 @@ class PointerController(Controller):
         """Put the crosshair somewhere and update everything watching it."""
         self.window.crosshair.move_to(float(x), float(y))
 
+    def turn_cube(self, dx: float, dy: float) -> None:
+        """Turn a 3D frame's cube, as its pointer mode's drag asks."""
+        self.window.frame_3d.rotate_by(float(dx), float(dy))
+
     def pick_at(self, x: float, y: float) -> bool:
         """Select the catalogue symbol at an image position, if any.
 

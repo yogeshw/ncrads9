@@ -34,6 +34,7 @@ from .crosshair import CrosshairController
 from .edit import EditController
 from .file import FileController
 from .frame import FrameController
+from .frame_3d import Frame3DController
 from .help import HelpController
 from .illustrate import IllustrateController
 from .image_servers import ImageServerController
@@ -78,6 +79,7 @@ CONTROLLERS: tuple[tuple[str, type], ...] = (
     ("edit", EditController),
     ("file", FileController),
     ("frame_controller", FrameController),
+    ("frame_3d", Frame3DController),
     ("help", HelpController),
     ("illustrate", IllustrateController),
     ("image_servers", ImageServerController),

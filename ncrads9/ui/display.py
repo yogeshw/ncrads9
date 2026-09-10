@@ -1048,7 +1048,18 @@ class DisplayPipeline:
         which is what makes Block a display transform rather than an edit
         (PLAN.md §3.4).
         """
-        image_data = self.active_channel_data(frame) if frame.frame_type == "rgb" else frame.image_data
+        if frame.frame_type == "3d":
+            # A 3D frame does not show a slice: it shows the whole cube,
+            # ray-traced from the angle the 3D dialog is set to. What comes
+            # back is data, so the block, the smooth, the scale and the
+            # colormap below all apply to it exactly as to a slice.
+            rendered = self.window.frame_3d.rendered(frame)
+            if rendered is not None:
+                image_data = rendered
+            else:
+                image_data = frame.image_data
+        else:
+            image_data = self.active_channel_data(frame) if frame.frame_type == "rgb" else frame.image_data
         if image_data is None:
             return np.array([], dtype=np.float32)
         # The crop comes first: it is expressed in the frame's own pixels, and

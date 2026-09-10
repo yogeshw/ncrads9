@@ -149,6 +149,7 @@ class SessionController(Controller):
         captured["crop_z"] = list(frame.crop_z) if frame.crop_z else None
         captured["crosshair"] = list(frame.crosshair) if frame.crosshair else None
         captured["color_tags"] = frame.color_tags.to_text() if frame.color_tags is not None else None
+        captured["three_d"] = self.window.frame_3d.state(frame) if frame.frame_type == "3d" else None
         captured["regions"] = (
             RegionWriter(coordinate_system="image").to_string(frame.regions) if frame.regions else ""
         )
@@ -255,6 +256,10 @@ class SessionController(Controller):
             from ...colormaps.color_tags import ColorTagSet
 
             frame.color_tags = ColorTagSet.from_text(tags)
+
+        three_d = saved.get("three_d")
+        if isinstance(three_d, dict):
+            self.window.frame_3d.apply_state(three_d, frame)
 
         text = saved.get("regions") or ""
         if text.strip():

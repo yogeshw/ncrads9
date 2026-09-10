@@ -133,6 +133,10 @@ class ContourOverlay(OverlayTransformMixin, QWidget):
         self._crosshair_color: QColor = QColor(255, 0, 0)
         self._crosshair_size: int = 24
         self._crosshair_position: tuple[float, float] | None = None
+        #: A 3D frame's decorations, in the rendered image's own
+        #: coordinates: the cube's twelve edges, the current slice's
+        #: outline, and the three axis arrows, each with its colour.
+        self._cube_lines: list[tuple[list[tuple[float, float]], QColor, int]] = []
 
     def set_contours(
         self,
@@ -193,6 +197,21 @@ class ContourOverlay(OverlayTransformMixin, QWidget):
             self._grid_line_width = float(settings.get("line_width", 1.0))
             self._grid_show_labels = bool(settings.get("show_labels", True))
             self._grid_label_font_size = int(settings.get("font_size", 10))
+        self.update()
+
+    def set_cube_lines(self, lines) -> None:
+        """Take a 3D frame's decorations, or clear them with an empty list.
+
+        Args:
+            lines: `(points, colour, width)` for each polyline, the points
+                being in the rendered image's coordinates -- which is what
+                a 3D frame displays, so the overlay's own image-to-widget
+                transform places them.
+        """
+        self._cube_lines = [
+            ([(float(x), float(y)) for x, y in points], QColor(color), int(width))
+            for points, color, width in lines
+        ]
         self.update()
 
     def set_crosshair(
@@ -358,6 +377,7 @@ class ContourOverlay(OverlayTransformMixin, QWidget):
             not self._contours
             and not self._grid_visible
             and not self._crosshair_visible
+            and not self._cube_lines
             and (not self._show_direction_arrows or self._north_vector is None or self._east_vector is None)
         ):
             return
@@ -405,6 +425,14 @@ class ContourOverlay(OverlayTransformMixin, QWidget):
             anchor = QPointF(self.width() - 40.0, self.height() - 30.0)
             self._draw_direction_arrow(painter, anchor, self._north_vector, "N")
             self._draw_direction_arrow(painter, anchor, self._east_vector, "E")
+
+        for points, color, width in self._cube_lines:
+            if len(points) < 2:
+                continue
+            pen = QPen(color)
+            pen.setWidth(width)
+            painter.setPen(pen)
+            painter.drawPolyline(QPolygonF([self._image_to_widget(x, y) for x, y in points]))
 
         if self._crosshair_visible and self._crosshair_position is not None:
             cx, cy = self._crosshair_position

@@ -108,7 +108,6 @@ class FrameController(Controller):
         menu.action_frame_rgb_dialog.triggered.connect(self.show_rgb_dialog)
         menu.action_frame_hsv_dialog.triggered.connect(lambda: self.show_frame_dialog("hsv"))
         menu.action_frame_hls_dialog.triggered.connect(lambda: self.show_frame_dialog("hls"))
-        menu.action_frame_3d_dialog.triggered.connect(lambda: self.show_frame_dialog("3d"))
 
         menu.action_tile_mode_grid.triggered.connect(lambda: self.set_tile_arrangement("grid"))
         menu.action_tile_mode_columns.triggered.connect(lambda: self.set_tile_arrangement("column"))
@@ -158,7 +157,6 @@ class FrameController(Controller):
         menu.action_match_colorbar.triggered.connect(self.match_colorbar)
         menu.action_match_block.triggered.connect(self.match_block)
         menu.action_match_smooth.triggered.connect(self.match_smooth)
-        menu.action_match_3d.triggered.connect(self.match_3d)
 
     def _connect_lock_actions(self, menu) -> None:
         """Wire Frame -> Lock."""
@@ -619,6 +617,9 @@ class FrameController(Controller):
         if frame_mode == "cube":
             self.show_cube_dialog()
             return
+        if frame_mode == "3d":
+            self.window.frame_3d.show_dialog()
+            return
         self.status(f"{frame_mode.upper()} parameters dialog not yet implemented", 2000)
 
     # -- data cubes ----------------------------------------------------------
@@ -996,6 +997,9 @@ class FrameController(Controller):
         state = "on" if enabled else "off"
         self.status(f"Frame lock {flag}: {state}", 2000)
 
+        if flag == "3d":
+            self.window.frame_3d.set_locked(enabled)
+            return
         if flag == "bin" and enabled:
             self.status("Bin-table binning arrives in M5-16; see Lock Block", 3000)
         elif flag == "block" and enabled:
@@ -1248,7 +1252,3 @@ class FrameController(Controller):
     def match_smooth(self) -> None:
         """Match smoothing parameters across frames."""
         self.status("Smoothing parameters are global in this build", 2000)
-
-    def match_3d(self) -> None:
-        """Match 3D parameters across frames."""
-        self.status("3D matching is not yet implemented", 2000)

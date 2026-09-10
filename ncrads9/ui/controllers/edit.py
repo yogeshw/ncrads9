@@ -70,9 +70,7 @@ PASTE_OFFSET = 10.0
 #: Pointer modes that are recorded but do nothing yet, and the milestone
 #: that gives each an effect. `none`, `region`, `crosshair` and `colorbar`
 #: are live.
-DEFERRED_MODES: dict[str, str] = {
-    "3d": "M9-21",
-}
+DEFERRED_MODES: dict[str, str] = {}
 
 #: Where the applied theme's name is kept, so re-applying can be skipped.
 THEME_PROPERTY = "ncrads9_theme"
@@ -159,6 +157,9 @@ class EditController(Controller):
             return
         if mode == "illustrate":
             self.status("Edit mode: illustrate -- drag to draw, click to select")
+            return
+        if mode == "3d":
+            self.status("Edit mode: 3D -- drag to turn the cube")
             return
 
         milestone = DEFERRED_MODES.get(mode)

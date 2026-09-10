@@ -1049,10 +1049,29 @@ Depends on M2, M3.
       driver supersedes it, and `Save Image -> EPS` goes through that.
 
 ### 3D
-- [ ] **M9-21** (L) `frames/frame_3d.py` rewritten: MIP and AIP ray-trace projections over a data
-      cube, threaded, with azimuth/elevation controls.
-- [ ] **M9-22** (M) 3D dialog (view angles, method, background, threads) and the 3D pointer mode.
-- [ ] **M9-23** (S) 3D match/lock and the `3d` XPA point.
+- [x] **M9-21** (L) `frames/frame_3d.py` rewritten: MIP and AIP ray-trace projections over a data
+      cube, threaded, with azimuth/elevation controls. The ray trace is DS9's: a ray back into
+      the view volume per screen pixel, the largest value along it for MIP and the average for
+      AIP, returning *data* so the scale, clip and colormap follow exactly as for a slice.
+      The rotation is DS9's own composition (`RotateY3d(az) * RotateX3d(el)`). **Deviation:**
+      not threaded. DS9 spreads the trace over POSIX threads because it walks rays one at a
+      time; ours walks every ray's Nth sample at once in numpy, so the work is already one C
+      loop per step and threads would only add copies -- which is why there is no thread count
+      to set. Verified against the geometry rather than against itself: seen from azimuth 90 a
+      cube is as wide as it is deep, a z scale of 4 makes it four times that, one bright voxel
+      is found from every angle, and a ray that misses is blank rather than zero.
+- [x] **M9-22** (M) 3D dialog (view angles, method, background, threads) and the 3D pointer mode.
+      `ui/dialogs/frame_3d_dialog.py` with DS9's Render, Highlite, Border and Compass menus over
+      its two sliders and the Z Axis Scale; the pointer mode turns the cube, sideways for
+      azimuth and up-and-down for elevation. The border, the highlighted slice and the compass
+      are projected and drawn over the render by the contour overlay. No thread count, for the
+      reason above. Found a bug the 3D frame makes loud: the colormap cast NaN straight to an
+      integer index, which warned and gave nonsense -- a 3D render is mostly NaN, every ray
+      that misses the cube.
+- [x] **M9-23** (S) 3D match/lock and the `3d` XPA point. Match and Lock copy the view to the
+      other 3D frames and leave the plain ones alone; the XPA point is DS9's syntax --
+      `3d`, `vp`, `az`, `el`, `scale`, `method`, `background`, the three decorations, `lock`,
+      `match`, `reset`, `open` and `close`. The view is captured in the backup, per frame.
 
 ### Undo/redo
 - [ ] **M9-24** (L) Command-pattern undo stack covering region edits, view changes, colormap

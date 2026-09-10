@@ -302,6 +302,7 @@ class MainWindow(QMainWindow):
         self.crop.connect()
         self.crosshair.connect()
         self.illustrate.connect()
+        self.frame_3d.connect()
         self.notes.connect()
         self.prism.connect()
         self.session.connect()

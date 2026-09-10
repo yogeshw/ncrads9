@@ -351,12 +351,16 @@ def test_choosing_a_mode_records_and_ticks_it(main_window):
     assert main_window.menu_bar.edit_mode_actions["colorbar"].isChecked()
 
 
-def test_a_deferred_mode_says_its_milestone(main_window):
-    """Only 3D and illustrate are still waiting; the rest work now."""
+def test_no_edit_mode_is_waiting_for_a_milestone_any_more(main_window):
+    """Every mode on DS9's Edit menu does something as of M9-21, so the
+    list of modes that only name a milestone is empty -- and this is the
+    guard that keeps it that way."""
     from ncrads9.ui.controllers.edit import DEFERRED_MODES
 
-    main_window.edit.set_mode("3d")
-    assert DEFERRED_MODES["3d"] in main_window.status_bar.currentMessage()
+    assert DEFERRED_MODES == {}
+    for mode in main_window.menu_bar.edit_mode_actions:
+        main_window.edit.set_mode(mode)
+        assert "arrives in" not in main_window.status_bar.currentMessage(), mode
 
 
 def test_an_unknown_mode_is_reported(main_window):

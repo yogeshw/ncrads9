@@ -86,10 +86,18 @@ def test_every_mode_ds9_offers_has_a_handler():
 
 
 def test_the_modes_with_no_handler_have_none():
-    """Pointer, region and colorbar are handled elsewhere; 3D and
-    illustrate arrive with their own milestones."""
-    for mode in ("none", "region", "colorbar", "3d", "illustrate"):
+    """These four are handled elsewhere: pointer, region and illustrate by
+    the overlay's own gestures, and colorbar by the colorbar widget."""
+    for mode in ("none", "region", "colorbar", "illustrate"):
         assert handler_for(mode, Recorder()) is None
+
+
+def test_the_3d_mode_turns_the_cube():
+    target = Recorder()
+    handler = handler_for("3d", target)
+    handler.press(10.0, 10.0)
+    handler.move(40.0, 30.0)
+    assert target.calls == [("turn_cube", (30.0, 20.0))]
 
 
 def test_a_pan_drag_moves_the_view_the_other_way():

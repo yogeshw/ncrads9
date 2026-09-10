@@ -82,6 +82,7 @@ class XPACommands:
             "save": self._handle_save,
             "exit": self._handle_exit,
             "quit": self._handle_exit,
+            "3d": self._handle_3d,
             "prism": self._handle_prism,
             "version": self._handle_version,
             "about": self._handle_about,
@@ -760,6 +761,99 @@ class XPACommands:
     #: What `prism import` and `prism export` call each format, and what
     #: `catalogs/catalog_file.py` calls it (`xpa.html`, the prism section).
     PRISM_FORMATS = {"xml": "votable", "rdb": "starbase", "tsv": "tsv"}
+
+    def _handle_3d(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle the `3d` access point.
+
+        `xpaset -p ds9 3d` makes the frame a 3D frame; `3d vp <az> <el>`
+        turns it, `3d scale`, `3d method mip|aip` and
+        `3d background none|azimuth|elevation` are the rest of the dialog
+        (`ds9/doc/ref/3d.html`).
+
+        Args:
+            params: The command's arguments.
+
+        Returns:
+            Response dictionary.
+        """
+        viewer_error = self._require_viewer()
+        if viewer_error:
+            return viewer_error
+        controller = getattr(self.viewer, "frame_3d", None)
+        if controller is None:
+            return {"status": "error", "message": "3D frames not available"}
+
+        args = [str(value) for value in self._args(params)]
+        if not args:
+            if params.get("get"):
+                return {"status": "ok", "result": controller.describe()}
+            # A bare `3d` creates a 3D frame, as DS9's parser has it.
+            self.viewer.frame_controller.new_frame_of_type("3d")
+            return {"status": "ok"}
+
+        command = args[0].lower()
+        rest = args[1:]
+
+        if command in ("vp", "view"):
+            if len(rest) < 2:
+                return {"status": "error", "message": "3d vp needs an azimuth and an elevation"}
+            controller.set_view(azimuth=float(rest[0]), elevation=float(rest[1]))
+            return {"status": "ok"}
+        if command == "az":
+            if not rest:
+                return {"status": "error", "message": "3d az needs an angle"}
+            controller.set_view(azimuth=float(rest[0]))
+            return {"status": "ok"}
+        if command == "el":
+            if not rest:
+                return {"status": "error", "message": "3d el needs an angle"}
+            controller.set_view(elevation=float(rest[0]))
+            return {"status": "ok"}
+        if command == "scale":
+            if not rest:
+                return {"status": "error", "message": "3d scale needs a factor"}
+            controller.set_view(scale=float(rest[0]))
+            return {"status": "ok"}
+        if command == "method":
+            if not rest or not controller.set_method(rest[0].lower()):
+                return {"status": "error", "message": "3d method is mip or aip"}
+            return {"status": "ok"}
+        if command == "background":
+            if not rest or not controller.set_background(rest[0].lower()):
+                return {
+                    "status": "error",
+                    "message": "3d background is none, azimuth or elevation",
+                }
+            return {"status": "ok"}
+        if command in ("highlite", "border", "compass"):
+            if not rest:
+                return {"status": "ok", "result": str(controller.setting(command))}
+            wanted = self._as_bool(rest[0])
+            if wanted is None:
+                controller.set_setting(f"{command}_color", rest[0])
+            else:
+                controller.set_setting(command, wanted)
+            return {"status": "ok"}
+        if command == "lock":
+            wanted = self._as_bool(rest[0]) if rest else None
+            controller.set_locked(bool(wanted))
+            return {"status": "ok"}
+        if command == "match":
+            controller.match()
+            return {"status": "ok"}
+        if command == "reset":
+            controller.reset()
+            return {"status": "ok"}
+        if command == "open":
+            controller.show_dialog()
+            return {"status": "ok"}
+        if command == "close":
+            dialog = getattr(controller, "_dialog", None)
+            if dialog is not None:
+                dialog.close()
+            return {"status": "ok"}
+
+        return {"status": "error", "message": f"Unknown 3d command: {command}"}
 
     def _handle_prism(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle the `prism` access point.
