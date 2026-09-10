@@ -510,9 +510,12 @@ def test_save_image_writes_the_four_raster_formats(main_window, tmp_path, monkey
         assert path.is_file(), name
 
 
-def test_save_image_as_eps_still_says_it_is_coming(main_window):
-    main_window.menu_bar.save_image_actions["eps"].trigger()
-    assert "M9-18" in main_window.status_bar.currentMessage()
+def test_save_image_as_eps_writes_through_the_postscript_driver(main_window, tmp_path):
+    """EPS was the last Save Image format waiting for a milestone; M9-18's
+    driver is what it was waiting for."""
+    path = tmp_path / "view.eps"
+    assert main_window.file._save_eps(main_window.file.current_pixmap(), str(path)) is True
+    assert path.read_text(encoding="ascii").startswith("%!PS-Adobe-3.0 EPSF-3.0")
 
 
 # -- Create Movie -----------------------------------------------------------------------

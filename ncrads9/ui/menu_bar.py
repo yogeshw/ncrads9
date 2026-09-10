@@ -453,6 +453,9 @@ class MenuBar(QMenuBar):
 
         self.file_menu.addSeparator()
 
+        self.action_page_setup: QAction = QAction("Page Set&up...", self)
+        self.file_menu.addAction(self.action_page_setup)
+
         self.action_print: QAction = QAction("&Print...", self)
         self.action_print.setShortcut(QKeySequence.StandardKey.Print)
         self.file_menu.addAction(self.action_print)

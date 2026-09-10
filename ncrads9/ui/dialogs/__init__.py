@@ -34,8 +34,10 @@ from .mask_dialog import MaskDialog
 from .movie_dialog import MovieDialog
 from .notes_dialog import NotesDialog
 from .open_dialog import OpenDialog
+from .page_setup_dialog import PageSetupDialog
 from .pan_zoom_rotate_dialog import PanZoomRotateDialog
 from .preferences_dialog import PreferencesDialog
+from .print_dialog import PrintDialog
 from .region_analysis_dialog import RegionPlotDialog, RegionStatisticsDialog
 from .region_dialog import RegionDialog
 from .save_dialog import SaveDialog
@@ -64,5 +66,7 @@ __all__ = [
     "CropParametersDialog",
     "MovieDialog",
     "NotesDialog",
+    "PageSetupDialog",
+    "PrintDialog",
     "PanZoomRotateDialog",
 ]

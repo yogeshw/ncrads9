@@ -1,4 +1,4 @@
-# This file is part of ncrads9.
+# NCRADS9 - NCRA DS9-like FITS Viewer
 # Copyright (C) 2026 Yogesh Wadadekar
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,155 +14,205 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""PrintEngine class for print rendering.
+"""
+Where a print goes: a file, or a command's standard input.
+
+DS9's Print dialog offers a printer with a command (`lp` by default) or a
+file with a name (`print.tcl:292`). The PostScript is the same either way,
+which is why this is a small module over `postscript.py` rather than part
+of it.
+
+PDF is ours rather than DS9's: DS9 prints PostScript, and a modern desktop
+would rather have a PDF. It is written by the same driver's page geometry
+through Pillow, so the page is laid out identically.
 
 Author: Yogesh Wadadekar
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import subprocess
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from numpy.typing import NDArray
+import numpy as np
+from numpy.typing import NDArray
 
-    from .page_setup import PageSetup
+from .page_setup import POINTS_PER_INCH, PageSetup
+from .postscript import PostScriptDocument, PostScriptError
+
+
+class Destination(Enum):
+    """Where the print goes."""
+
+    PRINTER = "printer"
+    FILE = "file"
 
 
 class OutputFormat(Enum):
-    """Supported output formats for printing."""
+    """What is written."""
 
     POSTSCRIPT = "ps"
+    EPS = "eps"
     PDF = "pdf"
-    PNG = "png"
-    JPEG = "jpeg"
-    TIFF = "tiff"
 
 
-class PrintEngine:
-    """Engine for rendering images to print output."""
+#: What DS9 pipes a print into by default (`ps(cmd)`, `print.tcl:18`).
+DEFAULT_COMMAND = "lp"
 
-    def __init__(
-        self,
-        page_setup: PageSetup | None = None,
-    ) -> None:
-        """Initialize the print engine.
+#: What DS9 calls the file (`ps(filename)`).
+DEFAULT_FILENAME = "ncrads9.ps"
 
-        Args:
-            page_setup: Page setup configuration.
-        """
-        self._page_setup: PageSetup | None = page_setup
-        self._dpi: int = 300
-        self._output_format: OutputFormat = OutputFormat.PDF
-        self._progress_callback: Callable[[float], None] | None = None
+#: How long to give the print command before giving up, in seconds.
+COMMAND_TIMEOUT = 60
 
-    @property
-    def page_setup(self) -> PageSetup | None:
-        """Get the current page setup."""
-        return self._page_setup
 
-    @page_setup.setter
-    def page_setup(self, value: PageSetup) -> None:
-        """Set the page setup."""
-        self._page_setup = value
+@dataclass
+class PrintSettings:
+    """Everything DS9's Print dialog holds.
 
-    @property
-    def dpi(self) -> int:
-        """Get the output DPI."""
-        return self._dpi
+    Attributes:
+        destination: A printer or a file.
+        command: The command a printer print is piped into.
+        filename: The file a file print is written to.
+        level: PostScript level 1, 2 or 3.
+        color_model: `rgb`, `cmyk` or `gray`.
+        resolution: Pixels per inch.
+        output_format: PostScript, EPS or PDF.
+        page: The page geometry, from Page Setup.
+    """
 
-    @dpi.setter
-    def dpi(self, value: int) -> None:
-        """Set the output DPI."""
-        self._dpi = max(72, min(1200, value))
+    destination: Destination = Destination.PRINTER
+    command: str = DEFAULT_COMMAND
+    filename: str = DEFAULT_FILENAME
+    level: int = 2
+    color_model: str = "rgb"
+    resolution: int = 150
+    output_format: OutputFormat = OutputFormat.POSTSCRIPT
+    page: PageSetup = field(default_factory=PageSetup)
 
-    @property
-    def output_format(self) -> OutputFormat:
-        """Get the output format."""
-        return self._output_format
 
-    @output_format.setter
-    def output_format(self, value: OutputFormat) -> None:
-        """Set the output format."""
-        self._output_format = value
+class PrintError(Exception):
+    """A print that did not happen, for the reason given."""
 
-    def set_progress_callback(
-        self,
-        callback: Callable[[float], None] | None,
-    ) -> None:
-        """Set a callback for progress updates.
 
-        Args:
-            callback: Function called with progress (0.0 to 1.0).
-        """
-        self._progress_callback = callback
+def document(settings: PrintSettings, title: str = "NCRADS9") -> PostScriptDocument:
+    """The PostScript document one set of settings describes."""
+    return PostScriptDocument(
+        page=settings.page,
+        level=settings.level,
+        color_model=settings.color_model,
+        resolution=settings.resolution,
+        title=title,
+        encapsulated=settings.output_format is OutputFormat.EPS,
+    )
 
-    def render_image(
-        self,
-        image: NDArray,
-        output_path: str | Path,
-        title: str | None = None,
-    ) -> bool:
-        """Render an image to file.
 
-        Args:
-            image: Image data to render.
-            output_path: Path for output file.
-            title: Optional title for the print.
+def to_file(
+    path: str | Path,
+    rgb: NDArray[np.uint8],
+    settings: PrintSettings,
+    title: str = "NCRADS9",
+) -> Path:
+    """Write a print to a file.
 
-        Returns:
-            True if rendering was successful.
-        """
-        output_path = Path(output_path)
+    Args:
+        path: Where to write it.
+        rgb: The rendered image.
+        settings: What to write.
+        title: The document's title.
 
-        if self._progress_callback:
-            self._progress_callback(0.0)
+    Returns:
+        The path written.
 
-        # TODO: Implement image rendering
-        if self._progress_callback:
-            self._progress_callback(1.0)
+    Raises:
+        PrintError: If it cannot be written.
+    """
+    target = Path(path)
+    try:
+        if settings.output_format is OutputFormat.PDF:
+            _write_pdf(target, rgb, settings)
+        else:
+            document(settings, title).write(target, rgb)
+    except (OSError, PostScriptError, ValueError) as exc:
+        raise PrintError(str(exc)) from exc
+    return target
 
-        return False
 
-    def render_to_printer(
-        self,
-        image: NDArray,
-        printer_name: str | None = None,
-    ) -> bool:
-        """Send image directly to a printer.
+def to_command(
+    rgb: NDArray[np.uint8],
+    settings: PrintSettings,
+    title: str = "NCRADS9",
+    runner=None,
+) -> None:
+    """Send a print to a command's standard input, as DS9's `lp` does.
 
-        Args:
-            image: Image data to print.
-            printer_name: Name of printer, or None for default.
+    Args:
+        rgb: The rendered image.
+        settings: What to print, and what command to print it with.
+        title: The document's title.
+        runner: What to run the command with. Defaults to
+            `subprocess.run`; a test passes its own and never spawns
+            anything.
 
-        Returns:
-            True if printing was successful.
-        """
-        # TODO: Implement direct printing
-        return False
+    Raises:
+        PrintError: If there is no command, or it fails.
+    """
+    command = (settings.command or "").strip()
+    if not command:
+        raise PrintError("no print command is set")
 
-    def get_available_printers(self) -> list[str]:
-        """Get list of available printers.
+    text = document(settings, title).render(rgb)
+    run = runner if runner is not None else subprocess.run
+    try:
+        result = run(
+            command.split(),
+            input=text.encode("ascii"),
+            capture_output=True,
+            timeout=COMMAND_TIMEOUT,
+        )
+    except FileNotFoundError as exc:
+        raise PrintError(f"{command.split()[0]} is not on the path") from exc
+    except OSError as exc:
+        raise PrintError(str(exc)) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise PrintError(f"{command} did not finish within {COMMAND_TIMEOUT}s") from exc
 
-        Returns:
-            List of printer names.
-        """
-        # TODO: Implement printer enumeration
-        return []
+    code = getattr(result, "returncode", 0)
+    if code:
+        stderr = getattr(result, "stderr", b"") or b""
+        detail = stderr.decode("utf-8", "replace").strip() if isinstance(stderr, bytes) else str(stderr)
+        raise PrintError(f"{command} failed: {detail or f'exit {code}'}")
 
-    def calculate_output_size(self) -> tuple[int, int]:
-        """Calculate output size in pixels based on page setup and DPI.
 
-        Returns:
-            Tuple of (width, height) in pixels.
-        """
-        if self._page_setup is None:
-            return (self._dpi * 8, self._dpi * 10)  # Default 8x10 inches
+def _write_pdf(path: Path, rgb: NDArray[np.uint8], settings: PrintSettings) -> None:
+    """Write a PDF page with the image where the PostScript would put it."""
+    from PIL import Image
 
-        width_inches = self._page_setup.printable_width
-        height_inches = self._page_setup.printable_height
+    from ..io.pdf_writer import PDFWriter
 
-        return (int(width_inches * self._dpi), int(height_inches * self._dpi))
+    array = np.asarray(rgb, dtype=np.uint8)
+    if array.ndim == 2:
+        array = np.repeat(array[:, :, None], 3, axis=2)
+    height, width = array.shape[:2]
+
+    # The page in pixels at the print resolution, so the PDF has the same
+    # geometry as the PostScript rather than its own idea of one.
+    scale = settings.resolution / POINTS_PER_INCH
+    page_width, page_height = settings.page.size_points
+    canvas = Image.new("RGB", (max(1, int(page_width * scale)), max(1, int(page_height * scale))), "white")
+
+    x, y, box_width, box_height = settings.page.place(width, height)
+    placed = Image.fromarray(array[:, :, :3]).resize(
+        (max(1, int(box_width * scale)), max(1, int(box_height * scale))), Image.Resampling.NEAREST
+    )
+    # PostScript counts y from the bottom and a picture from the top.
+    top = canvas.height - int((y + box_height) * scale)
+    canvas.paste(placed, (int(x * scale), top))
+
+    writer = PDFWriter(path)
+    # The page is already laid out and already bytes, so nothing is
+    # normalised on the way through.
+    writer.add_page(np.asarray(canvas), normalize=False)
+    writer.write(dpi=settings.resolution, title="NCRADS9")

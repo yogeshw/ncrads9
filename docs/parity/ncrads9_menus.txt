@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 986 (870 excluding separators)
+# entries: 987 (871 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -99,6 +99,7 @@
 .file.preserveduringload|checkbutton|Pan
 .file.preserveduringload|checkbutton|Region
 .file|separator|---
+.file|command|Page Setup
 .file|command|Print
 .file|separator|---
 .file|command|Exit

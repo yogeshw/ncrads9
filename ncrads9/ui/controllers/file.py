@@ -42,14 +42,15 @@ import shutil
 import tempfile
 import urllib.error
 import urllib.request
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 from astropy.io import fits
-from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QImage, QPixmap
-from PyQt6.QtWidgets import QDialog, QFileDialog, QInputDialog, QMessageBox
+from PyQt6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
+from ... import printing
 from ...colormaps.colormap import Colormap
 from ...core import fits_loaders
 from ...core.file_spec import FileSpec
@@ -64,6 +65,8 @@ from ...rendering.scale_algorithms import apply_scale, compute_zscale_limits
 from ..dialogs.array_dialog import ArrayDialog
 from ..dialogs.movie_dialog import MovieDialog
 from ..dialogs.open_dialog import HDUChoice, OpenDialog
+from ..dialogs.page_setup_dialog import PageSetupDialog
+from ..dialogs.print_dialog import PrintDialog
 from .base import Controller
 
 #: Filter for the Open dialog. gzip variants are handled by astropy.
@@ -93,9 +96,9 @@ MOSAIC_LOADERS: dict[str, tuple[MosaicKind, bool]] = {
 }
 
 #: `Save Image` formats nothing writes yet, and the milestone that does.
-DEFERRED_IMAGE_FORMATS: dict[str, str] = {
-    "eps": "M9-18",
-}
+#: Empty since M9-18 gave EPS the PostScript driver; kept because the
+#: mechanism is how a format says which milestone it is waiting for.
+DEFERRED_IMAGE_FORMATS: dict[str, str] = {}
 
 #: What the Import and Export cascades' colour entries make of a frame.
 COLOUR_ARRAYS: dict[str, str] = {
@@ -111,6 +114,15 @@ URL_TIMEOUT = 30
 class FileController(Controller):
     """Owns the File menu."""
 
+    def __init__(self, window) -> None:
+        """
+        Args:
+            window: The main window, as every controller takes.
+        """
+        super().__init__(window)
+        #: What the last print was set up as, so the next one need not be.
+        self.print_settings = printing.PrintSettings()
+
     def connect(self) -> None:
         """Wire the File menu."""
         self.menu.action_open.triggered.connect(self.open_file)
@@ -123,7 +135,8 @@ class FileController(Controller):
             action.triggered.connect(lambda _checked=False, key=name: self.import_file(key))
         for name, action in self.menu.export_actions.items():
             action.triggered.connect(lambda _checked=False, key=name: self.export_file(key))
-        self.menu.action_print.triggered.connect(self.print_image)
+        self.menu.action_print.triggered.connect(lambda _checked=False: self.print_image())
+        self.menu.action_page_setup.triggered.connect(lambda _checked=False: self.show_page_setup())
         self.menu.action_exit.triggered.connect(self.window.close)
 
         for name, action in self.menu.open_as_actions.items():
@@ -608,6 +621,9 @@ class FileController(Controller):
         if image_format in raster.FORMATS:
             self._save_image_raster(image_format, pixmap)
             return
+        if image_format == "eps":
+            self._save_eps(pixmap)
+            return
 
         filepath, _ = QFileDialog.getSaveFileName(self.window, "Save Image as FITS", "", FITS_SAVE_FILTER)
         if not filepath:
@@ -988,33 +1004,80 @@ class FileController(Controller):
             controller.set_slice(was)
         return movie.frames_of(rendered)
 
-    def print_image(self) -> None:
-        """Print the current view.
+    def print_image(self, settings=None) -> bool:
+        """DS9's File -> Print, through the PostScript driver.
 
-        A pixmap scaled to the page, not the full PostScript driver DS9 has;
-        M9-18 replaces this.
+        Not a screen capture: the image is resampled to the chosen
+        resolution and written as PostScript at the chosen level, with the
+        graphics as PostScript elements -- which is what makes a printed
+        figure sharper than the screen it came from.
+
+        Args:
+            settings: What to print, as `PrintDialog.settings` returns.
+                None asks.
+
+        Returns:
+            Whether anything was printed.
         """
         pixmap = self.current_pixmap()
         if pixmap is None:
             self.status("No image to print")
-            return
+            return False
 
-        from PyQt6.QtGui import QPainter
-        from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
+        if settings is None:
+            chosen = PrintDialog(self.print_settings, self.window).choose()
+            if chosen is None:
+                return False
+            settings = chosen
+        # Remembered, so the next print does not have to be set up again.
+        self.print_settings = settings
 
-        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
-        if QPrintDialog(printer, self.window).exec() != QDialog.DialogCode.Accepted:
-            return
+        rgb = self._pixmap_rgb(pixmap)
+        title = self.window.windowTitle()
+        try:
+            if settings.destination is printing.Destination.PRINTER:
+                printing.to_command(rgb, settings, title)
+                self.status(f"Sent to {settings.command}", 3000)
+            else:
+                written = printing.to_file(settings.filename, rgb, settings, title)
+                self.status(f"Printed to {written.name}", 3000)
+        except printing.PrintError as exc:
+            self.status(f"Print failed: {exc}", 5000)
+            return False
+        return True
 
-        painter = QPainter(printer)
-        rect = painter.viewport()
-        size = pixmap.size()
-        size.scale(rect.size(), Qt.AspectRatioMode.KeepAspectRatio)
-        painter.setViewport(rect.x(), rect.y(), size.width(), size.height())
-        painter.setWindow(pixmap.rect())
-        painter.drawPixmap(0, 0, pixmap)
-        painter.end()
-        self.status("Print completed")
+    def show_page_setup(self) -> bool:
+        """DS9's File -> Page Setup.
+
+        Returns:
+            Whether the page was changed.
+        """
+        chosen = PageSetupDialog(self.print_settings.page, self.window).choose()
+        if chosen is None:
+            return False
+        self.print_settings = replace(self.print_settings, page=chosen)
+        self.status(
+            f"Page: {chosen.paper_size.value} {chosen.orientation.value} at {chosen.scale:g}%",
+            3000,
+        )
+        return True
+
+    def _save_eps(self, pixmap: QPixmap, path: str | None = None) -> bool:
+        """DS9's Save Image -> EPS: one figure, through the same driver."""
+        if path is None:
+            path, _ = QFileDialog.getSaveFileName(
+                self.window, "Save Image as EPS", "", "EPS files (*.eps);;All files (*)"
+            )
+        if not path:
+            return False
+        settings = replace(self.print_settings, output_format=printing.OutputFormat.EPS)
+        try:
+            printing.to_file(path, self._pixmap_rgb(pixmap), settings, self.window.windowTitle())
+        except printing.PrintError as exc:
+            self.status(f"Could not write the EPS: {exc}", 5000)
+            return False
+        self.status(f"Saved the rendered image to {Path(path).name}", 3000)
+        return True
 
     # -- header --------------------------------------------------------------
 

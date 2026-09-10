@@ -53,11 +53,6 @@ PENDING_ADOPTION: dict[str, str] = {
     "catalogs.sdss": "M8-17",
     # M9 -- remaining subsystems.
     "communication.iis.iis_server": "M9-29",
-    "io.eps_writer": "M9-14",
-    "io.pdf_writer": "M9-20",
-    "printing.page_setup": "M9-19",
-    "printing.postscript": "M9-18",
-    "printing.print_engine": "M9-20",
     # M4 -- FITS coverage.
     # A save dialog with a format combo, duplicating QFileDialog's filter.
     # DS9 puts each format on its own `Save as` entry and so does M4, so

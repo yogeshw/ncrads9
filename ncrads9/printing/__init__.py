@@ -1,4 +1,4 @@
-# This file is part of ncrads9.
+# NCRADS9 - NCRA DS9-like FITS Viewer
 # Copyright (C) 2026 Yogesh Wadadekar
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,19 +14,33 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Printing package for print rendering and output.
+"""DS9's PostScript printing: the page, the driver, and where it goes."""
 
-Author: Yogesh Wadadekar
-"""
-
-from .page_setup import Orientation, PageSetup, PaperSize
-from .postscript import PostScriptGenerator
-from .print_engine import PrintEngine
+from .page_setup import PAPER_INCHES, Orientation, PageSetup, PaperSize
+from .postscript import COLOR_MODELS, LEVELS, RESOLUTIONS, PostScriptDocument, PostScriptError
+from .print_engine import (
+    Destination,
+    OutputFormat,
+    PrintError,
+    PrintSettings,
+    to_command,
+    to_file,
+)
 
 __all__ = [
-    "PrintEngine",
-    "PostScriptGenerator",
+    "COLOR_MODELS",
+    "LEVELS",
+    "PAPER_INCHES",
+    "RESOLUTIONS",
+    "Destination",
+    "Orientation",
+    "OutputFormat",
     "PageSetup",
     "PaperSize",
-    "Orientation",
+    "PostScriptDocument",
+    "PostScriptError",
+    "PrintError",
+    "PrintSettings",
+    "to_command",
+    "to_file",
 ]

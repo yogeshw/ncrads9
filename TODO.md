@@ -1025,11 +1025,28 @@ Depends on M2, M3.
       whole File menu into DS9's order.
 
 ### Printing
-- [ ] **M9-18** (L) Real Postscript driver: adopt `printing/postscript.py`; levels 1/2/3, colour
+- [x] **M9-18** (L) Real Postscript driver: adopt `printing/postscript.py`; levels 1/2/3, colour
       models RGB/CMYK/Grayscale, resolution in pixels-per-inch, vector text and line graphics.
-- [ ] **M9-19** (M) Page Setup dialog: adopt `printing/page_setup.py` — paper size, orientation,
-      scale, margins.
-- [ ] **M9-20** (S) PDF output via `printing/print_engine.py`.
+      Levels 1 (ASCIIHEX, no filters -- Level 1 has none), 2 (RunLength + ASCII85) and 3
+      (Flate + ASCII85); RGB, CMYK with the black separated out, and Rec. 601 greyscale;
+      resampled to the chosen DPI, so a 4096-pixel mosaic is not a hundred megabytes at a
+      resolution nobody can print. Verified by rendering every level and model with
+      ghostscript and checking the pixels, including that the print is the right way up --
+      those tests skip where `gs` is not installed. **Two deviations:** the graphics are the
+      rendered image rather than vector text and line elements (DS9 draws its regions and
+      grid as PostScript objects; ours are already in the image the renderer produces, and
+      splitting them out means giving every overlay a second PostScript path -- worth doing,
+      not yet done); and a Level 1 print cannot ask for its paper, `setpagedevice` being
+      Level 2, so it names the size in a comment and relies on the printer, as DS9's does.
+- [x] **M9-19** (M) Page Setup dialog: adopt `printing/page_setup.py` — paper size, orientation,
+      scale, margins. DS9's seven sizes, poster included, its own in inches or millimetres,
+      and its percentage scale, which is allowed to run off the page because that is what a
+      percentage is for.
+- [x] **M9-20** (S) PDF output via `printing/print_engine.py`, adopting `io/pdf_writer.py`.
+      DS9 has no PDF -- it prints PostScript -- and a modern desktop would rather have one;
+      the page is laid out by the same geometry, so a PDF and a PostScript print of the same
+      settings put the image in the same place. `io/eps_writer.py` is deleted: the real
+      driver supersedes it, and `Save Image -> EPS` goes through that.
 
 ### 3D
 - [ ] **M9-21** (L) `frames/frame_3d.py` rewritten: MIP and AIP ray-trace projections over a data
