@@ -47,9 +47,11 @@ ENTRY_POINTS = ("ncrads9.app", "ncrads9.__main__")
 #: writers, the theme definitions). Others are skeletons. `skeletons.md` says
 #: which is which.
 PENDING_ADOPTION: dict[str, str] = {
-    # M6 -- regions to parity. The shapes exist but the overlay cannot yet
-    # create them, and group_manager backs the Groups dialog.
-    # M7 -- analysis platform.
+    # M7 -- analysis platform. The task engine is written and tested; M7-4
+    # and M7-8 put it behind the Analysis menu, which is what reaches it.
+    "analysis.task_file": "M7-8",
+    "analysis.macros": "M7-8",
+    "analysis.task_runner": "M7-8",
     "analysis.pixel_table": "M7-26",
     "grid.grid_config": "M7-13",
     "grid.grid_labels": "M7-12",
