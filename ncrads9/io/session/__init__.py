@@ -1,4 +1,4 @@
-# NCRADS9 - NCRA DS9 Visualization Tool
+# NCRADS9 - NCRA DS9-like FITS Viewer
 # Copyright (C) 2026 Yogesh Wadadekar
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,20 +14,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""
-Session management subpackage for NCRADS9.
+"""DS9's Backup and Restore, and the automatic backup behind them."""
 
-Provides session save/restore and backup functionality.
+from . import autosave, backup
+from .backup import FILE_FILTER, VERSION, BackupError, load, save
 
-Author: Yogesh Wadadekar
-"""
-
-from .backup_reader import BackupReader
-from .backup_writer import BackupWriter
-from .session_manager import SessionManager
-
-__all__ = [
-    "SessionManager",
-    "BackupReader",
-    "BackupWriter",
-]
+__all__ = ["FILE_FILTER", "VERSION", "BackupError", "autosave", "backup", "load", "save"]

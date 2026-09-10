@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 942 (837 excluding separators)
+# entries: 945 (839 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -53,6 +53,9 @@
 .file.saveimage|command|JPEG
 .file.saveimage|command|PNG
 .file|command|Export
+.file|separator|---
+.file|command|Backup
+.file|command|Restore
 .file|command|Print
 .file|separator|---
 .file|command|Exit

@@ -299,6 +299,7 @@ class MainWindow(QMainWindow):
         self.crosshair.connect()
         self.illustrate.connect()
         self.prism.connect()
+        self.session.connect()
         self.image_servers.connect()
 
         self.menu_bar.action_fits_header.triggered.connect(self.file.show_header)
@@ -558,8 +559,14 @@ class MainWindow(QMainWindow):
         super().keyPressEvent(event)
 
     def closeEvent(self, event) -> None:
-        """Disconnect SAMP client on close."""
+        """Let go of what outlives the window: SAMP, and the auto backup.
+
+        Removing the automatic backup here is what makes it a crash
+        recovery rather than a session restore: one still on disk at the
+        next start means the last run did not reach this point.
+        """
         if self._samp_client is not None:
             self._samp_client.disconnect()
             self._samp_connected = False
+        self.session.clean_exit()
         super().closeEvent(event)

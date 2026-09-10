@@ -367,6 +367,15 @@ class MenuBar(QMenuBar):
         self.action_export: QAction = QAction("&Export...", self)
         self.file_menu.addAction(self.action_export)
 
+        self.file_menu.addSeparator()
+
+        # DS9 puts Backup and Restore here, after the image-saving entries
+        # and before Header (`mfile.tcl`).
+        self.action_backup: QAction = QAction("&Backup...", self)
+        self.file_menu.addAction(self.action_backup)
+        self.action_restore: QAction = QAction("&Restore...", self)
+        self.file_menu.addAction(self.action_restore)
+
         self.action_print: QAction = QAction("&Print...", self)
         self.action_print.setShortcut(QKeySequence.StandardKey.Print)
         self.file_menu.addAction(self.action_print)

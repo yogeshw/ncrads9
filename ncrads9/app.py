@@ -462,6 +462,11 @@ def run_application(argv: list[str]) -> int:
     main_window = MainWindow(config)
     main_window.show()
 
+    # DS9 offers to restore its automatic backup before doing anything else,
+    # then starts writing a new one (`autosave.tcl`).
+    main_window.session.offer_recovery()
+    main_window.session.start_autosave()
+
     xpa_enabled = bool(config.get("communication.xpa.enabled", True))
     xpa_server = None
     if xpa_enabled:

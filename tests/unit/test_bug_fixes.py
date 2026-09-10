@@ -7,7 +7,6 @@ import pytest
 
 from ncrads9.colormaps.builtin_maps import get_builtin_colormap
 from ncrads9.frames.frame_manager import FrameManager
-from ncrads9.io.session.backup_reader import BackupReader
 from ncrads9.utils.math_utils import apply_scaling
 
 _SCALE_ALGO_PATH = Path(__file__).resolve().parents[2] / "ncrads9" / "rendering" / "scale_algorithms.py"
@@ -79,8 +78,8 @@ def test_next_and_previous_frame_handle_a_stale_current_index():
     assert 0 <= manager.current_index < manager.num_frames
 
 
-def test_backup_reader_parse_region_ignores_missing_close_paren():
-    reader = BackupReader(__file__)
-    region = reader._parse_region("circle(10,20,5")
-    assert region["type"] is None
-    assert region["coords"] == []
+# The backup reader this file used to guard is gone: M9-11 replaced the
+# DS9-shaped text reader with a JSON one (`io/session/backup.py`), and the
+# behaviour it checked -- a malformed shape must not stop the read -- is
+# covered by test_session.py's
+# `test_a_region_that_no_longer_parses_does_not_stop_the_restore`.

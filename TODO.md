@@ -964,9 +964,23 @@ Depends on M2, M3.
       DS9's xy|xyex|xyey|xyexey error-column shapes.
 
 ### Session and files
-- [ ] **M9-11** (L) Backup / Restore: adopt `io/session/` to serialise all frames, their data
+- [x] **M9-11** (L) Backup / Restore: adopt `io/session/` to serialise all frames, their data
       references, view state, regions, contours, grids, colormaps and colour tags.
-- [ ] **M9-12** (S) Auto-recovery / autosave (DS9 `autosave.tcl`).
+      `io/session/backup.py` is the format and `ui/controllers/session.py` the capture and the
+      restore. **Deviation, deliberate:** DS9's backup is a Tcl script that rebuilds the
+      session by `eval`ing itself (`backup.tcl`), so a DS9 backup cannot be read by us and
+      ours cannot be read by DS9. We cannot eval Tcl, and a data file that executes on being
+      opened is not a design to reproduce -- a backup arrives by email as readily as any other
+      file. Ours is JSON beside a `.dir` of the same name, which is where DS9 keeps a backup's
+      auxiliary files too; a frame with a file behind it is stored as that file's
+      specification, and only a frame whose pixels came from elsewhere has them written out.
+      The three modules `io/session/` held before (a DS9-shaped text reader and writer and a
+      session manager) were skeletons nothing called; deleted, and `test_bug_fixes.py`'s guard
+      over one of them replaced by an equivalent over the new reader.
+- [x] **M9-12** (S) Auto-recovery / autosave (DS9 `autosave.tcl`). `io/session/autosave.py`.
+      DS9's policy exactly: on by default, every five minutes, written to `~/.ncrads9.auto`,
+      deleted on a clean exit, and offered back on the next start -- which only happens after
+      a crash, since a clean exit removes it. Both the switch and the interval are preferences.
 - [ ] **M9-13** (M) Import: Array, NRRD, ENVI, RGB/HSV/HLS Array, GIF, TIFF, JPEG, PNG — adopt
       `io/{array,nrrd,envi}_reader.py`.
 - [ ] **M9-14** (M) Export: the same 10 formats — adopt `io/*_writer.py`; keep the existing

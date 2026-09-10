@@ -41,6 +41,7 @@ from .pointer import PointerController
 from .prism import PrismController
 from .region import RegionController
 from .scale import ScaleController
+from .session import SessionController
 from .view import ViewController
 from .vo import VOController
 from .wcs import WCSController
@@ -83,6 +84,7 @@ CONTROLLERS: tuple[tuple[str, type], ...] = (
     ("prism", PrismController),
     ("region", RegionController),
     ("scale", ScaleController),
+    ("session", SessionController),
     ("view", ViewController),
     ("vo", VOController),
     ("wcs", WCSController),
