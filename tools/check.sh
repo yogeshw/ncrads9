@@ -46,6 +46,6 @@ if ! git diff --quiet -- docs/parity/ncrads9_menus.txt; then
     echo "       Review and commit the change."
     exit 1
 fi
-python tools/menu_diff.py --summary
+python tools/menu_diff.py --summary --minimum 92
 
 printf '\n\033[1;32mAll gates passed.\033[0m\n'

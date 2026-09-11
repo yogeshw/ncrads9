@@ -90,6 +90,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--missing", action="store_true", help="DS9 entries not in NCRADS9")
     parser.add_argument("--extra", action="store_true", help="NCRADS9 entries not in DS9")
     parser.add_argument("--menu", help="restrict output to one top-level menu")
+    parser.add_argument(
+        "--minimum",
+        type=float,
+        metavar="PERCENT",
+        help=(
+            "exit non-zero if overall parity is below this. The ratchet C-1 asks for: "
+            "without it parity is only reported, so a menu entry lost in a refactor "
+            "goes unnoticed until someone reads the summary."
+        ),
+    )
     args = parser.parse_args(argv)
 
     if not (args.summary or args.missing or args.extra):
@@ -103,6 +113,10 @@ def main(argv: list[str] | None = None) -> int:
         menus = [m for m in menus if m == args.menu.lower().lstrip(".")]
         if not menus:
             raise SystemExit(f"error: no such menu; known: {', '.join(sorted(set(ds9) | set(ours)))}")
+
+    total_ds9 = sum(len(ds9.get(menu, set())) for menu in menus)
+    total_have = sum(len(ds9.get(menu, set()) & ours.get(menu, set())) for menu in menus)
+    parity = 100.0 * total_have / total_ds9 if total_ds9 else 0.0
 
     if args.summary:
         total_ds9 = total_have = 0
@@ -142,6 +156,18 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"\n[{menu}] {len(extra)}")
                 for label in extra:
                     print(f"  + {label}")
+
+    if args.minimum is not None and parity < args.minimum:
+        print(
+            f"\nerror: menu parity is {parity:.1f}%, below the {args.minimum:.1f}% floor.",
+            file=sys.stderr,
+        )
+        print(
+            "Either restore the entries that went missing "
+            "(`python tools/menu_diff.py --missing`), or lower the floor deliberately.",
+            file=sys.stderr,
+        )
+        return 1
 
     return 0
 
