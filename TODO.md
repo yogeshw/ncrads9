@@ -939,11 +939,19 @@ Depends on M2, M3.
       hits no region to the catalogue layer.
 
 ### Illustrate layer
-- [ ] **M9-6** (L) `illustrate/` package: a non-WCS annotation layer with circle, ellipse, box,
-      polygon, line, text and image elements.
-- [ ] **M9-7** (M) Illustrate menu: Shape, Colour, Width, All/None/Invert, Front/Back,
+- [x] **M9-6** (L) `illustrate/` package: a non-WCS annotation layer with circle, ellipse, box,
+      polygon, line, text and image elements. `illustrate/elements.py` holds the seven shapes,
+      in *canvas* coordinates rather than image ones -- that is what makes the layer non-WCS,
+      and it is why an illustration stays where it was put when the frame is panned.
+- [x] **M9-7** (M) Illustrate menu: Shape, Colour, Width, All/None/Invert, Front/Back,
       Move to Front/Back, Open/Save/List, Delete All/Selection, Show.
-- [ ] **M9-8** (M) Illustrate file format read/write and its own selection handles.
+      `ui/controllers/illustrate.py` and `ui/dialogs/illustrate_dialog.py`, over
+      `illustrate/layer.py`, which holds the selection, the z-order and the clipboard.
+- [x] **M9-8** (M) Illustrate file format read/write and its own selection handles.
+      `illustrate/illustrate_file.py`, DS9's own `# Illustrate file format: DS9 version 1.0`.
+      The handles are the overlay's, which took the `illustrate_handler` slot M9-1 gave it.
+      *(These three were finished with the rest of M9 and their boxes were missed; ticked
+      here after checking the package, the menu and the 81 tests are all in place.)*
 
 ### Prism
 - [x] **M9-9** (L) Rewrite `prism/` as a real FITS browser: HDU list, header view, table view
@@ -1210,11 +1218,28 @@ Depends on M2, M3.
       wrapping two thousand of them would put the English a translator needs behind a function
       call. They are translated once, afterwards, and each action keeps its English text so the
       XPA points and the parity tools still find entries by name in Japanese.
-      **What is left:** the dialogs' own labels and the status messages. DS9's catalogue has
-      almost none of those -- they are its menus -- so they need translations written rather
-      than imported, and a half-translated sentence is worse than an English one. Coverage is
-      also DS9's coverage, which is partial: `Zoom`, `Scale` and `Contours` sit in DS9's French
-      file with nothing beside them and so stay in English.
+      **The dialogs translate the same way, all-or-nothing** (`i18n/dialogs.py`). One event
+      filter on the application translates each dialog the first time it is shown -- dialogs
+      are built all over the code and some only when first used, so a hook that fires when one
+      appears catches every one, including any added later, and no dialog constructor changes.
+      A dialog is translated only when the catalogue covers `THRESHOLD` (0.8) of its labels and
+      is left wholly English otherwise: DS9's catalogue is a catalogue of *menu* labels, and a
+      French Apply beside an English "Auto-calculate limits" is harder to read than honest
+      English. The ones left behind are collected by title, which is the list of what a
+      translator should do next.
+      Deliberately not `QTranslator`: Qt's mechanism installs between a widget and `tr()`,
+      which is the call site being avoided, and a per-string mechanism cannot see how much of a
+      dialog it failed to translate -- which is what the threshold needs. Also added here: the
+      catalogue takes a trailing colon off before looking a label up, since `Width:` is how
+      every form row is written and DS9's catalogue holds `Width`.
+      **What is left is only the writing.** Measured: DS9's French catalogue covers 42 of 218
+      dialog labels, 19%, and no dialog reaches the threshold -- so today the mechanism runs
+      and changes nothing, which is the honest result. `test_ds9s_catalogue_does_not_yet_cover_a_dialog`
+      records that and fails, usefully, once translations are written and a dialog passes.
+      Status messages stay English: there are thousands, DS9 has none of them, and they are
+      sentences rather than labels.
+      Coverage is also DS9's coverage, which is partial: `Zoom`, `Scale` and `Contours` sit in
+      DS9's French file with nothing beside them and so stay in English.
 - [x] **M9-32** (M) Grow Preferences to DS9's topic coverage: General, Precision, Startup,
       Coordinates, Region, Annulus, Panda, Scale, Colour, Contour, Grid, Bin, Smooth, Zoom,
       Graph, Panner, Magnifier, PixelTable, Examine, Catalog, VO, NRES, Analysis, HTTP, Print,
@@ -1261,13 +1286,79 @@ Depends on M2, M3.
 
 ## Continuous
 
-- [ ] **C-1** Keep `docs/parity/ncrads9_menus.txt` regenerated in CI (the `parity` job already
+- [x] **C-1** Keep `docs/parity/ncrads9_menus.txt` regenerated in CI (the `parity` job already
       fails when it is stale) and review the `tools/menu_diff.py --summary` output each milestone.
+      **Now a ratchet rather than a report.** `menu_diff.py --minimum PERCENT` exits non-zero
+      below a floor, and `check.sh` and the CI parity job both pass `--minimum 92`, today's
+      figure. Reporting alone meant a menu entry lost in a refactor went unnoticed until
+      somebody read the summary; a floor fails the build that loses it. Raise the floor when a
+      milestone improves parity, never lower it to make a build pass -- and a test checks that
+      `check.sh` and CI name the same number, so the two cannot drift apart.
 - [ ] **C-2** Keep `tests/unit/test_no_orphan_modules.py` (M1-20) green — no new orphans.
 - [ ] **C-3** Keep the `MenuBar` action-connection test (M2-15) green — no dead menu entries.
-- [ ] **C-4** Update `README.md`'s Feature Status section at the end of every milestone.
+- [x] **C-4** Update `README.md`'s Feature Status section at the end of every milestone.
+      Rewritten after M9. It had gone badly stale -- it still said `Save` and `Save As` were
+      "not yet writing FITS data" and that the image servers were "scaffolding", both untrue
+      for several milestones -- which is worse than no status section, since a reader trusts
+      it. Now it lists what nine milestones actually delivered, names the measured figures
+      (92% menu parity, 143 XPA points, ~3250 tests, 77% coverage) rather than adjectives, and
+      has a *Partial* section for the translations and the URL progress indicator and a
+      *Deliberately different from DS9* section pointing at PLAN.md section 7. Every claim in
+      it was checked against the code: the draft credited a searchable preferences window,
+      which does not exist, and named catalogues we do not query.
 - [ ] **C-5** Raise the coverage floor at the end of every milestone.
-- [ ] **C-6** Add an XPA conformance test per access point as it lands, comparing against real DS9
+- [x] **C-6** Add an XPA conformance test per access point as it lands, comparing against real DS9
       where available.
-- [ ] **C-7** Populate `tests/integration/` — currently empty — with end-to-end flows
+      **Better than a test per point: DS9's own examples, all 1496 of them.**
+      `ds9/doc/ref/xpa.html` documents every access point with a list of real command lines --
+      `$xpaget ds9 dsssao size`, `$xpaset -p ds9 bin factor 4`. That is a specification written
+      by the people who wrote the thing, and a better corpus than anything hand-written here.
+      `tools/import_ds9_xpa_examples.py` extracts them into `docs/parity/ds9_xpa_examples.json`
+      (committed, so the tests do not need the DS9 checkout; `--check` fails when stale, and a
+      parity test runs that when the checkout is present). Examples are validated against
+      `xpa.tcl`'s own `xpacmdadd` list, which caught five typos in DS9's reference --
+      `$xpaset -p ds9 connect` where the point is `xpa connect`.
+      `tests/unit/test_xpa_conformance.py` runs all 1407 that can run in a test process
+      (printers, browsers, `exit` and the blocking examine excluded, sockets refused) and
+      asserts three things: **nothing raises** -- a caller gets a reply, never a traceback;
+      **every documented point is known**; and **the number accepted does not fall**, a floor
+      like the parity one. Refusals are written to a report, since a refusal can be correct and
+      the list is what says where to work next.
+      **633 to 940 accepted while writing it**, from the bugs it found:
+      * *A read performed writes.* A read with arguments fell through to the setter -- in both
+        halves of the dispatcher -- so `xpaget ds9 contour clear` cleared the contours and
+        `xpaget ds9 frame delete` deleted the frame. A question that answers by changing the
+        answer is the worst kind of bug, and 65 of DS9's points take arguments on a read. Now a
+        read never writes: a point's `query` answers precisely, and a hand-written handler
+        without a dedicated reader answers its plain current value with the arguments dropped.
+      * *`xpaset -p ds9 file foo.fits` did not work* -- the commonest XPA command there is. The
+        first word was read as the verb, so the path became the verb and the whole thing was
+        refused. `file save` was refused too, saying "not implemented", though `save_fits_to`
+        had existed since M9-25.
+      * *`scale sideways` was accepted* and quietly left the scale linear; `scale mode`,
+        `scale limits`, `scale scope` and `scale datasec` answered `ok` and did nothing at all.
+      * *`saveimage jpeg out.jpeg 75`* read `jpeg` as the filename, so DS9's own second form
+        never worked.
+      * *`catalog` and `footprint`* opened methods that do not exist, and had no grammar; both
+        now have one, over the catalogue tool.
+      * *`contour` and `frame`* answered a fraction of theirs -- `contour` was a yes/no flag
+        with a whole controller behind it, and `frame` knew none of DS9's reads (`frame all`,
+        `frame active`, `frame has fits cube`) nor `hide`, `show`, `move` or `center`.
+      What is still refused is mostly a feature we do not have -- DS9's own search windows, its
+      per-column catalogue editing -- rather than a bug, and the report names each one.
+- [x] **C-7** Populate `tests/integration/` — currently empty — with end-to-end flows
       (open → scale → region → save → reload).
+      Two files, seventeen flows. `test_viewing_flows.py` drives the controllers as a person
+      does: the named open → scale → region → save → reload loop; a session backed up,
+      everything changed, and restored; a cube stepped through; smoothing that the analysis
+      tools must see, not just the renderer; a blank pixel followed from the file through the
+      scale to the colormap; and a frame written to FITS and read back identical, WCS and all.
+      `test_xpa_flows.py` drives the *same* application through XPA, because a script takes a
+      different path through the same code and the bugs live in the difference -- a setter the
+      menu calls with a bool and XPA calls with the string "yes". Each flow is a plausible
+      script, so a break there is somebody's pipeline breaking.
+      One of them, `test_reading_never_changes_anything`, is the regression test for the worst
+      bug C-6 found: it sets up a window, runs every dangerous-looking `xpaget`, and asserts
+      that nothing moved. It failed when written, which is what it is for.
+      Fixtures in `tests/integration/conftest.py`: a real window with its own preferences file,
+      every modal dialog answered, and sockets refused.
