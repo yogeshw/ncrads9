@@ -1368,6 +1368,20 @@ Depends on M2, M3.
         figure, axes, spines, ticks, labels and legend from the *widget's* palette rather than
         from a theme name, because under System the colours are the desktop's and there is no
         name to look up. It leaves a gridless plot gridless.
+      **And one more: a rotated image showed a different part of itself in the panner and the
+      magnifier** (`tests/unit/test_rotated_panels.py`). The two panels are fed a preview built
+      by `transform_image_array`, while the main view is painted through `DisplayTransform` --
+      and the two turned *opposite ways*. `np.rot90(k=1)` and `ndimage.rotate(+angle)` both turn
+      counter-clockwise in index space, which in a display array (row 0 at the top, y running
+      down like a painter's) looks counter-clockwise on screen, where `QTransform.rotate(+angle)`
+      turns clockwise. Both are negated now, and the painted pixmap was used as the arbiter of
+      which was right rather than reasoning about it.
+      Not a symmetrical mistake: **at 0 and 180 the two senses agree**, so only quarter turns
+      showed it, and half the cases looking right is why it lasted. Every test in the file
+      checks all four angles plus three arbitrary ones, and nine of them fail with the sign put
+      back. One was weak at first and worth recording: the magnifier's window is 64 pixels, so
+      on a 64-pixel test image it covered the whole thing and "the marker is in the magnified
+      region" was true however wrong the rotation was -- the image is 200 pixels now.
       Found while fixing the buttons: `ColormapDialog` raised `AttributeError` on construction --
       `setCurrentRow(0)` fired the selection signal, which previewed, which read a check box
       built forty lines later -- so `Color -> Colormap Parameters` could never be opened. Its

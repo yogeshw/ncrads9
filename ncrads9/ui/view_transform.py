@@ -48,7 +48,21 @@ def transform_image_array(
     flip_x: bool,
     flip_y: bool,
 ) -> NDArray[np.generic]:
-    """Apply the current display transform to a 2D or RGB image array."""
+    """Apply the current display transform to a 2D or RGB image array.
+
+    The array is a *display* image: row 0 is the top, so y runs down, the
+    same way a painter's does. The rotation therefore has to turn the same
+    way `QTransform.rotate` turns it, which is clockwise for a positive
+    angle -- and `np.rot90(k=1)` and `ndimage.rotate(+angle)` both turn
+    counter-clockwise in index space, which in a y-down array *looks*
+    counter-clockwise on screen. So both are negated here.
+
+    Getting this backwards is not a symmetrical mistake: at 0 and 180 the
+    two senses agree, so only quarter turns show it. The panner and the
+    magnifier are fed from this function while the main view is painted by
+    `DisplayTransform`, and at 90 and 270 the two disagreed -- which is
+    why a rotated image showed a different part of itself in those panels.
+    """
     transformed = image
     if flip_x:
         transformed = np.fliplr(transformed)
@@ -61,13 +75,13 @@ def transform_image_array(
 
     quarter_turn = angle / 90.0
     if isclose(quarter_turn, round(quarter_turn), abs_tol=1e-9):
-        transformed = np.rot90(transformed, k=int(round(quarter_turn)) % 4)
+        transformed = np.rot90(transformed, k=(-int(round(quarter_turn))) % 4)
         return np.ascontiguousarray(transformed)
 
     if transformed.ndim == 2:
         rotated = ndimage.rotate(
             transformed,
-            angle,
+            -angle,
             reshape=True,
             order=1,
             mode="nearest",
@@ -78,7 +92,7 @@ def transform_image_array(
     channels = [
         ndimage.rotate(
             transformed[..., channel],
-            angle,
+            -angle,
             reshape=True,
             order=1,
             mode="nearest",
