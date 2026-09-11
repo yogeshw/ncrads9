@@ -1310,7 +1310,36 @@ Depends on M2, M3.
       `test_every_button_reaches_its_action` is the ratchet, and it was checked by reverting
       the fix: it fails on the old wiring and passes on the new. M2-15's test only asks whether
       an action *has a listener*, which every one of these did; the button never reached it.
-      Found while fixing this: `ColormapDialog` raised `AttributeError` on construction --
+      **Three more reported after that, each in a widget with no test of its own** —
+      `tests/unit/test_panels_and_colorbar.py` is new, and each of its gates was checked by
+      reverting the fix:
+      * *The panner's N/E arrows pointed the wrong way.* The vectors arrive y-*up*, as
+        `source_vector_to_display` returns them, and a painter's y runs *down*; the negation
+        was missing, so on a normally-oriented image the compass read N-**down**, E-left. The
+        image overlay in `contour_overlay.py` had always done that conversion. The geometry is
+        now `PannerLabel.compass_arrows`, separate from the painting, because the first version
+        of the test recomputed the conversion itself and so passed either way -- which is
+        exactly how the bug got through. The arrows also carry heads now, as DS9's do.
+      * *The magnifier showed nothing.* M9-1 made the region overlay the sole mouse owner, and
+        the window still expected `ImageViewer.mouseMoveEvent` to fire -- it relied on Qt
+        propagating an ignored move event from the overlay to a *sibling's* wrapper, which does
+        not happen. So `mouse_moved` never fired on a plain hover and everything downstream of
+        it sat empty: the magnifier, both cut graphs and the pixel table. The overlay now emits
+        `hover_moved` itself, before the mode sees the event, so a mode that accepts the event
+        cannot silence the readout.
+      * *Thirty of the Matplotlib colormaps appeared to have no effect.* Their tables were
+        fine. The single-bar colorbar indexed `linspace(0, 255, ...)` into the table, and DS9's
+        bundled `.lut` files hold **128** colours -- so `IndexError` came out of
+        `_update_colorbar`, which `display()` calls *before* it draws the image, and the
+        picture kept the previous colormap. Any table that is not 256 long broke the whole
+        display; the multi-bar path had always indexed by `len(colors)` and so worked, which is
+        why no test caught it. Indices are now rounded to the nearest entry rather than
+        truncated, so a two-colour table ramps instead of showing its second colour in the last
+        pixel. `test_every_colormap_on_the_menu_reaches_the_picture` walks all 186 and samples
+        five points across the image -- one point cannot tell `grey` from its own reverse.
+        (`h5_yarg` is exempt: "yarg" is "gray" backwards, but DS9's own `h5_yarg.sao` holds an
+        *unreversed* ramp on all three channels and our copy is byte-identical to it.)
+      Found while fixing the buttons: `ColormapDialog` raised `AttributeError` on construction --
       `setCurrentRow(0)` fired the selection signal, which previewed, which read a check box
       built forty lines later -- so `Color -> Colormap Parameters` could never be opened. Its
       preview also drew the same grey ramp for every colormap, under a comment saying the real

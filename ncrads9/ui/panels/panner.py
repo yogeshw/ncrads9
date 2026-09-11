@@ -37,6 +37,9 @@ COMPASS_LENGTH = 22
 COMPASS_INSET = 6
 #: How far past the arrow head its N/E letter is drawn.
 COMPASS_LABEL_GAP = 6
+#: How long each barb of an arrow head is, and how far it spreads.
+COMPASS_HEAD = 5.0
+COMPASS_SPREAD = 3.0
 
 
 class PannerLabel(QLabel):
@@ -174,32 +177,73 @@ class PannerPanel(QWidget):
         self._show_compass = visible
         self._update_thumbnail()
 
-    def _draw_compass(self, painter: QPainter, size: tuple[int, int]) -> None:
-        """Draw the N and E arrows in the panner's bottom-left corner."""
+    def compass_arrows(self, size: tuple[int, int]) -> dict[str, tuple[QPointF, QPointF]]:
+        """The compass as the painter draws it: label -> (origin, tip).
+
+        Screen space, y running *down*. Separate from `_draw_compass` so a
+        test can assert on the geometry rather than on pixels -- which is
+        how the bug this had got through: the vectors were right and only
+        the drawing was mirrored.
+        """
         if not self._show_compass or self._north is None or self._east is None:
-            return
+            return {}
 
         width, height = size
         origin = QPointF(COMPASS_INSET + COMPASS_LENGTH, height - COMPASS_INSET - COMPASS_LENGTH)
         if origin.x() > width or origin.y() < 0:
-            return
+            return {}
 
-        painter.setPen(QPen(QColor(0, 255, 0), 1))
+        arrows: dict[str, tuple[QPointF, QPointF]] = {}
         for vector, label in ((self._north, "N"), (self._east, "E")):
             dx, dy = vector
+            # The vectors arrive y-*up*, as `source_vector_to_display`
+            # returns them, and a painter's y runs *down*. Without this
+            # negation north was drawn pointing south: the compass was
+            # mirrored, and on a normally-oriented image it read N-down,
+            # E-left. The image overlay in `contour_overlay.py` has always
+            # done this conversion; the panner did not.
+            dy = -dy
             norm = math.hypot(dx, dy)
             if norm <= 0:
                 continue
-            tip = QPointF(
-                origin.x() + dx / norm * COMPASS_LENGTH,
-                origin.y() + dy / norm * COMPASS_LENGTH,
+            ux, uy = dx / norm, dy / norm
+            arrows[label] = (
+                origin,
+                QPointF(origin.x() + ux * COMPASS_LENGTH, origin.y() + uy * COMPASS_LENGTH),
             )
+        return arrows
+
+    def _draw_compass(self, painter: QPainter, size: tuple[int, int]) -> None:
+        """Draw the N and E arrows in the panner's bottom-left corner."""
+        arrows = self.compass_arrows(size)
+        if not arrows:
+            return
+
+        painter.setPen(QPen(QColor(0, 255, 0), 1))
+        for label, (origin, tip) in arrows.items():
+            norm = math.hypot(tip.x() - origin.x(), tip.y() - origin.y())
+            if norm <= 0:
+                continue
+            ux, uy = (tip.x() - origin.x()) / norm, (tip.y() - origin.y()) / norm
             painter.drawLine(origin, tip)
+
+            # An arrow head, so the pair reads as arrows rather than as a
+            # corner. Perpendicular to the shaft, barbs swept back.
+            px, py = -uy, ux
+            for side in (1.0, -1.0):
+                painter.drawLine(
+                    tip,
+                    QPointF(
+                        tip.x() - ux * COMPASS_HEAD + px * COMPASS_SPREAD * side,
+                        tip.y() - uy * COMPASS_HEAD + py * COMPASS_SPREAD * side,
+                    ),
+                )
+
             # Nudge the letter clear of the arrow head.
             painter.drawText(
                 QPointF(
-                    tip.x() + dx / norm * COMPASS_LABEL_GAP - COMPASS_LABEL_GAP / 2,
-                    tip.y() + dy / norm * COMPASS_LABEL_GAP + COMPASS_LABEL_GAP / 2,
+                    tip.x() + ux * COMPASS_LABEL_GAP - COMPASS_LABEL_GAP / 2,
+                    tip.y() + uy * COMPASS_LABEL_GAP + COMPASS_LABEL_GAP / 2,
                 ),
                 label,
             )

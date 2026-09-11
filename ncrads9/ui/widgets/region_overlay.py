@@ -161,6 +161,14 @@ MINIMUM_EXTENT = 1e-6
 class RegionOverlay(QWidget):
     """Overlay widget for drawing and displaying regions."""
 
+    #: The cursor's image position on every hover, as (x, y) in image
+    #: pixels. The overlay is the sole mouse owner (M9-1), so it is the
+    #: only widget that knows where the pointer is -- the readout, the
+    #: magnifier, the cut graphs and the pixel table all need telling, and
+    #: relying on Qt to propagate an ignored move event to a sibling's
+    #: wrapper did not work: none of them updated on hover at all.
+    hover_moved = pyqtSignal(int, int)
+
     region_created = pyqtSignal(object)  # Emits the new BaseRegion
     region_selected = pyqtSignal(object)  # Emits the selected BaseRegion
     region_activated = pyqtSignal(object)  # Emits a double-clicked BaseRegion
@@ -844,7 +852,15 @@ class RegionOverlay(QWidget):
             event.accept()
 
     def mouseMoveEvent(self, event) -> None:
-        """Handle a drag: the pointer mode first, then regions."""
+        """Handle a drag: the pointer mode first, then regions.
+
+        Whatever the mode does with the event, the position is announced
+        first: everything that follows the cursor is downstream of this
+        one signal, and a mode that accepts the event must not silence the
+        readout.
+        """
+        self._announce_hover(event)
+
         if self._to_illustrate(event, "move"):
             event.accept()
             return
@@ -901,6 +917,13 @@ class RegionOverlay(QWidget):
 
             self.update()
             event.accept()
+
+    def _announce_hover(self, event) -> None:
+        """Say where the cursor is, in image pixels."""
+        point = self._widget_to_image_coords(event.position())
+        if point is None:
+            return
+        self.hover_moved.emit(int(point.x()), int(point.y()))
 
     def mouseReleaseEvent(self, event) -> None:
         """Handle a release: the pointer mode first, then regions."""

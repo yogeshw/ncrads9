@@ -79,6 +79,12 @@ class ImageViewerWithRegions(QWidget):
         self.region_overlay.illustrate_handler = self.illustrate_overlay.handle_event
 
         # Connect signals
+        # The overlay owns the mouse, so its hover is the one that reaches
+        # the readout. The inner viewer's `mouse_moved` is kept connected
+        # for the paths that still call its handler directly -- a contrast
+        # drag, a pan -- but on a plain hover it never fires, which is why
+        # the magnifier, the cut graphs and the pixel table all sat empty.
+        self.region_overlay.hover_moved.connect(self.mouse_moved)
         self.image_viewer.mouse_moved.connect(self.mouse_moved)
         self.image_viewer.mouse_clicked.connect(self.mouse_clicked)
         self.image_viewer.contrast_changed.connect(self.contrast_changed)

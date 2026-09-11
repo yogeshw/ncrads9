@@ -199,6 +199,27 @@ class ColorbarWidget(QWidget):
             return (array * 255).astype(np.uint8)
         return array.astype(np.uint8)
 
+    @staticmethod
+    def _ramp(table: np.ndarray, steps: int, reverse: bool = False) -> np.ndarray:
+        """`steps` colours spanning a table, whatever length the table is.
+
+        Not `linspace(0, 255, ...)`: a colour table need not have 256
+        entries. DS9's bundled `.lut` files have 128 of them, and so do
+        thirty of the Matplotlib cascade's tables -- for those this raised
+        `IndexError` from inside `display()`, *before* the image was drawn,
+        so the picture kept the previous colormap and the whole family
+        looked like it had no effect.
+        """
+        count = len(table)
+        if count == 0:
+            return np.zeros((max(0, steps), 3), dtype=np.uint8)
+        positions = np.linspace(count - 1, 0, steps) if reverse else np.linspace(0, count - 1, steps)
+        # Rounded to the nearest entry, not truncated: truncation pushes
+        # every position down, so a short table -- two colours, say --
+        # would show the first colour for the whole bar and the second
+        # only in its last pixel.
+        return table[np.clip(np.rint(positions).astype(int), 0, count - 1)]
+
     def _update_colorbar(self) -> None:
         """Redraw every bar, with ticks and labels."""
         if not self._entries:
@@ -214,9 +235,7 @@ class ColorbarWidget(QWidget):
             bar_height = max(14, self.bar_size)
             bar_width = max(180, self.colorbar_label.width() - 10)
             colorbar = np.zeros((bar_height, bar_width, 3), dtype=np.uint8)
-            indices = np.linspace(0, 255, bar_width).astype(int)
-            for i, idx in enumerate(indices):
-                colorbar[:, i] = cmap_uint8[idx]
+            colorbar[:, :] = self._ramp(cmap_uint8, bar_width)[np.newaxis, :, :]
 
             qimage = QImage(
                 colorbar.tobytes(),
@@ -243,9 +262,7 @@ class ColorbarWidget(QWidget):
         tick_width = 68 if self.show_numerics else 8
         height = max(140, self.colorbar_label.height() - 4)
         colorbar = np.zeros((height, bar_width, 3), dtype=np.uint8)
-        indices = np.linspace(255, 0, height).astype(int)
-        for i, idx in enumerate(indices):
-            colorbar[i, :] = cmap_uint8[idx]
+        colorbar[:, :] = self._ramp(cmap_uint8, height, reverse=True)[:, np.newaxis, :]
 
         qimage = QImage(
             colorbar.tobytes(),
