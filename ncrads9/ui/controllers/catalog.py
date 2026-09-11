@@ -89,6 +89,16 @@ class CatalogController(Controller):
         self.footprint_fetcher = None
         #: The search dialog, kept so it is not collected while shown.
         self._search_dialog = None
+        #: DS9's `catalog` settings that have no control of their own here
+        #: -- the match parameters, the row limit, the coordinate system a
+        #: listing is written in. XPA sets them; the tool reads them back.
+        self.settings: dict[str, str] = {
+            "maxrows": "5000",
+            "match_error": "2 arcsec",
+            "match_function": "1and2",
+            "match_return": "1and2",
+            "match_unique": "yes",
+        }
 
     def connect(self) -> None:
         """Wire every catalogue on the menu, plus load and clear."""

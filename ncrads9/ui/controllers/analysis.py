@@ -942,6 +942,40 @@ class AnalysisController(Controller):
             return
         self.status(f"Saved {len(contours)} contour levels to {Path(path).name}")
 
+    def load_contour_file(self, path: str) -> str | None:
+        """Read a contour file without asking, DS9's `contour load <file>`.
+
+        Returns:
+            None if it loaded, or what went wrong.
+        """
+        try:
+            contours = contour_file.load(path)
+        except contour_file.ContourFileError as exc:
+            return f"{Path(path).name}: {exc}"
+        except OSError as exc:
+            return f"cannot read {Path(path).name}: {exc}"
+        if not contours:
+            return f"{Path(path).name} holds no contours"
+        self.show_contour_set(contours)
+        self.status(f"Loaded {len(contours)} contour levels from {Path(path).name}")
+        return None
+
+    def save_contour_file(self, path: str) -> str | None:
+        """Write the contours on screen without asking.
+
+        Returns:
+            None if it wrote, or what went wrong.
+        """
+        contours = self.current_contour_set()
+        if contours is None:
+            return "no contours to save"
+        try:
+            contour_file.save(path, contours)
+        except OSError as exc:
+            return f"cannot write {Path(path).name}: {exc}"
+        self.status(f"Saved {len(contours)} contour levels to {Path(path).name}")
+        return None
+
     def copy_contours(self) -> None:
         """Copy the contours, DS9's Copy Contours.
 

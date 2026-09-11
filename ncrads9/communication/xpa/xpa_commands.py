@@ -142,6 +142,23 @@ class XPACommands:
         name = command.lower()
         handler = self._command_handlers.get(name)
 
+        if handler is not None and bool(params.get("get")):
+            # A read never writes -- the same rule the table enforces, and
+            # it has to hold here too or `xpaget ds9 frame delete` deletes
+            # the frame. A handler with a dedicated reader answers
+            # precisely; one without answers with its plain current value,
+            # the arguments dropped, which is imprecise but cannot do
+            # damage. Being vague about an answer is a nuisance; answering
+            # a question by changing the answer is a bug.
+            reader = getattr(self, f"_read_{name}", None)
+            try:
+                if reader is not None:
+                    return reader([str(word) for word in self._args(params)])
+                return handler({"get": True, "action": "get"})
+            except Exception as exc:
+                self._logger.error("Error reading %s: %s", command, exc)
+                return {"status": "error", "message": str(exc)}
+
         if handler is None:
             # The hand-written handlers above are the points with real
             # grammars; everything else is in the table, which is most of
@@ -188,18 +205,19 @@ class XPACommands:
                     args = [access_points.on_off(found) if isinstance(found, bool) else str(found)]
                     break
 
-        asked_to_read = bool(params.get("get"))
-        if asked_to_read and point.query is not None:
-            # A read that takes arguments: `xpaget ds9 dsssao size`,
-            # `xpaget ds9 iexam coordinate image`. Without this, an
-            # argument would make every read look like a write.
-            return {"status": "ok", "result": point.query(self.viewer, args)}
+        # A read never writes. Sixty-five of DS9's points take arguments on
+        # a read -- `xpaget ds9 contour clear`, `xpaget ds9 dsssao size` --
+        # and falling through to the setter for those would have `xpaget`
+        # *clear the contours*, which is the worst kind of bug: a command
+        # documented as a question that answers by changing something.
+        if bool(params.get("get")):
+            if point.query is not None:
+                return {"status": "ok", "result": point.query(self.viewer, args)}
+            if point.get is not None:
+                return {"status": "ok", "result": point.get(self.viewer)}
+            return {"status": "error", "message": f"{point.name} cannot be read"}
 
-        getting = asked_to_read and not args
-
-        if getting or (point.set is None and point.get is not None):
-            if point.get is None:
-                return {"status": "error", "message": f"{point.name} cannot be read"}
+        if point.set is None and point.get is not None:
             return {"status": "ok", "result": point.get(self.viewer)}
 
         if point.set is None:
@@ -252,26 +270,45 @@ class XPACommands:
         if viewer_error:
             return viewer_error
 
-        action = str(params.get("action", self._first_arg(params, "load"))).lower()
+        args = [str(word) for word in self._args(params)]
+        verbs = {"load", "open", "save", "saveas", "get", "current", "new", "delete", "slice"}
+
+        # `xpaset -p ds9 file foo.fits` is DS9's own first rule and the
+        # commonest XPA command there is: a bare filename, no verb. The
+        # first word was being read as the verb, so the path became the
+        # verb and the whole thing was refused.
+        action = str(params.get("action", "")).lower()
+        if not action:
+            action = args[0].lower() if args and args[0].lower() in verbs else "load"
+
         path = params.get("path")
         if path is None:
-            args = self._args(params)
-            if action in {"load", "open"} and args:
-                path = args[0]
-            elif action in {"save", "saveas"} and len(args) > 1:
-                path = args[1]
+            candidates = [word for word in args if word.lower() not in verbs]
+            path = candidates[0] if candidates else None
 
-        if action in {"load", "open"}:
+        if bool(params.get("get")) or action in {"get", "current"}:
+            frame = self.viewer.frame_manager.current_frame
+            return {
+                "status": "ok",
+                "result": str(frame.filepath) if frame and frame.filepath else "",
+            }
+        if action in {"load", "open", "new", "slice"}:
             if not path:
                 return {"status": "error", "message": "No file path specified"}
+            if action == "new":
+                self.viewer.frame_controller.new_frame()
             self.viewer.file.open_file(filepath=str(path))
             return {"status": "ok", "result": f"Loaded: {path}"}
         if action in {"save", "saveas"}:
-            return {"status": "error", "message": "Save through XPA is not implemented"}
-        if action in {"get", "current"}:
-            frame = self.viewer.frame_manager.current_frame
-            filename = frame.filepath.name if frame and frame.filepath else ""
-            return {"status": "ok", "result": filename}
+            if not path:
+                return {"status": "error", "message": "No file path specified"}
+            problem = self.viewer.file.save_fits_to(str(path))
+            if problem:
+                return {"status": "error", "message": problem}
+            return {"status": "ok", "result": f"Saved: {path}"}
+        if action == "delete":
+            self.viewer.frame_controller.clear_current()
+            return {"status": "ok"}
         return {"status": "error", "message": "Invalid file command"}
 
     def _handle_fits(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -303,6 +340,19 @@ class XPACommands:
 
         action = str(params.get("action", self._first_arg(params, "get"))).lower()
         args = self._args(params)
+
+        # DS9's reads reach `_read_frame` above; these are the same names
+        # arriving as a write, which `frame has grid` does when a caller
+        # forgets the `-p`. Answering rather than making a frame called
+        # `has` is the kinder reading.
+        if action in ("frameno", "all", "active", "has") and not (action == "frameno" and args[1:]):
+            answer = self._frame_read(action, [str(word) for word in args])
+            if answer is not None:
+                return {"status": "ok", "result": answer}
+
+        moved = self._frame_write(action, [str(word) for word in args])
+        if moved is not None:
+            return moved
         number = params.get("number")
         if number is None and action == "set" and args:
             number = args[0]
@@ -380,6 +430,136 @@ class XPACommands:
             "result": str(self.viewer.frame_manager.current_index + 1),
         }
 
+    def _read_frame(self, args: list[str]) -> dict[str, Any]:
+        """`xpaget ds9 frame ...`, which has a grammar of its own."""
+        viewer_error = self._require_viewer()
+        if viewer_error:
+            return viewer_error
+        action = args[0].lower() if args else ""
+        answer = self._frame_read(action, args)
+        if answer is None:
+            answer = str(self.viewer.frame_manager.current_index + 1)
+        return {"status": "ok", "result": answer}
+
+    def _frame_read(self, action: str, args: list[str]) -> str | None:
+        """DS9's `xpaget ds9 frame ...`, or None if it is not a read.
+
+        `frame has <capability>` answers yes or no for each of DS9's
+        capabilities; one we have no notion of answers `no`, which is true
+        and is what a script branches on.
+        """
+        frames = self.viewer.frame_manager
+        controller = self.viewer.frame_controller
+
+        if action in ("", "get", "frameno"):
+            return str(frames.current_index + 1)
+        if action == "all":
+            return " ".join(str(index + 1) for index in range(len(frames.frames)))
+        if action == "active":
+            return " ".join(str(index + 1) for index in controller.active_indices())
+        if action == "lock":
+            # The same text the `lock` point answers with, so the two
+            # spellings of DS9's question give one answer.
+            return access_points._lock_text(self.viewer)
+        if action == "has":
+            # `args` still carries the verb, since the dispatcher hands the
+            # whole argument list over; `frame has fits cube` asks about
+            # "fits cube", not about "has fits cube".
+            return access_points.on_off(self._frame_has([w for w in args if w.lower() != "has"]))
+        return None
+
+    def _frame_has(self, words: list[str]) -> bool:
+        """Whether the current frame has what `frame has ...` asks about."""
+        frame = self.viewer.frame_manager.current_frame
+        if frame is None or not words:
+            return False
+        what = " ".join(word.lower() for word in words)
+        data = getattr(frame, "image_data", None)
+        handler = getattr(frame, "wcs_handler", None)
+
+        if what.startswith("fits"):
+            if data is None:
+                return False
+            if what == "fits cube":
+                return getattr(frame, "image", None) is not None and frame.image.data.ndim >= 3
+            if what == "fits bin":
+                return bool(getattr(frame, "bin_table", None))
+            if what == "fits mosaic":
+                return bool(getattr(frame, "is_mosaic", False))
+            return True
+        if what.startswith("wcs"):
+            return bool(handler is not None and getattr(handler, "is_valid", False))
+        if what in ("physical", "system physical"):
+            return getattr(frame, "physical_transform", None) is not None
+        if what in ("amplifier", "detector"):
+            return False
+        if what in ("datamin", "irafmin", "datasec"):
+            return data is not None
+        if what == "grid":
+            return bool(self.viewer.menu_bar.action_coordinate_grid.isChecked())
+        if what == "smooth":
+            return bool(self.viewer.menu_bar.action_smooth.isChecked())
+        if what.startswith("contour"):
+            return bool(self.viewer.menu_bar.action_contours.isChecked())
+        if what == "iis":
+            return bool(self.viewer.iis.running())
+        if what.startswith("marker"):
+            regions = getattr(frame, "regions", [])
+            if what == "marker select":
+                return any(getattr(region, "selected", False) for region in regions)
+            if what == "marker paste":
+                return self.viewer.edit.clipboard() is not None
+            if what == "marker undo":
+                return self.viewer.undo.can_undo()
+            return bool(regions)
+        return False
+
+    def _frame_write(self, action: str, args: list[str]) -> dict[str, Any] | None:
+        """DS9's frame rules the block below does not cover, or None."""
+        controller = self.viewer.frame_controller
+
+        if action == "hide":
+            frame = self.viewer.frame_manager.current_frame
+            if frame is not None:
+                controller.set_active(frame.frame_id, False)
+            return {"status": "ok"}
+        if action == "show":
+            frames = self.viewer.frame_manager.frames
+            wanted = (
+                int(args[0]) - 1 if args and args[0].isdigit() else self.viewer.frame_manager.current_index
+            )
+            if not 0 <= wanted < len(frames):
+                return {"status": "error", "message": f"there is no frame {wanted + 1}"}
+            controller.set_active(frames[wanted].frame_id, True)
+            return {"status": "ok"}
+        if action == "move":
+            where = args[0].lower() if args else ""
+            handler = {
+                "first": controller.move_first,
+                "back": controller.move_back,
+                "forward": controller.move_forward,
+                "last": controller.move_last,
+            }.get(where)
+            if handler is None:
+                return {"status": "error", "message": "move takes first, back, forward or last"}
+            handler()
+            return {"status": "ok"}
+        if action == "center":
+            # `center`, `center <n>`, `center all`: DS9 re-centres the
+            # image in the frame, which is what a zoom-to-fit pan does.
+            self.viewer.zoom.center_image()
+            return {"status": "ok"}
+        if action == "frameno" and args:
+            return self._handle_frame({"action": "set", "args": args})
+        if action in ("match", "lock") and args:
+            point = self._points.get(action)
+            if point is not None and point.set is not None:
+                problem = point.set(self.viewer, args)
+                if problem:
+                    return {"status": "error", "message": problem}
+                return {"status": "ok"}
+        return None
+
     def _handle_zoom(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle zoom commands.
 
@@ -441,6 +621,15 @@ class XPACommands:
             return {"status": "ok", "result": "0 0"}
         return {"status": "ok", "result": f"{frame.pan_x:.6g} {frame.pan_y:.6g}"}
 
+    @staticmethod
+    def _is_number(value: Any) -> bool:
+        """Whether a word is a number, so a limit is not mistaken for a name."""
+        try:
+            float(value)
+        except (TypeError, ValueError):
+            return False
+        return True
+
     def _handle_scale(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle scale/contrast commands.
 
@@ -466,14 +655,88 @@ class XPACommands:
             "sqrt": ScaleAlgorithm.SQRT,
             "squared": ScaleAlgorithm.POWER,
             "power": ScaleAlgorithm.POWER,
+            "sinh": ScaleAlgorithm.SINH,
             "asinh": ScaleAlgorithm.ASINH,
             "histeq": ScaleAlgorithm.HISTOGRAM_EQUALIZATION,
+            "histequ": ScaleAlgorithm.HISTOGRAM_EQUALIZATION,
             "histogram": ScaleAlgorithm.HISTOGRAM_EQUALIZATION,
             "histogramequalization": ScaleAlgorithm.HISTOGRAM_EQUALIZATION,
         }
 
+        # DS9's other `scale` rules, which are not algorithms. Named here
+        # so that a word which is neither an algorithm nor one of these can
+        # be *refused*: `scale sideways` used to be accepted and quietly
+        # leave the scale linear, which is the worst kind of reply.
+        others = {
+            "zscale",
+            "zmax",
+            "minmax",
+            "mode",
+            "limits",
+            "scope",
+            "datasec",
+            "exp",
+            "match",
+            "lock",
+            "open",
+            "close",
+            "user",
+            "get",
+        }
+        if (
+            mode is not None
+            and str(mode).lower() not in mode_map
+            and str(mode).lower() not in others
+            and not self._is_number(mode)
+        ):
+            return {
+                "status": "error",
+                "message": f"{mode} is not a scale; try {', '.join(sorted(mode_map))}",
+            }
+
+        words = [str(word) for word in args]
+        rest = words[1:]
+
+        # DS9's sub-rules. These used to fall through to the return below,
+        # which answered `ok` and the current scale while changing nothing.
+        if mode == "mode":
+            if not rest:
+                return {"status": "error", "message": "scale mode takes a limit mode"}
+            self.viewer.scale.set_limit_mode(rest[0].lower())
+            return {"status": "ok", "result": self.viewer.scale.mode_key(self.viewer.scale.settings)}
+        if mode == "limits":
+            if len(rest) < 2 or not all(self._is_number(word) for word in rest[:2]):
+                return {"status": "error", "message": "scale limits takes a low and a high"}
+            self.viewer.scale.set_user_limits(float(rest[0]), float(rest[1]))
+            return {"status": "ok"}
+        if mode == "scope":
+            if not rest:
+                return {"status": "error", "message": "scale scope takes local or global"}
+            self.viewer.scale.set_scope(rest[0].lower())
+            return {"status": "ok"}
+        if mode == "datasec":
+            wanted = self._as_bool(rest[0]) if rest else None
+            if wanted is None:
+                return {"status": "error", "message": "scale datasec takes yes or no"}
+            self.viewer.scale.set_use_datasec(wanted)
+            return {"status": "ok"}
+        if mode in ("log", "exp") and rest and self._is_number(rest[-1]):
+            # `scale log exp 100`: the log scale and its exponent at once.
+            self.viewer.scale.set_scale(ScaleAlgorithm.LOG)
+            self.viewer.scale.set_log_exponent(float(rest[-1]))
+            return {"status": "ok", "result": self.viewer.current_scale.name.lower()}
+        if mode in ("match", "lock", "open", "close"):
+            point = self._points.get(mode)
+            if point is not None and point.set is not None:
+                problem = point.set(self.viewer, ["scalelimits", *rest] if mode != "open" else rest)
+                if problem:
+                    return {"status": "error", "message": problem}
+            return {"status": "ok"}
+
         if mode in {"zscale"}:
             self.viewer.scale.reset_limits()
+        elif mode in {"zmax", "user"}:
+            self.viewer.scale.set_limit_mode(str(mode))
         elif mode in {"minmax"}:
             self.viewer.scale.set_minmax_limits()
         elif mode in mode_map:

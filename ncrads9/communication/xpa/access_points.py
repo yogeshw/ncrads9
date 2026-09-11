@@ -43,6 +43,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+#: The sky frames DS9 names, for the reads that take one.
+SKY_FRAMES = frozenset({"fk4", "fk5", "icrs", "galactic", "ecliptic", "b1950", "j2000"})
+
 #: What `xpaget` answers for a boolean, as DS9 answers it.
 YES = "yes"
 NO = "no"
@@ -253,9 +256,11 @@ DISPLAY_POINTS: tuple[AccessPoint, ...] = (
     ),
     AccessPoint(
         "contour",
-        *flag("menu_bar.action_contours.isChecked", "analysis.set_contours"),
+        get=lambda window: on_off(window.menu_bar.action_contours.isChecked()),
+        query=lambda window, args: _contour_text(window, args),
+        set=lambda window, args: _contour(window, args),
         aliases=("contours",),
-        summary="whether contours are drawn",
+        summary="the contours: levels, method, colour, load, save, copy, paste",
     ),
     AccessPoint(
         "orient",
@@ -373,6 +378,248 @@ FRAME_POINTS: tuple[AccessPoint, ...] = (
         summary="match a scope across frames",
     ),
 )
+
+
+#: DS9's `contour` settings, mapped to the keys the contour dialog and
+#: `update_contours` use. DS9 spells them one way, the dialog another, and
+#: this is the one place the two names meet.
+_CONTOUR_KEYS = {
+    "color": "color",
+    "colour": "color",
+    "width": "line_width",
+    "nlevels": "num_levels",
+    "smooth": "smooth_sigma",
+    "method": "method",
+    "scale": "scale",
+    "mode": "mode",
+    "scope": "scope",
+    "limits": "limits",
+    "levels": "levels",
+}
+
+
+def _contour_settings(window) -> dict:
+    """The contour settings, made if there are none yet."""
+    if window._contour_settings is None:
+        window.analysis.set_contours(True)
+    return window._contour_settings or {}
+
+
+def _contour_text(window, args: list[str]) -> str:
+    """What `xpaget ds9 contour <what>` answers."""
+    if not args:
+        return on_off(window.menu_bar.action_contours.isChecked())
+
+    what = str(args[0]).lower()
+    settings = window._contour_settings or {}
+
+    if what in ("wcs", "image", "physical") or what.startswith("wcs"):
+        # `xpaget ds9 contour wcs fk5`: the contours themselves, written
+        # in that system, which is what DS9 answers with.
+        contours = window.analysis.current_contour_set()
+        if contours is None:
+            return ""
+        from ...analysis import contour_file
+
+        return contour_file.to_text(contours)
+    if what == "levels":
+        levels = window._contour_levels
+        return " ".join(f"{value:g}" for value in levels) if levels is not None else ""
+    if what == "dash":
+        return on_off(str(settings.get("line_style", "Solid")).lower() != "solid")
+    if what == "smooth":
+        return str(settings.get("smooth_sigma", 1))
+    if what == "width":
+        return f"{float(settings.get('line_width', 1)):g}"
+    if what == "nlevels":
+        return str(settings.get("num_levels", 10))
+    if what == "log":
+        return str(settings.get("log_exp", 1000))
+    if what in _CONTOUR_KEYS:
+        return str(settings.get(_CONTOUR_KEYS[what], ""))
+    return on_off(window.menu_bar.action_contours.isChecked())
+
+
+def _contour(window, args: list[str]) -> str | None:
+    """DS9's `contour`, which is a good deal more than a yes or a no.
+
+    `[yes|no] [clear] [generate] [load <file>] [save <file>] [copy]
+    [paste] [color <c>] [width <n>] [dash yes|no] [smooth <n>]
+    [method block|smooth] [nlevels <n>] [scale <s>] [mode <m>]
+    [scope local|global] [limits <low> <high>] [levels <v>...]
+    [open|close]`.
+    """
+    words = [str(word) for word in args]
+    controller = window.analysis
+    if not words:
+        controller.set_contours(True)
+        return None
+
+    first = words[0].lower()
+    rest = words[1:]
+
+    shown = as_bool(first)
+    if shown is not None and not rest:
+        controller.set_contours(shown)
+        return None
+
+    if first == "clear":
+        controller.set_contours(False)
+        return None
+    if first == "generate":
+        controller.update_contours()
+        return None
+    if first == "open":
+        controller.show_contour_dialog()
+        return None
+    if first == "close":
+        return None
+    if first == "copy":
+        controller.copy_contours()
+        return None
+    if first == "paste":
+        # `paste wcs red 2 no` names a system, colour, width and dash;
+        # what is on the clipboard already carries its own, so the extra
+        # words are DS9's way of overriding them and are applied after.
+        controller.paste_contours()
+        return _contour_style(window, rest)
+    if first == "convert":
+        return "contour convert turns contours into regions, which the Region menu does"
+
+    if first == "load":
+        # `load levels <file>` reads just the level values.
+        paths = [word for word in rest if word.lower() != "levels"]
+        if not paths:
+            return "a contour file is needed"
+        if "levels" in [word.lower() for word in rest]:
+            return _contour_levels_file(window, paths[0], write=False)
+        return controller.load_contour_file(paths[0])
+
+    if first == "save":
+        paths = [word for word in rest if word.lower() not in ("levels", "wcs", "image", "physical")]
+        if not paths:
+            return "a file to write is needed"
+        if "levels" in [word.lower() for word in rest]:
+            return _contour_levels_file(window, paths[0], write=True)
+        return controller.save_contour_file(paths[0])
+
+    settings = _contour_settings(window)
+
+    if first == "dash":
+        wanted = as_bool(rest[0]) if rest else None
+        if wanted is None:
+            return "dash takes yes or no"
+        settings["line_style"] = "Dashed" if wanted else "Solid"
+        controller.apply_contours(settings)
+        return None
+
+    if first == "levels":
+        try:
+            values = [float(word) for word in rest]
+        except ValueError:
+            return "levels takes numbers"
+        if not values:
+            return "at least one level is needed"
+        settings["levels"] = values
+        settings["num_levels"] = len(values)
+        controller.apply_contours(settings)
+        return None
+
+    if first == "limits":
+        if len(rest) < 2:
+            return "limits takes a low and a high"
+        try:
+            settings["limits"] = (float(rest[0]), float(rest[1]))
+        except ValueError:
+            return "limits takes two numbers"
+        controller.apply_contours(settings)
+        return None
+
+    if first == "log":
+        # `contour log exp 1000`.
+        try:
+            settings["log_exp"] = float(rest[-1])
+        except (IndexError, ValueError):
+            return "log takes an exponent"
+        controller.apply_contours(settings)
+        return None
+
+    if first in _CONTOUR_KEYS:
+        if not rest:
+            return f"contour {first} needs a value"
+        key = _CONTOUR_KEYS[first]
+        value: object = " ".join(rest)
+        if key in ("line_width", "num_levels", "smooth_sigma"):
+            try:
+                value = float(rest[0]) if key != "num_levels" else int(float(rest[0]))
+            except ValueError:
+                return f"contour {first} takes a number"
+        elif key == "method":
+            value = str(rest[0]).capitalize()
+        settings[key] = value
+        if key == "smooth_sigma":
+            settings["smooth"] = float(settings["smooth_sigma"]) > 1
+        controller.apply_contours(settings)
+        return None
+
+    return f"contour does not take {first}"
+
+
+def _contour_style(window, words: list[str]) -> str | None:
+    """The colour, width and dash DS9's `contour paste` may carry."""
+    if not words:
+        return None
+    settings = _contour_settings(window)
+    for word in words:
+        if word.lower() in ("wcs", "image", "physical") or word.lower().startswith("wcs"):
+            continue
+        flag = as_bool(word)
+        if flag is not None:
+            settings["line_style"] = "Dashed" if flag else "Solid"
+            continue
+        try:
+            settings["line_width"] = float(word)
+        except ValueError:
+            settings["color"] = word
+    window.analysis.apply_contours(settings)
+    return None
+
+
+def _contour_levels_file(window, path: str, write: bool) -> str | None:
+    """DS9's `contour load|save levels <file>`: the level values alone.
+
+    A plain list of numbers, one per line, which is what DS9's `.lev`
+    files hold -- not the contour paths a `.ctr` file holds.
+    """
+    from pathlib import Path
+
+    if write:
+        levels = window._contour_levels
+        if levels is None:
+            return "there are no contour levels to save"
+        try:
+            Path(path).write_text("\n".join(f"{value:g}" for value in levels) + "\n")
+        except OSError as exc:
+            return f"cannot write {path}: {exc}"
+        return None
+
+    try:
+        text = Path(path).read_text()
+    except OSError as exc:
+        return f"cannot read {path}: {exc}"
+    values = []
+    for word in text.replace(",", " ").split():
+        try:
+            values.append(float(word))
+        except ValueError:
+            continue
+    if not values:
+        return f"{path} holds no levels"
+    settings = _contour_settings(window)
+    settings["levels"] = values
+    settings["num_levels"] = len(values)
+    window.analysis.apply_contours(settings)
+    return None
 
 
 def _integer(window, args: list[str], path: str, what: str) -> str | None:
@@ -744,6 +991,7 @@ APP_POINTS: tuple[AccessPoint, ...] = (
     AccessPoint(
         "crosshair",
         get=lambda window: _cursor_text(window),
+        query=lambda window, args: _crosshair_text(window, args),
         set=lambda window, args: _crosshair(window, args),
         summary="where the crosshair is, in image pixels",
     ),
@@ -972,6 +1220,26 @@ def _cursor_text(window) -> str:
     return f"{placed[0]:g} {placed[1]:g}"
 
 
+def _crosshair_text(window, args: list[str]) -> str:
+    """Where the crosshair is, in whichever system was asked for.
+
+    `xpaget ds9 crosshair image`, `xpaget ds9 crosshair wcs fk5 degrees`.
+    Without this the arguments were ignored and the answer came back in
+    image pixels whatever was asked, which a script cannot tell from a
+    right answer.
+    """
+    placed = window.crosshair.position()
+    if placed is None:
+        return "0 0"
+    words = [str(word).lower() for word in args]
+    if not words or words[0] in ("image", "physical", "amplifier", "detector"):
+        return f"{placed[0]:g} {placed[1]:g}"
+
+    sky = next((word for word in words if word in SKY_FRAMES), "fk5")
+    sky_format = "sexagesimal" if "sexagesimal" in words else "degrees"
+    return window.iis.coordinate(placed[0], placed[1], words[0], sky, sky_format)
+
+
 def _cursor(window, args: list[str]) -> str | None:
     """`cursor <x> <y>`: move the crosshair there."""
     if len(args) < 2:
@@ -1126,15 +1394,36 @@ def _movie(window, args: list[str]) -> str | None:
 
 
 def _saveimage(window, args: list[str]) -> str | None:
-    """`saveimage <file>`, in whatever format the name asks for."""
+    """DS9's `saveimage`, in both its forms.
+
+    `saveimage ds9.tiff` takes the format from the name; `saveimage jpeg
+    ds9.jpeg 75` names the format first and the quality last. Reading the
+    first word as the path breaks the second form, and the second form is
+    the one anybody writes when they care about the quality.
+    """
     if not args:
         return "a file is needed"
     from pathlib import Path
 
     from ...io import raster
 
-    path = Path(str(args[0]))
+    words = [str(word) for word in args]
+    # The path is the argument with a suffix; a bare format name and a
+    # bare number are the other two things DS9 allows.
+    named = [word for word in words if Path(word).suffix]
+    if not named:
+        return "a file is needed"
+    path = Path(named[-1])
     suffix = path.suffix.lower()
+
+    # An explicit format wins over the suffix, as DS9's does.
+    for word in words:
+        if word is named[-1]:
+            continue
+        candidate = f".{word.lower().lstrip('.')}"
+        if any(candidate in suffixes for suffixes in raster.FORMATS.values()):
+            suffix = candidate
+            break
     formats = {suffix: name for name, suffixes in raster.FORMATS.items() for suffix in suffixes}
     pixmap = window.file.current_pixmap()
     if pixmap is None:
@@ -1340,13 +1629,20 @@ FILE_POINTS: tuple[AccessPoint, ...] = (
 
 TOOL_WINDOW_POINTS: tuple[AccessPoint, ...] = (
     AccessPoint(
-        "catalog", set=_show_window("catalog.show_dialog"), aliases=("cat",), summary="the catalogue tool"
+        "catalog",
+        get=lambda window: _catalog_text(window, []),
+        query=lambda window, args: _catalog_text(window, args),
+        set=lambda window, args: _catalog(window, args),
+        aliases=("cat",),
+        summary="the catalogue tool: load, query, filter, match, export",
     ),
     AccessPoint(
         "footprint",
-        set=_show_window("catalog.show_footprint_dialog"),
+        get=lambda window: _catalog_text(window, []),
+        query=lambda window, args: _catalog_text(window, args),
+        set=lambda window, args: _footprint(window, args),
         aliases=("fp",),
-        summary="the footprint tool",
+        summary="the footprint servers, which load as catalogues",
     ),
     AccessPoint(
         "vo",
@@ -2788,6 +3084,223 @@ def _sia(window, args: list[str]) -> str | None:
     if first in ("cancel", "clear", "print", "export", "current", "crosshair", "sky", "skyformat", "system"):
         return f"sia {first} belongs to DS9's own search window, which we reach through the servers"
     return f"we have no SIA service called {first}"
+
+
+def _catalog_text(window, args: list[str]) -> str:
+    """What `xpaget ds9 catalog` answers.
+
+    DS9 reads back the current catalogue's name, its filter, its row and
+    column limits, and the rows themselves; a bare read lists what is
+    loaded, which is the thing a script most often wants to know.
+    """
+    controller = window.catalog
+    loaded = controller.catalogs.catalogs
+    what = args[0].lower() if args else ""
+
+    if not what:
+        return "\n".join(f"{entry.name} {len(entry)}" for entry in loaded)
+    if not loaded:
+        return ""
+    current = loaded[-1]
+
+    if what == "current":
+        return current.name
+    if what == "filter":
+        return current.filter_expression
+    if what == "header":
+        return " ".join(current.columns)
+    if what in ("maxrows", "location", "psky", "psystem", "sky", "skyformat", "system"):
+        return str(window.catalog.settings.get(what, ""))
+    if what in ("ra", "dec"):
+        from ...catalogs import catalog_query
+
+        columns = catalog_query.coordinate_columns(current.table)
+        if columns is None:
+            return ""
+        return columns[0] if what == "ra" else columns[1]
+    if what == "export":
+        from ...catalogs import catalog_file
+
+        return catalog_file.to_text(current.filtered())
+    return current.name
+
+
+def _catalog(window, args: list[str]) -> str | None:
+    """DS9's `catalog`, over the catalogue tool.
+
+    `[<server>] [cds <name>] [new] [load <file>] [import <format> <file>]
+    [export <format> <file>] [filter <expression>|clear] [clear] [close]
+    [current <name>] [match ...] [maxrows <n>] [regions] [save <file>]
+    [symbol ...] [update] [sky|system|skyformat ...]`.
+
+    DS9's own search window and its per-column editing are its dialog's
+    business; where a rule belongs to the window rather than to the
+    catalogue, this says so.
+    """
+    from ...catalogs import catalog_file
+
+    controller = window.catalog
+    words = [str(word) for word in args]
+    if not words:
+        controller.show_tool()
+        return None
+
+    first = words[0].lower()
+    rest = words[1:]
+    loaded = controller.catalogs.catalogs
+    current = loaded[-1] if loaded else None
+
+    if first == "new":
+        # DS9 opens an empty search window; ours opens the search dialog,
+        # which is the same starting point.
+        controller.search()
+        return None
+    if first == "close":
+        for window_ in list(controller._windows.values()):
+            window_.close()
+        return None
+    if first == "clear":
+        controller.clear_all()
+        return None
+    if first == "cancel":
+        return None
+    if first == "update":
+        controller.refresh_overlay()
+        return None
+    if first == "crosshair":
+        return "catalog crosshair belongs to DS9's search window, which sets a position"
+
+    if first == "load":
+        if not rest:
+            return "a catalogue file is needed"
+        return None if controller.load_file(rest[0]) else f"{rest[0]} could not be loaded"
+    if first == "import":
+        # `import <format> <file>`; the loader detects the format anyway.
+        if len(rest) < 2:
+            return "a format and a file are needed"
+        return None if controller.load_file(rest[1]) else f"{rest[1]} could not be loaded"
+    if first in ("save", "export"):
+        if current is None:
+            return "no catalogue is loaded"
+        path = rest[-1] if rest else ""
+        if not path:
+            return "a file to write is needed"
+        try:
+            catalog_file.save(path, current.filtered())
+        except (catalog_file.CatalogFileError, OSError) as exc:
+            return f"could not write {path}: {exc}"
+        return None
+
+    if first == "filter":
+        if rest and rest[0].lower() == "clear":
+            current and setattr(current, "filter_expression", "")
+        elif rest and rest[0].lower() == "load":
+            return "catalog filter load reads DS9's own filter file, which we do not write"
+        elif current is not None:
+            current.filter_expression = " ".join(rest)
+        controller.refresh_overlay()
+        return None
+
+    if first == "current":
+        if not rest:
+            return "a catalogue name is needed"
+        return None if controller.catalogs.by_name(rest[0]) else f"no catalogue called {rest[0]}"
+
+    if first == "regions":
+        if current is None:
+            return "no catalogue is loaded"
+        controller.to_regions(current)
+        return None
+
+    if first == "match":
+        return _catalog_match(window, rest)
+
+    if first in ("maxrows", "location", "sky", "skyformat", "system", "psky", "psystem"):
+        controller.settings[first] = " ".join(rest) if rest else ""
+        return None
+
+    if first in ("allrows", "allcols", "header", "panto", "edit", "symbol", "plot", "print", "sort"):
+        return f"catalog {first} belongs to the catalogue window, which has it on its own menus"
+
+    if first in ("ra", "dec"):
+        return f"catalog {first} names a column, which the loader finds from the table's own units"
+
+    if first == "cds":
+        if not rest:
+            return "a CDS catalogue is needed"
+        return None if controller.query_identifier(rest[0].strip("{}")) else f"{rest[0]} returned nothing"
+
+    if first == "coordinate":
+        return "catalog coordinate sets DS9's search position; ours searches about the frame"
+
+    if first == "name":
+        return "catalog name resolves an object for DS9's search window; use `nameserver`"
+
+    # A bare word is one of DS9's catalogue names.
+    return None if controller.query(first) else f"{first} returned nothing"
+
+
+def _catalog_match(window, args: list[str]) -> str | None:
+    """DS9's `catalog match`, which has settings of its own."""
+    controller = window.catalog
+    settings = controller.settings
+    words = [str(word) for word in args]
+
+    if words and words[0].lower() in ("error", "function", "unique", "return"):
+        if len(words) < 2:
+            return f"match {words[0]} needs a value"
+        settings[f"match_{words[0].lower()}"] = " ".join(words[1:])
+        return None
+
+    names = [word for word in words if word.lower() not in ("error", "function", "unique", "return")]
+    if len(names) < 2:
+        loaded = controller.catalogs.catalogs
+        if len(loaded) < 2:
+            return "two loaded catalogues are needed to match"
+        names = [loaded[-2].name, loaded[-1].name]
+
+    radius = settings.get("match_error", "").split()
+    try:
+        arcsec = float(radius[0]) if radius else 2.0
+    except ValueError:
+        arcsec = 2.0
+    if len(radius) > 1 and radius[1].lower().startswith("arcmin"):
+        arcsec *= 60.0
+    elif len(radius) > 1 and radius[1].lower().startswith("deg"):
+        arcsec *= 3600.0
+
+    matched = controller.match(
+        names[0],
+        names[1],
+        arcsec,
+        settings.get("match_function", "1and2"),
+        settings.get("match_return", "1and2"),
+        as_bool(settings.get("match_unique", "yes")) is not False,
+    )
+    return None if matched else "the two catalogues did not match"
+
+
+def _footprint(window, args: list[str]) -> str | None:
+    """DS9's `footprint`: what observations cover this field.
+
+    They load as catalogues here, filterable and listable like any other,
+    and their outlines are drawn as polygon regions -- which is what DS9's
+    `fpreg.tcl` does with them -- so the rules a footprint shares with a
+    catalogue go to the same place.
+    """
+    from ...catalogs import footprints
+
+    words = [str(word) for word in args]
+    if not words:
+        return "a footprint server is needed: " + ", ".join(s.name for s in footprints.SERVERS)
+
+    first = words[0].lower()
+    if footprints.by_name(first) is not None:
+        return None if window.catalog.query_footprints(first) else f"{first} returned nothing"
+    if first == "clear":
+        window.catalog.clear_footprints()
+        return None
+    return _catalog(window, words)
 
 
 def _web(window, args: list[str]) -> str | None:
