@@ -21,6 +21,8 @@ Author: Yogesh Wadadekar
 """
 
 
+import numpy as np
+from numpy.typing import NDArray
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QImage, QPixmap
 from PyQt6.QtWidgets import (
@@ -38,7 +40,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ...colormaps.builtin_maps import list_builtin_colormaps
+from ...colormaps.builtin_maps import get_builtin_colormap, list_builtin_colormaps
 
 
 class ColormapDialog(QDialog):
@@ -75,9 +77,16 @@ class ColormapDialog(QDialog):
         for cmap_name in self.COLORMAPS:
             item = QListWidgetItem(cmap_name)
             self._cmap_list.addItem(item)
-        self._cmap_list.currentItemChanged.connect(self._on_colormap_selected)
+        # Selected *before* the signal is connected, and the preview drawn
+        # once at the end of this method. Connecting first made
+        # `setCurrentRow` fire `_on_colormap_selected` -> `_update_preview`
+        # before `_invert_check` existed, so constructing this dialog
+        # raised `AttributeError` and Color -> Colormap Parameters could
+        # never be opened at all.
         if self.COLORMAPS:
             self._cmap_list.setCurrentRow(0)
+            self._current_colormap = self._cmap_list.currentItem().text()
+        self._cmap_list.currentItemChanged.connect(self._on_colormap_selected)
         cmap_layout.addWidget(self._cmap_list)
 
         layout.addWidget(cmap_group)
@@ -89,7 +98,6 @@ class ColormapDialog(QDialog):
         self._preview_label = QLabel()
         self._preview_label.setMinimumHeight(50)
         self._preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._update_preview()
         preview_layout.addWidget(self._preview_label)
 
         layout.addWidget(preview_group)
@@ -135,6 +143,9 @@ class ColormapDialog(QDialog):
 
         layout.addLayout(button_layout)
 
+        # Everything the preview reads now exists.
+        self._update_preview()
+
     def _on_colormap_selected(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
         """Handle colormap selection.
 
@@ -153,26 +164,41 @@ class ColormapDialog(QDialog):
         self._update_preview()
 
     def _update_preview(self) -> None:
-        """Update the colormap preview."""
-        width = 400
-        height = 40
+        """Draw a ramp through the chosen colormap, inverted and gammaed.
+
+        It used to draw the same grey ramp whatever was selected, with a
+        comment saying the real colormap "would use matplotlib" -- which
+        `colormaps/` has done since M5. A preview that shows grey for
+        `heat` is worse than no preview.
+        """
+        width, height = 400, 40
+        ramp = np.linspace(0.0, 1.0, width, dtype=np.float64)
+        if self._invert_check.isChecked():
+            ramp = 1.0 - ramp
+        gamma = max(0.1, self._gamma_slider.value() / 100.0)
+        ramp = np.clip(ramp, 0.0, 1.0) ** gamma
+
+        colours = self._ramp_colours(ramp)
         image = QImage(width, height, QImage.Format.Format_RGB32)
-
-        # Create a simple gradient preview
         for x in range(width):
-            value = int(255 * x / width)
-            if self._invert_check.isChecked():
-                value = 255 - value
-            # Apply gamma
-            gamma = self._gamma_slider.value() / 100.0
-            value = int(255 * ((value / 255.0) ** gamma))
-
-            # Simple grayscale for now - actual colormap would use matplotlib
+            red, green, blue = (int(component) for component in colours[x])
+            colour = QColor(red, green, blue)
             for y in range(height):
-                image.setPixelColor(x, y, QColor(value, value, value))
+                image.setPixelColor(x, y, colour)
 
-        pixmap = QPixmap.fromImage(image)
-        self._preview_label.setPixmap(pixmap)
+        self._preview_label.setPixmap(QPixmap.fromImage(image))
+
+    def _ramp_colours(self, ramp: NDArray[np.floating]) -> NDArray[np.uint8]:
+        """The ramp through the selected colormap, as RGB rows.
+
+        Falls back to grey when the name is not one we hold, which is what
+        a preview of an unknown colormap honestly is.
+        """
+        colormap = get_builtin_colormap(self._current_colormap)
+        if colormap is None:
+            grey = np.clip(ramp * 255.0, 0, 255).astype(np.uint8)
+            return np.stack([grey, grey, grey], axis=-1)
+        return colormap.apply_normalized(ramp)
 
     def _get_settings(self) -> dict:
         """Get current colormap settings.

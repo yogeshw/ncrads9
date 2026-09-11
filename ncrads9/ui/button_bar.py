@@ -435,16 +435,36 @@ class ButtonBar(QWidget):
 
         action: QAction = getattr(self._menu_bar, spec.action)
         button.setToolTip(action.text().replace("&", ""))
+        button.setEnabled(action.isEnabled())
+        action.changed.connect(lambda a=action, b=button: b.setEnabled(a.isEnabled()))
+
         if action.isCheckable():
             button.setCheckable(True)
             button.setChecked(action.isChecked())
             # Mirror the action rather than the click: the menu, an XPA
             # command or a keyboard shortcut can all change it too.
             action.toggled.connect(button.setChecked)
-            button.clicked.connect(action.setChecked)
+            button.clicked.connect(lambda _checked=False, a=action, b=button: self._toggle(a, b))
         else:
             button.clicked.connect(action.trigger)
         return button
+
+    @staticmethod
+    def _toggle(action: QAction, button: QPushButton) -> None:
+        """Click a checkable action's button exactly as its menu entry.
+
+        `QAction.trigger()`, not `setChecked`: setting the state emits
+        `toggled` but *not* `triggered`, and every controller here connects
+        to `triggered` -- which is why sixty of these buttons changed their
+        own appearance and nothing else. A colormap button ticked itself
+        and left the colormap alone.
+
+        The button's own state is then taken from the action, which is the
+        one authority on it: an exclusive action already checked stays
+        checked, and the button must not be left unticked beside it.
+        """
+        action.trigger()
+        button.setChecked(action.isChecked())
 
     # -- categories ----------------------------------------------------------
 

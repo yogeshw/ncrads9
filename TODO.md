@@ -1296,6 +1296,26 @@ Depends on M2, M3.
       `check.sh` and CI name the same number, so the two cannot drift apart.
 - [ ] **C-2** Keep `tests/unit/test_no_orphan_modules.py` (M1-20) green — no new orphans.
 - [ ] **C-3** Keep the `MenuBar` action-connection test (M2-15) green — no dead menu entries.
+      **The same gate now covers the button bar** (`tests/unit/test_button_bar.py`), which had
+      no test file at all and **sixty of its hundred and seventeen buttons did nothing**. A
+      checkable action's button was wired to `QAction.setChecked`, which emits `toggled` but
+      *not* `triggered`, and every controller connects to `triggered` -- so a colormap button
+      ticked itself and left the colormap alone. That is the worst shape a broken button can
+      have: it looks like it worked, which is why it went unnoticed through nine milestones.
+      Every checkable button now calls `QAction.trigger()`, exactly as clicking the menu entry
+      does, and takes its own tick from the action afterwards so an exclusive button clicked
+      twice is not left unticked beside a checked menu entry. Buttons also follow their
+      action's *enabled* state now: Undo used to stay clickable beside a greyed Edit menu
+      entry, so it looked broken rather than unavailable.
+      `test_every_button_reaches_its_action` is the ratchet, and it was checked by reverting
+      the fix: it fails on the old wiring and passes on the new. M2-15's test only asks whether
+      an action *has a listener*, which every one of these did; the button never reached it.
+      Found while fixing this: `ColormapDialog` raised `AttributeError` on construction --
+      `setCurrentRow(0)` fired the selection signal, which previewed, which read a check box
+      built forty lines later -- so `Color -> Colormap Parameters` could never be opened. Its
+      preview also drew the same grey ramp for every colormap, under a comment saying the real
+      one "would use matplotlib"; `colormaps/` has done that since M5, and it now shows the
+      colormap that is selected.
 - [x] **C-4** Update `README.md`'s Feature Status section at the end of every milestone.
       Rewritten after M9. It had gone badly stale -- it still said `Save` and `Save As` were
       "not yet writing FITS data" and that the image servers were "scaffolding", both untrue
@@ -1306,7 +1326,12 @@ Depends on M2, M3.
       *Deliberately different from DS9* section pointing at PLAN.md section 7. Every claim in
       it was checked against the code: the draft credited a searchable preferences window,
       which does not exist, and named catalogues we do not query.
-- [ ] **C-5** Raise the coverage floor at the end of every milestone.
+- [x] **C-5** Raise the coverage floor at the end of every milestone.
+      Raised from 40 to 76 after M9 (measured 78.8%, kept a couple of points of slack so it
+      does not flap between environments -- the GPU paths and a few platform branches are
+      covered on some machines and not others). It had sat at the M0 baseline of 40 through
+      nine milestones, which meant coverage could have halved without the gate noticing: not a
+      floor at all.
 - [x] **C-6** Add an XPA conformance test per access point as it lands, comparing against real DS9
       where available.
       **Better than a test per point: DS9's own examples, all 1496 of them.**
