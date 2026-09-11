@@ -156,10 +156,13 @@ omit = [
 ]
 
 [tool.coverage.report]
-# Floor set to the measured baseline at the end of M0 (42%), rounded down so it
-# does not flap between environments. PLAN.md C-5 requires raising this at the
-# end of every milestone -- never lowering it.
-fail_under = 40
+# Floor set to the measured figure at the end of M9 (78.8%), rounded down a
+# couple of points so it does not flap between environments -- the GPU paths
+# and a few platform branches are covered on some machines and not others.
+# PLAN.md C-5 requires raising this at the end of every milestone -- never
+# lowering it. It was 40, the M0 baseline, and had not moved in nine
+# milestones, so it had stopped being a floor at all.
+fail_under = 76
 precision = 1
 show_missing = true
 # `exclude_lines` rather than `exclude_also` so this works on coverage < 7.2.
