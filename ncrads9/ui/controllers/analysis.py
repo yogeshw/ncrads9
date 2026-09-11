@@ -738,6 +738,8 @@ class AnalysisController(Controller):
         from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
         from matplotlib.figure import Figure
 
+        from .. import plot_theme
+
         dialog = QDialog(self.window)
         dialog.setWindowTitle("Radial Profile")
         dialog.setMinimumSize(640, 420)
@@ -750,6 +752,7 @@ class AnalysisController(Controller):
         ax.set_ylabel("Mean value")
         ax.set_title("Radial Profile")
         ax.grid(True, alpha=0.3)
+        plot_theme.style_figure(figure, dialog)
         figure.tight_layout()
         layout.addWidget(canvas)
         btn_row = QHBoxLayout()

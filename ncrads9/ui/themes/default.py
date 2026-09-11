@@ -21,7 +21,10 @@ Author: Yogesh Wadadekar
 """
 
 
+from PyQt6.QtGui import QPalette
 from PyQt6.QtWidgets import QApplication
+
+from . import palettes
 
 
 class DefaultTheme:
@@ -30,7 +33,8 @@ class DefaultTheme:
     NAME = "Default"
 
     STYLESHEET = """
-    QMainWindow {
+    /* As the Dark theme: the palette below is what reaches the dialogs. */
+    QMainWindow, QDialog {
         background-color: #f5f5f5;
     }
 
@@ -204,7 +208,14 @@ class DefaultTheme:
         if app is None:
             app = QApplication.instance()
         if app is not None:
+            palettes.remember_desktop_palette(app)
+            app.setPalette(cls.palette())
             app.setStyleSheet(cls.STYLESHEET)
+
+    @classmethod
+    def palette(cls) -> QPalette:
+        """The colours this theme gives every widget, dialogs included."""
+        return palettes.light()
 
     @classmethod
     def stylesheet(cls) -> str:

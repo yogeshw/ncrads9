@@ -53,11 +53,19 @@ class ScaleDialog(QDialog):
         self.setMinimumWidth(400)
 
         # Set window flags to make dialog independent and always on top
+        # An ordinary, movable, non-modal window. It used to carry
+        # `WindowStaysOnTopHint`, which is what made it impossible to get
+        # out of the way: it floated over the image whatever the user did,
+        # could not be sent behind the main window, and on a small screen
+        # there was nowhere to put it. The min/max buttons are asked for
+        # too, since naming flags explicitly replaces the default set and
+        # dropped them.
         self.setWindowFlags(
-            Qt.WindowType.Window  # Make it a top-level window
-            | Qt.WindowType.WindowCloseButtonHint
+            Qt.WindowType.Window
             | Qt.WindowType.WindowTitleHint
-            | Qt.WindowType.WindowStaysOnTopHint  # Keep on top
+            | Qt.WindowType.WindowSystemMenuHint
+            | Qt.WindowType.WindowMinMaxButtonsHint
+            | Qt.WindowType.WindowCloseButtonHint
         )
 
         # Set modality to allow interaction with main window

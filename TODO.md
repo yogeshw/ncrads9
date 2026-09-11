@@ -1339,6 +1339,35 @@ Depends on M2, M3.
         five points across the image -- one point cannot tell `grey` from its own reverse.
         (`h5_yarg` is exempt: "yarg" is "gray" backwards, but DS9's own `h5_yarg.sao` holds an
         *unreversed* ramp on all three channels and our copy is byte-identical to it.)
+      **Two more reported after those, both about the popups themselves** —
+      `tests/unit/test_window_chrome_and_theme.py` is new, and both gates walk *every* dialog
+      the application can show (40 of them, built with real arguments) rather than a list
+      somebody has to remember to extend. Each was checked by reverting its fix.
+      * *Some popups could not be dragged out of the way.* None was frameless and all had
+        title bars -- **seven carried `WindowStaysOnTopHint`**: Header, Help, Histogram,
+        Keyboard Shortcuts, Pixel Table, Scale and Statistics. They floated over the image
+        whatever the user did, could not be sent behind the main window, and on a small screen
+        there was nowhere to put them. They are ordinary movable windows now, and they ask for
+        the min/max buttons too -- naming window flags explicitly *replaces* the default set,
+        so the old list had silently dropped them.
+      * *Popups had a grey background and unreadable text in dark mode.* The themes styled
+        `QMainWindow { background-color }` and gave `QWidget` only a text *colour*, so under
+        Dark the main window went dark while every dialog kept Qt's default light grey ground
+        and wore the theme's light grey text on it: measured luma gap 27, which is grey on
+        grey. Naming `QDialog` as well would have fixed those windows and left the next one to
+        be written broken again, so the themes now set a **`QPalette`** --
+        `ui/themes/palettes.py` -- which Qt resolves for every widget, including ones no rule
+        mentions and parts a stylesheet cannot reach. Disabled roles are set too: a role left
+        at its default is the light patch that shows up in a dark window.
+        The System theme deliberately sets *no* palette. It records the one the desktop handed
+        us at startup and restores that, which is how Ubuntu's own dark mode shows through --
+        imposing a palette there, even a dark one, would override the very thing System exists
+        to follow, and switching away from Dark would otherwise leave Dark's colours behind.
+        Matplotlib knows nothing about Qt, so the four dialogs that embed a figure drew on
+        white with black text -- a bright panel in a dark window. `ui/plot_theme.py` paints the
+        figure, axes, spines, ticks, labels and legend from the *widget's* palette rather than
+        from a theme name, because under System the colours are the desktop's and there is no
+        name to look up. It leaves a gridless plot gridless.
       Found while fixing the buttons: `ColormapDialog` raised `AttributeError` on construction --
       `setCurrentRow(0)` fired the selection signal, which previewed, which read a check box
       built forty lines later -- so `Color -> Colormap Parameters` could never be opened. Its

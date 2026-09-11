@@ -49,11 +49,19 @@ class StatisticsDialog(QDialog):
         super().__init__(None)
 
         # Set window flags for independent draggable window
+        # An ordinary, movable, non-modal window. It used to carry
+        # `WindowStaysOnTopHint`, which is what made it impossible to get
+        # out of the way: it floated over the image whatever the user did,
+        # could not be sent behind the main window, and on a small screen
+        # there was nowhere to put it. The min/max buttons are asked for
+        # too, since naming flags explicitly replaces the default set and
+        # dropped them.
         self.setWindowFlags(
             Qt.WindowType.Window
-            | Qt.WindowType.WindowCloseButtonHint
             | Qt.WindowType.WindowTitleHint
-            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.WindowSystemMenuHint
+            | Qt.WindowType.WindowMinMaxButtonsHint
+            | Qt.WindowType.WindowCloseButtonHint
         )
         self.setWindowModality(Qt.WindowModality.NonModal)
 

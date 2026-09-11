@@ -71,6 +71,7 @@ from ...analysis.plot import (
     ZoomStack,
 )
 from ...analysis.plot.dataset import COLORS, SHAPES, SIZES, WIDTHS
+from .. import plot_theme
 
 #: How big a plot window opens, in pixels.
 WINDOW_SIZE = (720, 520)
@@ -601,6 +602,7 @@ class PlotWindow(QDialog):
             )
 
         self._install_selector()
+        plot_theme.style_figure(self.figure, self)
         self.canvas.draw_idle()
 
     def _draw_dataset(self, axes, dataset: Dataset) -> None:

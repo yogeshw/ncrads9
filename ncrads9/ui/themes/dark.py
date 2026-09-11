@@ -21,7 +21,10 @@ Author: Yogesh Wadadekar
 """
 
 
+from PyQt6.QtGui import QPalette
 from PyQt6.QtWidgets import QApplication
+
+from . import palettes
 
 
 class DarkTheme:
@@ -30,7 +33,11 @@ class DarkTheme:
     NAME = "Dark"
 
     STYLESHEET = """
-    QMainWindow {
+    /* The window's own background. Every other widget takes its colours
+       from the palette below rather than from a rule here: a rule only
+       reaches the widgets it names, and naming them one at a time is how
+       every dialog came to be light grey with light grey text on it. */
+    QMainWindow, QDialog {
         background-color: #1e1e1e;
     }
 
@@ -256,7 +263,14 @@ class DarkTheme:
         if app is None:
             app = QApplication.instance()
         if app is not None:
+            palettes.remember_desktop_palette(app)
+            app.setPalette(cls.palette())
             app.setStyleSheet(cls.STYLESHEET)
+
+    @classmethod
+    def palette(cls) -> QPalette:
+        """The colours this theme gives every widget, dialogs included."""
+        return palettes.dark()
 
     @classmethod
     def stylesheet(cls) -> str:

@@ -45,6 +45,7 @@ from PyQt6.QtWidgets import (
 
 from ...regions.base_region import BaseRegion
 from ...regions.region_analysis import AnalysisError
+from .. import plot_theme
 
 #: How big the statistics window opens, in pixels. DS9's is 80 columns.
 STATISTICS_SIZE = (760, 460)
@@ -144,6 +145,7 @@ class RegionPlotDialog(QDialog):
             x, y, errors = self._provider(self.region)
         except AnalysisError as exc:
             axes.text(0.5, 0.5, str(exc), ha="center", va="center", transform=axes.transAxes)
+            plot_theme.style_figure(self._figure, self)
             self._canvas.draw_idle()
             return
 
@@ -152,6 +154,7 @@ class RegionPlotDialog(QDialog):
         axes.set_ylabel(self._labels[1])
         axes.set_title(self._title)
         axes.grid(True, alpha=0.3)
+        plot_theme.style_figure(self._figure, self)
         self._canvas.draw_idle()
 
     def _draw(self, axes, x: Sequence[float], y: Sequence[float], errors) -> None:

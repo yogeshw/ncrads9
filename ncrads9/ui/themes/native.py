@@ -24,6 +24,8 @@ import sys
 
 from PyQt6.QtWidgets import QApplication, QStyleFactory
 
+from . import palettes
+
 
 class NativeTheme:
     """Native platform theme for the application."""
@@ -87,12 +89,22 @@ class NativeTheme:
         if app is None:
             app = QApplication.instance()
         if app is not None:
+            palettes.remember_desktop_palette(app)
             # setStyle re-parents the QStyle of every live widget, so only
             # do it when the style would actually change.
             style_name = cls.get_platform_style()
             current = app.style()
             if current is None or current.objectName().lower() != style_name.lower():
                 app.setStyle(style_name)
+            # Back to the desktop's own colours, which is what System
+            # means: Ubuntu's dark mode, or whatever the user has set.
+            # Imposing a palette of our own here -- even a dark one --
+            # would override the very thing this theme exists to follow,
+            # and switching away from Dark would otherwise leave Dark's
+            # palette in place.
+            original = palettes.desktop_palette(app)
+            if original is not None:
+                app.setPalette(original)
             app.setStyleSheet(cls.STYLESHEET)
 
     @classmethod

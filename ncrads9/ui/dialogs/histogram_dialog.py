@@ -34,6 +34,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from .. import plot_theme
+
 
 class HistogramDialog(QDialog):
     """Dialog showing image histogram."""
@@ -50,11 +52,19 @@ class HistogramDialog(QDialog):
         super().__init__(None)
 
         # Set window flags for independent draggable window
+        # An ordinary, movable, non-modal window. It used to carry
+        # `WindowStaysOnTopHint`, which is what made it impossible to get
+        # out of the way: it floated over the image whatever the user did,
+        # could not be sent behind the main window, and on a small screen
+        # there was nowhere to put it. The min/max buttons are asked for
+        # too, since naming flags explicitly replaces the default set and
+        # dropped them.
         self.setWindowFlags(
             Qt.WindowType.Window
-            | Qt.WindowType.WindowCloseButtonHint
             | Qt.WindowType.WindowTitleHint
-            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.WindowSystemMenuHint
+            | Qt.WindowType.WindowMinMaxButtonsHint
+            | Qt.WindowType.WindowCloseButtonHint
         )
         self.setWindowModality(Qt.WindowModality.NonModal)
 
@@ -133,4 +143,18 @@ class HistogramDialog(QDialog):
         )
 
         self.figure.tight_layout()
+        # In the interface's own colours, so a dark window does not carry a
+        # white plot. Styled after the axes exist, since it walks them.
+        plot_theme.style_figure(self.figure, self)
+        # The statistics box picks its own text colour, so it needs telling
+        # too -- `wheat` with black text is fine on white and illegible on
+        # a dark ground.
+        chosen = plot_theme.colours(self)
+        for text in ax.texts:
+            text.set_color(chosen["text"])
+            box = text.get_bbox_patch()
+            if box is not None:
+                box.set_facecolor(chosen["face"])
+                box.set_edgecolor(chosen["text"])
+                box.set_alpha(0.85)
         self.canvas.draw()
