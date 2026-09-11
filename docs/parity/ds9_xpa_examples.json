@@ -1,0 +1,2127 @@
+{
+  "source": "SAOImageDS9 ds9/doc/ref/xpa.html",
+  "note": "Command lines copied from SAOImageDS9's XPA reference, which is distributed under the GNU GPL, the same licence as this project. They are DS9's specification of its own access points and are used here as a conformance corpus. Regenerate with tools/import_ds9_xpa_examples.py.",
+  "points": 108,
+  "examples": 1496,
+  "commands": {
+    "2mass": {
+      "get": [
+        "2mass name",
+        "2mass coord",
+        "2mass size",
+        "2mass save",
+        "2mass frame",
+        "2mass survey"
+      ],
+      "set": [
+        "2mass",
+        "2mass m31",
+        "2mass name m31",
+        "2mass name clear",
+        "2mass 00:42:44.404 +41:16:08.78",
+        "2mass size 60 60 arcmin",
+        "2mass save yes",
+        "2mass frame current",
+        "2mass update frame",
+        "2mass survey j",
+        "2mass open",
+        "2mass close"
+      ]
+    },
+    "3d": {
+      "get": [
+        "3d view",
+        "3d az",
+        "3d el",
+        "3d scale",
+        "3d method",
+        "3d background",
+        "3d border",
+        "3d border color",
+        "3d highlite",
+        "3d highlite color",
+        "3d compass",
+        "3d compass color",
+        "3d lock"
+      ],
+      "set": [
+        "3d",
+        "3d view 45 30",
+        "3d az 45",
+        "3d el 30",
+        "3d scale 10",
+        "3d method mip",
+        "3d background azimuth",
+        "3d border yes",
+        "3d border color red",
+        "3d highlite yes",
+        "3d highlite color red",
+        "3d compass yes",
+        "3d compass color red",
+        "3d match",
+        "3d lock yes",
+        "3d open",
+        "3d close"
+      ]
+    },
+    "about": {
+      "get": [
+        "about"
+      ],
+      "set": []
+    },
+    "align": {
+      "get": [
+        "align"
+      ],
+      "set": [
+        "align yes"
+      ]
+    },
+    "analysis": {
+      "get": [
+        "analysis",
+        "analysis task",
+        "analysis entry {Please enter something}",
+        "analysis message okcancel {Hello World}",
+        "analysis filedialog open"
+      ],
+      "set": [
+        "analysis 0",
+        "analysis task 0",
+        "analysis task foobar",
+        "analysis {foo bar}",
+        "analysis my.ans",
+        "analysis load my.ans",
+        "analysis clear",
+        "analysis clear load my.ans",
+        "analysis message {This is a message}",
+        "analysis text {this is text}"
+      ]
+    },
+    "array": {
+      "get": [
+        "array > foo.arr",
+        "array little > foo.arr"
+      ],
+      "set": [
+        "array foo.arr[dim=512,bitpix=-32,endian=little]",
+        "array new foo.arr[dim=512,bitpix=-32,endian=little]",
+        "array mask foo.arr[dim=512,bitpix=-32,endian=little]"
+      ]
+    },
+    "backup": {
+      "get": [],
+      "set": [
+        "backup ds9.bck"
+      ]
+    },
+    "bin": {
+      "get": [
+        "bin about",
+        "bin buffersize",
+        "bin cols",
+        "bin factor",
+        "bin depth",
+        "bin filter",
+        "bin function",
+        "bin lock"
+      ],
+      "set": [
+        "bin about 4096 4096",
+        "bin about center",
+        "bin buffersize 512",
+        "bin cols detx dety",
+        "bin colsz detx dety time",
+        "bin factor 4",
+        "bin factor 4 2",
+        "bin depth 10",
+        "bin filter 'pha > 5'",
+        "bin filter clear",
+        "bin function sum",
+        "bin in",
+        "bin out",
+        "bin to fit",
+        "bin match",
+        "bin lock yes",
+        "bin open",
+        "bin close"
+      ]
+    },
+    "blink": {
+      "get": [
+        "blink",
+        "blink interval"
+      ],
+      "set": [
+        "blink",
+        "blink yes",
+        "blink interval 1"
+      ]
+    },
+    "block": {
+      "get": [
+        "block",
+        "block lock"
+      ],
+      "set": [
+        "block 4",
+        "block 4 2",
+        "block to 4",
+        "block to 4 2",
+        "block in",
+        "block to fit",
+        "block match",
+        "block lock yes",
+        "block open",
+        "block close"
+      ]
+    },
+    "catalog": {
+      "get": [
+        "catalog"
+      ],
+      "set": [
+        "catalog new",
+        "catalog 2mass",
+        "catalog cds 2mass",
+        "catalog cds {I/252}",
+        "catalog load foo.xml",
+        "catalog import tsv foo.tsv",
+        "catalog allrows",
+        "catalog allcols",
+        "catalog cancel",
+        "catalog clear",
+        "catalog close",
+        "catalog coordinate 202.48 47.21 fk5",
+        "catalog crosshair",
+        "catalog current 2mass",
+        "catalog dec DEC",
+        "catalog edit yes",
+        "catalog export tsv bar.tsv",
+        "catalog filter '$Jmag>10'",
+        "catalog filter load foo.flt",
+        "catalog header",
+        "catalog location 500",
+        "catalog match error 2 arcsec",
+        "catalog match function 1and2",
+        "catalog match unique no",
+        "catalog match return 1only",
+        "catalog match",
+        "catalog match 2mass csc",
+        "catalog maxrows 2000",
+        "catalog name m51",
+        "catalog panto no",
+        "catalog plot '$Jmag' '$Hmag' '$e_Jmag' '$e_Hmag'",
+        "catalog print",
+        "catalog psky fk5",
+        "catalog psystem wcs",
+        "catalog ra RA",
+        "catalog regions",
+        "catalog retrieve",
+        "catalog samp broadcast",
+        "catalog samp send aladin",
+        "catalog save foo.xml",
+        "catalog server sao",
+        "catalog show yes",
+        "catalog radius 1 degrees",
+        "catalog symbol condition '$Jmag>15'",
+        "catalog symbol 2 shape {boxcircle point}",
+        "catalog symbol color red",
+        "catalog symbol font times",
+        "catalog symbol fontsize 14",
+        "catalog symbol fontweight bold",
+        "catalog symbol fontslant italic",
+        "catalog symbol add",
+        "catalog symbol 2 remove",
+        "catalog symbol load foo.sym",
+        "catalog symbol save bar.sym",
+        "catalog sky fk5",
+        "catalog skyformat degrees",
+        "catalog sort {Jmag} incr",
+        "catalog system wcs",
+        "catalog update",
+        "catalog x RA",
+        "catalog y DEC"
+      ]
+    },
+    "cd": {
+      "get": [
+        "cd"
+      ],
+      "set": [
+        "cd /home/mrbill"
+      ]
+    },
+    "cmap": {
+      "get": [
+        "cmap",
+        "cmap file",
+        "cmap invert",
+        "cmap value"
+      ],
+      "set": [
+        "cmap Heat",
+        "cmap load foo.sao",
+        "cmap save bar.sao",
+        "cmap invert yes",
+        "cmap 5 .5",
+        "cmap tag load foo.tag",
+        "cmap tag save foo.tag",
+        "cmap tag delete",
+        "cmap open",
+        "cmap close"
+      ]
+    },
+    "colorbar": {
+      "get": [
+        "colorbar",
+        "colorbar orientation",
+        "colorbar numerics",
+        "colorbar space",
+        "colorbar font",
+        "colorbar fontsize",
+        "colorbar fontweight",
+        "colorbar fontslant",
+        "colorbar size",
+        "colorbar ticks",
+        "colorbar lock"
+      ],
+      "set": [
+        "colorbar yes",
+        "colorbar vertical",
+        "colorbar orientation vertical",
+        "colorbar numerics yes",
+        "colorbar space value",
+        "colorbar font times",
+        "colorbar fontsize 14",
+        "colorbar fontweight bold",
+        "colorbar fontslant italic",
+        "colorbar size 20",
+        "colorbar ticks 11",
+        "colorbar match",
+        "colorbar lock yes"
+      ]
+    },
+    "console": {
+      "get": [],
+      "set": [
+        "console"
+      ]
+    },
+    "contour": {
+      "get": [
+        "contour",
+        "contour wcs fk5",
+        "contour color",
+        "contour width",
+        "contour dash",
+        "contour smooth",
+        "contour method",
+        "contour nlevels",
+        "contour scale",
+        "contour log exp",
+        "contour mode",
+        "contour scope",
+        "contour limits",
+        "contour levels"
+      ],
+      "set": [
+        "contour",
+        "contour yes",
+        "contour clear",
+        "contour generate",
+        "contour load ds9.ctr",
+        "contour save ds9.ctr",
+        "contour save ds9.ctr wcs fk5",
+        "contour convert",
+        "contour load levels ds9.ctr",
+        "contour save levels ds9.lev",
+        "contour copy",
+        "contour paste",
+        "contour paste wcs red 2 no",
+        "contour color yellow",
+        "contour width 2",
+        "contour dash yes",
+        "contour smooth 5",
+        "contour method smooth",
+        "contour nlevels 10",
+        "contour scale sqrt",
+        "contour log exp 1000",
+        "contour mode zscale",
+        "contour scope local",
+        "contour limits 1 100",
+        "contour levels 1 10 100 1000",
+        "contour open",
+        "contour close"
+      ]
+    },
+    "crop": {
+      "get": [
+        "crop",
+        "crop wcs galactic sexagesimal arcsec",
+        "crop lock"
+      ],
+      "set": [
+        "crop 40 30 10 20",
+        "crop +104:51:06.915 +68:33:40.761  28.144405 22.000204 wcs galactic arcsec",
+        "crop match wcs",
+        "crop lock wcs",
+        "crop reset",
+        "crop 3d .25 .50 wcs",
+        "crop open",
+        "crop close"
+      ]
+    },
+    "crosshair": {
+      "get": [
+        "crosshair",
+        "crosshair wcs fk4 sexagesimal",
+        "crosshair lock"
+      ],
+      "set": [
+        "crosshair 100 100 physical",
+        "crosshair 345 58.8 wcs fk5",
+        "crosshair 23:01:00 +58:52:51 wcs fk5",
+        "crosshair match wcs",
+        "crosshair lock wcs"
+      ]
+    },
+    "cube": {
+      "get": [
+        "cube",
+        "cube wcs",
+        "cube interval",
+        "cube lock",
+        "cube order",
+        "cube axes lock",
+        "cube axis"
+      ],
+      "set": [
+        "cube",
+        "cube play",
+        "cube last",
+        "cube 3",
+        "cube 4.4 wcs",
+        "cube interval 2",
+        "cube match wcs",
+        "cube lock wcs",
+        "cube order 123",
+        "cube axes lock yes",
+        "cube axis 3",
+        "cube open",
+        "cube close"
+      ]
+    },
+    "cursor": {
+      "get": [],
+      "set": [
+        "cursor 10 10"
+      ]
+    },
+    "data": {
+      "get": [
+        "data image 450 520 3 3 yes",
+        "data physical 899 1039 6 6 no",
+        "data fk5 202.47091 47.196811 0.00016516669 0.00016516669 no",
+        "data wcs fk5 13:29:53.018 +47:11:48.52 0.00016516669 0.00016516669 no"
+      ],
+      "set": []
+    },
+    "dsseso": {
+      "get": [
+        "dsseso name",
+        "dsseso coord",
+        "dsseso size",
+        "dsseso save",
+        "dsseso frame",
+        "dsseso survey"
+      ],
+      "set": [
+        "dsseso",
+        "dsseso m31",
+        "dsseso name m31",
+        "dsseso name clear",
+        "dsseso 00:42:44.404 +41:16:08.78",
+        "dsseso size 60 60 arcmin",
+        "dsseso save yes",
+        "dsseso frame current",
+        "dsseso update frame",
+        "dsseso survey DSS2-red",
+        "dsseso open",
+        "dsseso close"
+      ]
+    },
+    "dsssao": {
+      "get": [
+        "dsssao name",
+        "dsssao coord",
+        "dsssao size",
+        "dsssao save",
+        "dsssao frame"
+      ],
+      "set": [
+        "dsssao",
+        "dsssao m31",
+        "dsssao name m31",
+        "dsssao name clear",
+        "dsssao 00:42:44.404 +41:16:08.78",
+        "dsssao size 60 60 arcmin",
+        "dsssao save yes",
+        "dsssao frame current",
+        "dsssao update frame",
+        "dsssao open",
+        "dsssao close"
+      ]
+    },
+    "dssstsci": {
+      "get": [
+        "dssstsci name",
+        "dssstsci coord",
+        "dssstsci size",
+        "dssstsci save",
+        "dssstsci frame",
+        "dssstsci survey"
+      ],
+      "set": [
+        "dssstsci",
+        "dssstsci m31",
+        "dssstsci name m31",
+        "dssstsci name clear",
+        "dssstsci 00:42:44.404 +41:16:08.78",
+        "dssstsci size 60 60 arcmin",
+        "dssstsci save yes",
+        "dssstsci frame current",
+        "dssstsci update frame",
+        "dssstsci survey all",
+        "dssstsci open",
+        "dssstsci close"
+      ]
+    },
+    "exit": {
+      "get": [],
+      "set": [
+        "exit"
+      ]
+    },
+    "export": {
+      "get": [],
+      "set": [
+        "export array foo.arr little",
+        "export nrrd foo.nrrd little",
+        "export envi foo.hdr foo.bsq little",
+        "export tiff foo.tiff jpeg",
+        "export jpeg foo.jpeg 75",
+        "export png foo.png"
+      ]
+    },
+    "fade": {
+      "get": [
+        "fade",
+        "fade interval"
+      ],
+      "set": [
+        "fade",
+        "fade yes",
+        "fade interval 2"
+      ]
+    },
+    "file": {
+      "get": [
+        "file"
+      ],
+      "set": []
+    },
+    "fits": {
+      "get": [
+        "fits > foo.fits",
+        "fits width",
+        "fits height",
+        "fits depth",
+        "fits bitpix",
+        "fits size",
+        "fits size wcs fk5 arcmin",
+        "fits count",
+        "fits header",
+        "fits header 2",
+        "fits header -2",
+        "fits header keyword BITPIX",
+        "fits header 1 keyword BITPIX",
+        "fits image > foo.fits",
+        "fits table > bar.fits",
+        "fits slice > foo.fits"
+      ],
+      "set": [
+        "fits foo.fits",
+        "fits new foo.fits",
+        "fits bar.fits[bin=detx,dety]",
+        "fits slice foo.fits",
+        "fits mask foo.fits"
+      ]
+    },
+    "footprint": {
+      "get": [
+        "footprint"
+      ],
+      "set": [
+        "footprint cxc",
+        "footprint cancel",
+        "footprint clear",
+        "footprint close",
+        "footprint coordinate 202.48 47.21 fk5",
+        "footprint crosshair",
+        "footprint current cxc",
+        "footprint export tsv foo.tsv",
+        "footprint filter '$ObsId<10000'",
+        "footprint filter load foo.flt",
+        "footprint name m51",
+        "footprint panto no",
+        "footprint print",
+        "footprint regions",
+        "footprint retrieve",
+        "footprint save foo.xml",
+        "footprint show yes",
+        "footprint radius 1 degrees",
+        "footprint sky fk5",
+        "footprint skyformat degrees",
+        "footprint sort {ObsId} incr",
+        "footprint system wcs",
+        "footprint update"
+      ]
+    },
+    "frame": {
+      "get": [
+        "frame",
+        "frame frameno",
+        "frame all",
+        "frame active",
+        "frame lock",
+        "frame has amplifier",
+        "frame has datamin",
+        "frame has datasec",
+        "frame has detector",
+        "frame has grid",
+        "frame has iis",
+        "frame has irafmin",
+        "frame has physical",
+        "frame has smooth",
+        "frame has contour",
+        "frame has contour aux",
+        "frame has fits",
+        "frame has fits bin",
+        "frame has fits cube",
+        "frame has fits mosaic",
+        "frame has marker highlite",
+        "frame has marker paste",
+        "frame has marker select",
+        "frame has marker undo",
+        "frame has system physical",
+        "frame has wcs wcsa",
+        "frame has wcs celestial wcsa",
+        "frame has wcs linear wcsa"
+      ],
+      "set": [
+        "frame center",
+        "frame center 1",
+        "frame center all",
+        "frame clear",
+        "frame new",
+        "frame new rgb",
+        "frame delete",
+        "frame reset",
+        "frame refresh",
+        "frame hide",
+        "frame show 1",
+        "frame move first",
+        "frame move back",
+        "frame move forward",
+        "frame move last",
+        "frame first",
+        "frame prev",
+        "frame next",
+        "frame last",
+        "frame frameno 4",
+        "frame 3",
+        "frame match wcs",
+        "frame lock wcs"
+      ]
+    },
+    "gif": {
+      "get": [
+        "gif > foo.gif"
+      ],
+      "set": [
+        "gif foo.gif",
+        "gif new foo.gif",
+        "gif slice foo.gif"
+      ]
+    },
+    "graph": {
+      "get": [
+        "graph grid",
+        "graph log",
+        "graph method",
+        "graph font",
+        "graph fontsize",
+        "graph fontweight",
+        "graph fontslant",
+        "graph size",
+        "graph thickness"
+      ],
+      "set": [
+        "graph grid yes",
+        "graph log no",
+        "graph method average",
+        "graph font helvetica",
+        "graph fontsize 9",
+        "graph fontweight normal",
+        "graph fontslant roman",
+        "graph size 150",
+        "graph thickness 1",
+        "graph open",
+        "graph close"
+      ]
+    },
+    "grid": {
+      "get": [
+        "grid",
+        "grid type",
+        "grid system",
+        "grid sky",
+        "grid skyformat",
+        "grid grid",
+        "grid grid color",
+        "grid grid width",
+        "grid grid dash",
+        "grid grid gap1",
+        "grid grid gap2",
+        "grid grid gap3",
+        "grid axes",
+        "grid axes color",
+        "grid axes width",
+        "grid axes dash",
+        "grid axes type",
+        "grid axes origin",
+        "grid format1",
+        "grid format2",
+        "grid tickmarks",
+        "grid tickmarks color",
+        "grid tickmarks width",
+        "grid tickmarks dash",
+        "grid border",
+        "grid border color",
+        "grid border width",
+        "grid border dash",
+        "grid numerics",
+        "grid numerics font",
+        "grid numerics fontsize",
+        "grid numerics fontweight",
+        "grid numerics fontslant",
+        "grid numerics color",
+        "grid numerics gap1",
+        "grid numerics gap2",
+        "grid numerics gap3",
+        "grid numerics type",
+        "grid numerics vertical",
+        "grid title",
+        "grid title text",
+        "grid title def",
+        "grid title gap",
+        "grid title font",
+        "grid title fontsize",
+        "grid title fontweight",
+        "grid title fontslant",
+        "grid title color",
+        "grid labels",
+        "grid labels text1",
+        "grid labels def1",
+        "grid labels gap1",
+        "grid labels text2",
+        "grid labels def2",
+        "grid labels gap2",
+        "grid labels font",
+        "grid labels fontsize",
+        "grid labels fontweight",
+        "grid labels fontslant",
+        "grid labels color"
+      ],
+      "set": [
+        "grid",
+        "grid yes",
+        "grid type analysis",
+        "grid system wcs",
+        "grid sky fk5",
+        "grid skyformat degrees",
+        "grid grid yes",
+        "grid grid color red",
+        "grid grid width 2",
+        "grid grid dash yes",
+        "grid grid gap1 10",
+        "grid grid gap2 10",
+        "grid grid gap3 10",
+        "grid axes yes",
+        "grid axes color red",
+        "grid axes width 2",
+        "grid axes dash yes",
+        "grid axes type exterior",
+        "grid axes origin lll",
+        "grid format1 d.2",
+        "grid format2 d.2",
+        "grid tickmarks yes",
+        "grid tickmarks color red",
+        "grid tickmarks width 2",
+        "grid tickmarks dash yes",
+        "grid border yes",
+        "grid border color red",
+        "grid border width 2",
+        "grid border dash yes",
+        "grid numerics yes",
+        "grid numerics font courier",
+        "grid numerics fontsize 12",
+        "grid numerics fontweight bold",
+        "grid numerics fontslant italic",
+        "grid numerics color red",
+        "grid numerics gap1 10",
+        "grid numerics gap2 10",
+        "grid numerics gap3 10",
+        "grid numerics type exterior",
+        "grid numerics vertical yes",
+        "grid title yes",
+        "grid title text {Hello World}",
+        "grid title def yes",
+        "grid title gap 10",
+        "grid title font courier",
+        "grid title fontsize 12",
+        "grid title fontweight bold",
+        "grid title fontslant italic",
+        "grid title color red",
+        "grid labels yes",
+        "grid labels text1 {Hello World}",
+        "grid labels def1 yes",
+        "grid labels gap1 10",
+        "grid labels text2 {Hello World}",
+        "grid labels def2 yes",
+        "grid labels gap2 10",
+        "grid labels font courier",
+        "grid labels fontsize 12",
+        "grid labels fontweight boldj",
+        "grid labels fontslant italic",
+        "grid labels color red",
+        "grid reset",
+        "grid load foo.grd",
+        "grid save foo.grd",
+        "grid open",
+        "grid close"
+      ]
+    },
+    "header": {
+      "get": [],
+      "set": [
+        "header",
+        "header 2",
+        "header close",
+        "header save 1 foo.txt"
+      ]
+    },
+    "height": {
+      "get": [
+        "height"
+      ],
+      "set": [
+        "height 512"
+      ]
+    },
+    "hls": {
+      "get": [
+        "hls channel",
+        "hls lock wcs",
+        "hls lock crop",
+        "hls lock slice",
+        "hls lock bin",
+        "hls lock scale",
+        "hls lock colorbar",
+        "hls lock block",
+        "hls lock smooth",
+        "hls system",
+        "hls view hue",
+        "hls view lightness",
+        "hls view saturation"
+      ],
+      "set": [
+        "hls lock scalelimits",
+        "hls",
+        "hls hue",
+        "hls channel hue",
+        "hls view saturation no",
+        "hls system wcs",
+        "hls lock wcs yes",
+        "hls lock crop yes",
+        "hls lock slice yes",
+        "hls lock bin yes",
+        "hls lock scale yes",
+        "hls lock scalelimits yes",
+        "hls lock colorbar yes",
+        "hls lock block yes",
+        "hls lock smooth yes",
+        "hls open",
+        "hls close"
+      ]
+    },
+    "hsv": {
+      "get": [
+        "hsv channel",
+        "hsv lock wcs",
+        "hsv lock crop",
+        "hsv lock slice",
+        "hsv lock bin",
+        "hsv lock scale",
+        "hsv lock scalelimits",
+        "hsv lock colorbar",
+        "hsv lock block",
+        "hsv lock smooth",
+        "hsv system",
+        "hsv view hue",
+        "hsv view saturation",
+        "hsv view value"
+      ],
+      "set": [
+        "hsv",
+        "hsv hue",
+        "hsv channel hue",
+        "hsv view saturation no",
+        "hsv system wcs",
+        "hsv lock wcs yes",
+        "hsv lock crop yes",
+        "hsv lock slice yes",
+        "hsv lock bin yes",
+        "hsv lock scale yes",
+        "hsv lock scalelimits yes",
+        "hsv lock colorbar yes",
+        "hsv lock block yes",
+        "hsv lock smooth yes",
+        "hsv open",
+        "hsv close"
+      ]
+    },
+    "hsvarray": {
+      "get": [
+        "hsvarray > foo.arr",
+        "hsvarray little > foo.arr"
+      ],
+      "set": [
+        "hsvarray foo.arr[dim=512,zdim=3,bitpix=-32,endian=little]",
+        "hsvarray new foo.arr[dim=512,zdim=3,bitpix=-32,endian=little]"
+      ]
+    },
+    "hsvcube": {
+      "get": [
+        "hsvcube > foo.fits"
+      ],
+      "set": [
+        "hsvcube foo.fits",
+        "hsvcube new foo.fits"
+      ]
+    },
+    "hsvimage": {
+      "get": [
+        "hsvimage > foo.fits"
+      ],
+      "set": [
+        "hsvimage foo.fits",
+        "hsvimage new foo.fits"
+      ]
+    },
+    "iconify": {
+      "get": [
+        "iconify"
+      ],
+      "set": [
+        "iconify",
+        "iconify yes"
+      ]
+    },
+    "iexam": {
+      "get": [
+        "iexam",
+        "iexam coordinate image",
+        "iexam key coordinate image",
+        "iexam coordinate wcs fk5 degrees",
+        "iexam coordinate wcs galactic sexagesimal",
+        "iexam coordinate fk5",
+        "iexam data",
+        "iexam key data",
+        "iexam data 3 3",
+        "iexam {'Click at $x,$y in file $filename'}"
+      ],
+      "set": []
+    },
+    "iis": {
+      "get": [
+        "iis filename",
+        "iis filename 4"
+      ],
+      "set": [
+        "iis filename foo.fits",
+        "iis filename bar.fits 4"
+      ]
+    },
+    "illustrate": {
+      "get": [
+        "illustrate",
+        "illustrate show",
+        "illustrate shape",
+        "illustrate color",
+        "illustrate fill",
+        "illustrate width",
+        "illustrate dash"
+      ],
+      "set": [
+        "illustrate foo.reg",
+        "illustrate load foo.reg",
+        "illustrate save foo.reg",
+        "illustrate save select foo.reg",
+        "illustrate list",
+        "illustrate list select",
+        "illustrate list close",
+        "illustrate show yes",
+        "illustrate select all",
+        "illustrate select none",
+        "illustrate select invert",
+        "illustrate select front",
+        "illustrate select back",
+        "illustrate move back",
+        "illustrate move front",
+        "illustrate delete",
+        "illustrate delete select",
+        "illustrate color red",
+        "illustrate fill yes",
+        "illustrate width 3",
+        "illustrate dash no",
+        "illustrate command {circle 100 100 20}",
+        "illustrate copy",
+        "illustrate cut",
+        "illustrate paste",
+        "illustrate undo",
+        "illustrate open",
+        "illustrate close"
+      ]
+    },
+    "jpeg": {
+      "get": [
+        "jpeg > foo.jpeg",
+        "jpeg 100 > foo.jpeg"
+      ],
+      "set": [
+        "jpeg foo.jpeg",
+        "jpeg new foo.jpeg",
+        "jpeg slice foo.jpeg"
+      ]
+    },
+    "lock": {
+      "get": [],
+      "set": [
+        "lock frame wcs",
+        "lock crosshair wcs",
+        "lock crop wcs",
+        "lock slice wcs",
+        "lock bin yes",
+        "lock axes yes",
+        "lock scale yes",
+        "lock scalelimits yes",
+        "lock colorbar yes",
+        "lock block yes",
+        "lock smooth yes",
+        "lock 3d yes"
+      ]
+    },
+    "lower": {
+      "get": [],
+      "set": [
+        "lower"
+      ]
+    },
+    "magnifier": {
+      "get": [
+        "magnifier color",
+        "magnifier zoom",
+        "magnifier cursor",
+        "magnifier region"
+      ],
+      "set": [
+        "magnifier color yellow",
+        "magnifier zoom 2",
+        "magnifier cursor no",
+        "magnifier region no"
+      ]
+    },
+    "mask": {
+      "get": [
+        "mask color",
+        "mask mark",
+        "mask range",
+        "mask transparency",
+        "mask blend",
+        "mask system"
+      ],
+      "set": [
+        "mask color red",
+        "mask mark zero",
+        "mask range 10 100",
+        "mask transparency 50",
+        "mask blend source",
+        "mask system wcs",
+        "mask clear",
+        "mask load foo.fits",
+        "mask open",
+        "mask close"
+      ]
+    },
+    "match": {
+      "get": [],
+      "set": [
+        "match frame wcs",
+        "match crosshair wcs",
+        "match crop wcs",
+        "match slicewcs",
+        "match bin",
+        "match axes",
+        "match scale",
+        "match scalelimits",
+        "match colorbar",
+        "match block",
+        "match smooth",
+        "match 3d"
+      ]
+    },
+    "mecube": {
+      "get": [
+        "mecube > foo.fits"
+      ],
+      "set": [
+        "mecube foo.fits",
+        "mecube new foo.fits"
+      ]
+    },
+    "minmax": {
+      "get": [
+        "minmax mode",
+        "minmax interval"
+      ],
+      "set": [
+        "minmax scan",
+        "minmax mode scan",
+        "minmax interval 100 $xpaset -p ds9 minmax rescan"
+      ]
+    },
+    "mode": {
+      "get": [
+        "mode"
+      ],
+      "set": [
+        "mode crosshair"
+      ]
+    },
+    "mosaic": {
+      "get": [
+        "mosaic > foo.fits"
+      ],
+      "set": [
+        "mosaic foo.fits",
+        "mosaic wcs foo.fits",
+        "mosaic wcs new foo.fits",
+        "mosaic wcs mask foo.fits"
+      ]
+    },
+    "mosaicimage": {
+      "get": [
+        "mosaicimage > foo.fits"
+      ],
+      "set": [
+        "mosaicimage foo.fits",
+        "mosaicimage wcs foo.fits",
+        "mosaicimage wcs new foo.fits",
+        "mosaicimage wcs mask foo.fits"
+      ]
+    },
+    "movie": {
+      "get": [],
+      "set": [
+        "movie slice mpeg ds9.mpg",
+        "movie frame gif ds9.gif",
+        "movie frame gif 100 fade ds9.gif",
+        "movie 3d mpeg ds9.mpg number 10 az from -60 az to 60 oscillate 1"
+      ]
+    },
+    "multiframe": {
+      "get": [],
+      "set": [
+        "multiframe foo.fits"
+      ]
+    },
+    "nameserver": {
+      "get": [
+        "nameserver",
+        "nameserver server",
+        "nameserver skyformat",
+        "nameserver m31"
+      ],
+      "set": [
+        "nameserver m31",
+        "nameserver name m31",
+        "nameserver server ned-sao",
+        "nameserver skyformat sexagesimal",
+        "nameserver pan",
+        "nameserver crosshair",
+        "nameserver open",
+        "nameserver close"
+      ]
+    },
+    "notes": {
+      "get": [
+        "notes"
+      ],
+      "set": [
+        "notes {Hello World}",
+        "notes append {Hello World}",
+        "notes insert {Hello World}",
+        "notes clear",
+        "notes load foo.txt",
+        "notes save foo.txt",
+        "notes open",
+        "notes close"
+      ]
+    },
+    "nrrd": {
+      "get": [
+        "nrrd",
+        "nrrd big"
+      ],
+      "set": [
+        "nrrd foo.nrrd",
+        "nrrd new foo.nrrd",
+        "nrrd mask foo.nrrd"
+      ]
+    },
+    "nvss": {
+      "get": [
+        "nvss name",
+        "nvss coord",
+        "nvss size",
+        "nvss save",
+        "nvss frame"
+      ],
+      "set": [
+        "nvss",
+        "nvss m31",
+        "nvss name m31",
+        "nvss name clear",
+        "nvss 00:42:44.404 +41:16:08.78",
+        "nvss size 60 60 arcmin",
+        "nvss save yes",
+        "nvss frame current",
+        "nvss update frame",
+        "nvss open",
+        "nvss close"
+      ]
+    },
+    "orient": {
+      "get": [
+        "orient"
+      ],
+      "set": [
+        "orient xy",
+        "orient open",
+        "orient close"
+      ]
+    },
+    "pagesetup": {
+      "get": [
+        "pagesetup orient",
+        "pagesetup scale",
+        "pagesetup size"
+      ],
+      "set": [
+        "pagesetup orient portrait",
+        "pagesetup scale 50",
+        "pagesetup size poster"
+      ]
+    },
+    "pan": {
+      "get": [
+        "pan",
+        "pan wcs fk4 sexagesimal"
+      ],
+      "set": [
+        "pan 200 200 image",
+        "pan to 400 400 physical",
+        "pan to 13:29:55 47:11:50 wcs fk5",
+        "pan open",
+        "pan close"
+      ]
+    },
+    "pixeltable": {
+      "get": [
+        "pixeltable"
+      ],
+      "set": [
+        "pixeltable",
+        "pixeltable yes",
+        "pixeltable open",
+        "pixeltable close"
+      ]
+    },
+    "plot": {
+      "get": [
+        "plot",
+        "plot layout",
+        "plot layout strip scale",
+        "plot current",
+        "plot current graph",
+        "plot current dataset",
+        "plot stats",
+        "plot list",
+        "plot mode",
+        "plot axis x grid",
+        "plot axis x log",
+        "plot axis x flip",
+        "plot axis x auto",
+        "plot axis x min",
+        "plot axis x max",
+        "plot axis x format",
+        "plot background",
+        "plot legend",
+        "plot legend position",
+        "plot font numbers font",
+        "plot font numbers size",
+        "plot font numbers weight",
+        "plot font numbers slant",
+        "plot title",
+        "plot title xaxis",
+        "plot title yaxis",
+        "plot show",
+        "plot name",
+        "plot line smooth",
+        "plot line color",
+        "plot line width",
+        "plot line dash",
+        "plot line fill",
+        "plot line fill color",
+        "plot line shape symbol",
+        "plot line shape size",
+        "plot line shape color",
+        "plot line shape fill",
+        "plot bar border color",
+        "plot bar border width",
+        "plot bar fill",
+        "plot bar color",
+        "plot bar width",
+        "plot error",
+        "plot error color",
+        "plot error cap",
+        "plot error width"
+      ],
+      "set": [
+        "plot line",
+        "plot bar",
+        "plot line xy.dat xy",
+        "plot line xy.dat {The Title} {X Axis} {Y Axis} xy",
+        "plot gui",
+        "plot load xy.dat xy",
+        "plot save foo.dat",
+        "plot current foo",
+        "plot layout strip",
+        "plot layout strip scale 30",
+        "plot add graph bar",
+        "plot current graph 1",
+        "plot delete graph",
+        "plot current dataset 1",
+        "plot delete dataset",
+        "plot duplicate",
+        "plot stats yes",
+        "plot list yes",
+        "plot backup foo.bck",
+        "plot restore foo.bck",
+        "plot pagesetup orient portrait",
+        "plot pagesetup size letter",
+        "plot print",
+        "plot print destination file",
+        "plot print command lp",
+        "plot print filename foo.ps",
+        "plot print color rgb",
+        "plot close",
+        "plot mode pointer",
+        "plot export tiff foo.tiff jpeg",
+        "plot export jpeg foo.jpeg 75",
+        "plot export png foo.png",
+        "plot axis x grid yes",
+        "plot axis x log yes",
+        "plot axis x flip yes",
+        "plot axis x auto no",
+        "plot axis x min 1",
+        "plot axis x max 100",
+        "plot axis x format {%f}",
+        "plot background white",
+        "plot legend yes",
+        "plot legend position left",
+        "plot font numbers font times",
+        "plot font numbers size 12",
+        "plot font numbers weight bold",
+        "plot font numbers slant italic",
+        "plot title {This is a Title}",
+        "plot title x {X Axis}",
+        "plot title y {Y Axis}",
+        "plot title legend {This is the Legend}",
+        "plot show yes",
+        "plot name {My Data}",
+        "plot line smooth step",
+        "plot line color red",
+        "plot line width 2",
+        "plot line dash yes",
+        "plot line fill no",
+        "plot line fill color red",
+        "plot line shape symbol circle",
+        "plot line shape size 5",
+        "plot line shape color cyan",
+        "plot line shape fill no",
+        "plot bar border color red",
+        "plot bar border width 2",
+        "plot bar fill no",
+        "plot bar color red",
+        "plot bar width 10",
+        "plot error yes",
+        "plot error color red",
+        "plot error cap yes",
+        "plot error width 2"
+      ]
+    },
+    "png": {
+      "get": [
+        "png > foo.png"
+      ],
+      "set": [
+        "png foo.png",
+        "png new foo.png",
+        "png slice foo.png"
+      ]
+    },
+    "prefs": {
+      "get": [
+        "prefs has bg color",
+        "prefs bg color",
+        "prefs nan color",
+        "prefs precision",
+        "prefs auto recovery",
+        "prefs auto recovery interval",
+        "prefs theme",
+        "prefs threads",
+        "prefs irafalign"
+      ],
+      "set": [
+        "prefs open",
+        "prefs save",
+        "prefs clear",
+        "prefs close",
+        "prefs bg color no",
+        "prefs bg color red",
+        "prefs nan color blue",
+        "prefs precision 8 7 4 3 8 7 5 3 8",
+        "prefs auto recovery yes",
+        "prefs auto recovery interval 5",
+        "prefs theme radiance",
+        "prefs threads 8",
+        "prefs iraf yes"
+      ]
+    },
+    "preserve": {
+      "get": [
+        "preserve pan",
+        "preserve regions"
+      ],
+      "set": [
+        "preserve pan yes",
+        "preserve regions yes"
+      ]
+    },
+    "print": {
+      "get": [
+        "print destination",
+        "print command",
+        "print filename",
+        "print color",
+        "print level",
+        "print resolution"
+      ],
+      "set": [
+        "print",
+        "print destination file",
+        "print command lp",
+        "print filename foo.ps",
+        "print color cmyk",
+        "print level 2",
+        "print resolution 96"
+      ]
+    },
+    "prism": {
+      "get": [
+        "prism"
+      ],
+      "set": [
+        "prism",
+        "prism open",
+        "prism foo.fits",
+        "prism load bar.fits",
+        "prism import tsv bar.tsv",
+        "prism clear",
+        "prism current prism2",
+        "prism ext 2",
+        "prism ext STDEVT",
+        "prism first",
+        "prism next",
+        "prism goto 20345",
+        "prism image",
+        "prism mode newplot",
+        "prism histogram RAWX 40",
+        "prism histogram RAWX 40 0 100",
+        "prism plot RAWX RAWY xy",
+        "prism plot RAWX RAWY PHA xyex",
+        "prism plot RAWX RAWY PHA PHI xyexey"
+      ]
+    },
+    "raise": {
+      "get": [],
+      "set": [
+        "raise"
+      ]
+    },
+    "region": {
+      "get": [
+        "region",
+        "region -format ds9 -system wcs -sky fk5 -skyformat sexagesimal -prop edit 1 -group foo",
+        "region epsilon",
+        "region show",
+        "region showtext",
+        "region centroid auto",
+        "region centroid radius",
+        "region centroid iteration",
+        "region format",
+        "region system",
+        "region sky",
+        "region skyformat",
+        "region strip",
+        "region shape",
+        "region color",
+        "region fill",
+        "region width",
+        "region dash",
+        "region font",
+        "region fontsize",
+        "region fontweight",
+        "region fontslant",
+        "region source",
+        "region background",
+        "region include",
+        "region exclude",
+        "region selected",
+        "region groups"
+      ],
+      "set": [
+        "region foo.reg",
+        "region -format ciao bar.reg",
+        "region foo.fits",
+        "region load foo.reg",
+        "region load all foo.reg",
+        "region load '*.reg'",
+        "region load all '*.reg'",
+        "region save foo.reg",
+        "region save select foo.reg",
+        "region list",
+        "region list select",
+        "region list close",
+        "region epsilon 5",
+        "region show yes",
+        "region showtext no",
+        "region centroid",
+        "region centroid auto yes",
+        "region centroid radius 10",
+        "region centroid iteration 20",
+        "region move back",
+        "region move front",
+        "region select all",
+        "region select none",
+        "region select invert",
+        "region select front",
+        "region select back",
+        "region delete",
+        "region delete select",
+        "region delete load foo.reg",
+        "region format ds9",
+        "region system wcs",
+        "region sky fk5",
+        "region skyformat degrees",
+        "region strip yes",
+        "region shape ellipse",
+        "region color red",
+        "region fill yes",
+        "region width 3",
+        "region dash yes",
+        "region font times",
+        "region fontsize 24",
+        "region fontweight bold",
+        "region fontslant italic",
+        "region edit yes",
+        "region include",
+        "region command {circle 100 100 20}",
+        "region analysis stats",
+        "region analysis stats close",
+        "region analysis histogram save",
+        "region composite",
+        "region dissolve",
+        "region template foo.tpl",
+        "region template foo.tpl at 13:29:55.92 +47:12:48.02 fk5",
+        "region savetemplate foo.tpl",
+        "region group new",
+        "region group foo new",
+        "region group foo update",
+        "region group foo select",
+        "region group foo color red",
+        "region group foo copy",
+        "region group foo delete",
+        "region group foo cut",
+        "region group foo font {times 14 bold}",
+        "region group foo move 100 100",
+        "region group foo movefront",
+        "region group foo moveback",
+        "region group foo property delete no",
+        "region copy",
+        "region cut",
+        "region paste wcs",
+        "region undo",
+        "region open",
+        "region close"
+      ]
+    },
+    "restore": {
+      "get": [],
+      "set": [
+        "restore ds9.bck"
+      ]
+    },
+    "rgb": {
+      "get": [
+        "rgb channel",
+        "rgb lock wcs",
+        "rgb lock crop",
+        "rgb lock slice",
+        "rgb lock bin",
+        "rgb lock scale",
+        "rgb lock scalelimits",
+        "rgb lock colorbar",
+        "rgb lock block",
+        "rgb lock smooth",
+        "rgb system",
+        "rgb view red",
+        "rgb view green",
+        "rgb view blue"
+      ],
+      "set": [
+        "rgb",
+        "rgb red",
+        "rgb channel red",
+        "rgb view blue no",
+        "rgb system wcs",
+        "rgb lock wcs yes",
+        "rgb lock crop yes",
+        "rgb lock slice yes",
+        "rgb lock bin yes",
+        "rgb lock scale yes",
+        "rgb lock scalelimits yes",
+        "rgb lock colorbar yes",
+        "rgb lock block yes",
+        "rgb lock smooth yes",
+        "rgb open",
+        "rgb close"
+      ]
+    },
+    "rgbarray": {
+      "get": [
+        "rgbarray > foo.arr",
+        "rgbarray little > foo.arr"
+      ],
+      "set": [
+        "rgbarray foo.arr[dim=512,zdim=3,bitpix=-32,endian=little]",
+        "rgbarray new foo.arr[dim=512,zdim=3,bitpix=-32,endian=little]"
+      ]
+    },
+    "rgbcube": {
+      "get": [
+        "rgbcube > foo.fits"
+      ],
+      "set": [
+        "rgbcube foo.fits",
+        "rgbcube new foo.fits"
+      ]
+    },
+    "rgbimage": {
+      "get": [
+        "rgbimage > foo.fits"
+      ],
+      "set": [
+        "rgbimage foo.fits",
+        "rgbimage new foo.fits"
+      ]
+    },
+    "rotate": {
+      "get": [
+        "rotate"
+      ],
+      "set": [
+        "rotate 45",
+        "rotate to 30",
+        "rotate open",
+        "rotate close"
+      ]
+    },
+    "samp": {
+      "get": [
+        "samp"
+      ],
+      "set": [
+        "samp connect",
+        "samp broadcast",
+        "samp broadcast table",
+        "samp send topcat",
+        "samp send table topcat",
+        "samp hub info"
+      ]
+    },
+    "save": {
+      "get": [],
+      "set": [
+        "save foo.fits",
+        "save fits foo.fits image",
+        "save fits foo.fits table",
+        "save fits foo.fits slice",
+        "save rgbimage foo.fits",
+        "save rgbcube foo.fits",
+        "save mecube foo.fits",
+        "save mosaic foo.fits",
+        "save mosaicimage foo.fits"
+      ]
+    },
+    "saveimage": {
+      "get": [],
+      "set": [
+        "saveimage ds9.tiff",
+        "saveimage jpeg ds9.jpeg 75"
+      ]
+    },
+    "scale": {
+      "get": [
+        "scale",
+        "scale log exp",
+        "scale datasec",
+        "scale limits",
+        "scale mode",
+        "scale scope",
+        "scale lock",
+        "scale lock limits"
+      ],
+      "set": [
+        "scale linear",
+        "scale log exp 100",
+        "scale datasec yes",
+        "scale histequ",
+        "scale limits 1 100",
+        "scale mode zscale",
+        "scale mode 99.5",
+        "scale scope local",
+        "scale match",
+        "scale match limits",
+        "scale lock yes",
+        "scale lock limits yes",
+        "scale open",
+        "scale close"
+      ]
+    },
+    "shm": {
+      "get": [
+        "shm"
+      ],
+      "set": [
+        "shm 102",
+        "shm key 102",
+        "shm shmid 102 foo",
+        "shm fits key 100 foo",
+        "shm mosaicimage iraf key 100 foo",
+        "shm mosaicimage wcs key 100 foo",
+        "shm mosaicimage wcsa key 100 foo",
+        "shm mosaicimage wfpc2 key 100 foo",
+        "shm mosaic iraf key 100 foo",
+        "shm mosaic wcs key 100 foo",
+        "shm rgbcube key 100 foo",
+        "shm rgbimage key 100 foo",
+        "shm rgbarray key 100 [dim=200,zdim=3,bitpix=-32]",
+        "shm array shmid 102 [dim=32,bitpix=-32]"
+      ]
+    },
+    "sia": {
+      "get": [
+        "sia"
+      ],
+      "set": [
+        "sia 2mass",
+        "sia cancel",
+        "sia clear",
+        "sia close",
+        "sia coordinate 202.48 47.21 fk5",
+        "sia crosshair",
+        "sia current 2mass",
+        "sia export tsv bar.tsv",
+        "sia name m51",
+        "sia print",
+        "sia retrieve",
+        "sia save foo.xml",
+        "sia radius 1 degrees",
+        "sia sky fk5",
+        "sia skyformat degrees",
+        "sia system wcs",
+        "sia update"
+      ]
+    },
+    "single": {
+      "get": [
+        "single"
+      ],
+      "set": [
+        "single"
+      ]
+    },
+    "skyview": {
+      "get": [
+        "skyview name",
+        "skyview coord",
+        "skyview size",
+        "skyview pixels",
+        "skyview save",
+        "skyview frame",
+        "skyview survey"
+      ],
+      "set": [
+        "skyview",
+        "skyview m31",
+        "skyview name m31",
+        "skyview name clear",
+        "skyview 00:42:44.404 +41:16:08.78",
+        "skyview size 60 60 arcmin",
+        "skyview pixels 600 600",
+        "skyview save yes",
+        "skyview frame current",
+        "skyview update frame",
+        "skyview survey sdssi",
+        "skyview open",
+        "skyview close"
+      ]
+    },
+    "sleep": {
+      "get": [],
+      "set": [
+        "sleep",
+        "sleep 2"
+      ]
+    },
+    "smooth": {
+      "get": [
+        "smooth",
+        "smooth function",
+        "smooth radius",
+        "smooth radiusminor",
+        "smooth sigma",
+        "smooth sigmaminor",
+        "smooth lock"
+      ],
+      "set": [
+        "smooth",
+        "smooth yes",
+        "smooth function tophat",
+        "smooth radius 4",
+        "smooth radiusminor 4",
+        "smooth sigma 2.0",
+        "smooth sigmaminor 2.0",
+        "smooth angle 45",
+        "smooth match",
+        "smooth lock yes",
+        "smooth open",
+        "smooth close"
+      ]
+    },
+    "source": {
+      "get": [],
+      "set": [
+        "source foo.tcl"
+      ]
+    },
+    "tcl": {
+      "get": [],
+      "set": [
+        "tcl {puts {Hello, World}}"
+      ]
+    },
+    "threads": {
+      "get": [
+        "threads"
+      ],
+      "set": [
+        "threads 8"
+      ]
+    },
+    "tiff": {
+      "get": [
+        "tiff > foo.tiff",
+        "tiff jpeg > foo.tiff"
+      ],
+      "set": [
+        "tiff foo.tiff",
+        "tiff new foo.tiff",
+        "tiff slice foo.tiff"
+      ]
+    },
+    "tile": {
+      "get": [
+        "tile",
+        "tile mode",
+        "tile grid mode",
+        "tile grid direction",
+        "tile grid layout",
+        "tile grid gap"
+      ],
+      "set": [
+        "tile",
+        "tile yes",
+        "tile mode row",
+        "tile grid",
+        "tile grid mode manual",
+        "tile grid direction x",
+        "tile grid layout 5 5",
+        "tile grid gap 10",
+        "tile row",
+        "tile column"
+      ]
+    },
+    "update": {
+      "get": [],
+      "set": [
+        "update",
+        "update 1 100 100 300 400",
+        "update now",
+        "update now 1 100 100 300 400"
+      ]
+    },
+    "url": {
+      "get": [],
+      "set": [
+        "url http://foo.bar.edu/foo.fits"
+      ]
+    },
+    "version": {
+      "get": [
+        "version"
+      ],
+      "set": []
+    },
+    "view": {
+      "get": [
+        "view layout",
+        "view multi",
+        "view keyvalue",
+        "view info",
+        "view panner",
+        "view magnifier",
+        "view buttons",
+        "view icons",
+        "view colorbar",
+        "view graph horizontal",
+        "view filename",
+        "view object",
+        "view keyword",
+        "view minmax",
+        "view lowhigh",
+        "view units",
+        "view image",
+        "view wcsa",
+        "view frame",
+        "view rgb red"
+      ],
+      "set": [
+        "view layout vertical",
+        "view multi yes",
+        "view keyvalue BITPIX",
+        "view info yes",
+        "view panner yes",
+        "view magnifier yes",
+        "view buttons yes",
+        "view icons yes",
+        "view colorbar yes",
+        "view graph horizontal yes",
+        "view filename yes",
+        "view object yes",
+        "view keyword yes",
+        "view minmax yes",
+        "view lowhigh yes",
+        "view units yes",
+        "view wcsa yes",
+        "view frame yes",
+        "view rgb red yes"
+      ]
+    },
+    "vla": {
+      "get": [
+        "vla name",
+        "vla coord",
+        "vla size",
+        "vla save",
+        "vla frame",
+        "vla survey"
+      ],
+      "set": [
+        "vla",
+        "vla m31",
+        "vla name m31",
+        "vla name clear",
+        "vla 00:42:44.404 +41:16:08.78",
+        "vla size 60 60 arcmin",
+        "vla save yes",
+        "vla frame current",
+        "vla update frame",
+        "vla survey stripe82",
+        "vla open",
+        "vla close"
+      ]
+    },
+    "vlss": {
+      "get": [
+        "vlss name",
+        "vlss coord",
+        "vlss size",
+        "vlss save",
+        "vlss frame"
+      ],
+      "set": [
+        "vlss",
+        "vlss m31",
+        "vlss name m31",
+        "vlss name clear",
+        "vlss 00:42:44.404 +41:16:08.78",
+        "vlss size 60 60 arcmin",
+        "vlss save yes",
+        "vlss frame current",
+        "vlss update frame",
+        "vlss open",
+        "vlss close"
+      ]
+    },
+    "vo": {
+      "get": [
+        "vo",
+        "vo method",
+        "vo server",
+        "vo internal",
+        "vo delay",
+        "vo connect"
+      ],
+      "set": [
+        "vo method xpa",
+        "vo server http://foo.bar.edu/list.txt",
+        "vo internal yes",
+        "vo delay 15",
+        "vo chandra-ed",
+        "vo connect chandra-ed",
+        "vo disconnect chandra-ed",
+        "vo open",
+        "vo close"
+      ]
+    },
+    "wcs": {
+      "get": [
+        "wcs",
+        "wcs system",
+        "wcs sky",
+        "wcs skyformat",
+        "wcs align"
+      ],
+      "set": [
+        "wcs wcs",
+        "wcs system wcs",
+        "wcs fk5",
+        "wcs sky fk5",
+        "wcs sexagesimal",
+        "wcs skyformat sexagesimal",
+        "wcs align yes",
+        "wcs reset",
+        "wcs load foo.wcs",
+        "wcs replace 1 foo.wcs",
+        "wcs append 1 foo.wcs",
+        "wcs save foo.wcs",
+        "wcs save 1 foo.wcs"
+      ]
+    },
+    "web": {
+      "get": [
+        "web"
+      ],
+      "set": [
+        "web www.cnn.com",
+        "web new www.cnn.com",
+        "web hvweb www.apple.com",
+        "web click back",
+        "web click 2",
+        "web clear",
+        "web close"
+      ]
+    },
+    "width": {
+      "get": [
+        "width"
+      ],
+      "set": [
+        "width 512"
+      ]
+    },
+    "xpa": {
+      "get": [
+        "xpa connect",
+        "xpa info"
+      ],
+      "set": []
+    },
+    "zoom": {
+      "get": [
+        "zoom"
+      ],
+      "set": [
+        "zoom 2",
+        "zoom 2 4",
+        "zoom to 4",
+        "zoom to 2 4",
+        "zoom in",
+        "zoom out",
+        "zoom to fit",
+        "zoom open",
+        "zoom close"
+      ]
+    },
+    "zscale": {
+      "get": [
+        "zscale contrast",
+        "zscale sample",
+        "zscale line"
+      ],
+      "set": [
+        "zscale",
+        "zscale contrast .25",
+        "zscale sample 600",
+        "zscale line 120"
+      ]
+    }
+  },
+  "registered": 143
+}

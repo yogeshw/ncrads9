@@ -21,6 +21,7 @@ entries, the parity numbers in PLAN.md quietly become fiction.
 """
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -158,3 +159,46 @@ class TestSnapshots:
         out = capsys.readouterr().out
         assert "TOTAL" in out
         assert "parity" in out
+
+    def test_the_xpa_example_corpus_is_committed_and_current(self):
+        """C-6's corpus is generated from DS9's reference and committed, so
+        the tests do not need the DS9 checkout. Regenerating it when the
+        checkout is there is how a change in DS9's documentation reaches
+        the conformance suite."""
+        corpus = REPO_ROOT / "docs" / "parity" / "ds9_xpa_examples.json"
+        assert corpus.is_file(), "run python tools/import_ds9_xpa_examples.py"
+        built = json.loads(corpus.read_text())
+        assert built["examples"] >= 1400
+        assert "SAOImageDS9" in built["source"], "a copied file records where it came from"
+
+        reference = REPO_ROOT / ".tmp_sao_ds9" / "ds9" / "doc" / "ref" / "xpa.html"
+        if not reference.is_file():
+            pytest.skip("the DS9 checkout is not here; run tools/fetch_ds9.sh to check freshness")
+        assert _load("import_ds9_xpa_examples").main(["--check"]) == 0
+
+    def test_menu_diff_passes_a_floor_it_meets(self, capsys):
+        """C-1's ratchet. Without it parity is only reported, so a menu
+        entry lost in a refactor goes unnoticed until someone reads the
+        summary; `check.sh` and CI both pass `--minimum`."""
+        assert _load("menu_diff").main(["--summary", "--minimum", "1"]) == 0
+        capsys.readouterr()
+
+    def test_menu_diff_fails_a_floor_it_misses(self, capsys):
+        assert _load("menu_diff").main(["--minimum", "100"]) == 1
+        captured = capsys.readouterr()
+        assert "below the 100.0% floor" in captured.err
+        assert "--missing" in captured.err, "it has to say how to find what went"
+
+    def test_the_floor_in_force_is_the_parity_we_have(self):
+        """The floor `check.sh` and CI use, checked here so the two cannot
+        drift apart: a floor above what we have would fail every build, and
+        one far below would ratchet nothing."""
+        import re
+
+        floor = re.search(
+            r"menu_diff\.py --summary --minimum (\d+)", (REPO_ROOT / "tools/check.sh").read_text()
+        )
+        assert floor, "check.sh should pass a parity floor"
+        workflow = (REPO_ROOT / ".github/workflows/ci.yml").read_text()
+        assert f"--minimum {floor.group(1)}" in workflow, "CI and check.sh should agree"
+        assert _load("menu_diff").main(["--minimum", floor.group(1)]) == 0
