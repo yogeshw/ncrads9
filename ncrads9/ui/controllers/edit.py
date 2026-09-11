@@ -96,6 +96,11 @@ class EditController(Controller):
         #: The region held by Cut or Copy, ready for Paste. One deep, as DS9's
         #: is; a full clipboard history would need the M9-24 command stack.
         self._clipboard: BaseRegion | None = None
+        #: What translates a dialog as it is first shown, once a language
+        #: other than English is in force. It lives here rather than on the
+        #: window because this is what installs it, and because the window
+        #: is held to 600 lines.
+        self.dialog_translator: i18n.DialogTranslator | None = None
 
     def connect(self) -> None:
         """Wire the Edit menu."""
@@ -264,14 +269,24 @@ class EditController(Controller):
         exists rather than being hard-coded in it. The menus are built in
         English and translated here, which keeps the English text in the
         source where a translator can see it.
+
+        The dialogs are translated as each is first shown, by a filter on
+        the application: they are built all over the code and some only
+        when first used, so a hook that runs when one appears catches
+        every one of them.
         """
         store = self.window.preferences
         bindings.apply(self.menu, bindings.from_preferences(store))
 
         language = str(store.get("language", i18n.DEFAULT_LANGUAGE))
-        if language != i18n.DEFAULT_LANGUAGE:
-            i18n.set_language(language)
-            translate_menu(self.menu)
+        if language == i18n.DEFAULT_LANGUAGE:
+            return
+        i18n.set_language(language)
+        translate_menu(self.menu)
+
+        application = QApplication.instance()
+        if application is not None and self.dialog_translator is None:
+            self.dialog_translator = i18n.install(application)
 
     def preferences_dict(self) -> dict:
         """The current preferences, with defaults filled in."""

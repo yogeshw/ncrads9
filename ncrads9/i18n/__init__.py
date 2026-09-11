@@ -25,10 +25,14 @@ converts them into `locales/*.json` for us. They are SAOImageDS9's work,
 under the same GNU GPL this project uses.
 
 What is translated is what a label goes through `translate()` for: the
-menus, the window titles, and the dialogs' own labels as they are given
-one. A status message is not translated -- there are thousands, DS9's
-catalogue has none of them, and a half-translated sentence is worse than
-an English one.
+menus (`menus.py`) and the dialogs (`dialogs.py`). A status message is
+not -- there are thousands, DS9's catalogue has none of them, and a
+half-translated sentence is worse than an English one.
+
+The dialogs translate all-or-nothing, for the same reason: DS9's
+catalogue is a catalogue of *menu* labels, so it covers only part of what
+a dialog says, and one is translated only when enough of it can be. As
+translations are written, more dialogs pass that bar on their own.
 
 Coverage is DS9's coverage, which is partial: `Zoom`, `Scale` and
 `Contours` are in DS9's French file with no translation beside them, so
@@ -47,13 +51,22 @@ from .catalogue import (
     set_language,
     translate,
 )
+from .dialogs import THRESHOLD, DialogTranslator, coverage, install, translate_dialog
+from .menus import english_label, translate_menu
 
 __all__ = [
     "DEFAULT_LANGUAGE",
     "LANGUAGES",
+    "THRESHOLD",
     "Catalogue",
+    "DialogTranslator",
     "available",
+    "coverage",
     "current",
+    "english_label",
+    "install",
     "set_language",
     "translate",
+    "translate_dialog",
+    "translate_menu",
 ]

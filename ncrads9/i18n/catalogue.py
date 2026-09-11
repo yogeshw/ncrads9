@@ -58,8 +58,10 @@ LANGUAGES: dict[str, str] = {
 #: Where the catalogues live.
 LOCALES = Path(__file__).resolve().parent / "locales"
 
-#: What a label can end with that is not part of its words.
-SUFFIXES: tuple[str, ...] = ("...", "…")
+#: What a label can end with that is not part of its words. The colon is
+#: how every form row is written -- `Width:` -- and DS9's catalogue holds
+#: the word without it.
+SUFFIXES: tuple[str, ...] = ("...", "…", ":")
 
 
 @dataclass
