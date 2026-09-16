@@ -399,4 +399,7 @@ class ZoomController(Controller):
             align=frame.align_wcs,
         )
         dialog.parameters_changed.connect(self.apply_pan_zoom_rotate_parameters)
-        dialog.exec()
+        # Modeless, as the dialog itself asks for: it emits
+        # `parameters_changed` live, so the point is to drag the rotation
+        # and watch the image turn -- not to freeze it and press OK.
+        self.show_window(dialog)

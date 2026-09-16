@@ -182,6 +182,10 @@ class ScaleController(Controller):
         if self.window.image_data is not None:
             self.refresh()
             self.status(f"Scale: {scale.name.lower()}")
+        # Frame -> Lock -> Scale, which is what makes it a lock rather
+        # than a one-off Match. `Scale and Limits` follows the limits
+        # themselves, through `on_limits_changed`.
+        self.window.frame_controller.propagate("scale")
 
     def on_button_bar_scale(self, label: str) -> None:
         """Select an algorithm from a button-bar label."""
@@ -231,6 +235,10 @@ class ScaleController(Controller):
         self.sync()
         self.invalidate()
 
+    def on_limits_changed(self) -> None:
+        """Called after the clip limits change, for Frame -> Lock."""
+        self.window.frame_controller.propagate("scale_limits")
+
     def invalidate(self) -> None:
         """Recompute the limits from the current settings and redisplay.
 
@@ -250,6 +258,7 @@ class ScaleController(Controller):
         self.window.z1, self.window.z2 = low, high
         self.store_limits(low, high)
         self.refresh()
+        self.on_limits_changed()
 
     def set_limit_mode(self, key: str) -> None:
         """Select a limit mode from its menu key.
@@ -485,7 +494,9 @@ class ScaleController(Controller):
         dialog = ScaleDialog(self.window)
         # Connect before showing, so the dialog's Apply button works.
         dialog.scale_changed.connect(self.apply_dialog_params)
-        dialog.exec()
+        # Modeless, which is the point of an Apply button: adjust the
+        # scale and watch the image change behind the dialog.
+        self.show_window(dialog)
 
     def apply_dialog_params(self, params: dict) -> None:
         """Apply settings from the Scale Parameters dialog."""

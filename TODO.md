@@ -1382,6 +1382,50 @@ Depends on M2, M3.
       back. One was weak at first and worth recording: the magnifier's window is 64 pixels, so
       on a 64-pixel test image it covered the whole thing and "the marker is in the magnified
       region" was true however wrong the rotation was -- the image is 200 pixels now.
+      **A walk through all 803 menu items** (`tests/unit/test_menu_walkthrough.py`), triggering
+      each one against a live window and comparing a broad state snapshot before and after. Four
+      faults, each covering several entries:
+      * *Eight windows froze the application.* Statistics, Histogram, Header, Reference Manual,
+        Keyboard Shortcuts, Scale Parameters, Pan/Zoom/Rotate Parameters and the RGB/HSV/HLS
+        channel dialog each set `NonModal` in their own constructor and were then shown with
+        `exec()` -- which makes a dialog modal whatever it asked for. So you could not compare a
+        histogram with the image it came from, and the two dialogs with live Apply signals
+        (Scale, Pan/Zoom/Rotate) had their whole point defeated: they exist to be adjusted while
+        the picture changes behind them. `Controller.show_window` shows them modeless and keeps
+        a reference, since a modeless dialog nothing holds is collected the moment it is shown;
+        opening the same kind twice raises the one already up rather than stacking another.
+        `test_no_dialog_that_asks_to_be_modeless_is_shown_modally` reads the source for the
+        contradiction, which is cheaper and broader than opening all forty dialogs.
+      * *`Frame -> Lock` had eight flags and only `Block` was live.* The other seven recorded the
+        tick and never acted on it -- the docstring admitted it. Turning one on now brings the
+        frames into line at once, as DS9's does, and `FrameController.propagate` keeps them
+        there as the setting changes afterwards, which is the difference between a lock and a
+        one-off Match. A test checks the other half too: with the lock *off*, a change must not
+        spread, since a propagation that ignored the flag would pass the positive tests and be
+        just as wrong.
+      * *Three Frame items reported instead of working.* `Match -> Axes Order` was a stub and is
+        now real (axis order is per-frame, so there is something to copy, and a frame parked on
+        a high slice is pulled back inside the new axis); `Match -> Bin` promised the feature
+        "arrives in M5-16", which had shipped -- the honest answer is that bin settings are the
+        window's, not the frame's, so every frame always matches; and `Frame -> HSV.../HLS...`
+        said "not yet implemented" while sitting beside a working RGB dialog. The three colour
+        spaces are the same three planes under different names, so one dialog serves all three
+        and `ui/display.py:channel_labels` holds the naming -- which also let the `hsv` and
+        `hls` XPA points accept DS9's own channel names (`hsv value`, `hls lightness`) instead
+        of only the storage keys.
+      * *Three Zoom presets gave the wrong zoom.* `ImageViewer.zoom_to` clamped to 0.1 - 20
+        while the menu offers 1/32 - 32, so `Zoom 1/32`, `Zoom 1/16` and `Zoom 32` were silently
+        clamped -- and the first two both landed on 0.1, which is why one of them looked like it
+        did nothing at all. The range now covers what the menu offers, and `zoom_in`, `zoom_out`
+        and `zoom_fit` go through the same clamp rather than past it.
+      Two honest limitations were *kept*, not papered over: `Frame -> Lock/Match -> Bin` and
+      `-> Smooth` say that those settings are the window's rather than the frame's, so every
+      frame already matches. Making them per-frame is a larger change than a menu walk, and a
+      message that says why beats a tick that silently does nothing. `Help -> About Qt` is Qt's
+      own modal dialog and stays modal, which is what that entry is.
+      Also caught while wiring the colour dialog: `action_frame_rgb_dialog.triggered` was bound
+      straight to a method whose first argument is the colour space, so the action's checked
+      state would have arrived as a request for a space called "False".
       Found while fixing the buttons: `ColormapDialog` raised `AttributeError` on construction --
       `setCurrentRow(0)` fired the selection signal, which previewed, which read a check box
       built forty lines later -- so `Color -> Colormap Parameters` could never be opened. Its

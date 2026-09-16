@@ -520,18 +520,26 @@ def test_the_header_dialog_lists_every_extension(main_window, mef, monkeypatch):
     captured = {}
 
     class _Dialog:
+        """Enough of a dialog to be shown. It is *shown*, not `exec`-ed:
+        the header window is one you read while looking at the image, so
+        modal was the wrong thing and this stub follows suit."""
+
         def __init__(self, header, parent, extensions=None, handler=None, index=0):
             captured["extensions"] = extensions
             captured["index"] = index
 
-        def exec(self):
-            return 0
+        def show(self):
+            captured["shown"] = True
+
+        def raise_(self):
+            return None
 
     monkeypatch.setattr(module, "HeaderDialog", _Dialog)
     main_window.display.load_fits(f"{mef}[ERR]")
     main_window.file.show_header()
     assert [info.name for info in captured["extensions"]] == ["PRIMARY", "SCI", "ERR"]
     assert captured["index"] == 2
+    assert captured.get("shown") is True
 
 
 def test_the_header_dialog_switches_extension(qapp, mef):

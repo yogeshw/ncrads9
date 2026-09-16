@@ -69,7 +69,26 @@ from .widgets.colorbar_widget import ColorbarEntry
 DEFAULT_NAN_COLOR = "#ffffff"
 
 #: The channels of a colour frame, in the order the colorbar shows them.
+#: These are the storage keys for the three colour planes, whatever colour
+#: space the frame is labelled with.
 RGB_CHANNEL_ORDER: tuple[str, str, str] = ("red", "green", "blue")
+
+#: What DS9 *calls* those three planes, per frame type. The planes
+#: themselves are the same three slots -- an HSV frame is three images
+#: composed as one -- so the keys above stay put and only the labels
+#: change. Without this, `Frame -> HSV...` and `Frame -> HLS...` had
+#: nothing to show and said "not yet implemented".
+CHANNEL_LABELS: dict[str, tuple[str, str, str]] = {
+    "rgb": ("red", "green", "blue"),
+    "hsv": ("hue", "saturation", "value"),
+    "hls": ("hue", "lightness", "saturation"),
+}
+
+
+def channel_labels(frame_type: str) -> tuple[str, str, str]:
+    """DS9's names for a colour frame's three channels."""
+    return CHANNEL_LABELS.get(str(frame_type).lower(), RGB_CHANNEL_ORDER)
+
 
 #: A ramp per channel, so an RGB frame's three bars read as red, green and
 #: blue rather than as three identical greys.

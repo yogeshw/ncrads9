@@ -48,11 +48,11 @@ class HelpController(Controller):
 
     def show_contents(self) -> None:
         """Show the in-app help contents."""
-        HelpContentsDialog(self.window).exec()
+        self.show_window(HelpContentsDialog(self.window))
 
     def show_shortcuts(self) -> None:
         """Show the keyboard shortcut reference."""
-        KeyboardShortcutsDialog(self.window).exec()
+        self.show_window(KeyboardShortcutsDialog(self.window))
 
     def show_about(self) -> None:
         """Show the About box.

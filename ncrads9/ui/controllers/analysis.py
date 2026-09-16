@@ -706,8 +706,9 @@ class AnalysisController(Controller):
             self.status("No image loaded", 2000)
             return
 
-        dialog = StatisticsDialog(self.analysis_image_data(frame), self.window)
-        dialog.exec()
+        # Beside the image, not over it: these are numbers you read while
+        # looking at the picture they describe.
+        self.show_window(StatisticsDialog(self.analysis_image_data(frame), self.window))
         self.log_command("statistics")
 
     def show_histogram(self) -> None:
@@ -717,8 +718,7 @@ class AnalysisController(Controller):
             self.status("No image loaded", 2000)
             return
 
-        dialog = HistogramDialog(self.analysis_image_data(frame), self.window)
-        dialog.exec()
+        self.show_window(HistogramDialog(self.analysis_image_data(frame), self.window))
         self.log_command("histogram")
 
     def show_radial_profile(self) -> None:

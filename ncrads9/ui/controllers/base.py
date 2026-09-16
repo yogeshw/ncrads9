@@ -123,6 +123,59 @@ class Controller:
         """Redraw the current frame."""
         self.window.display.display()
 
+    def show_window(self, dialog, key: str | None = None):
+        """Show a dialog *beside* the image rather than on top of it.
+
+        For the windows you read while looking at the picture -- the
+        header, the statistics, the histogram, the help. Six of those
+        declared `NonModal` in their own constructors and were then shown
+        with `exec()`, which makes a dialog modal whatever it asked for:
+        the application froze until each was dismissed, so you could not
+        compare a histogram with the image it came from.
+
+        A reference is kept, because a modeless dialog nothing holds is
+        collected the moment it is shown; opening the same kind twice
+        raises the one already up instead of stacking another.
+
+        Args:
+            dialog: The dialog to show.
+            key: What to file it under. Defaults to its class name, which
+                is what makes "the same kind" mean what it should.
+
+        Returns:
+            The dialog now on screen -- the one passed in, or the one
+            already open under that key.
+        """
+        held = getattr(self.window, "_open_windows", None)
+        if held is None:
+            held = {}
+            self.window._open_windows = held
+
+        name = key or type(dialog).__name__
+        existing = held.get(name)
+        if existing is not None and existing is not dialog:
+            try:
+                if existing.isVisible():
+                    existing.raise_()
+                    existing.activateWindow()
+                    dialog.deleteLater()
+                    return existing
+            except RuntimeError:
+                # The C++ object is gone; the new one replaces it.
+                pass
+
+        held[name] = dialog
+        # `finished` is a QDialog signal; a plain QWidget shown this way
+        # has none, and neither does a test's stand-in. Forgetting it on
+        # close is a tidiness, not a requirement, so its absence must not
+        # stop the window being shown.
+        finished = getattr(dialog, "finished", None)
+        if finished is not None:
+            finished.connect(lambda _result, k=name: held.pop(k, None))
+        dialog.show()
+        dialog.raise_()
+        return dialog
+
     def connect(self) -> None:
         """Wire this controller's menu actions to its methods.
 

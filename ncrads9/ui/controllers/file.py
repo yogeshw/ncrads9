@@ -1190,10 +1190,12 @@ class FileController(Controller):
             self.status(f"Could not read the header: {exc}", 3000)
             return
 
-        HeaderDialog(
-            header,
-            self.window,
-            extensions=extensions,
-            handler=handler,
-            index=index,
-        ).exec()
+        self.show_window(
+            HeaderDialog(
+                header,
+                self.window,
+                extensions=extensions,
+                handler=handler,
+                index=index,
+            )
+        )

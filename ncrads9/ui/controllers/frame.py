@@ -105,7 +105,10 @@ class FrameController(Controller):
         menu.action_hide_all_frames.triggered.connect(self.hide_all)
 
         menu.action_frame_cube_dialog.triggered.connect(lambda: self.show_frame_dialog("cube"))
-        menu.action_frame_rgb_dialog.triggered.connect(self.show_rgb_dialog)
+        # Through a lambda, not bound directly: `triggered` carries the
+        # action's checked state, which would arrive as `frame_type` and
+        # ask for a colour space called "False".
+        menu.action_frame_rgb_dialog.triggered.connect(lambda: self.show_frame_dialog("rgb"))
         menu.action_frame_hsv_dialog.triggered.connect(lambda: self.show_frame_dialog("hsv"))
         menu.action_frame_hls_dialog.triggered.connect(lambda: self.show_frame_dialog("hls"))
 
@@ -672,9 +675,13 @@ class FrameController(Controller):
         return True
 
     def show_frame_dialog(self, frame_mode: str) -> None:
-        """Open frame mode dialog."""
-        if frame_mode == "rgb":
-            self.show_rgb_dialog()
+        """Open one of DS9's Frame parameter dialogs.
+
+        Args:
+            frame_mode: `rgb`, `hsv`, `hls`, `cube` or `3d`.
+        """
+        if frame_mode in ("rgb", "hsv", "hls"):
+            self.show_rgb_dialog(frame_mode)
             return
         if frame_mode == "cube":
             self.show_cube_dialog()
@@ -682,7 +689,7 @@ class FrameController(Controller):
         if frame_mode == "3d":
             self.window.frame_3d.show_dialog()
             return
-        self.status(f"{frame_mode.upper()} parameters dialog not yet implemented", 2000)
+        self.status(f"There is no {frame_mode.upper()} parameters dialog", 2000)
 
     # -- data cubes ----------------------------------------------------------
 
@@ -777,6 +784,7 @@ class FrameController(Controller):
         self.window.cube_dialog.set_depth(depth, frame.slice_index)
         self.set_slice(frame.slice_index)
         self.status(f"Axis order: {axes}")
+        self.propagate("axes_order")
 
     def update_cube_coordinate(self) -> None:
         """Show the current slice's world coordinate on the Cube dialog."""
@@ -870,27 +878,44 @@ class FrameController(Controller):
         self.status(f"{channel.capitalize()}: {'shown' if visible else 'hidden'}")
         return None
 
-    def show_rgb_dialog(self) -> None:
-        """Show DS9-style RGB channel dialog."""
+    def show_rgb_dialog(self, frame_type: str = "rgb") -> None:
+        """DS9's channel dialog for a colour frame.
+
+        One dialog for all three colour spaces. The three planes are the
+        same three slots whichever space the frame is labelled with, so
+        only the labels differ -- which is why `Frame -> HSV...` and
+        `Frame -> HLS...` could report "not yet implemented" while sitting
+        on a working dialog.
+
+        Args:
+            frame_type: `rgb`, `hsv` or `hls`. A frame of another type is
+                replaced with a new one of this type, as the RGB entry has
+                always done.
+        """
+        from ..display import channel_labels
+
+        frame_type = str(frame_type).lower()
+        labels = channel_labels(frame_type)
+
         self.persist_view_state()
         frame = self.frames.current_frame
-        if frame is None or frame.frame_type != "rgb":
-            self.new_frame_of_type("rgb")
+        if frame is None or frame.frame_type != frame_type:
+            self.new_frame_of_type(frame_type)
             frame = self.frames.current_frame
         if frame is None:
             return
 
         dialog = QDialog(None)
         dialog.setWindowFlag(Qt.WindowType.Window, True)
-        dialog.setWindowTitle("RGB")
+        dialog.setWindowTitle(frame_type.upper())
         layout = QVBoxLayout(dialog)
 
         channel_group = QGroupBox("Current Channel", dialog)
         channel_layout = QHBoxLayout(channel_group)
         button_group = QButtonGroup(channel_group)
         radio_buttons: dict[str, QRadioButton] = {}
-        for channel in self.window.display.channel_names():
-            radio = QRadioButton(channel.capitalize(), channel_group)
+        for channel, label in zip(self.window.display.channel_names(), labels, strict=True):
+            radio = QRadioButton(label.capitalize(), channel_group)
             radio.setChecked(frame.rgb_current_channel == channel)
             button_group.addButton(radio)
             channel_layout.addWidget(radio)
@@ -900,8 +925,8 @@ class FrameController(Controller):
         view_group = QGroupBox("View", dialog)
         view_layout = QHBoxLayout(view_group)
         view_checks: dict[str, QCheckBox] = {}
-        for channel in self.window.display.channel_names():
-            checkbox = QCheckBox(channel.capitalize(), view_group)
+        for channel, label in zip(self.window.display.channel_names(), labels, strict=True):
+            checkbox = QCheckBox(label.capitalize(), view_group)
             checkbox.setChecked(frame.rgb_view.get(channel, True))
             view_layout.addWidget(checkbox)
             view_checks[channel] = checkbox
@@ -1075,8 +1100,11 @@ class FrameController(Controller):
             self.window.display.sync_view_state_from_channel(frame)
             self.apply_view_state(frame)
             self.window.display.display()
-            active = frame.rgb_current_channel.capitalize()
-            self.status(f"RGB updated (active channel: {active})", 2000)
+            keys = self.window.display.channel_names()
+            active = dict(zip(keys, labels, strict=True)).get(
+                frame.rgb_current_channel, frame.rgb_current_channel
+            )
+            self.status(f"{frame_type.upper()} updated (active channel: {active.capitalize()})", 2000)
 
         def apply_and_close() -> None:
             apply_changes()
@@ -1099,7 +1127,10 @@ class FrameController(Controller):
         if cancel_button is not None:
             cancel_button.clicked.connect(dialog.reject)
         layout.addWidget(buttons)
-        dialog.exec()
+        # Modeless, which is what its Apply button is for: adjust a
+        # channel and watch the composite change behind the dialog. It
+        # used to `exec()`, so the image it was adjusting was frozen.
+        self.show_window(dialog, key=f"colour-{frame_type}")
 
     def set_lock_scope(self, scope: str, value: str) -> None:
         """Set lock scope value."""
@@ -1124,10 +1155,48 @@ class FrameController(Controller):
         if flag == "3d":
             self.window.frame_3d.set_locked(enabled)
             return
-        if flag == "bin" and enabled:
-            self.status("Bin-table binning arrives in M5-16; see Lock Block", 3000)
-        elif flag == "block" and enabled:
-            self.match_block()
+        if not enabled:
+            return
+
+        # Turning a lock on takes effect at once, as DS9's does: the other
+        # frames are brought into line now, and `propagate` keeps them
+        # there as the setting changes afterwards. Only `block` did this
+        # before; the other six recorded the flag and never acted on it,
+        # so every one of them was a tick that did nothing.
+        apply_now = {
+            "block": self.match_block,
+            "scale": self.match_scale,
+            "scale_limits": self.match_scale_limits,
+            "colorbar": self.match_colorbar,
+            "axes_order": self.match_axes_order,
+            "bin": self.match_bin,
+            "smooth": self.match_smooth,
+        }.get(flag)
+        if apply_now is not None:
+            apply_now()
+
+    def is_locked(self, flag: str) -> bool:
+        """Whether one Frame -> Lock flag is on."""
+        return bool(self.window._frame_lock_flags.get(flag))
+
+    def propagate(self, flag: str) -> None:
+        """Copy a just-changed setting to the other frames, if it is locked.
+
+        What makes a lock a *lock* rather than a one-off Match: the
+        controllers that own each setting call this after changing it, so
+        the frames stay together instead of drifting apart again.
+        """
+        if not self.is_locked(flag):
+            return
+        matcher = {
+            "block": self.match_block,
+            "scale": self.match_scale,
+            "scale_limits": self.match_scale_limits,
+            "colorbar": self.match_colorbar,
+            "axes_order": self.match_axes_order,
+        }.get(flag)
+        if matcher is not None:
+            matcher()
 
     def block_is_locked(self) -> bool:
         """Whether a block change should be copied to every frame."""
@@ -1312,18 +1381,49 @@ class FrameController(Controller):
     def match_bin(self) -> None:
         """Copy the bin-table binning of this frame to the others.
 
-        DS9's Bin is the table-to-image conversion; nothing here does that
-        yet (M5-16), so this reports rather than copying the block factor,
-        which is what it used to do and which is what `match_block` is for.
+        There is nothing to copy: the bin settings and the bin columns are
+        the *window's* (`bin_settings`, `bin_spec`), not the frame's, so
+        every frame is already binned the same way and matching is
+        satisfied by construction. Said plainly rather than silently doing
+        nothing -- and the message this replaces was worse than silence,
+        since it promised the feature "arrives in M5-16" when DS9's Bin
+        has worked here since that milestone shipped.
         """
         if not self.frames.current_frame:
             self.status("No frame to match", 2000)
             return
-        self.status("Bin-table binning arrives in M5-16; see Match Block", 3000)
+        self.status("Bin settings are shared by every frame, so they always match", 3000)
 
     def match_axes_order(self) -> None:
-        """Match cube axes order across frames."""
-        self.status("Axes order matching is not yet implemented", 2000)
+        """Copy this frame's cube axis order to the others.
+
+        Per-frame, unlike the bin settings, so this is real work: a frame
+        that is not a cube keeps its default order, and one whose new
+        slice axis is shorter has its slice index pulled back inside it.
+        """
+        source = self.frames.current_frame
+        if not source:
+            self.status("No frame to match", 2000)
+            return
+
+        order = source.axis_order
+        matched = 0
+        for frame in self.frames.frames:
+            if frame is source:
+                continue
+            handler = self.cube_handler(frame)
+            if handler is None:
+                continue
+            frame.axis_order = order
+            depth = handler.depth(AxisOrder.parse(order))
+            frame.slice_index = max(0, min(frame.slice_index, depth - 1))
+            matched += 1
+
+        if matched == 0:
+            self.status("No other frame holds a data cube", 3000)
+            return
+        self.update_display()
+        self.status(f"Matched {matched} frame(s) (axis order {order})", 2000)
 
     def match_scale(self) -> None:
         """Match scale functions across frames."""

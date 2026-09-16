@@ -332,7 +332,11 @@ def test_match_bin_no_longer_copies_the_block_factor(main_window):
 
     main_window.frame_controller.match_bin()
     assert second.block_factor == 1
-    assert "M5-16" in main_window.status_bar.currentMessage()
+    # The message no longer names a milestone: DS9's Bin shipped in M5-16
+    # and the promise had gone stale. What it says now is why there is
+    # nothing to copy -- the bin settings are the window's, not the
+    # frame's -- which is the durable reason rather than a date.
+    assert "shared by every frame" in main_window.status_bar.currentMessage()
 
 
 def test_locking_block_propagates_later_changes(main_window):

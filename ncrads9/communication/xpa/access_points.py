@@ -2483,8 +2483,27 @@ def _view(window, args: list[str]) -> str | None:
     return f"view does not know {first}"
 
 
+def _channel_keys(window, frame) -> dict[str, str]:
+    """Every name a channel answers to, mapped to its storage key.
+
+    DS9's own name for the plane (`value` on an HSV frame) and the key it
+    is stored under (`blue`) both work, so a script written for DS9 and
+    one written against this application agree.
+    """
+    from ...ui.display import channel_labels
+
+    keys = tuple(frame.rgb_channels)
+    names = {key.lower(): key for key in keys}
+    for label, key in zip(channel_labels(frame.frame_type), keys, strict=False):
+        names[label.lower()] = key
+    return names
+
+
 def _channel_view(window, channel: str, shown: bool) -> str | None:
     """Show or hide one channel of an RGB, HSV or HLS frame."""
+    frame = window.frame_manager.current_frame
+    if frame is not None and getattr(frame, "rgb_channels", None):
+        channel = _channel_keys(window, frame).get(channel.lower(), channel)
     return window.frame_controller.set_channel_visible(channel, shown)
 
 
@@ -2905,14 +2924,19 @@ def _colour_frame(window, args: list[str], kind: str) -> str | None:
     if frame is None or frame.frame_type != kind:
         found = "no frame" if frame is None else frame.frame_type
         return f"the current frame is {found}, not {kind}"
-    channels = frame.rgb_channels
+    # DS9 names the three planes per colour space -- `hsv value`, `hls
+    # lightness` -- while they are stored under one set of keys. Both
+    # spellings are accepted, since a script written for DS9 uses its
+    # names and one written against our storage uses ours.
+    channels = _channel_keys(window, frame)
 
     if first == "channel":
         if not rest:
             return None
-        if rest[0].lower() not in channels:
-            return f"{rest[0]} is not a channel: {', '.join(channels)}"
-        return controller.set_channel(rest[0].lower())
+        key = channels.get(rest[0].lower())
+        if key is None:
+            return f"{rest[0]} is not a channel: {', '.join(sorted(channels))}"
+        return controller.set_channel(key)
         return None
 
     if first == "view":

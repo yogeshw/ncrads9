@@ -27,6 +27,13 @@ from PyQt6.QtWidgets import QLabel
 
 from .view_transform import DisplayTransform, normalize_rotation
 
+#: The zoom range, which has to cover what the Zoom menu offers -- DS9's
+#: presets run from 1/32 to 32 (`menu_bar.py`). It used to be 0.1 to 20,
+#: so `Zoom 1/32`, `Zoom 1/16` and `Zoom 32` were silently clamped to
+#: something else, and the first two both landed on 0.1.
+MIN_ZOOM = 1.0 / 64.0
+MAX_ZOOM = 64.0
+
 
 class ImageViewer(QLabel):
     """Interactive image viewer with zoom, pan, and contrast/brightness controls."""
@@ -146,17 +153,21 @@ class ImageViewer(QLabel):
 
     def zoom_in(self) -> None:
         """Zoom in by 20%."""
-        self._zoom *= 1.2
-        self._update_display()
+        self.zoom_to(self._zoom * 1.2)
 
     def zoom_out(self) -> None:
         """Zoom out by 20%."""
-        self._zoom /= 1.2
-        self._update_display()
+        self.zoom_to(self._zoom / 1.2)
 
     def zoom_to(self, zoom: float) -> None:
-        """Set specific zoom level."""
-        self._zoom = max(0.1, min(zoom, 20.0))
+        """Set specific zoom level.
+
+        Clamped to the range the Zoom menu actually offers. It used to be
+        0.1 to 20, while the menu offers 1/32 to 32 -- so `Zoom 1/32`,
+        `Zoom 1/16` and `Zoom 32` silently gave a different zoom from the
+        one that was picked, and two of them gave the *same* one.
+        """
+        self._zoom = max(MIN_ZOOM, min(float(zoom), MAX_ZOOM))
         self._update_display()
 
     def zoom_fit(self, container_size: QSize) -> None:
@@ -169,8 +180,7 @@ class ImageViewer(QLabel):
             return
         width_ratio = container_size.width() / display_w
         height_ratio = container_size.height() / display_h
-        self._zoom = min(width_ratio, height_ratio) * 0.95
-        self._update_display()
+        self.zoom_to(min(width_ratio, height_ratio) * 0.95)
 
     def zoom_actual(self) -> None:
         """Zoom to 1:1 (actual size)."""

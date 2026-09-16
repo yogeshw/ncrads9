@@ -173,6 +173,7 @@ class ColorController(Controller):
         if self.window.image_data is not None:
             self.refresh()
             self.status(f"Colormap: {cmap_name}")
+        self.window.frame_controller.propagate("colorbar")
 
     def on_button_bar_colormap(self, label: str) -> None:
         """Select a colormap from a button-bar label."""
@@ -195,6 +196,7 @@ class ColorController(Controller):
         if self.window.image_data is not None:
             self.refresh()
             self.status(f"Colormap {'inverted' if inverted else 'normal'}")
+        self.window.frame_controller.propagate("colorbar")
 
     # -- user colormaps ------------------------------------------------------
 
