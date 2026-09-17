@@ -21,7 +21,7 @@ Author: Yogesh Wadadekar
 """
 
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QEvent, Qt
 from PyQt6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -31,21 +31,20 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..help_documents import stylesheet
+
 
 class HelpContentsDialog(QDialog):
     """Dialog showing help contents."""
 
+    #: The page, without a stylesheet: the colours come from the widget's
+    #: palette at render time. They were written in here -- `#2e3436` text
+    #: and a `#f0f0f0` code background -- which under the dark theme drew
+    #: near-black on near-black. That is the grey-on-grey fault reported for
+    #: the popups, surviving inside one of them because it was in the
+    #: *document* rather than in the widget, where a palette cannot reach it.
     HELP_HTML = """
     <html>
-    <head>
-        <style>
-            body { color: #2e3436; line-height: 1.4; }
-            h1 { color: #2e3436; font-size: 24px; }
-            h2 { color: #204a87; font-size: 18px; margin-top: 20px; }
-            h3 { color: #4e9a06; font-size: 14px; margin-top: 15px; }
-            code { background-color: #f0f0f0; padding: 2px 5px; font-family: monospace; }
-        </style>
-    </head>
     <body>
         <h1>NCRADS9 Help</h1>
 
@@ -181,10 +180,10 @@ class HelpContentsDialog(QDialog):
         layout = QVBoxLayout()
 
         # Help browser
-        browser = QTextBrowser()
-        browser.setHtml(self.HELP_HTML)
-        browser.setOpenExternalLinks(True)
-        layout.addWidget(browser)
+        self.browser = QTextBrowser()
+        self.browser.setOpenExternalLinks(True)
+        layout.addWidget(self.browser)
+        self.refresh()
 
         # Buttons
         button_layout = QHBoxLayout()
@@ -196,3 +195,19 @@ class HelpContentsDialog(QDialog):
 
         layout.addLayout(button_layout)
         self.setLayout(layout)
+
+    def refresh(self) -> None:
+        """Render the page in the colours currently in force."""
+        body = self.HELP_HTML
+        for marker in ("<html>", "</html>", "<body>", "</body>"):
+            body = body.replace(marker, "")
+        self.browser.setHtml(
+            f"<html><head><style>{stylesheet(self.browser.palette())}</style>"
+            f"</head><body>{body}</body></html>"
+        )
+
+    def changeEvent(self, event: QEvent | None) -> None:
+        """Re-render when the theme changes under an open window."""
+        super().changeEvent(event)
+        if event is not None and event.type() == QEvent.Type.PaletteChange:
+            self.refresh()

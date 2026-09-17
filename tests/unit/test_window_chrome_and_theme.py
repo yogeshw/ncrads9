@@ -122,6 +122,7 @@ def _dialogs(window):
     from ncrads9.colormaps.color_tags import ColorTag
     from ncrads9.image_servers.servers import SERVERS
     from ncrads9.regions.shapes.circle import Circle
+    from ncrads9.ui import help_documents
     from ncrads9.ui.dialogs import (
         analysis_text_dialog,
         array_dialog,
@@ -139,6 +140,7 @@ def _dialogs(window):
         group_dialog,
         header_dialog,
         help_contents_dialog,
+        help_document_dialog,
         histogram_dialog,
         illustrate_dialog,
         image_server_dialog,
@@ -185,6 +187,10 @@ def _dialogs(window):
     yield "GroupDialog", group_dialog.GroupDialog([region], window)
     yield "HeaderDialog", header_dialog.HeaderDialog(header, window)
     yield "HelpContentsDialog", help_contents_dialog.HelpContentsDialog(window)
+    yield (
+        "HelpDocumentDialog",
+        help_document_dialog.HelpDocumentDialog(help_documents.BY_NAME["faq"], window),
+    )
     yield "HistogramDialog", histogram_dialog.HistogramDialog(data, window)
     yield "IllustrateDialog", illustrate_dialog.IllustrateDialog(window.illustrate, window)
     yield "ImageServerDialog", image_server_dialog.ImageServerDialog(SERVERS[0], (10.0, 20.0), window)
