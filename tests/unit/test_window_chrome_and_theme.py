@@ -268,6 +268,26 @@ def test_a_popup_is_not_modal_so_the_image_stays_usable(window, quiet):
 # -- every popup follows the theme -------------------------------------------------
 
 
+def _restyle(qapp, theme: str) -> None:
+    """Apply a theme with the dead widgets actually gone first.
+
+    Applying one walks *every* live widget, and a QWidget that Python has
+    dropped but Qt has not yet deleted is still live. With enough of them
+    left over from other test files this crashes Qt outright -- an
+    order-dependent segfault rather than a failure, which is the worst
+    kind to chase.
+    """
+    import gc
+
+    from ncrads9.ui.controllers.edit import THEMES
+
+    gc.collect()
+    qapp.processEvents()
+    qapp.sendPostedEvents(None, 0)
+    THEMES[theme].apply(qapp)
+    qapp.processEvents()
+
+
 @pytest.mark.parametrize("theme", ["Light", "Dark"])
 def test_every_popup_is_readable_under_each_theme(window, quiet, qapp, theme):
     """The gate for the second fault.
@@ -276,9 +296,7 @@ def test_every_popup_is_readable_under_each_theme(window, quiet, qapp, theme):
     colour it will draw with. Under Dark this measured a gap of 27 --
     light grey text on Qt's default light grey ground.
     """
-    from ncrads9.ui.controllers.edit import THEMES
-
-    THEMES[theme].apply(qapp)
+    _restyle(qapp, theme)
     try:
         unreadable = []
         for name, dialog in _dialogs(window):
@@ -293,18 +311,17 @@ def test_every_popup_is_readable_under_each_theme(window, quiet, qapp, theme):
             if gap < MINIMUM_LUMA_GAP:
                 unreadable.append(f"{name}: background {background} vs text {text}, gap {gap:.0f}")
             dialog.close()
+            dialog.deleteLater()
         assert unreadable == [], "\n".join(unreadable)
     finally:
-        THEMES["System"].apply(qapp)
+        _restyle(qapp, "System")
 
 
 def test_the_dark_theme_darkens_a_dialog_not_only_the_main_window(qapp):
     """The bug in one line: `QMainWindow` was styled and nothing else was."""
     from PyQt6.QtWidgets import QDialog
 
-    from ncrads9.ui.controllers.edit import THEMES
-
-    THEMES["Dark"].apply(qapp)
+    _restyle(qapp, "Dark")
     try:
         dialog = QDialog()
         window_colour = dialog.palette().color(QPalette.ColorRole.Window)
@@ -313,14 +330,13 @@ def test_the_dark_theme_darkens_a_dialog_not_only_the_main_window(qapp):
         ), f"a dialog under Dark should be dark, not {window_colour.name()}"
         dialog.close()
     finally:
-        THEMES["System"].apply(qapp)
+        _restyle(qapp, "System")
 
 
 def test_the_system_theme_keeps_the_desktops_own_colours(qapp):
     """What System means. Ubuntu's dark mode is the desktop's palette, not
     one of ours, so System must restore it rather than impose a palette --
     and must restore it after Dark has replaced it."""
-    from ncrads9.ui.controllers.edit import THEMES
 
     desktop = palettes.build(
         window="#353535",
@@ -342,18 +358,18 @@ def test_the_system_theme_keeps_the_desktops_own_colours(qapp):
     qapp.setProperty(palettes.DESKTOP_PALETTE_PROPERTY, None)
     qapp.setPalette(desktop)
     try:
-        THEMES["System"].apply(qapp)
+        _restyle(qapp, "System")
         assert palettes.is_dark(qapp.palette()), "System on a dark desktop stays dark"
 
-        THEMES["Dark"].apply(qapp)
-        THEMES["System"].apply(qapp)
+        _restyle(qapp, "Dark")
+        _restyle(qapp, "System")
         assert (
             qapp.palette().color(QPalette.ColorRole.Window).name() == "#353535"
         ), "System must put the desktop's own colours back, not Dark's or Fusion's"
     finally:
         qapp.setProperty(palettes.DESKTOP_PALETTE_PROPERTY, None)
         qapp.setPalette(original)
-        THEMES["System"].apply(qapp)
+        _restyle(qapp, "System")
 
 
 def test_a_palette_sets_the_disabled_colours_too(qapp):
@@ -385,10 +401,9 @@ def test_is_dark_reads_brightness_not_a_single_channel():
 def test_a_matplotlib_figure_follows_the_theme(window, quiet, qapp, theme):
     """A `Figure` knows nothing about Qt: left alone it draws on white with
     black text, so in a dark window every plot was a bright panel."""
-    from ncrads9.ui.controllers.edit import THEMES
     from ncrads9.ui.dialogs.histogram_dialog import HistogramDialog
 
-    THEMES[theme].apply(qapp)
+    _restyle(qapp, theme)
     try:
         data = window.frame_manager.current_frame.image_data
         dialog = HistogramDialog(data, window)
@@ -405,7 +420,7 @@ def test_a_matplotlib_figure_follows_the_theme(window, quiet, qapp, theme):
         finally:
             dialog.close()
     finally:
-        THEMES["System"].apply(qapp)
+        _restyle(qapp, "System")
 
 
 def test_the_plot_helper_reads_the_widgets_palette(qapp):
