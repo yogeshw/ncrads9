@@ -21,7 +21,7 @@ Author: Yogesh Wadadekar
 """
 
 
-from PyQt6.QtCore import QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QMouseEvent, QPixmap, QWheelEvent
 from PyQt6.QtWidgets import QScrollArea, QVBoxLayout, QWidget
 
@@ -91,6 +91,11 @@ class ImageViewerWithRegions(QWidget):
         self.region_overlay.region_created.connect(self.region_created)
         self.region_overlay.region_activated.connect(self.region_activated)
         self.region_overlay.region_selected.connect(self.region_selected)
+
+        # The inner viewer resizes *itself* when the image or the zoom
+        # changes, and the overlays are sized from its geometry, so the
+        # wrapper has to hear about it.
+        self.image_viewer.installEventFilter(self)
 
         # Start in non-interactive mode so mouse events reach the image viewer
         self.set_region_mode(RegionMode.NONE)
@@ -171,27 +176,27 @@ class ImageViewerWithRegions(QWidget):
     def zoom_in(self) -> None:
         """Zoom in."""
         self.image_viewer.zoom_in()
-        self._update_overlay_transform()
+        self._update_overlay_geometry()
 
     def zoom_out(self) -> None:
         """Zoom out."""
         self.image_viewer.zoom_out()
-        self._update_overlay_transform()
+        self._update_overlay_geometry()
 
     def zoom_to(self, zoom: float) -> None:
         """Set specific zoom level."""
         self.image_viewer.zoom_to(zoom)
-        self._update_overlay_transform()
+        self._update_overlay_geometry()
 
     def zoom_fit(self, viewport_size: QSize) -> None:
         """Zoom to fit viewport."""
         self.image_viewer.zoom_fit(viewport_size)
-        self._update_overlay_transform()
+        self._update_overlay_geometry()
 
     def zoom_actual(self) -> None:
         """Zoom to 1:1."""
         self.image_viewer.zoom_actual()
-        self._update_overlay_transform()
+        self._update_overlay_geometry()
 
     def set_view_transform(self, rotation: float, flip_x: bool, flip_y: bool) -> None:
         """Set display rotation and flip state."""
@@ -199,7 +204,9 @@ class ImageViewerWithRegions(QWidget):
         self._flip_x = flip_x
         self._flip_y = flip_y
         self.image_viewer.set_view_transform(rotation, flip_x, flip_y)
-        self._update_overlay_transform()
+        # A quarter turn swaps the viewer's width and height, so the
+        # overlays need resizing, not only re-transforming.
+        self._update_overlay_geometry()
 
     def get_display_image_size(self) -> tuple[int, int]:
         """Get display image size after orientation/rotation."""
@@ -230,7 +237,16 @@ class ImageViewerWithRegions(QWidget):
         self.image_viewer.setStyleSheet(f"background-color: {color_hex};")
 
     def _update_overlay_geometry(self) -> None:
-        """Update region overlay geometry to match image viewer."""
+        """Size every overlay to the inner viewer, and refresh its transform.
+
+        The viewer resizes itself whenever the image or the zoom changes,
+        and the overlays are sized from it -- so anything that changes
+        either has to come through here. Calling only
+        `_update_overlay_transform` updates the zoom and the offset but
+        leaves the overlay its old *size*, which is how regions, contours,
+        catalogue symbols and illustrations came to be clipped to the
+        widget's 100x100 minimum until the window was next resized.
+        """
         self.region_overlay.setGeometry(self.image_viewer.geometry())
         self.contour_overlay.setGeometry(self.image_viewer.geometry())
         self.catalog_overlay.setGeometry(self.image_viewer.geometry())
@@ -280,10 +296,30 @@ class ImageViewerWithRegions(QWidget):
         super().resizeEvent(event)
         self._update_overlay_geometry()
 
+    def eventFilter(self, watched, event) -> bool:
+        """Follow the inner viewer's own resizes.
+
+        The overlays are sized from `image_viewer.geometry()`, and the
+        inner viewer resizes *itself* -- `_update_display` calls `resize`
+        whenever the image or the zoom changes. Nothing told the wrapper,
+        so the overlays kept whatever geometry they had when the window
+        was last resized: after loading an image they sat at the widget's
+        100x100 minimum while the viewer was eight hundred pixels wide,
+        and every region, contour, catalogue symbol and illustration was
+        clipped to that corner.
+
+        Never consumes the event.
+        """
+        if watched is self.image_viewer and event is not None:
+            if event.type() in (QEvent.Type.Resize, QEvent.Type.Move):
+                self._update_overlay_geometry()
+        return False
+
     def wheelEvent(self, event: QWheelEvent) -> None:
         """Forward wheel events to image viewer."""
+        # The wheel zooms, which resizes the viewer.
         self.image_viewer.wheelEvent(event)
-        self._update_overlay_transform()
+        self._update_overlay_geometry()
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Handle mouse press - check for middle button center."""
