@@ -50,6 +50,7 @@ from ...regions.region_formats import RegionFormat, dropped_shapes
 from ...regions.region_parser import RegionParser
 from ...regions.region_writer import RegionWriter
 from ...regions.shapes.composite import Composite
+from ...regions.shapes.point import Point
 from ..dialogs.centroid_dialog import CentroidDialog
 from ..dialogs.group_dialog import GroupDialog
 from ..dialogs.region_analysis_dialog import RegionPlotDialog, RegionStatisticsDialog
@@ -65,13 +66,35 @@ from .base import Controller
 
 #: Mode -> the name the status bar and button bar show. Read off the Shape
 #: cascade so a shape cannot be offered under one name and reported under
-#: another; the ampersands are the menu's accelerator marks.
-MODE_LABELS: dict[RegionMode, str] = {RegionMode.NONE: "None"} | {
+#: another; the ampersands are the menu's accelerator marks. Point is named
+#: here rather than read off the table, because the cascade names its seven
+#: symbols instead of the mode.
+MODE_LABELS: dict[RegionMode, str] = {RegionMode.NONE: "None", RegionMode.POINT: "Point"} | {
     RegionMode(name): label.replace("&", "") for name, label in REGION_SHAPES
 }
 
-#: Button-bar label -> region mode. The button bar has no Point button.
+#: Button-bar label -> region mode.
 LABEL_MODES: dict[str, RegionMode] = {label: mode for mode, label in MODE_LABELS.items()}
+
+
+def _point_symbol(name: str) -> str | None:
+    """The point symbol a DS9 shape name asks for, or None if it is not one.
+
+    DS9 spells these `circle point`, `boxcircle point` and so on, and a
+    script may write them with or without the space. `point` on its own is
+    not one: it names the mode and leaves the symbol alone. Nor is `circle`
+    or `box`, which are whole shapes of their own -- only the compound is a
+    point.
+    """
+    cleaned = str(name).strip().lower()
+    for separator in (" ", ""):
+        suffix = f"{separator}point"
+        if cleaned.endswith(suffix):
+            symbol = cleaned[: -len(suffix)].strip()
+            if symbol in Point.SHAPES:
+                return symbol
+    return None
+
 
 REGION_FILTER = "Region Files (*.reg);;All Files (*)"
 
@@ -136,6 +159,8 @@ class RegionController(Controller):
 
         for name, action in menu.region_shape_actions.items():
             action.triggered.connect(lambda _checked=False, key=name: self.set_shape(key))
+        for name, action in menu.region_point_shape_actions.items():
+            action.triggered.connect(lambda _checked=False, key=name: self.set_point_shape(key))
         menu.action_region_none.triggered.connect(lambda: self.set_mode(RegionMode.NONE))
 
         for name, action in menu.region_color_actions.items():
@@ -144,6 +169,14 @@ class RegionController(Controller):
             action.triggered.connect(lambda _checked=False, key=value: self.set_width(key))
         for name, action in menu.region_property_actions.items():
             action.toggled.connect(lambda state, key=name: self.set_property(key, state))
+        # A radio pair reports through `triggered`: `toggled` fires on the
+        # action being *unchecked* as well, so both halves would answer one
+        # click and the second would undo the first.
+        for attribute, pair in menu.region_either_or_actions.items():
+            for value, action in pair.items():
+                action.triggered.connect(
+                    lambda _checked=False, key=attribute, state=value: self.set_property(key, state)
+                )
         for family, action in menu.region_font_actions.items():
             action.triggered.connect(lambda _checked=False, key=family: self.set_font_family(key))
         for size, action in menu.region_font_size_actions.items():
@@ -156,6 +189,7 @@ class RegionController(Controller):
         menu.action_region_save.triggered.connect(self.save_regions)
         menu.action_region_list.triggered.connect(self.list_regions)
         menu.action_region_delete_all.triggered.connect(self.clear_regions)
+        menu.action_region_delete_all_and_load.triggered.connect(self.delete_all_and_load_regions)
 
         # Through a lambda: `triggered` hands its `checked` bool to the
         # first argument, which would arrive as the region to show.
@@ -188,13 +222,41 @@ class RegionController(Controller):
     def set_shape(self, name: str) -> None:
         """Choose the shape the next drag draws.
 
+        Also accepts DS9's names for the seven point symbols -- `diamond
+        point`, `boxcirclepoint` and the rest -- which is how a script names
+        a point, since DS9 has no plain `point` in its Shape cascade either.
+
         Args:
-            name: A key of `MenuBar.region_shape_actions`.
+            name: A key of `MenuBar.region_shape_actions`, or one of DS9's
+                point-symbol names.
         """
+        symbol = _point_symbol(name)
+        if symbol is not None:
+            self.set_point_shape(symbol)
+            return
         try:
             self.set_mode(RegionMode(name))
         except ValueError:
             self.status(f"Unknown region shape: {name}", 3000)
+
+    def set_point_shape(self, symbol: str) -> None:
+        """Arm point mode, drawing points with one of DS9's seven symbols.
+
+        The symbol is `Point.shape`, and it is stored as the `shape` default
+        -- which reaches new points through `apply_defaults` and no other
+        region, since `Point` is the only shape with a `shape` attribute.
+
+        Args:
+            symbol: One of `Point.SHAPES`.
+        """
+        if symbol not in Point.SHAPES:
+            self.status(f"Unknown point shape: {symbol}", 3000)
+            return
+        self.defaults["shape"] = symbol
+        for region in self.selection():
+            region.shape = symbol
+        self.set_mode(RegionMode.POINT)
+        self.status(f"Region mode: {symbol} point")
 
     def set_mode(self, mode: RegionMode) -> None:
         """Set the shape the next drag will draw."""
@@ -829,8 +891,18 @@ class RegionController(Controller):
 
     # -- file operations -----------------------------------------------------
 
-    def load_regions(self) -> None:
-        """Load a DS9 region file into the current frame."""
+    def load_regions(self, replace: bool = False) -> None:
+        """Open a DS9 region file, adding its regions to the current frame.
+
+        Adding, not replacing, which is what DS9's `Region -> Open` does --
+        and is why DS9 has a second entry for the other behaviour. This
+        replaced, so opening a second file silently threw away the first
+        one's regions and there was no way to load two files at once.
+
+        Args:
+            replace: Delete the frame's regions first, as DS9's `Delete All
+                and Open` does.
+        """
         filepath, _ = QFileDialog.getOpenFileName(self.window, "Load Region File", "", REGION_FILTER)
         if not filepath:
             return
@@ -842,9 +914,15 @@ class RegionController(Controller):
 
         frame = self.frame
         if frame is not None:
-            frame.regions = regions
+            kept = [] if replace else list(frame.regions)
+            with self.window.undo.regions(f"Open {Path(filepath).name}"):
+                frame.regions = kept + list(regions)
             self.show_frame_regions(frame)
         self.status(f"Loaded {len(regions)} regions from {filepath}", 3000)
+
+    def delete_all_and_load_regions(self) -> None:
+        """DS9's `Delete All and Open`: the frame's regions, then a file."""
+        self.load_regions(replace=True)
 
     def load_file(self, filepath: str, append: bool = False) -> str | None:
         """Load a region file without asking, as XPA's `region load` does.

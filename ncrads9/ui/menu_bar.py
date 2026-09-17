@@ -31,17 +31,27 @@ from ..colormaps.bundled import CATEGORIES, colormap_label
 from ..core.bin_table import BUFFER_SIZES, DEFAULT_BUFFER_SIZE
 from ..image_servers.servers import SERVERS as IMAGE_SERVERS
 from ..regions.region_template import bundled_templates
+from .help_documents import BY_NAME as HELP_BY_NAME
 from .layout.view_state import DEFAULT_INFO_FIELDS, WCS_SUFFIXES
 
 #: The shapes the Region menu's Shape cascade offers, in DS9's order. Every
 #: one of DS9's nineteen descriptions except Composite, which has a cascade
 #: of its own, and Text, which is created by typing rather than dragging.
+#:
+#: Point is absent here and has a cascade of its own -- `REGION_POINT_SHAPES`
+#: -- because a point has no size to drag out, only a symbol, and DS9 picks
+#: the symbol at the same moment it arms the mode.
+#:
+#: The three composite names are DS9's own words. They were `Ellipse
+#: Annulus`, `Epanda` and `Bpanda`, which is how the region *file format*
+#: spells them; DS9's menu says `Elliptical Annulus`, `Elliptical Panda` and
+#: `Box Panda`, and the menu is what a person reads. The keys are unchanged,
+#: so region files and XPA are unaffected.
 REGION_SHAPES: tuple[tuple[str, str], ...] = (
     ("circle", "&Circle"),
     ("ellipse", "&Ellipse"),
     ("box", "&Box"),
     ("polygon", "&Polygon"),
-    ("point", "Poi&nt"),
     ("line", "&Line"),
     ("vector", "&Vector"),
     ("segment", "Se&gment"),
@@ -50,11 +60,24 @@ REGION_SHAPES: tuple[tuple[str, str], ...] = (
     ("compass", "Co&mpass"),
     ("projection", "Pro&jection"),
     ("annulus", "&Annulus"),
-    ("ellipseannulus", "Ellipse Ann&ulus"),
+    ("ellipseannulus", "Ellip&tical Annulus"),
     ("boxannulus", "Box Annul&us"),
     ("panda", "Pa&nda"),
-    ("epanda", "Epa&nda"),
-    ("bpanda", "Bpand&a"),
+    ("epanda", "Elliptical &Panda"),
+    ("bpanda", "Bo&x Panda"),
+)
+
+#: The symbols a point region can be drawn with, in DS9's order
+#: (`.region.shape.point`). These are `Point.SHAPES`, and choosing one both
+#: arms point mode and becomes the symbol new points are drawn with.
+REGION_POINT_SHAPES: tuple[tuple[str, str], ...] = (
+    ("circle", "&Circle"),
+    ("box", "&Box"),
+    ("diamond", "&Diamond"),
+    ("cross", "C&ross"),
+    ("x", "&X"),
+    ("arrow", "&Arrow"),
+    ("boxcircle", "Box&Circle"),
 )
 
 #: The archive web links DS9's Archives menu offers, grouped as it groups
@@ -137,17 +160,43 @@ ILLUSTRATE_SHAPES: tuple[str, ...] = (
 DEFAULT_ILLUSTRATE_COLOR = "cyan"
 
 #: DS9's Region -> Properties cascade: the flags a region carries, with the
-#: value a new region takes.
-REGION_PROPERTIES: tuple[tuple[str, str, bool], ...] = (
+#: value a new region takes. `None` as the name is a separator, so this table
+#: also carries DS9's grouping.
+#:
+#: The four permissions are DS9's own words. They read `Edit`, `Move`,
+#: `Rotate` and `Delete` here, which in a menu of verbs looks like four
+#: commands -- `Delete` next to the menu's real `Delete All` especially. They
+#: are permissions, and `Can Delete` says so.
+#:
+#: `Dash` and `Fill` are ours; DS9 has no counterpart (PLAN.md section 7).
+REGION_PROPERTIES: tuple[tuple[str | None, str, bool], ...] = (
     ("fixed", "Fi&xed in Size", False),
-    ("can_edit", "&Edit", True),
-    ("can_move", "&Move", True),
-    ("can_rotate", "&Rotate", True),
-    ("can_delete", "&Delete", True),
-    ("include", "&Include", True),
-    ("source", "&Source", True),
+    (None, "", False),
+    ("can_edit", "Can &Edit", True),
+    ("can_move", "Can &Move", True),
+    ("can_rotate", "Can &Rotate", True),
+    ("can_delete", "Can &Delete", True),
+)
+
+#: The two NCRADS9 adds, kept after DS9's own so DS9's cascade reads
+#: unbroken and the divergence is visibly at the end rather than in the
+#: middle of it.
+REGION_EXTRA_PROPERTIES: tuple[tuple[str, str, bool], ...] = (
     ("dash", "Das&h", False),
     ("fill", "&Fill", False),
+)
+
+#: DS9's two either-or properties, each a radio pair rather than one check
+#: box. They were single check boxes called `Include` and `Source`, so the
+#: other half of each pair -- `Exclude`, the `-` prefix in a region file, and
+#: `Background`, which is `background` rather than `source=1` -- had no menu
+#: entry at all and no name on screen. A pair also says what unchecking
+#: means, which one box does not.
+#:
+#: Each entry is (attribute, (label, value), (label, value)).
+REGION_EITHER_OR: tuple[tuple[str, tuple[str, bool], tuple[str, bool]], ...] = (
+    ("include", ("&Include", True), ("&Exclude", False)),
+    ("source", ("&Source", True), ("Back&ground", False)),
 )
 
 #: The fonts DS9's Region -> Font cascade offers, and its defaults.
@@ -1527,7 +1576,9 @@ class MenuBar(QMenuBar):
 
         Shape is a cascade in DS9 and a flat list here, because NCRADS9's
         shape list is also what the button bar shows and a cascade would put
-        every shape two clicks away.
+        every shape two clicks away. Point keeps its own cascade, as DS9 has
+        it: a point has no size to drag out, only a symbol, and the symbol is
+        chosen in the same gesture that arms the mode.
         """
         self.region_menu: QMenu = self.addMenu("&Region")
 
@@ -1549,6 +1600,18 @@ class MenuBar(QMenuBar):
             self.region_shape_menu.addAction(action)
             self.region_shape_actions[name] = action
             setattr(self, f"action_region_{name}", action)
+
+        #: Point symbol -> its action. In the same exclusive group as the
+        #: shapes above, so choosing a symbol unchecks whatever shape was
+        #: armed, and choosing a shape unchecks the symbol.
+        self.region_point_menu: QMenu = self.region_shape_menu.addMenu("Poi&nt")
+        self.region_point_shape_actions: dict[str, QAction] = {}
+        for name, label in REGION_POINT_SHAPES:
+            action = QAction(label, self)
+            action.setCheckable(True)
+            shape_group.addAction(action)
+            self.region_point_menu.addAction(action)
+            self.region_point_shape_actions[name] = action
 
         # The six shapes the button bar and toolbar already reach by name.
         self.action_region_none: QAction = QAction("&None", self)
@@ -1602,9 +1665,40 @@ class MenuBar(QMenuBar):
             self.region_width_actions[value] = action
 
         self.region_properties_menu: QMenu = self.region_menu.addMenu("&Properties")
-        #: Property name -> its action.
+        #: Property name -> its action, for the flags that are simply on or
+        #: off. The either-or pair below is kept separate because one of its
+        #: two actions being checked is not the same question.
         self.region_property_actions: dict[str, QAction] = {}
         for name, label, default in REGION_PROPERTIES:
+            if name is None:
+                self.region_properties_menu.addSeparator()
+                continue
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(default)
+            self.region_properties_menu.addAction(action)
+            self.region_property_actions[name] = action
+
+        #: Attribute -> {value -> action} for DS9's two either-or properties.
+        #: Each pair is its own exclusive group, so include and exclude
+        #: cannot both be checked and neither can be left unchecked.
+        self.region_either_or_actions: dict[str, dict[bool, QAction]] = {}
+        for attribute, (on_label, on_value), (off_label, off_value) in REGION_EITHER_OR:
+            self.region_properties_menu.addSeparator()
+            group = QActionGroup(self)
+            group.setExclusive(True)
+            pair: dict[bool, QAction] = {}
+            for label, value in ((on_label, on_value), (off_label, off_value)):
+                action = QAction(label, self)
+                action.setCheckable(True)
+                action.setChecked(value)
+                group.addAction(action)
+                self.region_properties_menu.addAction(action)
+                pair[value] = action
+            self.region_either_or_actions[attribute] = pair
+
+        self.region_properties_menu.addSeparator()
+        for name, label, default in REGION_EXTRA_PROPERTIES:
             action = QAction(label, self)
             action.setCheckable(True)
             action.setChecked(default)
@@ -1672,8 +1766,13 @@ class MenuBar(QMenuBar):
         self.action_region_list: QAction = QAction("&List", self)
         self.region_menu.addAction(self.action_region_list)
 
+        self.region_menu.addSeparator()
+
         self.action_region_delete_all: QAction = QAction("&Delete All", self)
         self.region_menu.addAction(self.action_region_delete_all)
+
+        self.action_region_delete_all_and_load: QAction = QAction("Delete All and &Open...", self)
+        self.region_menu.addAction(self.action_region_delete_all_and_load)
 
         self.region_menu.addSeparator()
 
@@ -2078,8 +2177,41 @@ class MenuBar(QMenuBar):
         self.analysis_menu.addAction(self.action_clear_analysis_commands)
 
     def _setup_help_menu(self) -> None:
-        """Set up the Help menu."""
+        """Set up the Help menu.
+
+        DS9's eight entries (`ds9/library/mhelp.tcl`) in DS9's order and
+        DS9's grouping, then NCRADS9's own four. Every one of the eight was
+        missing: the menu offered Contents, Keyboard Shortcuts and two About
+        boxes, so a user arriving from DS9 found nothing under a name they
+        knew. What each opens is in `ncrads9/ui/help_documents.py`.
+        """
         self.help_menu: QMenu = self.addMenu("&Help")
+
+        #: Document name -> its action, so the Help controller can wire them
+        #: in one loop and a guard test can check none is left unconnected.
+        self.help_document_actions: dict[str, QAction] = {}
+        for group in (("reference_manual", "user_manual"), ("faq", "release_notes", "help_desk")):
+            for name in group:
+                document = HELP_BY_NAME[name]
+                action = QAction(document.label, self)
+                self.help_menu.addAction(action)
+                self.help_document_actions[name] = action
+            self.help_menu.addSeparator()
+
+        for name in ("story", "acknowledgment"):
+            document = HELP_BY_NAME[name]
+            action = QAction(document.label, self)
+            self.help_menu.addAction(action)
+            self.help_document_actions[name] = action
+
+        self.help_menu.addSeparator()
+
+        about_ds9 = HELP_BY_NAME["about_ds9"]
+        self.action_about_ds9: QAction = QAction(about_ds9.label, self)
+        self.help_menu.addAction(self.action_about_ds9)
+        self.help_document_actions["about_ds9"] = self.action_about_ds9
+
+        self.help_menu.addSeparator()
 
         self.action_help_contents: QAction = QAction("&Contents", self)
         self.action_help_contents.setShortcut(QKeySequence.StandardKey.HelpContents)

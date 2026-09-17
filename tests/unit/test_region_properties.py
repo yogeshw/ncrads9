@@ -207,7 +207,7 @@ def main_window(qapp, monkeypatch):
 
 
 def test_the_shape_cascade_offers_every_drawable_shape(main_window):
-    assert len(REGION_SHAPES) == 18
+    assert len(REGION_SHAPES) == 17
     for name, _label in REGION_SHAPES:
         assert name in main_window.menu_bar.region_shape_actions
 
@@ -264,7 +264,10 @@ def test_the_defaults_reach_a_newly_drawn_region(main_window):
     assert drawn.width == 3
 
 
-@pytest.mark.parametrize(("name", "_label", "_default"), REGION_PROPERTIES)
+@pytest.mark.parametrize(
+    ("name", "_label", "_default"),
+    [row for row in REGION_PROPERTIES if row[0] is not None],
+)
 def test_every_property_flag_is_offered(main_window, name, _label, _default):
     action = main_window.menu_bar.region_property_actions[name]
     action.setChecked(not action.isChecked())
