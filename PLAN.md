@@ -623,6 +623,13 @@ Kept as modern-UX improvements; documented so they are not mistaken for gaps:
 - **Mosaic resampling is nearest-neighbour**, so a mosaic is a display aid and conserves no flux.
   DS9 resamples too; anyone wanting a photometric mosaic should use `reproject` or SWarp and load
   the result.
+- **A preference to turn detachable menus off** (`Menus and Buttons` -> `Detachable menus`,
+  on by default). DS9's tear-offs are simply always there; ours can be switched off, because the
+  dashed line across the top of every menu is a visible change and somebody will not want it.
+- **A detached menu is an ordinary window, not a `Tool`.** Qt's own torn-off menus are
+  `Qt.WindowType.Tool`, which is always kept above its parent -- the same complaint that was
+  made about the popups. DS9's tear-offs are plain Tk toplevels, so ours are plain windows: they
+  can be moved *and* pushed behind the image.
 - **DS9's eight Help entries open NCRADS9's own documents**, not DS9's manual, which describes a
   different program. Two are generated rather than written -- the Reference Manual from the XPA
   access-point table and the Release Notes from the package version -- so they cannot fall behind

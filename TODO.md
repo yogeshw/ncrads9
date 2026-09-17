@@ -1431,6 +1431,46 @@ Depends on M2, M3.
       A grab needs a viewport, so a window that was never shown (which is how the printing
       tests drive it) still falls back to the rendered array, and an OpenGL frame that a driver
       hands back as a flat rectangle does too.
+      **Detachable menus, as DS9 has them** (`ncrads9/ui/tearoff.py`,
+      `tests/unit/test_tearoff_menus.py`). Every DS9 menu and submenu carries a dashed line at
+      the top; clicking it tears the menu off into a window that stays open, which turns a menu
+      worked through repeatedly -- Scale, Colormap, Region -> Shape -- into a panel beside the
+      image. NCRADS9 had nothing of the kind.
+      Qt can already do it: `QMenu.setTearOffEnabled`, and the torn-off copy shares the source
+      menu's `QAction` objects rather than duplicating them, so choosing an item works and a
+      checkable item stays in step without any syncing of ours. So this is not a
+      reimplementation; the work was in two places.
+      *Asking every menu.* Walked rather than listed, so a submenu added later is detachable
+      with no line anywhere -- 102 menus under the main window. The tool windows needed a second
+      route: they are dialogs that keep a `QMenuBar` in their layout rather than windows with a
+      `menuBar()`, so a walk that only asked `menuBar()` skipped every one of them in silence.
+      Both are looked for now. And rather than a call in each of the six tool windows that build
+      a menu bar -- the seventh would have been written without it -- one watcher on the
+      `QApplication` walks each window as it is first shown.
+      *The window Qt hands back.* Qt makes a torn-off menu a `Qt.WindowType.Tool`, and a tool
+      window with a parent is **always kept above it**. That is exactly the fault reported for
+      the popups -- a window that floats over the image and cannot be sent behind -- arriving
+      again by a different route, and DS9's own tear-offs are plain Tk toplevels that can go
+      behind. Each one is re-flagged into an ordinary window as it appears, and titled
+      `NCRADS9 -- <menu>`, since `Shape` alone says nothing in a window list. The re-flagging is
+      deferred to the next turn of the event loop rather than done inside the show event:
+      `setWindowFlags` hides and re-shows the widget, and doing that to a widget in the middle
+      of being shown is the kind of surgery on Qt's own dispatch that the theme-apply crash was.
+      A preference (`Menus and Buttons` -> `Detachable menus`, on as DS9 is) turns it off, and
+      turning it off also puts away any menu already detached -- the window would otherwise
+      outlive the setting that allowed it. Ours rather than DS9's, which simply always has them;
+      a dashed line across the top of every menu is a visible change and somebody will not want
+      it.
+      The watcher lives on `EditController`, not on the window: `MainWindow` is held to 600
+      lines by a ratchet whose own message says new behaviour belongs in a controller, and the
+      nine lines here took it to 604. The controller that owns the preference is the right
+      owner anyway, and `dialog_translator` is there for the same reason.
+      Gated on all of it, including the parts that are Qt's guarantee rather than ours: if the
+      torn-off copy ever stopped sharing the original actions, the menus would look right and do
+      nothing. Also on readability under each theme, measured off rendered pixels, because a
+      detached menu is a separate toplevel and the popup gate walks a list that cannot include
+      it. Three of the gates fail without the re-flagging and one without the tool-window walk.
+      No effect on menu parity: a tear-off handle is not a menu entry.
       **The Region menu's fifteen missing entries, and the Help menu's eight**
       (`tests/unit/test_region_menu_parity.py`, `tests/unit/test_help_menu.py`). Menu parity was
       92%; the two weakest menus were Region at 78% and Help at 0%. Both are now 100%, and the

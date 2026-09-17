@@ -192,6 +192,15 @@ PREFERENCES: tuple[Preference, ...] = (
     # -- Menus and Buttons (`PrefsDialogMenu`) ------------------------------
     _preference("buttons_visible", "Menus and Buttons", "Show the button bar", "bool", True),
     _preference("icons_visible", "Menus and Buttons", "Show the icon bar", "bool", False),
+    _preference(
+        "menu_tearoff",
+        "Menus and Buttons",
+        "Detachable menus",
+        "bool",
+        True,
+        note="DS9's tear-off menus: click the dashed line at the top of a menu to keep it "
+        "open in a window of its own. On, as it is in DS9.",
+    ),
     # -- Panner and Magnifier -----------------------------------------------
     _preference("panner_compass", "Panner", "Show the compass", "bool", True),
     _preference("panner_wcs_compass", "Panner", "Show the WCS compass", "bool", True),

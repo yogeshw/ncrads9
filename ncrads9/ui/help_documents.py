@@ -243,6 +243,16 @@ Export</b> writes the data instead, and <b>File &rarr; Print</b> sends the
 view to a printer or a PostScript file. <b>File &rarr; Backup</b> saves the
 whole session, frames and all, to be restored later.</p>
 
+<h2>Keeping a menu open</h2>
+<p>Every menu and submenu has a dashed line across the top. Click it and
+the menu detaches into a window of its own that stays open, so a menu you
+are working through -- Scale, Colormap, Region &rarr; Shape -- can sit
+beside the image instead of being reopened for every change. Detached
+menus are ordinary windows: move them, and push them behind the main one
+when they are in the way. Close one and the menu goes back to normal.</p>
+<p>Turn it off under <b>Edit &rarr; Preferences &rarr; Menus and
+Buttons</b> if the dashed lines are not wanted.</p>
+
 <h2>Driving it from a script</h2>
 <p>NCRADS9 answers XPA, so <code>xpaset</code> and <code>xpaget</code> work
 as they do with DS9, and pyds9 and its successors talk to it. The Reference
@@ -278,6 +288,13 @@ way, and the coordinate readout is the thing to trust.</p>
 <p>The buttons above the image mirror the menus, so whatever the menu entry
 does the button does. If a button appears to do nothing, the menu entry is
 the thing to check, and the status line at the bottom says what happened.</p>
+
+<h2>What is the dashed line at the top of every menu?</h2>
+<p>A tear-off handle, as in DS9. Click it and that menu -- or submenu --
+becomes a window of its own that stays open, which saves reopening a menu
+you are using repeatedly. It is an ordinary window, so it can be moved and
+pushed behind the image. <b>Edit &rarr; Preferences &rarr; Menus and
+Buttons</b> turns the handles off.</p>
 
 <h2>Can I open several images at once?</h2>
 <p>Yes. <b>Frame &rarr; New Frame</b> makes another, <b>Frame &rarr;

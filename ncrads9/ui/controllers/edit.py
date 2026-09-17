@@ -42,7 +42,7 @@ from ...i18n.menus import translate_menu
 from ...regions.base_region import BaseRegion
 from ...rendering.scale_algorithms import ScaleAlgorithm
 from ...utils import preference_defs
-from .. import bindings
+from .. import bindings, tearoff
 from ..dialogs.preferences_dialog import PreferencesDialog
 from ..themes.dark import DarkTheme
 from ..themes.default import DefaultTheme
@@ -101,6 +101,14 @@ class EditController(Controller):
         #: window because this is what installs it, and because the window
         #: is held to 600 lines.
         self.dialog_translator: i18n.DialogTranslator | None = None
+        #: DS9's tear-off menus: the watcher that makes each torn-off window
+        #: an ordinary one and keeps a tool window's own menus detachable as
+        #: it is first shown. Here rather than on the window for the reason
+        #: above, and because whether menus may be torn off is a preference,
+        #: which this controller owns. `apply_preferences` runs before
+        #: `MainWindow.__init__` returns, so it is in force from startup.
+        self.tearoff = tearoff.TearOffWatcher()
+        self.tearoff.install()
 
     def connect(self) -> None:
         """Wire the Edit menu."""
@@ -333,6 +341,12 @@ class EditController(Controller):
                 self.viewer.set_cache_size_mb(int(prefs.get("cache_size_mb", 1000)))
 
         self.apply_theme(str(prefs.get("theme", "System")))
+
+        # DS9's tear-off menus. Every window, not just this one: a plot
+        # window already on screen should follow the setting too.
+        detachable = bool(prefs.get("menu_tearoff", True))
+        self.tearoff.enabled = detachable
+        tearoff.enable_everywhere(detachable)
 
         window._apply_background_color(prefs.get("background_color", "#000000"))
         window.nan_color = str(prefs.get("nan_color", "#ffffff"))
