@@ -954,11 +954,65 @@ class FileController(Controller):
     # -- rendering for export and print --------------------------------------
 
     def current_pixmap(self) -> QPixmap | None:
-        """Render the current view to a pixmap.
+        """What is on screen, as a pixmap: Save Image, Export and Print.
 
-        Applies the same pipeline the display uses -- clip limits, the
-        viewer's contrast and bias, the scale algorithm, then the colormap --
-        so what is exported or printed matches what is on screen.
+        Grabbed from the viewport rather than re-rendered from the array.
+        Re-rendering reproduced the *data* -- scale, limits, colormap --
+        and nothing else, so a saved image came out at the file's own
+        resolution with no zoom, no pan, no rotation, and **none of the
+        overlays**: no regions, no contours, no coordinate grid, no
+        catalogue symbols, no illustrations. What you saved was never what
+        you were looking at, which is the one thing Save Image is for.
+
+        The overlays are child widgets of the viewer, so grabbing the
+        viewport gets them for free and in the right places -- there is no
+        second drawing path to keep in step with the first, which is how
+        they came to be missing in the first place.
+
+        Returns:
+            The view, or None when there is no image to save.
+        """
+        if self.window.image_data is None:
+            return None
+
+        viewport = self.window.scroll_area.viewport()
+        if viewport is None or viewport.width() <= 0 or viewport.height() <= 0:
+            return self._rendered_pixmap()
+
+        pixmap = viewport.grab()
+        if pixmap.isNull() or pixmap.width() <= 0:
+            return self._rendered_pixmap()
+
+        # A GPU frame draws through OpenGL, which `grab` may hand back as
+        # an empty black rectangle depending on the driver. Falling back
+        # to the rendered array loses the overlays, but a black picture
+        # loses everything.
+        if self.window.using_gpu_rendering and self._is_blank(pixmap):
+            return self._rendered_pixmap()
+        return pixmap
+
+    @staticmethod
+    def _is_blank(pixmap: QPixmap) -> bool:
+        """Whether a grab came back as one flat colour, which means it failed."""
+        image = pixmap.toImage()
+        if image.isNull():
+            return True
+        first = image.pixel(0, 0)
+        step_x = max(1, image.width() // 16)
+        step_y = max(1, image.height() // 16)
+        for y in range(0, image.height(), step_y):
+            for x in range(0, image.width(), step_x):
+                if image.pixel(x, y) != first:
+                    return False
+        return True
+
+    def _rendered_pixmap(self) -> QPixmap | None:
+        """The image alone, re-rendered from the array.
+
+        The fallback for when the view cannot be grabbed -- a window that
+        was never shown, or an OpenGL frame the driver will not hand back.
+        It reproduces the data faithfully and carries no overlays, so it
+        is a poorer answer than a grab, not an equal one.
         """
         image_data = self.window.image_data
         if image_data is None:

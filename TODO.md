@@ -1418,6 +1418,26 @@ Depends on M2, M3.
         clamped -- and the first two both landed on 0.1, which is why one of them looked like it
         did nothing at all. The range now covers what the menu offers, and `zoom_in`, `zoom_out`
         and `zoom_fit` go through the same clamp rather than past it.
+      **Save Image, Export and Print wrote the wrong picture**
+      (`tests/unit/test_saved_image_matches_view.py`). `current_pixmap` re-rendered the array:
+      it reproduced the *data* -- scale, limits, colormap -- at the file's own resolution and
+      nothing else, so a saved image had no zoom, no pan, no rotation, and **none of the
+      overlays**: no regions, no contours, no coordinate grid, no catalogue symbols, no
+      illustrations. Its own docstring said "so what is exported or printed matches what is on
+      screen", which is exactly what it did not do. The view is now *grabbed* from the
+      viewport, so the overlays come along for free and in the right places -- there is no
+      second drawing path to keep in step with the first, which is how they came to be missing.
+      A grab needs a viewport, so a window that was never shown (which is how the printing
+      tests drive it) still falls back to the rendered array, and an OpenGL frame that a driver
+      hands back as a flat rectangle does too.
+      **Found while chasing it: all four overlays were the wrong size.** They are sized from the
+      inner viewer's geometry, and the inner viewer resizes *itself* whenever the image or the
+      zoom changes (`_update_display` calls `resize`) -- nothing told the wrapper, so after
+      loading an image the overlays sat at the widget's 100x100 minimum while the viewer was
+      eight hundred pixels wide. Regions, contours, catalogue symbols and illustrations were
+      clipped to that corner **on screen**, not only in a saved image; a window resize was what
+      happened to fix it, which is why it was easy to miss. The wrapper now watches the inner
+      viewer for resizes.
       Two honest limitations were *kept*, not papered over: `Frame -> Lock/Match -> Bin` and
       `-> Smooth` say that those settings are the window's rather than the frame's, so every
       frame already matches. Making them per-frame is a larger change than a menu walk, and a
