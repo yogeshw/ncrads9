@@ -1430,6 +1430,29 @@ Depends on M2, M3.
       A grab needs a viewport, so a window that was never shown (which is how the printing
       tests drive it) still falls back to the rendered array, and an OpenGL frame that a driver
       hands back as a flat rectangle does too.
+      **Switching theme could kill the process** (`tests/unit/test_theme_restyle_safety.py`).
+      Applying a theme calls `setStyle`, `setPalette` and `setStyleSheet` on the
+      `QApplication`, and each walks every live widget while holding raw pointers to the ones
+      it has not reached yet. Visiting a widget runs Python -- every widget built from Python
+      is a sip subclass whose `changeEvent` re-enters the interpreter -- and Python may collect
+      garbage at any allocation. A collection there frees a widget the walk still points at,
+      and the walk's next step dereferences freed memory. The stack was always the same shape:
+      `setStyleSheet` -> the style walk -> `QWidget::setPalette` -> `propagatePaletteChange` ->
+      `sipQComboBox::changeEvent` -> `QWidget::update`, SIGSEGV.
+      It presented as an order-dependent segfault in the test suite -- five runs in six of one
+      file pair -- which is why it was first mitigated in the test file rather than fixed. That
+      was the wrong place: a user switching theme with a few windows open runs exactly the same
+      walk. Every theme now applies through `ncrads9/ui/themes/restyle.py`, which collects
+      pending cycles, drains Qt's `DeferredDelete` queue, and holds the cyclic collector off
+      until the walk is done. Measured on the case that crashed: 5/6 before, 0/8 after, with
+      the collect and the hold-off each enough on their own; both are kept because each closes
+      a door the other leaves open. The test-file mitigation was removed, and that file passing
+      without it is part of the evidence.
+      A crash cannot be asserted directly -- a test that segfaults takes the whole run with it
+      -- so the gate measures the conditions instead, from *inside* the walk: a probe combo box
+      records `gc.isenabled()` in its own `changeEvent`, for each of the three themes. A fourth
+      gate keeps the application-wide setters inside that one module, so a theme added later
+      cannot go round it.
       **Found while chasing it: all four overlays were the wrong size.** They are sized from the
       inner viewer's geometry, and the inner viewer resizes *itself* whenever the image or the
       zoom changes (`_update_display` calls `resize`) -- nothing told the wrapper, so after

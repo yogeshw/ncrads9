@@ -24,7 +24,7 @@ Author: Yogesh Wadadekar
 from PyQt6.QtGui import QPalette
 from PyQt6.QtWidgets import QApplication
 
-from . import palettes
+from . import palettes, restyle
 
 
 class DefaultTheme:
@@ -209,8 +209,7 @@ class DefaultTheme:
             app = QApplication.instance()
         if app is not None:
             palettes.remember_desktop_palette(app)
-            app.setPalette(cls.palette())
-            app.setStyleSheet(cls.STYLESHEET)
+            restyle.restyle(app, cls.palette(), cls.STYLESHEET)
 
     @classmethod
     def palette(cls) -> QPalette:
