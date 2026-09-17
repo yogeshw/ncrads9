@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 1015 (890 excluding separators)
+# entries: 1042 (908 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -702,7 +702,6 @@
 .region.shape|radiobutton|Ellipse
 .region.shape|radiobutton|Box
 .region.shape|radiobutton|Polygon
-.region.shape|radiobutton|Point
 .region.shape|radiobutton|Line
 .region.shape|radiobutton|Vector
 .region.shape|radiobutton|Segment
@@ -711,11 +710,19 @@
 .region.shape|radiobutton|Compass
 .region.shape|radiobutton|Projection
 .region.shape|radiobutton|Annulus
-.region.shape|radiobutton|Ellipse Annulus
+.region.shape|radiobutton|Elliptical Annulus
 .region.shape|radiobutton|Box Annulus
 .region.shape|radiobutton|Panda
-.region.shape|radiobutton|Epanda
-.region.shape|radiobutton|Bpanda
+.region.shape|radiobutton|Elliptical Panda
+.region.shape|radiobutton|Box Panda
+.region.shape|cascade|Point
+.region.shape.point|radiobutton|Circle
+.region.shape.point|radiobutton|Box
+.region.shape.point|radiobutton|Diamond
+.region.shape.point|radiobutton|Cross
+.region.shape.point|radiobutton|X
+.region.shape.point|radiobutton|Arrow
+.region.shape.point|radiobutton|BoxCircle
 .region.shape|separator|---
 .region.shape|radiobutton|None
 .region|cascade|Composite Region
@@ -775,12 +782,18 @@
 .region.width|radiobutton|4
 .region|cascade|Properties
 .region.properties|checkbutton|Fixed in Size
-.region.properties|checkbutton|Edit
-.region.properties|checkbutton|Move
-.region.properties|checkbutton|Rotate
-.region.properties|checkbutton|Delete
-.region.properties|checkbutton|Include
-.region.properties|checkbutton|Source
+.region.properties|separator|---
+.region.properties|checkbutton|Can Edit
+.region.properties|checkbutton|Can Move
+.region.properties|checkbutton|Can Rotate
+.region.properties|checkbutton|Can Delete
+.region.properties|separator|---
+.region.properties|radiobutton|Include
+.region.properties|radiobutton|Exclude
+.region.properties|separator|---
+.region.properties|radiobutton|Source
+.region.properties|radiobutton|Background
+.region.properties|separator|---
 .region.properties|checkbutton|Dash
 .region.properties|checkbutton|Fill
 .region|cascade|Font
@@ -817,7 +830,9 @@
 .region|command|Open
 .region|command|Save
 .region|command|List
+.region|separator|---
 .region|command|Delete All
+.region|command|Delete All and Open
 .region|separator|---
 .region|cascade|Region Parameters
 .region.regionparameters|checkbutton|Show
@@ -1028,6 +1043,18 @@
 .analysis|command|Load Analysis Commands
 .analysis|command|Clear Analysis Commands
 # Help
+.help|command|Reference Manual
+.help|command|User Manual
+.help|separator|---
+.help|command|FAQ
+.help|command|Release Notes
+.help|command|Help Desk
+.help|separator|---
+.help|command|Story of SAOImageDS9
+.help|command|Acknowledgment
+.help|separator|---
+.help|command|About SAOImageDS9
+.help|separator|---
 .help|command|Contents
 .help|command|Keyboard Shortcuts
 .help|separator|---

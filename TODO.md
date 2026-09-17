@@ -1289,8 +1289,9 @@ Depends on M2, M3.
 - [x] **C-1** Keep `docs/parity/ncrads9_menus.txt` regenerated in CI (the `parity` job already
       fails when it is stale) and review the `tools/menu_diff.py --summary` output each milestone.
       **Now a ratchet rather than a report.** `menu_diff.py --minimum PERCENT` exits non-zero
-      below a floor, and `check.sh` and the CI parity job both pass `--minimum 92`, today's
-      figure. Reporting alone meant a menu entry lost in a refactor went unnoticed until
+      below a floor, and `check.sh` and the CI parity job both pass `--minimum 97` -- raised
+      from 92 when the Region and Help menus reached full parity (423 of DS9's 433 labels, which
+      the summary rounds to 98%). Reporting alone meant a menu entry lost in a refactor went unnoticed until
       somebody read the summary; a floor fails the build that loses it. Raise the floor when a
       milestone improves parity, never lower it to make a build pass -- and a test checks that
       `check.sh` and CI name the same number, so the two cannot drift apart.
@@ -1430,6 +1431,57 @@ Depends on M2, M3.
       A grab needs a viewport, so a window that was never shown (which is how the printing
       tests drive it) still falls back to the rendered array, and an OpenGL frame that a driver
       hands back as a flat rectangle does too.
+      **The Region menu's fifteen missing entries, and the Help menu's eight**
+      (`tests/unit/test_region_menu_parity.py`, `tests/unit/test_help_menu.py`). Menu parity was
+      92%; the two weakest menus were Region at 78% and Help at 0%. Both are now 100%, and the
+      total is 98%. Only the first group below was cosmetic.
+      *Region, three shapes renamed.* `Ellipse Annulus`, `Epanda` and `Bpanda` are how the region
+      *file format* spells them; DS9's menu says `Elliptical Annulus`, `Elliptical Panda` and
+      `Box Panda`, and the menu is what a person reads. The keys are unchanged, so region files,
+      XPA and the button bar are unaffected.
+      *Region, the seven point symbols.* DS9's Shape cascade has no plain `Point`: it has a
+      `Point` submenu of circle, box, diamond, cross, x, arrow and boxcircle. NCRADS9 offered
+      `Point` and drew every point as a circle -- while `Point.SHAPES` had supported all seven
+      since M6. The cascade is now DS9's, in one exclusive group with the other shapes so the
+      menu cannot show two shapes armed; the symbol is kept as the `shape` default, which reaches
+      new points through `apply_defaults` and no other region, `Point` being the only shape with
+      a `shape` attribute. `set_shape` also takes DS9's own spellings -- `diamond point`,
+      `boxcirclepoint` -- since that is how a script names a point.
+      *Region, include/exclude and source/background.* These were single check boxes called
+      `Include` and `Source`, so `Exclude` and `Background` had no entry and no name on screen,
+      even though both are real states a region can be in and both are written into region files
+      (the `-` prefix and `background`). Each is now an exclusive pair, which also says what
+      unchecking meant -- one box does not. Wired on `triggered` rather than `toggled`: `toggled`
+      fires on the *un*checking too, so both halves would answer one click and the second would
+      undo the first. The four permissions were also renamed to DS9's `Can Edit`, `Can Move`,
+      `Can Rotate`, `Can Delete` -- as `Edit`/`Move`/`Rotate`/`Delete` they read as commands, and
+      `Delete` sat four entries from the menu's real `Delete All`.
+      *Region, `Delete All and Open` -- and a bug behind it.* The entry was missing, and finding
+      out why DS9 has it at all turned up the real fault: DS9's `Region -> Open` **adds** to the
+      frame's regions, which is why it needs a second entry for the other behaviour. Ours
+      replaced, so opening a second region file silently threw the first one's regions away and
+      there was no way to load two files at once. `Open` now adds, `Delete All and Open` replaces,
+      and both are one undo step.
+      *Help, all eight entries.* DS9's Reference Manual, User Manual, FAQ, Release Notes, Help
+      Desk, Story of SAOImageDS9, Acknowledgment and About SAOImageDS9. A user arriving from DS9
+      found nothing under any name they knew. Each is answered with NCRADS9's own material
+      (`ncrads9/ui/help_documents.py`), not a link to DS9's manual, which describes a different
+      program. Two are *generated* so they cannot go stale: the Reference Manual lists every XPA
+      access point from the table that implements them -- a written list of commands is wrong the
+      first time one is added -- and the Release Notes read `__version__`. One dialog serves all
+      eight, and a second Open raises the open window rather than stacking a copy.
+      **Found while doing it: the Contents page was unreadable in dark mode.** Its stylesheet
+      named its colours outright (`color: #2e3436`), so under the dark theme it drew near-black
+      text on a near-black ground -- luma gap 13 against the 60 the popup gate requires. This is
+      the same grey-on-grey fault that was reported for the popups, and it survived the fix for
+      that because it was in the *document*: the popup gate measures the widget's palette against
+      its pixels, and a `QTextBrowser` whose HTML names its own colours passes that and stays
+      unreadable. Every help document now takes its colours from the palette at render time and
+      re-renders when the theme changes under an open window, and the new gate measures rendered
+      *pixels* -- the only place the fault was visible. It reports 31 against the old page and
+      175 against the new one. `Link` supplies the heading colour rather than `Highlight`:
+      Highlight is a selection *background*, chosen to sit near the window's own colour, and
+      under Dark it is another shade of the same grey (gap 20).
       **Switching theme could kill the process** (`tests/unit/test_theme_restyle_safety.py`).
       Applying a theme calls `setStyle`, `setPalette` and `setStyleSheet` on the
       `QApplication`, and each walks every live widget while holding raw pointers to the ones

@@ -623,6 +623,15 @@ Kept as modern-UX improvements; documented so they are not mistaken for gaps:
 - **Mosaic resampling is nearest-neighbour**, so a mosaic is a display aid and conserves no flux.
   DS9 resamples too; anyone wanting a photometric mosaic should use `reproject` or SWarp and load
   the result.
+- **DS9's eight Help entries open NCRADS9's own documents**, not DS9's manual, which describes a
+  different program. Two are generated rather than written -- the Reference Manual from the XPA
+  access-point table and the Release Notes from the package version -- so they cannot fall behind
+  the code. `About SAOImageDS9` says what SAOImageDS9 is and where to get it, which is the honest
+  answer to that entry in a reimplementation; `About NCRADS9` is the one about this program.
+- **NCRADS9's own four Help entries** -- Contents, Keyboard Shortcuts, About NCRADS9, About Qt --
+  are kept below DS9's eight rather than replaced by them.
+- **`Region -> Properties` keeps `Dash` and `Fill`**, which DS9 has no counterpart for; they are
+  written into region files as DS9's parser tolerates.
 - **`Save` writes what is displayed**, not the array as it came off disk — the block, smooth or
   cube slice on screen is what lands in the file, with the header's axis cards corrected to match
   and an `NCSPEC` card recording the specification it was loaded from.
