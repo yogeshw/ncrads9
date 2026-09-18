@@ -147,4 +147,15 @@ NCRADS9 is licensed under the GNU General Public License v3.0. See [LICENSE](LIC
 
 ## Acknowledgments
 
-This project is inspired by SAOImageDS9, developed at the Smithsonian Astrophysical Observatory.
+NCRADS9's interface is modelled on **SAOImageDS9**, developed at the Smithsonian Astrophysical
+Observatory, and it reads and writes DS9's region files, session files and XPA names so the two
+interoperate. The arrangement of the menus is DS9's work, as are the region file format, those
+XPA names, and the 164 bundled colour tables.
+
+The ideas underneath are older than DS9 and are not its to be credited with: colour lookup tables
+and the mouse dragged across them, blink comparison, zoom and pan, contours and coordinate grids
+over the data, regions as overlays, tiled frames, cuts along a row. AIPS, IRAF, MIDAS, Karma,
+SAOimage and SAOtng were doing these things, in some cases decades ago, and DS9 grew out of that
+work rather than starting it. The `zscale` limits are IRAF's algorithm.
+
+Built on astropy, numpy, scipy, scikit-image, PyQt6, matplotlib and astroquery.

@@ -188,122 +188,205 @@ def release_notes() -> str:
 
 
 _USER_MANUAL = """
-<p>NCRADS9 shows FITS images the way SAOImageDS9 does. If you know DS9, the
-menus are in the same places; this page is the short version.</p>
+<p>NCRADS9 shows FITS images. If you know SAOImageDS9 the menus are in the
+same places; this page is the practical core, and the HTML user guide that
+ships with the source has a chapter on each part of it.</p>
 
 <h2>Opening an image</h2>
 <p><b>File &rarr; Open</b> reads a FITS file. <b>File &rarr; Open as</b> has
-one entry per way of reading the same file -- as a data cube, an RGB
-composite, a mosaic, a compressed array, or an event table to be binned.
-On the command line, <code>ncrads9 image.fits</code> does the same thing.</p>
+one entry per other way of reading the same bytes: a single slice, an RGB,
+HSV or HLS composite, every extension as a cube or as separate frames, a
+mosaic laid out by WCS or by IRAF convention, or a file over http.
+<b>File &rarr; Import</b> takes what is not FITS &mdash; raw arrays, NRRD,
+ENVI, GIF, TIFF, JPEG, PNG.</p>
+<p>When a file has more than one displayable extension you are asked which
+one; DS9 takes the first without asking, and a preference restores that.
+<b>File &rarr; Prism</b> opens a file as a structure &mdash; extensions,
+headers, table columns &mdash; which is the way to see what is in it before
+deciding how to load it.</p>
+<p>An event table has no image in it, only a row per photon.
+The <b>Bin</b> menu bins those rows onto a grid: average or sum, a factor,
+and the size of the buffer they are binned into.</p>
 
 <h2>Seeing the faint things</h2>
-<p><b>Scale</b> chooses how pixel values become brightness: linear, log,
-power, square root, squared, histogram equalisation or the asinh and sinh
-curves. <b>Scale &rarr; Limits</b> chooses which values to spread across
-that range -- minmax for everything, zscale or zmax for the values that
-matter in an astronomical image, or a pair you type in. Dragging with the
-right mouse button adjusts contrast and bias without changing either.</p>
+<p>This is the setting that matters most, and the default is deliberately
+the unhelpful one: linear between the data's own minimum and maximum, which
+on real data means one hot pixel flattens everything else.</p>
+<ul>
+<li><b>Scale &rarr; ZScale</b> is the usual first move. It fits the middle
+of the value distribution and ignores the tails.</li>
+<li><b>Scale &rarr; Log</b>, <b>Square Root</b> or <b>ASINH</b> for a large
+dynamic range. ASINH is the one that behaves near and below zero, which
+matters in interferometric maps.</li>
+<li>The percentage limits, <b>99.5%</b> down to <b>90%</b>, are a blunter
+and more predictable alternative to zscale.</li>
+<li><b>Scale Parameters</b> draws the histogram with the limits on it, which
+usually explains at a glance why an image looks the way it does.</li>
+<li><b>Global</b> or <b>Local</b> decides whether the limits are measured
+over the whole image or only the part on screen.</li>
+</ul>
+<p>Right-dragging on the image slides the contrast and bias on top of all
+this. <b>Color &rarr; Reset Contrast/Bias</b> undoes it.</p>
 
 <h2>Colour</h2>
-<p><b>Color</b> holds DS9's bundled colour tables and matplotlib's. Invert
-one with <b>Color &rarr; Invert Colormap</b>; the colour bar under the image
-shows what is in force, and <b>Color &rarr; Colormap Parameters</b> is where
-contrast and bias can be set by hand.</p>
+<p><b>Color</b> holds 164 bundled tables &mdash; the classic ones, the
+matplotlib families, and further collections &mdash; and <b>User &rarr; Load
+Colormap</b> reads <code>.sao</code> and <code>.lut</code> files you already
+have. For a figure, prefer grey or one of the perceptually uniform maps:
+rainbow and HSV have bright bands in the middle that read as edges in the
+data and do not survive being printed in black and white.</p>
 
 <h2>Moving around</h2>
-<p><b>Zoom</b> has the fixed steps, <b>Zoom Fit</b> and the rotations and
-flips. The <b>panner</b> shows where you are in the whole image and which
-way north and east point; the <b>magnifier</b> shows the pixels under the
-cursor. Middle-click centres the image where you click.</p>
-
-<h2>Regions</h2>
-<p><b>Edit &rarr; Region</b> arms the pointer for drawing, and <b>Region
-&rarr; Shape</b> chooses what a drag draws -- every shape DS9 has, with the
-seven point symbols under <b>Point</b>. Double-click a region to edit its
-position, size and text. <b>Region &rarr; Open</b> reads a DS9 region file
-and adds it to what is there; <b>Delete All and Open</b> replaces instead.
-<b>Region &rarr; List</b> shows the file that would be written.</p>
+<p><b>Zoom</b> has the fixed steps, <b>Zoom Fit</b>, the flips and the
+rotations, and <b>Align</b> to put north up by the WCS. Middle-click centres
+on a point; the scroll wheel zooms about the cursor. The <b>panner</b> shows
+where you are in the whole image and which way north and east point; the
+<b>magnifier</b> shows the pixels under the cursor.</p>
 
 <h2>Coordinates</h2>
 <p>The panel above the image reads out the position under the cursor in
-image, physical and world coordinates. <b>WCS</b> chooses the system (fk5,
-fk4, ICRS, galactic, ecliptic) and the format (degrees or sexagesimal).
-<b>Analysis &rarr; Coordinate Grid</b> draws the grid.</p>
+image, physical and world coordinates at once. <b>WCS</b> picks the system
+&mdash; fk5, fk4, ICRS, galactic, ecliptic &mdash; and sexagesimal or
+degrees. That choice applies to the readout, to region files written in
+world coordinates, and to what XPA reports, so check it before comparing
+positions with a catalogue.</p>
+
+<h2>Several images at once</h2>
+<p><b>Frame &rarr; New Frame</b>, then <b>Tile</b> to see them side by side,
+<b>Blink</b> to cycle them in place, or <b>Fade</b> to cross-fade.
+<b>Match</b> makes the others match this one now; <b>Lock</b> keeps them
+matched from now on. Locking by <b>WCS</b> is what you want for two images
+of the same field from different instruments: pan one and the other follows
+to the same piece of sky whatever its pixel grid.</p>
+
+<h2>Regions</h2>
+<p><b>Edit &rarr; Region</b> puts the left button into drawing mode and
+<b>Region &rarr; Shape</b> chooses what a drag draws &mdash; every shape DS9
+has, with the seven point symbols under <b>Point</b>. Double-click a region
+to type exact coordinates, set its text, or reach its statistics, radial
+profile and histogram.</p>
+<p><b>Properties</b> carries the flags that matter for measurement:
+<b>Include</b> or <b>Exclude</b> (an excluded region is written with a
+leading <code>-</code>, and is how you mask a star out of an aperture), and
+<b>Source</b> or <b>Background</b>.</p>
+<p><b>Region &rarr; Open</b> <i>adds</i> a region file to what is already
+there; <b>Delete All and Open</b> replaces. <b>List</b> shows the text that
+would be written without writing it. The format is DS9's, so the files pass
+to CASA, topcat and the astropy <code>regions</code> package.</p>
 
 <h2>Measuring</h2>
-<p><b>Analysis</b> holds the pixel table, the horizontal and vertical cut
-graphs, contours, smoothing, and the block and bin controls. A region's own
-right-click menu has its statistics, its radial profile and its histogram.</p>
+<p><b>Analysis</b> holds the pixel table, statistics, the histogram, the
+radial profile, contours, the coordinate grid, blocking and smoothing, the
+catalogue and image services, and the plot tool. <b>View &rarr; Horizontal
+Graph</b> and <b>Vertical Graph</b> add live cuts along the row and column
+under the cursor.</p>
+<p><b>Block</b> and <b>Smooth</b> change what the analysis tools see, not
+just the picture. Turn them off before measuring.</p>
 
-<h2>Saving what you see</h2>
-<p><b>File &rarr; Save Image</b> writes the view as it appears -- at the
-zoom you are at, with the regions, contours and grid on it. <b>File &rarr;
-Export</b> writes the data instead, and <b>File &rarr; Print</b> sends the
-view to a printer or a PostScript file. <b>File &rarr; Backup</b> saves the
-whole session, frames and all, to be restored later.</p>
+<h2>Getting it back out</h2>
+<p>Four different things, kept apart:</p>
+<ul>
+<li><b>Save</b> / <b>Save As</b> &mdash; the data, as FITS. It writes what is
+<i>displayed</i>: the block, smooth or cube slice on screen is what lands in
+the file, with the axis cards corrected to match.</li>
+<li><b>Export</b> &mdash; the data, in another format.</li>
+<li><b>Save Image</b> &mdash; the <i>picture</i>, at the zoom you are at,
+with the regions, contours and grid on it. This is the one for a figure.</li>
+<li><b>Backup</b> &mdash; the whole session, to <b>Restore</b> later.</li>
+</ul>
+<p><b>Print</b> sends the same view to a printer or a PostScript file.</p>
 
 <h2>Keeping a menu open</h2>
-<p>Every menu and submenu has a dashed line across the top. Click it and
-the menu detaches into a window of its own that stays open, so a menu you
-are working through -- Scale, Colormap, Region &rarr; Shape -- can sit
-beside the image instead of being reopened for every change. Detached
-menus are ordinary windows: move them, and push them behind the main one
-when they are in the way. Close one and the menu goes back to normal.</p>
+<p>Every menu and submenu has a dashed line across the top. Click it and the
+menu detaches into a window of its own that stays open, so a menu you are
+working through &mdash; Scale, Colormap, Region &rarr; Shape &mdash; can sit
+beside the image instead of being reopened for every change. Detached menus
+are ordinary windows: move them, and push them behind the main one when they
+are in the way.</p>
 <p>Turn it off under <b>Edit &rarr; Preferences &rarr; Menus and
-Buttons</b> if the dashed lines are not wanted.</p>
+Buttons</b>.</p>
 
 <h2>Driving it from a script</h2>
 <p>NCRADS9 answers XPA, so <code>xpaset</code> and <code>xpaget</code> work
-as they do with DS9, and pyds9 and its successors talk to it. The Reference
-Manual in this menu lists every name it answers.</p>
+as they do with DS9 once you address <code>ncrads9</code>, and pyds9 and its
+successors talk to it. The <b>Reference Manual</b> in this menu lists every
+name it answers, generated from the table that implements them. SAMP
+connects it to topcat and Aladin. <b>File &rarr; Open Python Console</b>
+gives you a prompt inside the running program, with <code>window</code>
+bound to the main window.</p>
 """
 
 
 _FAQ = f"""
 <h2>Is this SAOImageDS9?</h2>
-<p>No. It is a separate program that reimplements DS9's interface and file
-formats in Python and Qt6. DS9 is the original, developed at the
-Smithsonian Astrophysical Observatory; see <b>About SAOImageDS9</b> in this
-menu.</p>
+<p>No. It is a separate program, written in Python and Qt6, whose interface
+is modelled on DS9's and which reads and writes DS9's region, session and
+contour files. DS9 is the original and is developed at the Smithsonian
+Astrophysical Observatory; see <b>About SAOImageDS9</b> in this menu. The
+ideas both programs express are older than either &mdash; <b>Story of
+SAOImageDS9</b> says where they came from.</p>
 
 <h2>Will my DS9 region files, colour tables and scripts work?</h2>
-<p>Region files and DS9's <code>.sao</code> and <code>.lut</code> colour
-tables are read and written in DS9's own formats. Scripts that use XPA work
-if they address <code>ncrads9</code> instead of <code>ds9</code>; the
-Reference Manual lists the names answered. A script that finds a name
-missing gets a message saying so rather than silence.</p>
+<p>Region files, contour files, session backups and DS9's <code>.sao</code>
+and <code>.lut</code> colour tables are read and written in DS9's own
+formats. Scripts that use XPA work if they address <code>ncrads9</code>
+instead of <code>ds9</code>; the Reference Manual lists the names answered,
+and a name that is missing replies saying so rather than failing silently.
+Tcl scripts do not run &mdash; the console here is Python.</p>
+
+<h2>Why is everything black?</h2>
+<p>Almost always the scale. The default limits are the data's own minimum
+and maximum, and a single hot pixel flattens the rest. Try <b>Scale &rarr;
+ZScale</b>, then <b>Log</b>. <b>Scale &rarr; Scale Parameters</b> shows the
+histogram with the limits marked, which usually makes the reason plain. If
+it is still black, turn off the GPU renderer in <b>Preferences &rarr;
+General</b>: some drivers hand back an empty frame.</p>
 
 <h2>Why is my image upside down?</h2>
 <p>It probably is not. FITS counts rows from the bottom and screens count
 them from the top, so an image with no WCS can look flipped compared with
 another program's default. <b>Zoom &rarr; Invert Y</b> settles it either
-way, and the coordinate readout is the thing to trust.</p>
+way, and the coordinate readout is the thing to trust. With a WCS,
+<b>Zoom &rarr; Align</b> puts north up.</p>
 
-<h2>The colours in the image look wrong after I dragged with the mouse.</h2>
+<h2>The colours look wrong after I dragged with the mouse.</h2>
 <p>Right-drag adjusts contrast and bias, which is DS9's behaviour.
-<b>Color &rarr; Reset Colormap</b> puts them back.</p>
+<b>Color &rarr; Reset Contrast/Bias</b> puts them back without changing
+which colour table you are on.</p>
 
-<h2>Nothing happens when I click a colour or a shape button.</h2>
-<p>The buttons above the image mirror the menus, so whatever the menu entry
-does the button does. If a button appears to do nothing, the menu entry is
-the thing to check, and the status line at the bottom says what happened.</p>
+<h2>Dragging pans when I want to draw a region.</h2>
+<p>The left button does whatever <b>Edit</b> is set to. Choose
+<b>Edit &rarr; Region</b>, then pick a shape under <b>Region &rarr;
+Shape</b>.</p>
+
+<h2>Why do my statistics disagree with another tool?</h2>
+<p>Check whether <b>Block</b> or <b>Smooth</b> is on &mdash; both change the
+values the analysis tools measure, and a smoothed image has correlated
+noise. Then check that the region is in the coordinate system you think it
+is.</p>
+
+<h2>Can I open several images at once?</h2>
+<p>Yes. <b>Frame &rarr; New Frame</b> makes another, <b>Tile</b> shows them
+side by side, <b>Blink</b> cycles them, and <b>Lock</b> ties their panning,
+zoom, scale or colour together. Lock by WCS to compare the same field from
+two instruments.</p>
 
 <h2>What is the dashed line at the top of every menu?</h2>
-<p>A tear-off handle, as in DS9. Click it and that menu -- or submenu --
+<p>A tear-off handle. Click it and that menu &mdash; or submenu &mdash;
 becomes a window of its own that stays open, which saves reopening a menu
 you are using repeatedly. It is an ordinary window, so it can be moved and
 pushed behind the image. <b>Edit &rarr; Preferences &rarr; Menus and
 Buttons</b> turns the handles off.</p>
 
-<h2>Can I open several images at once?</h2>
-<p>Yes. <b>Frame &rarr; New Frame</b> makes another, <b>Frame &rarr;
-Tile</b> shows them side by side, and <b>Frame &rarr; Lock</b> ties their
-panning, zoom, scale or colour together.</p>
-
 <h2>Everything is grey and hard to read.</h2>
 <p><b>Edit &rarr; Preferences</b> chooses the theme. <b>System</b> follows
 the desktop's own colours, including a dark mode set outside NCRADS9.</p>
+
+<h2>Which "save" do I want?</h2>
+<p><b>Save</b> writes the data as FITS. <b>Export</b> writes the data in
+another format. <b>Save Image</b> writes the <i>picture</i> &mdash; the
+current zoom, with regions, contours and grid on it &mdash; and is the one
+you want for a figure. <b>Backup</b> writes the whole session.</p>
 
 <h2>How do I report a problem?</h2>
 <p><b>Help &rarr; Help Desk</b> says what to include. The short answer is
@@ -336,31 +419,52 @@ releases -- belong with SAO rather than here:
 
 
 _STORY = f"""
-<p>SAOImageDS9 is the FITS image viewer that this program reimplements. Its
-line began with SAOimage, written at the Smithsonian Astrophysical
-Observatory, continued through SAOtng, and became DS9 -- named, as
-astronomers' software often is, after something on television. Its
-principal author is William Joye, and it has been developed and maintained
-at SAO with support from the Chandra X-ray Science Center and NASA's High
-Energy Astrophysics programme.</p>
-
-<p>DS9 is written in Tcl/Tk over C and C++, and two of its decisions shaped
-everything built around it: regions are plain text in a documented format,
-so they pass between programs and can be written by hand, and XPA lets
-another process read and set almost anything in a running DS9, which is why
-so many pipelines drive it rather than reimplementing its display.</p>
-
-<h2>Where NCRADS9 comes from</h2>
-<p>NCRADS9 was written at the National Centre for Radio Astrophysics as a
-reimplementation of DS9 in Python and Qt6, so that the viewer sits in the
-same language as the analysis around it -- numpy arrays, astropy WCS,
+<p>NCRADS9 is a FITS image viewer written at the National Centre for Radio
+Astrophysics in Python and Qt6, so that the viewer sits in the same
+language as the analysis around it -- numpy arrays, astropy WCS,
 matplotlib plots -- and can be extended in it.</p>
 
-<p>It follows DS9 rather than improving on it: the menus are where DS9 puts
-them, the region and session files are DS9's, and the XPA names are DS9's.
-Where it diverges it is because something is not finished, or because a
-divergence is deliberate and recorded -- the project keeps a menu-by-menu
-parity count against DS9 and a list of the places it departs on purpose.</p>
+<p>Its interface follows SAOImageDS9's. That is a deliberate choice rather
+than an accident: DS9 is the viewer most optical and radio astronomers
+already have in their fingers, and a clone that puts Scale somewhere else
+would cost its users more than it gained them. So the menus are where DS9
+puts them, the region files are DS9's format, the session files are DS9's,
+and the XPA names are DS9's, which is what lets an existing pipeline drive
+this program instead.</p>
+
+<h2>What came before</h2>
+
+<p>Following DS9's interface is not the same as owing DS9 every idea in
+it, and it would be wrong to suggest otherwise. Almost everything this
+program does was current practice before SAOImageDS9 was written.</p>
+
+<p>Blink comparison is older than computing -- Pluto was found with a
+blink comparator and photographic plates. Displaying an image through a
+colour lookup table, and dragging the mouse to slide the contrast and bias
+of that table, was how you looked at data on AIPS's TV and in IRAF long
+before it was how you looked at data in DS9. Zoom and pan, contour
+overlays, coordinate grids drawn from the WCS, apertures and other regions
+laid over the pixels, several images tiled for comparison, an intensity
+cut along a row or column: AIPS, IRAF, MIDAS and Karma's <i>kvis</i> were
+doing these things, in some cases decades ago. The <i>zscale</i> limits
+under the Scale menu are IRAF's algorithm, named after IRAF's task.</p>
+
+<p>DS9 itself grew out of that work. It descends from SAOimage, written at
+the Smithsonian Astrophysical Observatory by Mike VanHilst, and from
+SAOtng after it; its principal author is William Joye, and it is
+maintained at SAO with support from the Chandra X-ray Science Center and
+NASA's High Energy Astrophysics programme.</p>
+
+<h2>What is DS9's own</h2>
+
+<p>Two things DS9 contributed are worth naming, because NCRADS9 uses both
+rather than inventing something incompatible. The region file format is
+plain text, documented, and written so a person can type one -- which is
+why regions pass between DS9, NCRADS9, CASA, topcat and a hundred scripts.
+And XPA, SAO's messaging layer, lets another process read and set almost
+anything in a running viewer, which is why so many pipelines drive a
+viewer rather than reimplementing one. The particular arrangement of the
+menus is DS9's too, and so are the 164 bundled colour tables.</p>
 
 <p><a href="{PROJECT_URL}">{PROJECT_URL}</a></p>
 """
@@ -368,26 +472,38 @@ parity count against DS9 and a list of the places it departs on purpose.</p>
 
 _ACKNOWLEDGMENT = f"""
 <h2>SAOImageDS9</h2>
-<p>NCRADS9 exists because SAOImageDS9 does. Its interface, its region
-format, its session format and its XPA names are DS9's work, developed at
-the Smithsonian Astrophysical Observatory with support from the Chandra
-X-ray Science Center and NASA's High Energy Astrophysics programme. The
-164 bundled colour tables are DS9's own. Credit for the design belongs
-there; the faults here are this program's.</p>
+<p>NCRADS9's interface is modelled on SAOImageDS9's, and it reads and
+writes DS9's region files, DS9's session files and DS9's XPA names so that
+the two interoperate. The arrangement of the menus is DS9's work, as are
+the region file format, those XPA names, and the 164 bundled colour
+tables. DS9 is developed at the Smithsonian Astrophysical Observatory with
+support from the Chandra X-ray Science Center and NASA's High Energy
+Astrophysics programme.</p>
+
+<h2>And what came before it</h2>
+<p>The ideas underneath -- colour lookup tables and the mouse dragged
+across them, blink comparison, zoom and pan, contours and coordinate grids
+over the data, regions as overlays, tiled frames, cuts along a row --
+belong to a longer tradition than any one program: AIPS, IRAF, MIDAS,
+Karma, SAOimage and SAOtng, several of them decades old. The <i>zscale</i>
+limits are IRAF's algorithm. Crediting DS9 with all of that would be
+crediting it with other people's work.</p>
 
 <h2>The libraries this is built on</h2>
 <ul>
 <li><b>astropy</b> -- FITS, WCS and tables</li>
 <li><b>numpy</b> and <b>scipy</b> -- the arrays and the filtering</li>
+<li><b>scikit-image</b> -- the contour tracer</li>
 <li><b>PyQt6</b> and <b>Qt</b> -- the interface</li>
 <li><b>matplotlib</b> -- the plots and a second set of colour tables</li>
 <li><b>astroquery</b> -- the catalogue and image services</li>
 </ul>
 
 <h2>If NCRADS9 helped your work</h2>
-<p>Cite SAOImageDS9 as its authors ask, since the design is theirs, and
-name NCRADS9 and its version as the software used:
-<a href="{PROJECT_URL}">{PROJECT_URL}</a>.</p>
+<p>Name NCRADS9 and its version as the software used:
+<a href="{PROJECT_URL}">{PROJECT_URL}</a>. If you also used DS9, or your
+figures depend on its region format or its colour tables, cite
+SAOImageDS9 as its authors ask.</p>
 
 <h2>This program</h2>
 <p>Copyright &copy; 2026 Yogesh Wadadekar. Licensed under the GNU General
@@ -398,27 +514,37 @@ Public License, version 3 or later.</p>
 _ABOUT_DS9 = f"""
 <p><b>SAOImageDS9</b> is an astronomical imaging and data visualisation
 application developed at the Smithsonian Astrophysical Observatory. It is
-the program NCRADS9 reimplements, and it is not this program.</p>
+the program whose interface NCRADS9 is modelled on, and it is not this
+program.</p>
 
 <h2>What it is</h2>
 <p>A FITS image viewer with support for multiple frames, RGB composites,
-data cubes, mosaics, world coordinate systems, regions in a documented text
-format, binning of event tables, contours, coordinate grids, catalogue and
-image services, and scripting through XPA and SAMP. Its principal author is
-William Joye; it is written in Tcl/Tk over C and C++, and it runs on Linux,
-macOS and Windows.</p>
+data cubes, mosaics, world coordinate systems, regions in a documented
+text format, binning of event tables, contours, coordinate grids,
+catalogue and image services, and scripting through XPA and SAMP. Its
+principal author is William Joye; it descends from SAOimage and SAOtng, is
+written in Tcl/Tk over C and C++, and runs on Linux, macOS and
+Windows.</p>
+
+<h2>Why this entry is here</h2>
+<p>NCRADS9 follows DS9's menus and file formats closely enough that
+somebody may reasonably wonder which of the two they have open, and DS9
+deserves naming rather than being an unattributed resemblance. The debt is
+to DS9's interface and its formats; the ideas those express are older than
+DS9 and belong to the wider tradition that produced it --
+<b>Help &rarr; Story of SAOImageDS9</b> says where they came from.</p>
 
 <h2>Where to get it</h2>
 <p><a href="{DS9_URL}">{DS9_URL}</a></p>
 
 <h2>Its licence</h2>
-<p>SAOImageDS9 is free software under the GNU General Public License. It is
-distributed by SAO, not with NCRADS9, and no part of it is included here.</p>
+<p>SAOImageDS9 is free software under the GNU General Public License. It
+is distributed by SAO, not with NCRADS9, and no part of it is included
+here.</p>
 
 <h2>Which of the two you are running</h2>
 <p>This is NCRADS9 {__version__}. <b>Help &rarr; About NCRADS9</b> has its
-version and licence; <b>Help &rarr; Story of SAOImageDS9</b> says how the
-two are related.</p>
+version and licence.</p>
 """
 
 
