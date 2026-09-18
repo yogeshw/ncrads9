@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NCRADS9 &mdash; Coordinates and WCS</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               max-width: 900px; margin: 0 auto; padding: 2rem; line-height: 1.6; color: #222; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 0.5rem; }
+        h2 { color: #34495e; margin-top: 2rem; }
+        h3 { color: #34495e; margin-top: 1.5rem; font-size: 1.05rem; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: #f4f6f8; padding: 0.1rem 0.35rem; border-radius: 3px;
+               font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.92em; }
+        pre { background: #f4f6f8; padding: 1rem; border-radius: 6px; overflow-x: auto; }
+        pre code { background: none; padding: 0; }
+        kbd { background: #eceff1; border: 1px solid #cfd8dc; border-bottom-width: 2px;
+              border-radius: 4px; padding: 0.05rem 0.35rem; font-size: 0.85em;
+              font-family: ui-monospace, Menlo, Consolas, monospace; }
+        table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+        th, td { border: 1px solid #dfe4e8; padding: 0.5rem 0.7rem; text-align: left;
+                 vertical-align: top; }
+        th { background: #f4f6f8; }
+        .toc { background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin: 1rem 0; }
+        .toc h2 { margin-top: 0; }
+        .note { background: #f1f8ff; border-left: 4px solid #3498db; padding: 0.8rem 1rem;
+                margin: 1rem 0; border-radius: 0 6px 6px 0; }
+        .warn { background: #fff8f1; border-left: 4px solid #e67e22; padding: 0.8rem 1rem;
+                margin: 1rem 0; border-radius: 0 6px 6px 0; }
+        ol, ul { padding-left: 1.5rem; }
+        li { padding: 0.2rem 0; }
+        .breadcrumb { margin-bottom: 1rem; color: #666; }
+        .breadcrumb a { color: #666; }
+        .nav { display: flex; justify-content: space-between; margin-top: 3rem;
+               padding-top: 1rem; border-top: 1px solid #dfe4e8; }
+    </style>
+</head>
+<body>
+    <div class="breadcrumb">
+        <a href="../index.html">Home</a> / <a href="index.html">User Guide</a> / Coordinates
+    </div>
+
+    <h1>Coordinates and WCS</h1>
+
+    <p>Every pixel has several addresses at once, and NCRADS9 shows them
+    together in the information panel above the image.</p>
+
+    <h2>The four coordinate systems</h2>
+    <table>
+      <tr><th>System</th><th>What it counts</th></tr>
+      <tr><td><b>Image</b></td><td>Pixels in the array as loaded, from 1 at the
+      bottom left, as FITS counts them.</td></tr>
+      <tr><td><b>Physical</b></td><td>Pixels in the original detector frame,
+      before any trimming or binning — what <code>LTV</code>/<code>LTM</code> in
+      the header describe.</td></tr>
+      <tr><td><b>Amplifier</b> and <b>Detector</b></td><td>The readout's own
+      coordinates, for instruments whose headers carry them.</td></tr>
+      <tr><td><b>WCS</b></td><td>Position on the sky, from the header's world
+      coordinate solution.</td></tr>
+    </table>
+    <p><b>View</b> chooses which of these the panel shows, and
+    <b>Multiple WCS</b> shows a second solution where a header carries one.</p>
+
+    <h2>Sky systems and formats</h2>
+    <p>The <b>WCS</b> menu picks the system — <b>FK5</b>, <b>FK4</b>,
+    <b>ICRS</b>, <b>Galactic</b>, <b>Ecliptic</b> — and the format,
+    <b>Sexagesimal</b> or <b>Degrees</b>. The choice applies to the readout, to
+    region files written in world coordinates, and to what XPA reports.</p>
+    <div class="note">ICRS and FK5 differ by tens of milliarcseconds; FK4 is a
+    different equinox and differs by arcminutes. If positions from NCRADS9
+    disagree with a catalogue at that level, check that both are in the same
+    system before looking for a bug.</div>
+
+    <h2>Which way is north</h2>
+    <p>The <b>panner</b> draws a compass for north and east, taken from the WCS
+    and rotated with the display, so it stays right when you rotate or flip the
+    image. <b>WCS &rarr; Show Direction Arrows</b> additionally draws the
+    compass over the image itself; DS9 puts it only in the panner, and this
+    toggle defaults off.</p>
+
+    <h2>The coordinate grid</h2>
+    <p><b>Analysis &rarr; Coordinate Grid</b> draws a graticule over the image,
+    and <b>Coordinate Grid Parameters</b> controls it in detail: which system,
+    the spacing, whether the labels sit inside or outside the frame, the fonts,
+    the colours, the title and the axis titles. The grid is drawn from the WCS,
+    so it curves where the projection curves.</p>
+
+    <h2>Pan, zoom and rotate</h2>
+    <ul>
+      <li><b>Zoom &rarr; Center Image</b> re-centres; middle-click centres on a
+      point.</li>
+      <li><b>Zoom In</b>, <b>Zoom Out</b>, <b>Zoom Fit</b>
+      (<kbd>Ctrl</kbd>+<kbd>0</kbd>) and the fixed steps from <b>1/32</b> to
+      <b>32</b>.</li>
+      <li><b>Invert X</b>, <b>Invert Y</b>, <b>Invert XY</b> flip the display.
+      FITS counts rows from the bottom and screens from the top, so an image
+      with no WCS can look flipped compared with another program's default.</li>
+      <li><b>0</b>, <b>90</b>, <b>180</b>, <b>270 Degrees</b> rotate it.</li>
+      <li><b>Zoom &rarr; Align</b> rotates the image so that north is up
+      according to its WCS.</li>
+      <li><b>Pan Zoom Rotate Parameters</b> sets all of them by typing numbers —
+      including panning to a position in world coordinates, which is how you go
+      to a named source.</li>
+    </ul>
+    <p>The panner, the magnifier and any regions, contours or grid all follow
+    the rotation, so what you measure is what you see.</p>
+
+    <h2>Resolving a name</h2>
+    <p><b>Analysis &rarr; Name Resolution</b> looks a source name up with SIMBAD
+    or NED and gives you its coordinates, which you can then pan to.</p>
+
+    <div class="nav">
+        <a href="colormaps.html">&larr; Colour</a>
+        <a href="frames.html">Frames and Comparison &rarr;</a>
+    </div>
+</body>
+</html>

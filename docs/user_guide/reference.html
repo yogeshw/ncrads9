@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NCRADS9 &mdash; Quick Reference</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               max-width: 900px; margin: 0 auto; padding: 2rem; line-height: 1.6; color: #222; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 0.5rem; }
+        h2 { color: #34495e; margin-top: 2rem; }
+        h3 { color: #34495e; margin-top: 1.5rem; font-size: 1.05rem; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: #f4f6f8; padding: 0.1rem 0.35rem; border-radius: 3px;
+               font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.92em; }
+        pre { background: #f4f6f8; padding: 1rem; border-radius: 6px; overflow-x: auto; }
+        pre code { background: none; padding: 0; }
+        kbd { background: #eceff1; border: 1px solid #cfd8dc; border-bottom-width: 2px;
+              border-radius: 4px; padding: 0.05rem 0.35rem; font-size: 0.85em;
+              font-family: ui-monospace, Menlo, Consolas, monospace; }
+        table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+        th, td { border: 1px solid #dfe4e8; padding: 0.5rem 0.7rem; text-align: left;
+                 vertical-align: top; }
+        th { background: #f4f6f8; }
+        .toc { background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin: 1rem 0; }
+        .toc h2 { margin-top: 0; }
+        .note { background: #f1f8ff; border-left: 4px solid #3498db; padding: 0.8rem 1rem;
+                margin: 1rem 0; border-radius: 0 6px 6px 0; }
+        .warn { background: #fff8f1; border-left: 4px solid #e67e22; padding: 0.8rem 1rem;
+                margin: 1rem 0; border-radius: 0 6px 6px 0; }
+        ol, ul { padding-left: 1.5rem; }
+        li { padding: 0.2rem 0; }
+        .breadcrumb { margin-bottom: 1rem; color: #666; }
+        .breadcrumb a { color: #666; }
+        .nav { display: flex; justify-content: space-between; margin-top: 3rem;
+               padding-top: 1rem; border-top: 1px solid #dfe4e8; }
+    </style>
+</head>
+<body>
+    <div class="breadcrumb">
+        <a href="../index.html">Home</a> / <a href="index.html">User Guide</a> / Reference
+    </div>
+
+    <h1>Quick Reference</h1>
+
+    <h2>Keyboard</h2>
+    <p>These are the defaults; all of them can be rebound in
+    <b>Preferences</b>.</p>
+    <table>
+      <tr><th>Key</th><th>Does</th><th>Key</th><th>Does</th></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>Open</td>
+          <td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Save As</td>
+          <td><kbd>Ctrl</kbd>+<kbd>P</kbd></td><td>Print</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd></td><td>Page Setup</td>
+          <td><kbd>Ctrl</kbd>+<kbd>Q</kbd></td><td>Exit</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>Undo</td>
+          <td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td>Redo</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>X</kbd></td><td>Cut</td>
+          <td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Copy</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>Paste</td>
+          <td><kbd>Ctrl</kbd>+<kbd>,</kbd></td><td>Preferences</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>+</kbd></td><td>Zoom In</td>
+          <td><kbd>Ctrl</kbd>+<kbd>-</kbd></td><td>Zoom Out</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>0</kbd></td><td>Zoom to Fit</td>
+          <td><kbd>F11</kbd></td><td>Full Screen</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>New Frame</td>
+          <td><kbd>Ctrl</kbd>+<kbd>W</kbd></td><td>Delete Frame</td></tr>
+      <tr><td><kbd>Tab</kbd></td><td>Next Frame</td>
+          <td><kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Previous Frame</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>I</kbd></td><td>Header</td>
+          <td><kbd>Ctrl</kbd>+<kbd>B</kbd></td><td>Prism</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd></td><td>Notes</td>
+          <td><kbd>Ctrl</kbd>+<kbd>`</kbd></td><td>Python Console</td></tr>
+    </table>
+
+    <h2>Mouse</h2>
+    <table>
+      <tr><th>Gesture</th><th>Effect</th></tr>
+      <tr><td>Left drag</td><td>Whatever <b>Edit</b> is set to: pan under
+      <b>None</b>, draw under <b>Region</b>, and so on.</td></tr>
+      <tr><td>Right drag</td><td>Contrast (up/down) and bias (left/right).</td></tr>
+      <tr><td>Middle click</td><td>Centre on the point clicked.</td></tr>
+      <tr><td>Scroll</td><td>Zoom about the cursor.</td></tr>
+      <tr><td>Double click a region</td><td>Its dialog.</td></tr>
+      <tr><td>Right click while drawing a polygon</td><td>Finish it.</td></tr>
+    </table>
+
+    <h2>Pointer modes (Edit menu)</h2>
+    <p><b>None</b>, <b>Region</b>, <b>Crosshair</b>, <b>Colorbar</b>,
+    <b>Pan</b>, <b>Zoom</b>, <b>Rotate</b>, <b>Crop</b>, <b>Catalog</b>,
+    <b>Footprint</b>, <b>Examine</b>, <b>3D</b>, <b>Illustrate</b> — each makes
+    the left button do that one thing.</p>
+
+    <h2>Command line</h2>
+    <p>Options are applied in the order given, so they can be interleaved with
+    filenames.</p>
+    <table>
+      <tr><th>Group</th><th>Options</th></tr>
+      <tr><td>Help</td><td><code>-h</code>, <code>--help</code>,
+      <code>--help-html</code></td></tr>
+      <tr><td>Colour composites</td><td><code>-rgb</code>, <code>-red</code>,
+      <code>-green</code>, <code>-blue</code></td></tr>
+      <tr><td>Display mode</td><td><code>-single</code>, <code>-tile</code>,
+      <code>-blink</code>, <code>-fade</code> (each also
+      <code>on|off</code>)</td></tr>
+      <tr><td>Scale</td><td><code>-linear</code>, <code>-log</code>,
+      <code>-sqrt</code>, <code>-squared</code>, <code>-power</code>,
+      <code>-asinh</code>, <code>-histeq</code>, <code>-histogram</code>,
+      <code>-zscale</code>, <code>-minmax</code>, <code>-scale MODE</code></td></tr>
+      <tr><td>Colour</td><td><code>-cmap NAME</code>, <code>-colormap NAME</code>,
+      <code>-color NAME</code>, <code>-invert</code>, <code>-noinvert</code>, and
+      a table's name directly (<code>-heat</code>, <code>-viridis</code>)</td></tr>
+      <tr><td>WCS</td><td><code>-wcs SYSTEM</code>, <code>-fk5</code>,
+      <code>-fk4</code>, <code>-icrs</code>, <code>-galactic</code>,
+      <code>-ecliptic</code>, <code>-sexagesimal</code>,
+      <code>-degrees</code></td></tr>
+      <tr><td>Other</td><td><code>-bin N</code>, <code>-frame</code>,
+      <code>-zoom</code>, <code>-pan</code>, <code>-colorbar</code>,
+      <code>-regions</code>, <code>-match</code>, <code>-lock</code>,
+      <code>-width</code>, <code>-height</code>, <code>-save</code>,
+      <code>-version</code>, <code>-about</code></td></tr>
+    </table>
+
+    <h2>File formats read and written</h2>
+    <table>
+      <tr><th>Kind</th><th>Read</th><th>Written</th></tr>
+      <tr><td>Images</td><td>FITS (plain, gzip, fpack), NRRD, ENVI, GIF, TIFF,
+      JPEG, PNG, raw array</td><td>the same, plus EPS for the view</td></tr>
+      <tr><td>Regions</td><td>DS9 <code>.reg</code></td><td>DS9
+      <code>.reg</code></td></tr>
+      <tr><td>Region templates</td><td><code>.tpl</code></td><td><code>.tpl</code></td></tr>
+      <tr><td>Contours</td><td>DS9 contour files</td><td>DS9 contour files</td></tr>
+      <tr><td>Colour tables</td><td><code>.sao</code>, <code>.lut</code></td>
+      <td>&mdash;</td></tr>
+      <tr><td>Sessions</td><td>DS9 backup</td><td>DS9 backup</td></tr>
+      <tr><td>Analysis commands</td><td><code>.ans</code>,
+      <code>*.ds9</code></td><td>&mdash;</td></tr>
+    </table>
+
+    <div class="nav">
+        <a href="customising.html">&larr; Customising NCRADS9</a>
+        <a href="troubleshooting.html">Troubleshooting &rarr;</a>
+    </div>
+</body>
+</html>

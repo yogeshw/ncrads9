@@ -3,113 +3,100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Colormaps and Scale - NCRADS9 User Guide</title>
+    <title>NCRADS9 &mdash; Colour</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 900px; margin: 0 auto; padding: 2rem; line-height: 1.6; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               max-width: 900px; margin: 0 auto; padding: 2rem; line-height: 1.6; color: #222; }
         h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 0.5rem; }
-        h2 { color: #34495e; }
+        h2 { color: #34495e; margin-top: 2rem; }
+        h3 { color: #34495e; margin-top: 1.5rem; font-size: 1.05rem; }
         a { color: #3498db; text-decoration: none; }
         a:hover { text-decoration: underline; }
-        code { background: #f4f4f4; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: 'Monaco', 'Menlo', monospace; }
+        code { background: #f4f6f8; padding: 0.1rem 0.35rem; border-radius: 3px;
+               font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.92em; }
+        pre { background: #f4f6f8; padding: 1rem; border-radius: 6px; overflow-x: auto; }
+        pre code { background: none; padding: 0; }
+        kbd { background: #eceff1; border: 1px solid #cfd8dc; border-bottom-width: 2px;
+              border-radius: 4px; padding: 0.05rem 0.35rem; font-size: 0.85em;
+              font-family: ui-monospace, Menlo, Consolas, monospace; }
+        table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+        th, td { border: 1px solid #dfe4e8; padding: 0.5rem 0.7rem; text-align: left;
+                 vertical-align: top; }
+        th { background: #f4f6f8; }
+        .toc { background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin: 1rem 0; }
+        .toc h2 { margin-top: 0; }
+        .note { background: #f1f8ff; border-left: 4px solid #3498db; padding: 0.8rem 1rem;
+                margin: 1rem 0; border-radius: 0 6px 6px 0; }
+        .warn { background: #fff8f1; border-left: 4px solid #e67e22; padding: 0.8rem 1rem;
+                margin: 1rem 0; border-radius: 0 6px 6px 0; }
+        ol, ul { padding-left: 1.5rem; }
+        li { padding: 0.2rem 0; }
         .breadcrumb { margin-bottom: 1rem; color: #666; }
         .breadcrumb a { color: #666; }
-        .nav-footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #eee; display: flex; justify-content: space-between; }
-        table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
-        th, td { border: 1px solid #ddd; padding: 0.75rem; text-align: left; }
-        th { background: #f8f9fa; }
+        .nav { display: flex; justify-content: space-between; margin-top: 3rem;
+               padding-top: 1rem; border-top: 1px solid #dfe4e8; }
     </style>
 </head>
 <body>
     <div class="breadcrumb">
-        <a href="../index.html">Home</a> / <a href="index.html">User Guide</a> / Colormaps
+        <a href="../index.html">Home</a> / <a href="index.html">User Guide</a> / Colour
     </div>
 
-    <h1>Colormaps and Scale</h1>
+    <h1>Colour</h1>
 
-    <h2>Available Colormaps</h2>
-    <p>NCRADS9 now exposes DS9-style color controls in the top-level <strong>Color</strong> menu, including default astronomical maps, grouped scientific maps, and user-loaded colormaps.</p>
+    <p>The colour table maps the scaled values to colours. Which one you choose
+    is mostly taste, with one real constraint: a table that is not monotonic in
+    lightness will invent structure that is not in your data.</p>
 
-    <table>
-        <tr>
-            <th>Colormaps</th>
-        </tr>
-        <tr>
-            <td>Grey, Red, Green, Blue, A, B, BB, HE, I8, AIPS0, SLS, HSV, Heat, Cool, Rainbow, Standard, Staircase, Color, plus grouped Matplotlib Uniform maps (Viridis/Plasma/Inferno/Magma) and user-loaded maps</td>
-        </tr>
-    </table>
-
-    <p>Access colormaps via the top-level <strong>Color</strong> menu, including <strong>User → Load Colormap...</strong> for <code>.lut</code>/<code>.sao</code> files.</p>
-
-    <h2>Colorbar Controls</h2>
-    <p>The <strong>Color</strong> menu includes colorbar controls for visibility, orientation, numerics, spacing mode, font size, bar size, and tick count.</p>
-
-    <h2>Scale Options</h2>
-    <p>The scale determines how pixel values map to display colors:</p>
-
-    <table>
-        <tr>
-            <th>Scale</th>
-            <th>Description</th>
-            <th>Best For</th>
-        </tr>
-        <tr>
-            <td>Linear</td>
-            <td>Direct mapping of values</td>
-            <td>Uniform data ranges</td>
-        </tr>
-        <tr>
-            <td>Log</td>
-            <td>Logarithmic mapping</td>
-            <td>Large dynamic range</td>
-        </tr>
-        <tr>
-            <td>Sqrt</td>
-            <td>Square root mapping</td>
-            <td>Moderate dynamic range</td>
-        </tr>
-        <tr>
-            <td>Squared</td>
-            <td>Squared mapping</td>
-            <td>Enhancing bright features</td>
-        </tr>
-        <tr>
-            <td>Asinh</td>
-            <td>Inverse hyperbolic sine</td>
-            <td>Wide range with negatives</td>
-        </tr>
-        <tr>
-            <td>Histogram Equalization</td>
-            <td>Equalizes histogram</td>
-            <td>Maximum detail</td>
-        </tr>
-    </table>
-
-    <p>Access scale options via <strong>Scale</strong> menu.</p>
-
-    <h2>Contrast and Bias</h2>
-    <p>Fine-tune the display using contrast and bias controls:</p>
+    <h2>The tables</h2>
     <ul>
-        <li><strong>Contrast:</strong> Adjusts the range of values displayed (vertical mouse drag)</li>
-        <li><strong>Bias:</strong> Shifts the center of the display range (horizontal mouse drag)</li>
+      <li><b>Gray</b>, <b>Red</b>, <b>Green</b>, <b>Blue</b>, <b>A</b>,
+      <b>B</b>, <b>BB</b>, <b>HE</b>, <b>I8</b> — the classic set.</li>
+      <li><b>AIPS0</b>, <b>SLS</b>, <b>HSV</b>, <b>Heat</b>, <b>Cool</b>,
+      <b>Rainbow</b>, <b>Standard</b>, <b>Staircase</b>, <b>Color</b> — the rest
+      of the traditional tables, several inherited from AIPS.</li>
+      <li><b>Viridis</b>, <b>Plasma</b>, <b>Inferno</b> and <b>Magma</b> at the
+      top level, with the rest of matplotlib's grouped below as <b>Matplotlib
+      Uniform</b>, <b>Sequential</b>, <b>Diverging</b> and <b>Cyclic</b>.</li>
+      <li><b>h5utils</b>, <b>Cubehelix</b>, <b>Gist</b>, <b>Topographic</b>,
+      <b>Scientific Colour Maps</b> and <b>Solar Colormaps</b> — further
+      collections, 164 bundled tables in all.</li>
+      <li><b>User</b> — <b>Load Colormap</b> reads <code>.sao</code> and
+      <code>.lut</code> files, so tables you already have work here.</li>
     </ul>
+    <div class="note"><b>For publication</b>, prefer grey or one of the
+    perceptually uniform maps. Rainbow and HSV have bright bands in the middle
+    that read as edges in the data, and they do not survive being printed in
+    black and white or being seen by a colour-blind reader.</div>
 
-    <h3>Keyboard Shortcuts</h3>
-    <ul>
-        <li><code>Right-click + drag</code>: Adjust contrast and bias interactively</li>
-    </ul>
+    <h2>Inverting, and resetting</h2>
+    <p><b>Color &rarr; Invert Colormap</b> flips the table — black-on-white for
+    a figure that will be printed. <b>Reset Colormap</b> returns the table to
+    its default, and <b>Reset Contrast/Bias</b> undoes a right-drag without
+    changing which table you are on.</p>
 
-    <h2>Scale Limits</h2>
-    <p>Set specific minimum and maximum values via <strong>Scale → Scale Parameters</strong>:</p>
-    <ul>
-        <li><strong>Min/Max:</strong> Uses full data range</li>
-        <li><strong>ZScale:</strong> IRAF zscale algorithm</li>
-        <li><strong>User:</strong> Manual specification</li>
-        <li><strong>Percentile:</strong> Based on data percentiles</li>
-    </ul>
+    <h2>The colour bar</h2>
+    <p><b>Color &rarr; Colorbar</b> and <b>View &rarr; Colorbar</b> show and
+    hide it; they are the same switch in two places, which is a deliberate
+    divergence from DS9, where it lives only in View.
+    <b>Color &rarr; Colorbar Options</b> sets its orientation, whether it
+    carries numbers, the font, the size of the bar and the number of ticks.
+    <b>View &rarr; Multiple Colorbars</b> gives each frame its own when they are
+    tiled.</p>
 
-    <div class="nav-footer">
-        <a href="regions.html">← Regions</a>
-        <a href="analysis.html">Analysis →</a>
+    <h2>Colour tags</h2>
+    <p><b>Color &rarr; Color Tags</b> paints a chosen range of values in a flat
+    colour of its own, on top of the table. Use it to mark saturated pixels, or
+    to pick out everything above a threshold without changing the stretch.</p>
+
+    <h2>Colormap Parameters</h2>
+    <p>Contrast and bias as numbers rather than as a drag, with a preview of the
+    table. Useful when you need two frames to have demonstrably the same
+    settings, or when you want to write the numbers into a caption.</p>
+
+    <div class="nav">
+        <a href="scales.html">&larr; Scaling the Data</a>
+        <a href="coordinates.html">Coordinates and WCS &rarr;</a>
     </div>
 </body>
 </html>

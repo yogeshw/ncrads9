@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NCRADS9 &mdash; Scaling the Data</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               max-width: 900px; margin: 0 auto; padding: 2rem; line-height: 1.6; color: #222; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 0.5rem; }
+        h2 { color: #34495e; margin-top: 2rem; }
+        h3 { color: #34495e; margin-top: 1.5rem; font-size: 1.05rem; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: #f4f6f8; padding: 0.1rem 0.35rem; border-radius: 3px;
+               font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.92em; }
+        pre { background: #f4f6f8; padding: 1rem; border-radius: 6px; overflow-x: auto; }
+        pre code { background: none; padding: 0; }
+        kbd { background: #eceff1; border: 1px solid #cfd8dc; border-bottom-width: 2px;
+              border-radius: 4px; padding: 0.05rem 0.35rem; font-size: 0.85em;
+              font-family: ui-monospace, Menlo, Consolas, monospace; }
+        table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+        th, td { border: 1px solid #dfe4e8; padding: 0.5rem 0.7rem; text-align: left;
+                 vertical-align: top; }
+        th { background: #f4f6f8; }
+        .toc { background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin: 1rem 0; }
+        .toc h2 { margin-top: 0; }
+        .note { background: #f1f8ff; border-left: 4px solid #3498db; padding: 0.8rem 1rem;
+                margin: 1rem 0; border-radius: 0 6px 6px 0; }
+        .warn { background: #fff8f1; border-left: 4px solid #e67e22; padding: 0.8rem 1rem;
+                margin: 1rem 0; border-radius: 0 6px 6px 0; }
+        ol, ul { padding-left: 1.5rem; }
+        li { padding: 0.2rem 0; }
+        .breadcrumb { margin-bottom: 1rem; color: #666; }
+        .breadcrumb a { color: #666; }
+        .nav { display: flex; justify-content: space-between; margin-top: 3rem;
+               padding-top: 1rem; border-top: 1px solid #dfe4e8; }
+    </style>
+</head>
+<body>
+    <div class="breadcrumb">
+        <a href="../index.html">Home</a> / <a href="index.html">User Guide</a> / Scaling
+    </div>
+
+    <h1>Scaling the Data</h1>
+
+    <p>A FITS image holds numbers; a screen shows 256 greys. The scale is how
+    the one becomes the other, and it is the single setting that most decides
+    whether you can see what is in your data. Nothing here changes the pixel
+    values — only how they are drawn.</p>
+    <p>Two choices make up a scale: <b>which range of values to spread across
+    the display</b> (the limits), and <b>what curve to spread them along</b>
+    (the algorithm).</p>
+
+    <h2>Limits</h2>
+    <p>The top of the <b>Scale</b> menu's second group:</p>
+    <table>
+      <tr><th>Limits</th><th>What they are</th><th>When to use them</th></tr>
+      <tr><td><b>Min Max</b></td><td>The smallest and largest pixel in the
+      image.</td><td>Rarely useful on real data: one hot pixel or one bright
+      star sets the maximum and flattens everything else. It is the
+      default because it is the only choice that is guaranteed to show every
+      value.</td></tr>
+      <tr><td><b>ZScale</b></td><td>IRAF's algorithm: it samples the image, fits
+      the middle of the value distribution and ignores the tails.</td>
+      <td>The usual first move. Shows faint structure without the bright
+      sources taking over.</td></tr>
+      <tr><td><b>ZMax</b></td><td>ZScale's lower limit with the true
+      maximum above it.</td><td>When you want the faint end zscaled but the peak
+      value still on the bar.</td></tr>
+      <tr><td><b>99.5%</b> down to <b>90%</b></td><td>Clip that percentage of
+      the distribution, discarding the rest at both ends.</td>
+      <td>A blunter, more predictable alternative to zscale.</td></tr>
+      <tr><td><b>User</b></td><td>The pair you last typed.</td><td>Comparing
+      several images on identical limits.</td></tr>
+      <tr><td><b>Other</b></td><td>Type a pair now.</td><td>As above.</td></tr>
+    </table>
+    <p><b>Scale &rarr; Scale Parameters</b> shows the histogram with the current
+    limits drawn on it, which is the quickest way to understand why an image
+    looks the way it does. <b>ZScale Parameters</b> exposes zscale's contrast,
+    sample size and line count if the defaults are not suiting your data.</p>
+
+    <h3>Where the limits are measured</h3>
+    <ul>
+      <li><b>Global</b> / <b>Local</b> — compute limits over the whole image, or
+      only over the part currently displayed. Local re-stretches as you pan,
+      which is excellent for exploring and misleading for comparing.</li>
+      <li><b>Min Max</b> mode and <b>Use DATASEC</b> — whether to respect the
+      header's <code>DATASEC</code> and ignore overscan regions when measuring.</li>
+    </ul>
+
+    <h2>Algorithms</h2>
+    <table>
+      <tr><th>Algorithm</th><th>Shape</th><th>Good for</th></tr>
+      <tr><td><b>Linear</b></td><td>Straight.</td><td>Flat fields, anything
+      whose values span a small range.</td></tr>
+      <tr><td><b>Log</b></td><td>Compresses the bright end hard.</td>
+      <td>Large dynamic range: a galaxy core and its outskirts at once. The
+      <b>Log Exponent</b> entry sets how hard.</td></tr>
+      <tr><td><b>Square Root</b></td><td>Mild compression.</td><td>A gentler log;
+      often the best-looking choice for broadband images.</td></tr>
+      <tr><td><b>Squared</b></td><td>Expands the bright end.</td><td>Separating
+      values near the top of the range.</td></tr>
+      <tr><td><b>Power</b></td><td>Adjustable exponent.</td><td>When square root
+      and squared bracket what you want.</td></tr>
+      <tr><td><b>ASINH</b>, <b>SINH</b></td><td>Linear near zero, logarithmic
+      further out.</td><td>Faint emission on a noisy background — asinh does not
+      blow up at or below zero the way log does, which matters in
+      interferometric maps with negative pixels.</td></tr>
+      <tr><td><b>Histogram Equalization</b></td><td>Every displayed grey gets
+      the same number of pixels.</td><td>Finding structure. Not for figures: it
+      makes the brightness scale meaningless.</td></tr>
+    </table>
+
+    <h2>Contrast and bias</h2>
+    <p>Right-drag on the image slides the colour table's midpoint (left and
+    right) and steepens or flattens it (up and down). This sits on top of the
+    scale, and is the fastest way to explore a stretch you have already chosen.
+    <b>Color &rarr; Reset Colormap</b> undoes it. To set exact numbers, use
+    <b>Color &rarr; Colormap Parameters</b>.</p>
+
+    <div class="note"><b>Comparing frames?</b> Set the limits by hand or use
+    <b>Frame &rarr; Lock &rarr; Scale Limits</b>, so that a difference on screen
+    is a difference in the data rather than in the stretch.</div>
+
+    <div class="nav">
+        <a href="opening_files.html">&larr; Opening Files</a>
+        <a href="colormaps.html">Colour &rarr;</a>
+    </div>
+</body>
+</html>

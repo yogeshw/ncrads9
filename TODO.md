@@ -1431,6 +1431,36 @@ Depends on M2, M3.
       A grab needs a viewport, so a window that was never shown (which is how the printing
       tests drive it) still falls back to the rendered array, and an OpenGL frame that a driver
       hands back as a flat rectangle does too.
+      **The user documentation was six thin pages, and it over-credited DS9**
+      (`docs/user_guide/`, `ncrads9/ui/help_documents.py`, `tests/unit/test_documentation.py`).
+      Two separate things, reported together.
+      *Terse.* The guide was 21 KB across six pages -- mostly headings with a sentence under
+      each, and parts of it stale ("NCRADS9 currently loads the default extension" predates the
+      extension chooser). It is now 93 KB across thirteen chapters, with seven that did not
+      exist at all: scaling, coordinates and WCS, frames and comparison, saving and printing,
+      scripting, customising, a quick reference and troubleshooting. The existing six were
+      rewritten rather than padded. Every claim was checked against the menu snapshot or the
+      code before it was written, and several first drafts were wrong and got corrected: `Open
+      as` does not have Data Cube, Array or Compressed entries (those are under `Import`),
+      `Preserve During Load` keeps Pan and Region and not the scale limits, the colour table is
+      `Gray` not `Grey`, and Match/Lock covers `Scale and Limits` and 3D.
+      *Over-credited.* The pages said NCRADS9 "exists because SAOImageDS9 does", that "credit
+      for the design belongs there", and that "the design is theirs". That hands DS9 other
+      people's work. Colour lookup tables and the mouse dragged across them, blink comparison,
+      zoom and pan, contours and coordinate grids over the data, regions as overlays, tiled
+      frames, cuts along a row: AIPS, IRAF, MIDAS and Karma were doing these things, several of
+      them decades ago, and blink comparison is older than computing -- Pluto was found with a
+      blink comparator. DS9 grew out of that work, by way of SAOimage and SAOtng, rather than
+      starting it. The `zscale` limits are IRAF's algorithm and are named after IRAF's task.
+      What *is* DS9's own is named plainly instead, because it is real and NCRADS9 depends on
+      it: the arrangement of the menus, the region file format, the session format, the XPA
+      access-point names, and the 164 bundled colour tables. The Story, Acknowledgment and About
+      SAOImageDS9 pages, the guide's introduction and the README all give that account now.
+      Gated both ways in `tests/unit/test_documentation.py`: every link in `docs/` resolves, the
+      contents page lists every chapter and every chapter links back, each chapter carries its
+      title, breadcrumb, heading and nav bar and more than 1500 characters of prose (the fault
+      being fixed), the acknowledgment and story name both what is DS9's *and* what came before
+      it, and the four exact over-claims are kept out of every page a user reads.
       **A contour joined each island to the next** (`tests/unit/test_contour_islands.py`).
       Reported as the lowest contour level connecting to the lowest level of the adjacent
       island, and it was two faults together.

@@ -3,20 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Working with Regions - NCRADS9 User Guide</title>
+    <title>NCRADS9 &mdash; Regions</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 900px; margin: 0 auto; padding: 2rem; line-height: 1.6; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               max-width: 900px; margin: 0 auto; padding: 2rem; line-height: 1.6; color: #222; }
         h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 0.5rem; }
-        h2 { color: #34495e; }
+        h2 { color: #34495e; margin-top: 2rem; }
+        h3 { color: #34495e; margin-top: 1.5rem; font-size: 1.05rem; }
         a { color: #3498db; text-decoration: none; }
         a:hover { text-decoration: underline; }
-        code { background: #f4f4f4; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: 'Monaco', 'Menlo', monospace; }
-        pre { background: #2c3e50; color: #ecf0f1; padding: 1rem; border-radius: 8px; overflow-x: auto; }
-        pre code { background: none; color: inherit; }
+        code { background: #f4f6f8; padding: 0.1rem 0.35rem; border-radius: 3px;
+               font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.92em; }
+        pre { background: #f4f6f8; padding: 1rem; border-radius: 6px; overflow-x: auto; }
+        pre code { background: none; padding: 0; }
+        kbd { background: #eceff1; border: 1px solid #cfd8dc; border-bottom-width: 2px;
+              border-radius: 4px; padding: 0.05rem 0.35rem; font-size: 0.85em;
+              font-family: ui-monospace, Menlo, Consolas, monospace; }
+        table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+        th, td { border: 1px solid #dfe4e8; padding: 0.5rem 0.7rem; text-align: left;
+                 vertical-align: top; }
+        th { background: #f4f6f8; }
+        .toc { background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin: 1rem 0; }
+        .toc h2 { margin-top: 0; }
+        .note { background: #f1f8ff; border-left: 4px solid #3498db; padding: 0.8rem 1rem;
+                margin: 1rem 0; border-radius: 0 6px 6px 0; }
+        .warn { background: #fff8f1; border-left: 4px solid #e67e22; padding: 0.8rem 1rem;
+                margin: 1rem 0; border-radius: 0 6px 6px 0; }
+        ol, ul { padding-left: 1.5rem; }
+        li { padding: 0.2rem 0; }
         .breadcrumb { margin-bottom: 1rem; color: #666; }
         .breadcrumb a { color: #666; }
-        .nav-footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #eee; display: flex; justify-content: space-between; }
-        .tip { background: #e8f4fd; border-left: 4px solid #3498db; padding: 1rem; margin: 1rem 0; }
+        .nav { display: flex; justify-content: space-between; margin-top: 3rem;
+               padding-top: 1rem; border-top: 1px solid #dfe4e8; }
     </style>
 </head>
 <body>
@@ -24,52 +42,103 @@
         <a href="../index.html">Home</a> / <a href="index.html">User Guide</a> / Regions
     </div>
 
-    <h1>Working with Regions</h1>
+    <h1>Regions</h1>
 
-    <p>Regions allow you to define areas of interest on your image for analysis, annotation, or data extraction.</p>
+    <p>A region marks part of an image: an aperture to measure, a source to
+    label, an artefact to exclude. Regions are drawn over the pixels, saved as
+    text, and understood by other astronomical software.</p>
 
-    <h2>Creating Regions</h2>
-    <p>To create a region, select a region shape from the <strong>Region</strong> menu or toolbar:</p>
+    <h2>Drawing one</h2>
+    <ol>
+      <li><b>Edit &rarr; Region</b> puts the left mouse button into drawing
+      mode. (Under <b>Edit &rarr; None</b>, dragging pans instead.)</li>
+      <li><b>Region &rarr; Shape</b> chooses what a drag draws.</li>
+      <li>Drag on the image. Polygons and segments take a click per vertex and a
+      right-click to finish.</li>
+    </ol>
+
+    <h3>The shapes</h3>
+    <table>
+      <tr><th>Group</th><th>Shapes</th></tr>
+      <tr><td>Simple</td><td>Circle, Ellipse, Box, Polygon</td></tr>
+      <tr><td>Linear</td><td>Line, Vector, Segment, Projection</td></tr>
+      <tr><td>Annotation</td><td>Text, Ruler, Compass</td></tr>
+      <tr><td>Annuli</td><td>Annulus, Elliptical Annulus, Box Annulus</td></tr>
+      <tr><td>Panda</td><td>Panda, Elliptical Panda, Box Panda &mdash; annuli cut
+      into angular sectors, for azimuthal work</td></tr>
+      <tr><td>Point</td><td>A submenu of seven symbols: Circle, Box, Diamond,
+      Cross, X, Arrow, BoxCircle</td></tr>
+    </table>
+
+    <h2>Editing</h2>
+    <p>Click a region to select it and drag to move it; drag a handle to resize.
+    <b>Double-click</b> opens its dialog, which is where you type exact centres,
+    radii and angles, set the text label, and reach that region's own analysis.
+    <b>Region &rarr; Get Information</b> does the same for the selection.</p>
+    <p><b>All</b>, <b>None</b> and <b>Invert</b> change the selection;
+    <b>Front</b>, <b>Back</b>, <b>Move to Front</b> and <b>Move to Back</b>
+    change the stacking order of overlapping regions.</p>
+
+    <h2>Colour, width, font and properties</h2>
+    <p>The <b>Color</b>, <b>Width</b> and <b>Font</b> cascades apply to the
+    selected regions, or set the default for the next one when nothing is
+    selected. <b>Properties</b> holds the flags:</p>
+    <table>
+      <tr><th>Property</th><th>Meaning</th></tr>
+      <tr><td><b>Fixed in Size</b></td><td>Keeps its screen size when you
+      zoom, instead of scaling with the image.</td></tr>
+      <tr><td><b>Can Edit / Move / Rotate / Delete</b></td><td>Permissions. Turn
+      off <b>Can Delete</b> to protect a region from <b>Delete All</b>.</td></tr>
+      <tr><td><b>Include</b> / <b>Exclude</b></td><td>Whether the region adds to
+      the area of interest or cuts out of it. An excluded region is written with
+      a leading <code>-</code> and is how you mask a star out of an
+      aperture.</td></tr>
+      <tr><td><b>Source</b> / <b>Background</b></td><td>What the region is for.
+      Analysis tools that subtract a background use this.</td></tr>
+      <tr><td><b>Dash</b>, <b>Fill</b></td><td>Appearance. These two are ours;
+      DS9 has no counterpart.</td></tr>
+    </table>
+
+    <h2>Groups, composites and templates</h2>
     <ul>
-        <li><strong>Circle:</strong> Click and drag to define radius</li>
-        <li><strong>Ellipse:</strong> Click and drag to define axes</li>
-        <li><strong>Box:</strong> Click and drag to define rectangle</li>
-        <li><strong>Polygon:</strong> Click to add vertices, double-click to close</li>
-        <li><strong>Line:</strong> Click and drag to define endpoints</li>
-        <li><strong>Point:</strong> Click to place a point marker</li>
+      <li><b>New Group</b> names the current selection so it can be recalled;
+      <b>Groups</b> lists and manages them.</li>
+      <li><b>Composite Region &rarr; Create</b> welds a selection into one region
+      that moves as a unit; <b>Dissolve</b> takes it apart again.</li>
+      <li><b>Template &rarr; Save</b> writes the regions relative to a reference
+      point rather than at absolute coordinates, so <b>Open</b> can drop the same
+      arrangement onto another image — a slit pattern, or a set of
+      apertures.</li>
+      <li><b>Instrument FOV</b> drops the footprint of a real instrument on the
+      image: Chandra ACIS and HRC, XMM EPIC, and the MMT and Suzaku
+      instruments.</li>
     </ul>
 
-    <h2>Editing Regions</h2>
-    <p>Select a region by clicking on it, then drag to move it:</p>
-    <ul>
-        <li><strong>Move:</strong> Drag the selected region to reposition</li>
-        <li><strong>Deselect:</strong> Click on empty space</li>
-    </ul>
+    <h2>Files</h2>
+    <p><b>Region &rarr; Save</b> writes DS9 format (<code>.reg</code>), which
+    CASA, topcat, pyregion, the <code>regions</code> astropy package and DS9
+    itself all read. <b>List</b> shows the same text in a window without writing
+    it, which is the quickest way to check exactly what you have.</p>
+    <p><b>Open</b> <i>adds</i> the file's regions to what is already there.
+    <b>Delete All and Open</b> replaces them. This is DS9's behaviour and the
+    reason it has both entries.</p>
+    <p><b>Save Selection</b>, <b>List Selection</b> and <b>Delete Selection</b>
+    do the same for the selected regions only.</p>
 
-    <h2>Saving and Loading Regions</h2>
-    <p>Regions can be saved in DS9 region format:</p>
+    <h2>Measuring with a region</h2>
+    <p>A region's own dialog reaches its statistics, its radial profile, its
+    histogram and a plot along it. <b>Region &rarr; Centroid</b> snaps regions
+    onto the source they sit near, and <b>Region Parameters &rarr; Auto
+    Centroid</b> does that as each one is drawn. The same dialog's <b>Auto Plot
+    2D</b>, <b>Auto Plot 3D</b> and <b>Auto Plot Statistics</b> open the
+    corresponding window automatically for every new region.</p>
+    <p><b>Region Parameters &rarr; Show</b> and <b>Show Text</b> hide the
+    overlay and its labels without deleting anything — useful just before
+    saving a figure.</p>
 
-    <h3>Saving</h3>
-    <p>Select <strong>Region → Save</strong></p>
-
-    <h3>Loading</h3>
-    <p>Select <strong>Region → Load</strong></p>
-
-    <div class="tip">
-        <strong>Tip:</strong> Region files use the standard DS9 format (.reg) and are compatible with other astronomy software.
-    </div>
-
-    <h2>Region File Format</h2>
-    <p>Example region file:</p>
-    <pre><code># Region file format: DS9 version 4.1
-global color=green dashlist=8 3 width=1
-fk5
-circle(12:30:45.2,+12:23:45.6,30")
-box(12:30:50.0,+12:24:00.0,60",40",45)</code></pre>
-
-    <div class="nav-footer">
-        <a href="opening_files.html">← Opening Files</a>
-        <a href="colormaps.html">Colormaps →</a>
+    <div class="nav">
+        <a href="frames.html">&larr; Frames and Comparison</a>
+        <a href="analysis.html">Analysis Tools &rarr;</a>
     </div>
 </body>
 </html>

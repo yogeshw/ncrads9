@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NCRADS9 &mdash; Frames and Comparison</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               max-width: 900px; margin: 0 auto; padding: 2rem; line-height: 1.6; color: #222; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 0.5rem; }
+        h2 { color: #34495e; margin-top: 2rem; }
+        h3 { color: #34495e; margin-top: 1.5rem; font-size: 1.05rem; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: #f4f6f8; padding: 0.1rem 0.35rem; border-radius: 3px;
+               font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.92em; }
+        pre { background: #f4f6f8; padding: 1rem; border-radius: 6px; overflow-x: auto; }
+        pre code { background: none; padding: 0; }
+        kbd { background: #eceff1; border: 1px solid #cfd8dc; border-bottom-width: 2px;
+              border-radius: 4px; padding: 0.05rem 0.35rem; font-size: 0.85em;
+              font-family: ui-monospace, Menlo, Consolas, monospace; }
+        table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+        th, td { border: 1px solid #dfe4e8; padding: 0.5rem 0.7rem; text-align: left;
+                 vertical-align: top; }
+        th { background: #f4f6f8; }
+        .toc { background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin: 1rem 0; }
+        .toc h2 { margin-top: 0; }
+        .note { background: #f1f8ff; border-left: 4px solid #3498db; padding: 0.8rem 1rem;
+                margin: 1rem 0; border-radius: 0 6px 6px 0; }
+        .warn { background: #fff8f1; border-left: 4px solid #e67e22; padding: 0.8rem 1rem;
+                margin: 1rem 0; border-radius: 0 6px 6px 0; }
+        ol, ul { padding-left: 1.5rem; }
+        li { padding: 0.2rem 0; }
+        .breadcrumb { margin-bottom: 1rem; color: #666; }
+        .breadcrumb a { color: #666; }
+        .nav { display: flex; justify-content: space-between; margin-top: 3rem;
+               padding-top: 1rem; border-top: 1px solid #dfe4e8; }
+    </style>
+</head>
+<body>
+    <div class="breadcrumb">
+        <a href="../index.html">Home</a> / <a href="index.html">User Guide</a> / Frames
+    </div>
+
+    <h1>Frames and Comparison</h1>
+
+    <p>A frame holds one image with its own scale, colour table, pan, zoom and
+    regions. Several frames let you compare — which is most of what a viewer is
+    for.</p>
+
+    <h2>Making and moving between frames</h2>
+    <ul>
+      <li><b>Frame &rarr; New Frame</b> (<kbd>Ctrl</kbd>+<kbd>N</kbd>), and the
+      <b>RGB</b>, <b>HSV</b>, <b>HLS</b> and <b>3D</b> variants.</li>
+      <li><b>Delete Frame</b> (<kbd>Ctrl</kbd>+<kbd>W</kbd>), <b>Delete All
+      Frames</b>.</li>
+      <li><kbd>Tab</kbd> and <kbd>Shift</kbd>+<kbd>Tab</kbd> step through them;
+      <b>First</b>, <b>Previous</b>, <b>Next</b>, <b>Last</b> and <b>Goto
+      Frame</b> do the same from the menu.</li>
+      <li><b>Show/Hide Frames</b> takes a frame out of the tiling without
+      deleting it; <b>Move Frame</b> reorders them.</li>
+      <li><b>Clear Frame</b> empties one, <b>Reset Frame</b> returns its
+      settings to the defaults, <b>Refresh Frame</b> redraws it.</li>
+    </ul>
+
+    <h2>Four ways to show several frames</h2>
+    <table>
+      <tr><th>Mode</th><th>What it does</th><th>Good for</th></tr>
+      <tr><td><b>Single Frame</b></td><td>One at a time.</td><td>Detail.</td></tr>
+      <tr><td><b>Tile Frames</b></td><td>All at once, side by side.</td>
+      <td>Comparing morphology, or several bands of the same field.</td></tr>
+      <tr><td><b>Blink Frames</b></td><td>Cycles through them in place.</td>
+      <td>Finding what moved or changed — the oldest trick in observational
+      astronomy, and still the best one for a transient.</td></tr>
+      <tr><td><b>Fade Frames</b></td><td>Cross-fades between them.</td>
+      <td>The same, more gently, when the two differ in alignment.</td></tr>
+    </table>
+    <p><b>Frame Parameters</b> sets the tile layout — grid, columns, rows — and
+    the blink interval.</p>
+
+    <h2>Match and Lock</h2>
+    <p>These are the two halves of keeping frames comparable, and the difference
+    matters:</p>
+    <ul>
+      <li><b>Frame &rarr; Match</b> makes the other frames match this one
+      <i>now</i>, once.</li>
+      <li><b>Frame &rarr; Lock</b> keeps them matched <i>from now on</i>, so a
+      change to one is a change to all.</li>
+    </ul>
+    <p>Both work on frame, crosshair, crop, slice, bin, axes order, scale,
+    scale and limits, colorbar, block, smooth and 3D, and both can tie the view
+    together by
+    <b>Image</b>, <b>Physical</b>, <b>Amplifier</b>, <b>Detector</b> or
+    <b>WCS</b> coordinates. Locking by WCS is what you want for two images of
+    the same field from different instruments: pan one and the other follows to
+    the same piece of sky, whatever its pixel grid.</p>
+    <div class="note"><b>Bin</b> and <b>Smooth</b> locking is a known
+    divergence: those two settings are the window's here rather than each
+    frame's, so all frames already share them and the entry says so rather than
+    silently doing nothing.</div>
+
+    <h2>Colour composites</h2>
+    <p>An <b>RGB</b> frame holds three images, one per channel.
+    <b>Frame &rarr; RGB</b> opens the dialog that chooses the current channel,
+    shows or hides each, and locks the channels' scale and colour together.
+    <b>HSV</b> and <b>HLS</b> work the same way in those colour spaces.
+    Channels need not share a pixel grid if they have WCS — lock by WCS and they
+    will be aligned.</p>
+
+    <h2>Data cubes</h2>
+    <p>A cube arrives with the <b>Cube</b> dialog (<b>Frame &rarr; Cube</b>): a
+    slider to step through planes, playback controls to run through them, and
+    the axis order for cubes whose spectral axis is not the third.
+    Analysis tools act on the plane you are looking at.</p>
+
+    <h2>3D frames</h2>
+    <p><b>Frame &rarr; New Frame 3D</b> renders a cube as a volume rather than a
+    stack, with azimuth and elevation, a choice of method, and a background
+    setting. <b>Frame &rarr; 3D</b> opens its controls.</p>
+
+    <div class="nav">
+        <a href="coordinates.html">&larr; Coordinates and WCS</a>
+        <a href="regions.html">Regions &rarr;</a>
+    </div>
+</body>
+</html>

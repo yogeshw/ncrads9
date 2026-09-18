@@ -3,22 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analysis Tools - NCRADS9 User Guide</title>
+    <title>NCRADS9 &mdash; Analysis Tools</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 900px; margin: 0 auto; padding: 2rem; line-height: 1.6; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               max-width: 900px; margin: 0 auto; padding: 2rem; line-height: 1.6; color: #222; }
         h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 0.5rem; }
-        h2 { color: #34495e; }
+        h2 { color: #34495e; margin-top: 2rem; }
+        h3 { color: #34495e; margin-top: 1.5rem; font-size: 1.05rem; }
         a { color: #3498db; text-decoration: none; }
         a:hover { text-decoration: underline; }
-        code { background: #f4f4f4; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: 'Monaco', 'Menlo', monospace; }
-        pre { background: #2c3e50; color: #ecf0f1; padding: 1rem; border-radius: 8px; overflow-x: auto; }
-        pre code { background: none; color: inherit; }
+        code { background: #f4f6f8; padding: 0.1rem 0.35rem; border-radius: 3px;
+               font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.92em; }
+        pre { background: #f4f6f8; padding: 1rem; border-radius: 6px; overflow-x: auto; }
+        pre code { background: none; padding: 0; }
+        kbd { background: #eceff1; border: 1px solid #cfd8dc; border-bottom-width: 2px;
+              border-radius: 4px; padding: 0.05rem 0.35rem; font-size: 0.85em;
+              font-family: ui-monospace, Menlo, Consolas, monospace; }
+        table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+        th, td { border: 1px solid #dfe4e8; padding: 0.5rem 0.7rem; text-align: left;
+                 vertical-align: top; }
+        th { background: #f4f6f8; }
+        .toc { background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin: 1rem 0; }
+        .toc h2 { margin-top: 0; }
+        .note { background: #f1f8ff; border-left: 4px solid #3498db; padding: 0.8rem 1rem;
+                margin: 1rem 0; border-radius: 0 6px 6px 0; }
+        .warn { background: #fff8f1; border-left: 4px solid #e67e22; padding: 0.8rem 1rem;
+                margin: 1rem 0; border-radius: 0 6px 6px 0; }
+        ol, ul { padding-left: 1.5rem; }
+        li { padding: 0.2rem 0; }
         .breadcrumb { margin-bottom: 1rem; color: #666; }
         .breadcrumb a { color: #666; }
-        .nav-footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #eee; display: flex; justify-content: space-between; }
-        table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
-        th, td { border: 1px solid #ddd; padding: 0.75rem; text-align: left; }
-        th { background: #f8f9fa; }
+        .nav { display: flex; justify-content: space-between; margin-top: 3rem;
+               padding-top: 1rem; border-top: 1px solid #dfe4e8; }
     </style>
 </head>
 <body>
@@ -28,107 +44,100 @@
 
     <h1>Analysis Tools</h1>
 
-    <p>NCRADS9 provides a DS9-style Analysis menu for examining and inspecting astronomical images.</p>
+    <p>The <b>Analysis</b> menu is for measuring and for looking closely. Most
+    of these tools act on the current frame and the plane you are looking at.</p>
 
-    <h2>Statistics</h2>
-    <p>Access via <strong>Analysis → Statistics</strong></p>
-
-    <p>The statistics dialog computes summary values for the loaded image:</p>
-    <table>
-        <tr>
-            <th>Statistic</th>
-            <th>Description</th>
-        </tr>
-        <tr>
-            <td>Sum</td>
-            <td>Total of all pixel values</td>
-        </tr>
-        <tr>
-            <td>Mean</td>
-            <td>Average pixel value</td>
-        </tr>
-        <tr>
-            <td>Median</td>
-            <td>Median pixel value</td>
-        </tr>
-        <tr>
-            <td>Std Dev</td>
-            <td>Standard deviation</td>
-        </tr>
-        <tr>
-            <td>Min/Max</td>
-            <td>Minimum and maximum values</td>
-        </tr>
-    </table>
-
-    <h2>Histogram</h2>
-    <p>Access via <strong>Analysis → Histogram</strong></p>
-
-    <p>The histogram dialog displays the distribution of valid pixel values (NaN/Inf excluded) using a fixed binning and includes a quick summary of min/max/mean/median.</p>
-    
-
-    <h2>Radial Profile</h2>
-    <p>Access via <strong>Analysis → Radial Profile</strong></p>
-    <p>Plots the mean radial profile around the image center in an interactive pop-up plot.</p>
-
-    <h2>Coordinate Systems</h2>
-    <p>NCRADS9 supports WCS coordinate display in these systems:</p>
-
-    <table>
-        <tr>
-            <th>System</th>
-            <th>Description</th>
-        </tr>
-        <tr>
-            <td>ICRS</td>
-            <td>International Celestial Reference System</td>
-        </tr>
-        <tr>
-            <td>FK5</td>
-            <td>J2000 equatorial (RA/Dec)</td>
-        </tr>
-        <tr>
-            <td>FK4</td>
-            <td>B1950 equatorial</td>
-        </tr>
-        <tr>
-            <td>Galactic</td>
-            <td>Galactic coordinates (l/b)</td>
-        </tr>
-        <tr>
-            <td>Ecliptic</td>
-            <td>Ecliptic coordinates</td>
-        </tr>
-    </table>
-
-    <p>Switch coordinate systems via the <strong>WCS</strong> menu.</p>
+    <h2>Looking at values</h2>
+    <ul>
+      <li><b>Pixel Table</b> — the values around the cursor as a grid, updating
+      as you move, at 3&times;3, 5&times;5, 7&times;7 or 9&times;9. This is the
+      tool for deciding whether a feature is one hot pixel or several.</li>
+      <li><b>Statistics</b> — sum, mean, median, standard deviation, minimum and
+      maximum. Over a region if one is selected.</li>
+      <li><b>Histogram</b> — the distribution of the valid pixels, with NaN and
+      infinity excluded and a summary of min, max, mean and median.</li>
+      <li><b>Radial Profile</b> — mean value against radius from a chosen
+      centre, for checking a PSF or the falloff of a source.</li>
+      <li><b>Name Resolution</b> — look up a source name with SIMBAD or NED.</li>
+    </ul>
+    <p><b>View &rarr; Horizontal Graph</b> and <b>Vertical Graph</b> add live
+    cuts along the row and column under the cursor, beside the image.
+    <b>Analysis &rarr; Graph Parameters</b> sets their scale, including a log
+    axis.</p>
 
     <h2>Contours</h2>
-    <p>Access via <strong>Analysis → Contours</strong> and <strong>Analysis → Contour Parameters</strong></p>
-
-    <p>Overlay contour lines on your image:</p>
+    <p><b>Analysis &rarr; Contours</b> draws them; <b>Contour Parameters</b>
+    chooses how many, between which limits, by which spacing (linear,
+    logarithmic, square root, or levels you type), and their colour, width and
+    dash. Two methods are offered, as in DS9:</p>
     <ul>
-        <li>Automatic or manual level selection</li>
-        <li>Linear, logarithmic, or custom spacing</li>
-        <li>Customizable colors and line styles</li>
-        <li>Export contour levels and paths to JSON</li>
+      <li><b>Block</b> averages the image down before tracing, so a larger
+      smoothness is <i>faster</i> and coarser.</li>
+      <li><b>Smooth</b> smooths the image before tracing, so a larger smoothness
+      is <i>slower</i> and rounder.</li>
+    </ul>
+    <p>Contours can be saved and loaded as DS9 contour files, and copied and
+    pasted between frames.</p>
+    <div class="note"><b>Sigma levels.</b> The parameters dialog can set levels
+    as multiples of the noise above a base, which is the usual way to contour a
+    radio map. Give it the RMS from an empty part of the field.</div>
+
+    <h2>Coordinate grid</h2>
+    <p><b>Coordinate Grid</b> and its parameters draw a graticule from the WCS —
+    see <a href="coordinates.html">Coordinates and WCS</a>.</p>
+
+    <h2>Block and smooth</h2>
+    <ul>
+      <li><b>Block</b> averages neighbouring pixels together, by a factor from
+      <b>1</b> to <b>256</b>, or <b>Block In</b> / <b>Out</b> / <b>Fit</b>. It
+      changes what the analysis tools see, not only the picture.</li>
+      <li><b>Smooth</b> convolves the image. Four kernels: boxcar, tophat,
+      Gaussian, and an elliptical Gaussian that takes a major and minor radius
+      and a position angle. Also seen by the analysis tools.</li>
+    </ul>
+    <div class="warn">Both change the values the other tools measure. Statistics
+    taken on a smoothed image are statistics of the smoothed image, and its
+    noise is correlated. Turn them off before measuring.</div>
+
+    <h2>Masks</h2>
+    <p><b>Mask Parameters</b> overlays a second image as a mask — a colour, a
+    transparency, and the range of mask values to paint — for showing a
+    segmentation map or a flag array on top of the data.</p>
+
+    <h2>Catalogues and image servers</h2>
+    <ul>
+      <li><b>Catalogs</b> queries SIMBAD, NED, Vizier and others for a field and
+      overlays the sources it finds. <b>Catalog Tool</b> is the table itself —
+      sort it, filter it, and select a row to find that object on the
+      image.</li>
+      <li><b>Image Servers</b> fetches a cutout from DSS, 2MASS, SDSS and
+      others.</li>
+      <li><b>Footprint Servers</b> overlays the coverage of an observatory's
+      archive.</li>
+      <li><b>Virtual Observatory</b> queries VO services; <b>Archives</b> opens
+      the archive web pages directly.</li>
     </ul>
 
-    <h2>Block and Smooth</h2>
-    <p>The Analysis menu includes DS9-style <strong>Block</strong> controls (Block In/Out/Fit and block factors 1-32) and a <strong>Smooth</strong> toggle with smoothing parameters.</p>
+    <h2>Plot Tool</h2>
+    <p><b>Plot Tool</b> opens a plotting window of its own, which is where cuts,
+    profiles and region plots land. It has menus for loading and saving the
+    data, for the axes, for the legend, and for the style of each dataset, and
+    it can write the plot out as an image.</p>
 
-    <h2>Coordinate Grid and Name Resolution</h2>
-    <p><strong>Analysis → Coordinate Grid</strong> and <strong>Coordinate Grid Parameters</strong> expose grid settings, and <strong>Analysis → Name Resolution</strong> resolves object names to sky coordinates and reports/pans when WCS is available.</p>
+    <h2>Analysis command files</h2>
+    <p><b>Load Analysis Commands</b> reads a DS9 analysis file
+    (<code>.ans</code>), which adds your own entries to the bottom of the
+    Analysis menu, each running an external program on the current file. This is
+    how an observatory ships its own reduction tools inside the viewer.
+    <b>Analysis Command Log</b> shows what has been run;
+    <b>Clear Analysis Commands</b> removes them.</p>
+    <p>NCRADS9 loads <code>ds9.ans</code> and <code>*.ds9</code> from the usual
+    places at startup, as DS9 does. <b>Preferences &rarr; Startup</b> turns that
+    off.</p>
 
-    <h2>Mask, Crosshair, and Graph Tools</h2>
-    <p><strong>Mask Parameters</strong> provides finite/range masking for analysis products, <strong>Crosshair Parameters</strong> controls an interactive crosshair overlay, and <strong>Graph Parameters</strong> controls horizontal/vertical profile graph panels.</p>
-
-    <h2>Analysis Command Loading</h2>
-    <p><strong>Load Analysis Commands</strong> can import simple external command lists (`label|command` format). Loaded entries appear in the Analysis menu and can be cleared using <strong>Clear Analysis Commands</strong>.</p>
-
-    <div class="nav-footer">
-        <a href="colormaps.html">← Colormaps</a>
-        <a href="index.html">Table of Contents →</a>
+    <div class="nav">
+        <a href="regions.html">&larr; Regions</a>
+        <a href="saving.html">Saving, Exporting and Printing &rarr;</a>
     </div>
 </body>
 </html>

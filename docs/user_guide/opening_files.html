@@ -3,22 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Opening FITS Files - NCRADS9 User Guide</title>
+    <title>NCRADS9 &mdash; Opening Files</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 900px; margin: 0 auto; padding: 2rem; line-height: 1.6; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               max-width: 900px; margin: 0 auto; padding: 2rem; line-height: 1.6; color: #222; }
         h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 0.5rem; }
-        h2 { color: #34495e; }
+        h2 { color: #34495e; margin-top: 2rem; }
+        h3 { color: #34495e; margin-top: 1.5rem; font-size: 1.05rem; }
         a { color: #3498db; text-decoration: none; }
         a:hover { text-decoration: underline; }
-        code { background: #f4f4f4; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: 'Monaco', 'Menlo', monospace; }
-        pre { background: #2c3e50; color: #ecf0f1; padding: 1rem; border-radius: 8px; overflow-x: auto; }
-        pre code { background: none; color: inherit; }
+        code { background: #f4f6f8; padding: 0.1rem 0.35rem; border-radius: 3px;
+               font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.92em; }
+        pre { background: #f4f6f8; padding: 1rem; border-radius: 6px; overflow-x: auto; }
+        pre code { background: none; padding: 0; }
+        kbd { background: #eceff1; border: 1px solid #cfd8dc; border-bottom-width: 2px;
+              border-radius: 4px; padding: 0.05rem 0.35rem; font-size: 0.85em;
+              font-family: ui-monospace, Menlo, Consolas, monospace; }
+        table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+        th, td { border: 1px solid #dfe4e8; padding: 0.5rem 0.7rem; text-align: left;
+                 vertical-align: top; }
+        th { background: #f4f6f8; }
+        .toc { background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin: 1rem 0; }
+        .toc h2 { margin-top: 0; }
+        .note { background: #f1f8ff; border-left: 4px solid #3498db; padding: 0.8rem 1rem;
+                margin: 1rem 0; border-radius: 0 6px 6px 0; }
+        .warn { background: #fff8f1; border-left: 4px solid #e67e22; padding: 0.8rem 1rem;
+                margin: 1rem 0; border-radius: 0 6px 6px 0; }
+        ol, ul { padding-left: 1.5rem; }
+        li { padding: 0.2rem 0; }
         .breadcrumb { margin-bottom: 1rem; color: #666; }
         .breadcrumb a { color: #666; }
-        .nav-footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #eee; display: flex; justify-content: space-between; }
-        table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
-        th, td { border: 1px solid #ddd; padding: 0.75rem; text-align: left; }
-        th { background: #f8f9fa; }
+        .nav { display: flex; justify-content: space-between; margin-top: 3rem;
+               padding-top: 1rem; border-top: 1px solid #dfe4e8; }
     </style>
 </head>
 <body>
@@ -26,54 +42,94 @@
         <a href="../index.html">Home</a> / <a href="index.html">User Guide</a> / Opening Files
     </div>
 
-    <h1>Opening FITS Files</h1>
+    <h1>Opening Files</h1>
 
-    <h2>Supported Formats</h2>
-    <p>NCRADS9 supports the following file formats:</p>
+    <p>NCRADS9 reads FITS, and reads it in several different senses depending
+    on what the file holds.</p>
+
+    <h2>What it reads</h2>
     <table>
-        <tr>
-            <th>Format</th>
-            <th>Extensions</th>
-            <th>Description</th>
-        </tr>
-        <tr>
-            <td>FITS</td>
-            <td>.fits, .fit, .fts</td>
-            <td>Flexible Image Transport System</td>
-        </tr>
-        <tr>
-            <td>Compressed FITS</td>
-            <td>.fits.gz, .fits.fz</td>
-            <td>Gzip or fpack compressed FITS</td>
-        </tr>
+      <tr><th>Kind</th><th>Extensions</th><th>Notes</th></tr>
+      <tr><td>FITS image</td><td><code>.fits</code> <code>.fit</code>
+      <code>.fts</code></td><td>2D images, and cubes and mosaics as below.</td></tr>
+      <tr><td>Compressed FITS</td><td><code>.fits.gz</code>
+      <code>.fits.fz</code></td><td>gzip and fpack, transparently.</td></tr>
+      <tr><td>Event table</td><td><code>.fits</code></td><td>A table of photon
+      events, binned into an image — see below.</td></tr>
+      <tr><td>Array</td><td>any</td><td>Raw pixels with no header, when you can
+      supply the dimensions and type yourself.</td></tr>
     </table>
 
-    <h2>Loading Images</h2>
-    <p>There are several ways to open a FITS file:</p>
-
-    <h3>From the Menu</h3>
-    <p>Select <strong>File → Open</strong> or use the keyboard shortcut <code>Ctrl+O</code>.</p>
-
-    <h3>From the Command Line</h3>
-    <pre><code>ncrads9 /path/to/image.fits</code></pre>
-
-    <h2>Multi-Extension FITS</h2>
-    <p>NCRADS9 currently loads the default extension when opening a FITS file from the UI.</p>
-    <p>For multi-extension workflows, use frame navigation to compare separately opened inputs:</p>
+    <h2>Open, and Open as</h2>
+    <p><b>File &rarr; Open</b> (<kbd>Ctrl</kbd>+<kbd>O</kbd>) reads a file the
+    ordinary way. <b>File &rarr; Open as</b> has one entry for each other way of
+    reading the same bytes:</p>
     <ul>
-        <li>Navigate between extensions using <strong>Frame → Next</strong> and <strong>Frame → Previous</strong></li>
-        <li>Use <strong>Frame → Tile</strong> and <strong>Frame → Blink</strong> to compare frames</li>
+      <li><b>Slice</b> — one plane of a cube rather than the cube.</li>
+      <li><b>RGB Image</b> and <b>RGB Cube</b>, and the same for <b>HSV</b> and
+      <b>HLS</b> — three planes or three files composed into one colour
+      image.</li>
+      <li><b>Multiple Extension Cube</b> / <b>Multiple Extension Frames</b> —
+      every image extension as the planes of one cube, or each extension in a
+      frame of its own.</li>
+      <li><b>Mosaic WCS</b>, <b>Mosaic IRAF</b>, their <b>Segment</b> variants
+      and <b>Mosaic WFPC2</b> — several detectors laid out on the sky.</li>
+      <li><b>URL</b> — read a FITS file over http rather than from disk.</li>
+    </ul>
+    <p>Formats that are not FITS come in through <b>File &rarr; Import</b>:
+    <b>Array</b> (headerless pixels, whose shape and type you supply), <b>NRRD</b>,
+    <b>ENVI</b>, the <b>RGB/HSV/HLS Array</b> variants, and <b>GIF</b>,
+    <b>TIFF</b>, <b>JPEG</b> and <b>PNG</b>. <b>File &rarr; Export</b> writes the
+    same set back out.</p>
+    <div class="warn"><b>Mosaics are resampled nearest-neighbour</b>, so a
+    mosaic here is a display aid and conserves no flux. For photometry on a
+    mosaic, build it with <code>reproject</code> or SWarp and load the
+    result.</div>
+
+    <h2>Files with more than one extension</h2>
+    <p>Instrument files often carry SCI, ERR and DQ extensions together.
+    NCRADS9 asks which you want. DS9 applies its own rule and takes the first
+    without asking, which for such a file is a coin toss; if you prefer that,
+    turn off <b>Ask which extension to load</b> in
+    <b>Preferences &rarr; General</b>.</p>
+    <p><b>File &rarr; Prism</b> (<kbd>Ctrl</kbd>+<kbd>B</kbd>) opens the file as
+    a structure instead of a picture: every extension, its header, and its table
+    columns, so you can see what is in a file before deciding how to load it.</p>
+
+    <h2>Event tables and binning</h2>
+    <p>An event table has no image in it — it has a row per photon. NCRADS9 bins
+    those rows onto a grid, and the <b>Bin</b> menu controls how:</p>
+    <ul>
+      <li><b>Average</b> or <b>Sum</b> the values falling in a bin.</li>
+      <li><b>Bin In</b>, <b>Bin Out</b>, <b>Bin Fit</b>, or a factor from
+      <b>Bin 1</b> to <b>Bin 256</b>.</li>
+      <li>A buffer size from <b>128&times;128</b> to <b>8192&times;8192</b>: how
+      big an image the events are binned into.</li>
+      <li><b>Binning Parameters</b> for the columns to bin on and the filter to
+      apply.</li>
     </ul>
 
-    <h2>Opening Multiple Files</h2>
-    <p>You can open multiple FITS files simultaneously:</p>
-    <pre><code>ncrads9 file1.fits file2.fits file3.fits</code></pre>
+    <h2>Keeping settings across loads</h2>
+    <p>By default, opening a file resets the view. <b>File &rarr; Preserve
+    During Load</b> has two switches, <b>Pan</b> and <b>Region</b>, which keep
+    the current centre and the current regions when the next image arrives —
+    useful when stepping through exposures of the same field.</p>
 
-    <p>Each file opens in a separate frame; use the <strong>Frame</strong> menu to navigate, tile, and blink frames.</p>
+    <h2>Getting images from elsewhere</h2>
+    <p><b>Analysis &rarr; Image Servers</b> fetches a cutout of a named position
+    from DSS, 2MASS, SDSS and others. <b>Analysis &rarr; Archives</b> opens the
+    archive web pages. Both need a network connection.</p>
 
-    <div class="nav-footer">
-        <a href="getting_started.html">← Getting Started</a>
-        <a href="regions.html">Regions →</a>
+    <h2>From the command line</h2>
+    <pre><code>ncrads9 image.fits
+ncrads9 -zscale -cmap heat image.fits
+ncrads9 -tile a.fits b.fits c.fits</code></pre>
+    <p>Options and filenames are applied in the order you write them, so
+    <code>-log</code> before a file scales that file logarithmically.</p>
+
+    <div class="nav">
+        <a href="getting_started.html">&larr; Getting Started</a>
+        <a href="scales.html">Scaling the Data &rarr;</a>
     </div>
 </body>
 </html>
