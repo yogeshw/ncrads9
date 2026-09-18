@@ -15,7 +15,18 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
-Contour generation for astronomical images using scipy.
+Contours for astronomical images.
+
+DS9's two contour methods, the levels to draw them at, and the tracing
+itself. `trace` is a marching-squares tracer written here so that a
+contour does not depend on an optional package being installed; where
+scikit-image *is* installed its tracer runs instead, and a test holds the
+two to the same answers.
+
+The one thing a contour must get right is which points belong to the same
+curve. Getting that wrong does not look like a bug in the mathematics --
+it looks like a line drawn from one source to the next, which is how it
+was reported.
 
 Author: Yogesh Wadadekar
 """
@@ -50,6 +61,204 @@ def _block_down(data: NDArray[np.floating], factor: int) -> NDArray[np.floating]
         return data
     trimmed = data[:height, :width]
     return trimmed.reshape(height // step, step, width // step, step).mean(axis=(1, 3))
+
+
+#: The sixteen marching-squares cases, as pairs of cell edges to join.
+#:
+#: A cell is the square between four neighbouring pixel centres, and its
+#: index is which of those four are at or above the level::
+#:
+#:     bit 0  upper left      bit 2  lower right
+#:     bit 1  upper right     bit 3  lower left
+#:
+#: Each entry is the edges the contour crosses -- "t"op, "r"ight, "b"ottom,
+#: "l"eft -- in pairs, and the crossing point on an edge is found by
+#: interpolating between the two pixels it joins.
+#:
+#: Cases 5 and 10 are the saddles, where the two corners above the level are
+#: diagonally opposite and the cell alone cannot say whether they are one
+#: island or two. Both are resolved *apart*, which is what makes two sources
+#: that touch only at a corner stay two contours rather than one -- the same
+#: choice `skimage.measure.find_contours` makes with its default
+#: `fully_connected="low"`, so the two paths through this module agree.
+_CASES: tuple[tuple[tuple[str, str], ...], ...] = (
+    (),  # 0000  none above
+    (("l", "t"),),  # 0001  upper left
+    (("t", "r"),),  # 0010  upper right
+    (("l", "r"),),  # 0011  top
+    (("r", "b"),),  # 0100  lower right
+    (("l", "t"), ("r", "b")),  # 0101  saddle, kept apart
+    (("t", "b"),),  # 0110  right
+    (("l", "b"),),  # 0111  all but lower left
+    (("b", "l"),),  # 1000  lower left
+    (("t", "b"),),  # 1001  left
+    (("t", "r"), ("b", "l")),  # 1010  saddle, kept apart
+    (("r", "b"),),  # 1011  all but lower right
+    (("l", "r"),),  # 1100  bottom
+    (("t", "r"),),  # 1101  all but upper right
+    (("l", "t"),),  # 1110  all but upper left
+    (),  # 1111  all above
+)
+
+
+def _crossing(
+    edge: str,
+    row: int,
+    column: int,
+    upper_left: float,
+    upper_right: float,
+    lower_left: float,
+    lower_right: float,
+    level: float,
+) -> tuple[float, float]:
+    """Where the level crosses one edge of one cell, in (row, column).
+
+    Linear interpolation between the two pixel centres the edge joins. A
+    zero denominator cannot arise: an edge is only crossed when its two
+    values are on opposite sides of the level, so they differ.
+    """
+    if edge == "t":
+        return (float(row), column + (level - upper_left) / (upper_right - upper_left))
+    if edge == "b":
+        return (float(row + 1), column + (level - lower_left) / (lower_right - lower_left))
+    if edge == "l":
+        return (row + (level - upper_left) / (lower_left - upper_left), float(column))
+    return (row + (level - upper_right) / (lower_right - upper_right), float(column + 1))
+
+
+def _segments(
+    data: NDArray[np.floating], level: float
+) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+    """Every contour segment at `level`, one or two per crossed cell.
+
+    A pixel exactly at the level counts as above it, so that a level equal
+    to some of the data still produces a contour rather than nothing.
+    """
+    above = data >= level
+    upper_left = above[:-1, :-1]
+    upper_right = above[:-1, 1:]
+    lower_left = above[1:, :-1]
+    lower_right = above[1:, 1:]
+    index = (
+        upper_left.astype(np.uint8)
+        | (upper_right.astype(np.uint8) << 1)
+        | (lower_right.astype(np.uint8) << 2)
+        | (lower_left.astype(np.uint8) << 3)
+    )
+
+    found: list[tuple[tuple[float, float], tuple[float, float]]] = []
+    rows, columns = np.nonzero((index != 0) & (index != 15))
+    for row, column in zip(rows.tolist(), columns.tolist(), strict=True):
+        values = (
+            float(data[row, column]),
+            float(data[row, column + 1]),
+            float(data[row + 1, column]),
+            float(data[row + 1, column + 1]),
+        )
+        if any(value != value for value in values):
+            # A blank pixel says nothing about where the level lies, so the
+            # cell is left out rather than contoured through the gap.
+            continue
+        for first, second in _CASES[int(index[row, column])]:
+            found.append(
+                (
+                    _crossing(first, row, column, *values, level),
+                    _crossing(second, row, column, *values, level),
+                )
+            )
+    return found
+
+
+def _link(segments: list[tuple[tuple[float, float], tuple[float, float]]]) -> list[NDArray[np.floating]]:
+    """Join segments end to end into as many separate paths as there are.
+
+    This is the part that was missing. Without it every crossing in the
+    image is one heap of points, and drawing that heap as a polyline runs a
+    line from each island to the next -- which is the bug this replaces.
+
+    Endpoints match exactly rather than approximately: the edge shared by
+    two neighbouring cells is interpolated from the same two pixel values
+    both times, so the two cells produce the same float for it.
+    """
+    ends: dict[tuple[float, float], list[int]] = {}
+    for position, (start, finish) in enumerate(segments):
+        ends.setdefault(start, []).append(position)
+        ends.setdefault(finish, []).append(position)
+
+    used = [False] * len(segments)
+    paths: list[NDArray[np.floating]] = []
+
+    def walk(point: tuple[float, float]) -> list[tuple[float, float]]:
+        """Follow the chain from `point` until it ends or closes."""
+        chain = [point]
+        while True:
+            nxt = None
+            for position in ends.get(chain[-1], ()):
+                if not used[position]:
+                    nxt = position
+                    break
+            if nxt is None:
+                return chain
+            used[nxt] = True
+            start, finish = segments[nxt]
+            chain.append(finish if start == chain[-1] else start)
+
+    # Open paths first, from the endpoints only one segment touches: a
+    # closed loop has none of those, and starting a loop mid-way would cut
+    # it into two.
+    for point, positions in ends.items():
+        if len(positions) == 1 and not used[positions[0]]:
+            chain = walk(point)
+            if len(chain) > 1:
+                paths.append(np.asarray(chain, dtype=np.float64))
+
+    for position, (start, _finish) in enumerate(segments):
+        if used[position]:
+            continue
+        chain = walk(start)
+        if len(chain) > 1:
+            paths.append(np.asarray(chain, dtype=np.float64))
+
+    return paths
+
+
+def trace(data: NDArray[np.floating], level: float) -> list[NDArray[np.floating]]:
+    """Contour `data` at `level`, as separate paths in (row, column).
+
+    Marching squares, with the segments linked into paths -- the same
+    contract as `skimage.measure.find_contours`, which is what this stands
+    in for when scikit-image is not installed.
+    """
+    array = np.asarray(data, dtype=np.float64)
+    if array.ndim != 2 or array.shape[0] < 2 or array.shape[1] < 2:
+        return []
+    return _link(_segments(array, float(level)))
+
+
+def _paths(data: NDArray[np.floating], level: float) -> list[NDArray[np.floating]]:
+    """Contour one level, as separate paths in (row, column).
+
+    scikit-image's tracer where it is installed, `trace` where it is not.
+    They agree -- case for case, including which way the saddles go -- and
+    a test holds them to that, so which one runs changes the speed and
+    nothing else.
+
+    It used to matter a great deal. scikit-image was never declared as a
+    dependency, so on any clean install the import failed, and the caller's
+    `except Exception` quietly reached for a "fallback" that was not a
+    contour tracer at all: it collected every crossing pixel in the image
+    into one array, in raster order, and the overlay drew that as a single
+    polyline. Every island was joined to the next by a straight line, worst
+    at the lowest level where the islands are largest -- which is how the
+    fault was reported. scikit-image is declared now *and* the fallback is
+    a real tracer, because a contour that is quietly wrong is worse in a
+    measuring tool than one that is missing.
+    """
+    try:
+        from skimage import measure
+    except ImportError:
+        return trace(data, level)
+    return list(measure.find_contours(data, level))
 
 
 class ContourGenerator:
@@ -217,8 +426,6 @@ class ContourGenerator:
         list
             List of contour paths for each level.
         """
-        from skimage import measure
-
         if levels is not None:
             self.levels = levels
 
@@ -227,48 +434,9 @@ class ContourGenerator:
 
         self.contours = []
         for level in self.levels:
-            contour_paths = measure.find_contours(self.data, level)
-            self.contours.append([self._scale(path) for path in contour_paths])
+            self.contours.append([self._scale(path) for path in _paths(self.data, level)])
 
         return self.contours
-
-    def find_contours_scipy(
-        self,
-        levels: list[float] | None = None,
-    ) -> list[list[tuple[NDArray[np.floating], NDArray[np.floating]]]]:
-        """
-        Find contour paths using scipy's binary dilation method.
-
-        This is a simpler fallback when skimage is not available.
-
-        Parameters
-        ----------
-        levels : list of float, optional
-            Contour levels. If None, uses previously generated levels.
-
-        Returns
-        -------
-        list
-            List of (x, y) coordinate arrays for each level.
-        """
-        if levels is not None:
-            self.levels = levels
-
-        if not self.levels:
-            self.generate_levels()
-
-        contours = []
-        for level in self.levels:
-            binary = self.data >= level
-            dilated = ndimage.binary_dilation(binary)
-            edge = dilated ^ binary
-            y_coords, x_coords = np.where(edge)
-            # `np.where` gives integer indices; the caller is promised
-            # floating-point coordinates, since a real contour lies between
-            # pixels.
-            contours.append([(x_coords.astype(float), y_coords.astype(float))])
-
-        return contours
 
     def get_contour_at_level(
         self,
@@ -287,9 +455,7 @@ class ContourGenerator:
         list
             List of contour paths at this level.
         """
-        from skimage import measure
-
-        return measure.find_contours(self.data, level)
+        return [self._scale(path) for path in _paths(self.data, level)]
 
     def contour_area(
         self,

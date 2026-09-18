@@ -846,12 +846,14 @@ class AnalysisController(Controller):
 
         levels = self.contour_levels(generator, settings)
 
-        try:
-            contours = generator.find_contours(levels)
-            contour_paths = self.convert_skimage_contours(contours)
-        except Exception:
-            contours = generator.find_contours_scipy(levels)
-            contour_paths = self.convert_scipy_contours(contours)
+        # No `try` around this any more. There used to be one, falling back
+        # to a second contour routine on *any* exception -- which is how a
+        # missing scikit-image turned into contours that joined every island
+        # to the next instead of an error anybody could see. Choosing the
+        # tracer is the generator's business now, and both of its tracers
+        # are correct; a real failure here should reach the status bar.
+        contours = generator.find_contours(levels)
+        contour_paths = self.convert_skimage_contours(contours)
 
         self.window._contour_paths = contour_paths
         self.window._contour_levels = levels
@@ -1052,7 +1054,12 @@ class AnalysisController(Controller):
         return generator.generate_levels(num_levels, vmin=vmin, vmax=vmax, log_scale=False)
 
     def convert_skimage_contours(self, contours: list) -> list:
-        """Convert skimage contours to x/y arrays."""
+        """Turn the tracer's (row, column) paths into the overlay's (x, y).
+
+        One converter, not two. The second one existed for the fallback
+        tracer and took a different shape of input, so the two paths could
+        -- and did -- disagree about what a contour is.
+        """
         contour_paths: list = []
         for level_paths in contours:
             converted = []
@@ -1060,17 +1067,6 @@ class AnalysisController(Controller):
                 if path.ndim == 2 and path.shape[1] == 2:
                     coords = np.column_stack([path[:, 1], path[:, 0]]).astype(np.float64)
                     converted.append(coords)
-            contour_paths.append(converted)
-        return contour_paths
-
-    def convert_scipy_contours(self, contours: list) -> list:
-        """Convert scipy contours to x/y arrays."""
-        contour_paths: list = []
-        for level_paths in contours:
-            converted = []
-            for x_coords, y_coords in level_paths:
-                coords = np.column_stack([x_coords, y_coords]).astype(np.float64)
-                converted.append(coords)
             contour_paths.append(converted)
         return contour_paths
 

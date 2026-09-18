@@ -29,6 +29,9 @@ dependencies = [
     "astroquery>=0.4",
     "numpy>=1.23",
     "scipy>=1.9",
+    # The contour tracer. `ncrads9/analysis/contour.py` has one of its own
+    # for when this is absent, and they agree; this one is faster.
+    "scikit-image>=0.19",
     "pillow>=9.0",
     "requests>=2.28",
 ]

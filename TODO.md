@@ -1431,6 +1431,34 @@ Depends on M2, M3.
       A grab needs a viewport, so a window that was never shown (which is how the printing
       tests drive it) still falls back to the rendered array, and an OpenGL frame that a driver
       hands back as a flat rectangle does too.
+      **A contour joined each island to the next** (`tests/unit/test_contour_islands.py`).
+      Reported as the lowest contour level connecting to the lowest level of the adjacent
+      island, and it was two faults together.
+      *scikit-image was never a declared dependency* -- not in `pyproject.toml`, not anywhere --
+      although `measure.find_contours` was the primary and only real tracer. On a clean install
+      the import failed every time.
+      *And the caller caught it.* `update_contours` wrapped the tracer in `except Exception` and
+      fell back to `find_contours_scipy`, which was not a contour tracer at all: it dilated the
+      threshold mask, took every boundary pixel in the *whole image* with `np.where` -- raster
+      order -- and returned them as one array per level. The overlay drew that array as a single
+      polyline, so it ran from island to island by a straight line, and zig-zagged within each
+      island as well. Worst at the lowest level, where the islands are largest and the jumps
+      between them longest, which is exactly how it was seen. The `except Exception` also
+      covered the *converter*, so any error there became silently wrong contours too, and
+      nothing ever reached the status bar.
+      Both halves are fixed. scikit-image is declared. The fallback is now a real marching-
+      squares tracer (`trace`) that links its segments into as many separate paths as there are
+      -- the step that was missing -- and it agrees with scikit-image case for case, saddles
+      included: cases 5 and 10 are resolved *apart*, so two sources touching at a single corner
+      stay two contours, which is scikit-image's own `fully_connected="low"` default. A test
+      holds the two tracers to the same path counts and point counts on clean and noisy data, so
+      which one runs changes the speed and nothing else. Blank pixels are skipped rather than
+      contoured across, edge-clipped contours stay open and interior ones close, and a level
+      equal to the data still draws (`>=`, not `>`).
+      The `try`/`except` is gone, and so is the second converter it fed: one tracer entry point,
+      one converter, no way for the two to disagree about what a contour is. A real failure now
+      raises where somebody can see it -- a contour that is quietly wrong is worse in a measuring
+      tool than one that is missing. Four of the gates fail with the old fallback restored.
       **Detachable menus, as DS9 has them** (`ncrads9/ui/tearoff.py`,
       `tests/unit/test_tearoff_menus.py`). Every DS9 menu and submenu carries a dashed line at
       the top; clicking it tears the menu off into a window that stays open, which turns a menu
