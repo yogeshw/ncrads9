@@ -320,38 +320,62 @@ class ContourOverlay(OverlayTransformMixin, QWidget):
     def _paint_axis_titles(self, painter: QPainter, geometry, element) -> None:
         """Draw the two axis titles, outside the numbers along each edge.
 
-        Placed relative to the image's own edges rather than the widget's:
+        Placed relative to the grid's own box rather than the widget's:
         the widget is usually larger than the image, so a title pinned to
         the bottom of the widget lands on the numbers when the image is
         small and floats away from them when it is large.
+
+        Which edge each one gets is the renderer's decision, not a constant.
+        Turn the frame a quarter turn and the longitudes label the sides
+        while the latitudes label the top and bottom; a title nailed to the
+        bottom would then be naming the numbers up the side of the window.
         """
         painter.setPen(QPen(_color(element.color)))
         painter.setFont(_element_font(element))
         metrics = painter.fontMetrics()
 
-        left, top, right, bottom = self._image_edges(geometry)
+        box = self._image_edges(geometry)
         clearance = metrics.height() + 2.0 * NUMBER_MARGIN
 
-        if geometry.x_title:
-            width = metrics.horizontalAdvance(geometry.x_title)
-            # Its own lane, below the numbers'. Not clamped to the widget:
-            # clamping put it back on top of the numbers whenever the image
-            # nearly filled the viewport, which is exactly when it matters.
-            baseline = bottom + clearance + metrics.ascent()
-            painter.drawText(QPointF((left + right - width) / 2.0, baseline), geometry.x_title)
+        self._paint_one_axis_title(
+            painter, geometry.x_title, geometry.x_title_position, box, clearance, metrics
+        )
+        self._paint_one_axis_title(
+            painter, geometry.y_title, geometry.y_title_position, box, clearance, metrics
+        )
 
-        if geometry.y_title:
-            # Turned on its side, as every plotting convention has it.
-            width = metrics.horizontalAdvance(geometry.y_title)
-            x = left - clearance
-            painter.save()
-            painter.translate(x, (top + bottom) / 2.0)
-            painter.rotate(-90.0)
-            painter.drawText(QPointF(-width / 2.0, 0.0), geometry.y_title)
-            painter.restore()
+    def _paint_one_axis_title(self, painter, text, position, box, clearance, metrics) -> None:
+        """Draw one axis title in its own lane outside one edge of the box."""
+        if not text:
+            return
+        left, top, right, bottom = box
+        width = metrics.horizontalAdvance(text)
+
+        if position in (LabelPosition.BOTTOM, LabelPosition.TOP):
+            # Its own lane, clear of the numbers'. Not clamped to the
+            # widget: clamping put it back on top of the numbers whenever
+            # the image nearly filled the viewport, which is exactly when
+            # it matters.
+            baseline = (
+                bottom + clearance + metrics.ascent()
+                if position is LabelPosition.BOTTOM
+                else top - clearance - metrics.descent()
+            )
+            painter.drawText(QPointF((left + right - width) / 2.0, baseline), text)
+            return
+
+        # Turned on its side, as every plotting convention has it, and
+        # reading upwards on the left and downwards on the right so the
+        # text always faces out of the picture.
+        x = left - clearance if position is LabelPosition.LEFT else right + clearance
+        painter.save()
+        painter.translate(x, (top + bottom) / 2.0)
+        painter.rotate(-90.0 if position is LabelPosition.LEFT else 90.0)
+        painter.drawText(QPointF(-width / 2.0, 0.0), text)
+        painter.restore()
 
     def _image_edges(self, geometry) -> tuple[float, float, float, float]:
-        """The image's outline in widget pixels, as (left, top, right, bottom)."""
+        """The grid box's outline in widget pixels, as (left, top, right, bottom)."""
         points = [self._image_to_widget(x, y) for x, y in geometry.border] or [
             QPointF(0.0, 0.0),
             QPointF(float(self.width()), float(self.height())),

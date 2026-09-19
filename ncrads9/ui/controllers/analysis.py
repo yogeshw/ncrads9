@@ -353,10 +353,11 @@ class AnalysisController(Controller):
     def refresh_grid(self) -> None:
         """Recompute the graticule and hand it to the overlay.
 
-        Called on a zoom, a pan, a frame change and every settings change:
-        the grid is in image coordinates, so panning does not change it,
-        but loading a different frame changes the WCS and therefore all of
-        it.
+        Called on a zoom, a pan, a rotation, a frame change and every
+        settings change: the grid is in image coordinates, so panning does
+        not change it, but loading a different frame changes the WCS and
+        rotating one changes the screen box the grid is laid out in -- and
+        therefore its border, its numbers and its ticks.
         """
         overlay = getattr(self.viewer, "contour_overlay", None)
         if overlay is None or not hasattr(overlay, "set_grid_geometry"):
@@ -371,6 +372,15 @@ class AnalysisController(Controller):
         renderer = self._grid_renderer
         renderer.wcs = getattr(frame, "wcs_handler", None) if frame else None
         renderer.config = self.grid_config
+        # DS9 lays its grid out on the canvas, not on the image
+        # (`tksao/frame/grid2d.C`), so the renderer has to be told how the
+        # frame is turned. Without it a rotated image gets a tilted border
+        # and its numbers stacked down a diagonal.
+        renderer.set_view(
+            float(getattr(frame, "rotation", 0.0) or 0.0) if frame else 0.0,
+            bool(getattr(frame, "flip_x", False)) if frame else False,
+            bool(getattr(frame, "flip_y", False)) if frame else False,
+        )
 
         geometry = None
         if self.grid_config.visible and data is not None:

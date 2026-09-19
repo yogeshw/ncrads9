@@ -613,6 +613,10 @@ class DisplayPipeline:
         self.update_preview_panels(frame)
         self.window.zoom.update_panner_rect()
         self.window.wcs.update_direction_arrows()
+        # The coordinate grid is laid out in the frame the reader sees, so a
+        # rotation moves its border, its numbers and its ticks even though
+        # none of the image data has changed.
+        self.window.analysis.refresh_grid()
         self.window.view.refresh_info()
         if self.window._last_mouse_pos is not None:
             self.window._on_mouse_moved(*self.window._last_mouse_pos)

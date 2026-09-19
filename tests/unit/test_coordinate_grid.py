@@ -26,6 +26,7 @@ from ncrads9.core.wcs_handler import WCSHandler
 from ncrads9.grid import (
     ELEMENTS,
     LINE_ELEMENTS,
+    DisplayFrame,
     GridConfig,
     GridRenderer,
     GridType,
@@ -549,6 +550,170 @@ def test_the_grid_is_cached_in_image_coordinates(main_window):
     geometry = main_window.image_viewer.contour_overlay._grid_geometry
     x, y = geometry.longitude_lines[0][0]
     assert 0 <= x <= SIZE + 1 and 0 <= y <= SIZE + 1
+
+
+# -- a rotated or flipped frame (DS9 lays its grid out on the canvas) ----------------------
+
+
+@pytest.mark.parametrize("rotation", [0.0, 30.0, 90.0, 180.0, 270.0, 137.5])
+@pytest.mark.parametrize("flips", [(False, False), (True, False), (False, True), (True, True)])
+def test_the_grids_frame_agrees_with_the_one_the_overlays_paint_through(rotation, flips):
+    """The grid maps image to screen itself; it must land where the picture does.
+
+    `DisplayFrame` repeats `ui.view_transform.DisplayTransform` rather than
+    importing it, so that `ncrads9.grid` stays free of Qt. This is what
+    stops the copy drifting from the original.
+    """
+    from ncrads9.ui.view_transform import DisplayTransform
+
+    flip_x, flip_y = flips
+    width, height = 301, 173
+    frame = DisplayFrame(width, height, rotation, flip_x, flip_y)
+    painted = DisplayTransform(width=width, height=height, rotation=rotation, flip_x=flip_x, flip_y=flip_y)
+
+    for x, y in [(0.5, 0.5), (width + 0.5, height + 0.5), (13.25, 88.0), (width / 2, height / 2)]:
+        u, v = frame.image_to_display(x, y)
+        # The overlays count image y from the bottom and screen y from the top.
+        expected = painted.source_to_display(x, height - 1 - y)
+        assert float(u) == pytest.approx(expected[0], abs=1e-9)
+        assert float(v) == pytest.approx(expected[1], abs=1e-9)
+
+
+@pytest.mark.parametrize("rotation", [0.0, 30.0, 90.0, 270.0])
+def test_the_screen_frame_round_trips(rotation):
+    frame = DisplayFrame(301, 173, rotation, flip_x=True, flip_y=False)
+    u, v = frame.image_to_display(np.array([0.5, 12.0, 301.5]), np.array([0.5, 44.0, 173.5]))
+    x, y = frame.display_to_image(u, v)
+    assert x == pytest.approx([0.5, 12.0, 301.5])
+    assert y == pytest.approx([0.5, 44.0, 173.5])
+
+
+def test_an_unturned_frame_changes_nothing(renderer):
+    """The whole point of the default: rotation zero is the old behaviour."""
+    assert renderer.view == (0.0, False, False)
+    assert renderer.frame(SIZE, SIZE).upright
+    border = renderer.compute(SIZE, SIZE).border
+    assert border[0] == (0.5, 0.5)
+    assert (SIZE + 0.5, SIZE + 0.5) in border
+
+
+def test_a_rotated_frame_gets_an_upright_border(renderer):
+    """DS9 draws the grid in an upright box on the canvas (`grid2d.C`).
+
+    In image pixels that box comes back tilted the other way, which is what
+    the overlay's transform then straightens. Tilted-in, upright-out.
+    """
+    renderer.set_view(30.0, False, False)
+    geometry = renderer.compute(SIZE, SIZE)
+    frame = renderer.frame(SIZE, SIZE)
+
+    xs = np.array([point[0] for point in geometry.border])
+    ys = np.array([point[1] for point in geometry.border])
+    u, v = frame.image_to_display(xs, ys)
+    # Four corners and the repeated first: two distinct u and two distinct v.
+    assert len(np.unique(np.round(u, 6))) == 2
+    assert len(np.unique(np.round(v, 6))) == 2
+
+
+def test_a_rotated_border_is_not_the_image_outline(renderer):
+    """It used to be, and so it tilted with the picture."""
+    renderer.set_view(30.0, False, False)
+    assert (0.5, 0.5) not in renderer.compute(SIZE, SIZE).border
+
+
+def test_the_box_a_rotated_image_fills_is_larger_than_the_image(renderer):
+    """A turned square does not fit in its own footprint, and the corner
+    wedges are inside the border, so the grid has to reach them."""
+    turned = DisplayFrame(SIZE, SIZE, 45.0, False, False)
+    left, top, right, bottom = turned.image_box()
+    assert right - left > SIZE
+    assert bottom - top > SIZE
+
+
+@pytest.mark.parametrize("rotation", [0.0, 30.0, 90.0, 180.0, 270.0])
+def test_every_label_lands_on_an_edge_of_the_screen_box(renderer, rotation):
+    """A number that is not against the edge it claims is a number in mid-air."""
+    renderer.set_view(rotation, False, False)
+    geometry = renderer.compute(SIZE, SIZE)
+    frame = renderer.frame(SIZE, SIZE)
+    left, top, right, bottom = frame.image_box()
+    tolerance = 0.02 * max(right - left, bottom - top)
+
+    assert geometry.labels
+    for label in geometry.labels:
+        u, v = frame.image_to_display(label.x, label.y)
+        distance = {
+            LabelPosition.LEFT: float(u) - left,
+            LabelPosition.RIGHT: right - float(u),
+            LabelPosition.TOP: float(v) - top,
+            LabelPosition.BOTTOM: bottom - float(v),
+        }[label.position]
+        assert distance <= tolerance, f"{label.text} is {distance:.1f} from its {label.position}"
+
+
+def test_a_quarter_turn_moves_the_numbers_to_the_other_edges(renderer):
+    """North-up: declinations up the sides. Turned 90: declinations along
+    the bottom, and the longitudes take the sides."""
+    sides = {LabelPosition.LEFT, LabelPosition.RIGHT}
+
+    upright = renderer.compute(SIZE, SIZE)
+    upright_sides = {label.text for label in upright.labels if label.position in sides}
+
+    renderer.set_view(90.0, False, False)
+    turned = renderer.compute(SIZE, SIZE)
+    turned_sides = {label.text for label in turned.labels if label.position in sides}
+
+    # Declinations are written `+dd:mm:ss`, right ascensions in hours; on
+    # this field the two sets do not overlap at all.
+    assert upright_sides and turned_sides
+    assert not (upright_sides & turned_sides)
+
+
+def test_an_axis_title_follows_its_own_numbers(renderer):
+    """Turned a quarter turn, `Right Ascension` belongs up the side."""
+    upright = renderer.compute(SIZE, SIZE)
+    assert upright.x_title_position is LabelPosition.BOTTOM
+    assert upright.y_title_position in {LabelPosition.LEFT, LabelPosition.RIGHT}
+
+    renderer.set_view(90.0, False, False)
+    turned = renderer.compute(SIZE, SIZE)
+    assert turned.x_title_position in {LabelPosition.LEFT, LabelPosition.RIGHT}
+    assert turned.y_title_position in {LabelPosition.TOP, LabelPosition.BOTTOM}
+
+
+def test_a_tick_still_points_inwards_when_the_frame_is_turned(renderer):
+    """Ticks are screen-space offsets, so a turn must not tilt them."""
+    renderer.set_view(30.0, False, False)
+    geometry = renderer.compute(SIZE, SIZE)
+    assert geometry.ticks
+    for _x, _y, dx, dy in geometry.ticks:
+        # One axis only: upright box, so a tick is horizontal or vertical.
+        assert (dx == 0.0) != (dy == 0.0)
+
+
+def test_a_flip_alone_also_moves_the_furniture(renderer):
+    """Orient x mirrors the picture; the numbers swap sides with it."""
+    upright = renderer.compute(SIZE, SIZE)
+    renderer.set_view(0.0, True, False)
+    flipped = renderer.compute(SIZE, SIZE)
+
+    def side(geometry, text):
+        return next((label.position for label in geometry.labels if label.text == text), None)
+
+    shared = {label.text for label in upright.labels} & {label.text for label in flipped.labels}
+    moved = [text for text in shared if side(upright, text) is not side(flipped, text)]
+    assert moved
+
+
+def test_the_grid_follows_a_rotation_without_a_reload(main_window):
+    """The geometry is cached, so something has to recompute it on a turn."""
+    main_window.menu_bar.action_coordinate_grid.trigger()
+    overlay = main_window.image_viewer.contour_overlay
+    before = list(overlay._grid_geometry.border)
+
+    main_window.zoom.set_rotation(45.0)
+    after = list(overlay._grid_geometry.border)
+    assert after != before
 
 
 # -- the display bug the grid exposed -----------------------------------------------------

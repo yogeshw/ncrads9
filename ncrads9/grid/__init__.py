@@ -46,9 +46,11 @@ from .grid_labels import (
     parse_format,
 )
 from .grid_renderer import GridGeometry, GridRenderer
+from .grid_transform import DisplayFrame
 
 __all__ = [
     "COLORS",
+    "DisplayFrame",
     "ELEMENTS",
     "FONTS",
     "LINE_ELEMENTS",

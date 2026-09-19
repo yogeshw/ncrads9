@@ -335,13 +335,24 @@ def nice_spacing(span: float, target: int, sexagesimal: bool) -> float:
     wanted = span / target
     candidates = _SEXAGESIMAL_STEPS if sexagesimal else _DECIMAL_STEPS
     for step in candidates:
-        if step >= wanted:
+        # A hair's tolerance, because the candidates are far apart and the
+        # span is not exact. A field one pixel wider than the last one --
+        # which is all it takes to move from the image's outline to the
+        # upright box a rotated image sits in -- otherwise steps the whole
+        # grid from a line every two arcminutes to a line every five, and
+        # the reader sees the graticule thin out for no visible reason.
+        if step >= wanted * (1.0 - _SPACING_TOLERANCE):
             return step
 
     # Larger than every candidate: fall back to a decade of degrees.
     decade = 10.0 ** math.ceil(math.log10(wanted))
     return max(decade, 1e-9)
 
+
+#: How far below the wanted interval a candidate may sit and still be taken.
+#: Small enough that it only ever settles a tie, large enough to swallow the
+#: sub-pixel differences between one way of measuring a field and another.
+_SPACING_TOLERANCE = 1e-3
 
 #: Round intervals in degrees, for a decimal grid.
 _DECIMAL_STEPS: tuple[float, ...] = tuple(

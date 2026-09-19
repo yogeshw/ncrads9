@@ -29,6 +29,16 @@ A line is also broken wherever it leaves the image and rejoined where it
 comes back, so a curve that clips a corner does not get a chord drawn across
 the frame.
 
+The *lines* follow the sky; the *furniture* -- the border, the numbers, the
+ticks -- follows the screen. That is DS9's arrangement: `Grid2d::doit` builds
+its plot on a frame set whose base domain is WIDGET and whose box is an
+upright rectangle on the canvas, so rotating the frame turns the picture and
+the graticule under a border that stays square to the window. Laying the
+furniture out in image pixels instead tilts the border with the picture and
+stacks the numbers down a diagonal. `DisplayFrame` is what carries the turn
+in here; the points produced are still image pixels, because that is what the
+overlay's own transform expects.
+
 Built on `astropy.wcs`'s own transforms. PLAN.md suggested
 `astropy.visualization.wcsaxes`; its transform machinery is bound to a
 matplotlib axes object, and the drawing here is QPainter, so the transform
@@ -48,6 +58,7 @@ from numpy.typing import NDArray
 
 from .grid_config import GridConfig
 from .grid_labels import Label, LabelPosition, default_format, format_coordinate, nice_spacing
+from .grid_transform import DisplayFrame
 
 #: How many points each grid line is sampled at. Enough that a curve across
 #: a wide field reads as a curve; few enough to redraw on every pan.
@@ -78,8 +89,13 @@ class GridGeometry:
         latitude_lines: One per line of constant latitude.
         labels: The numbers, with the edge each belongs to.
         ticks: Tick marks, as (x, y, dx, dy) with the direction to draw in.
-        border: The image's outline, as one polyline.
+        border: The outline of the box the grid is drawn in, as one polyline.
         x_title, y_title: The axis titles to draw.
+        x_title_position, y_title_position: Which screen edge each title
+            belongs beside. Not fixed at bottom and left: rotate the frame
+            a quarter turn and the longitudes label the sides while the
+            latitudes label the top and bottom, and a title left behind on
+            its old edge names the numbers on the other one.
         longitude_spacing, latitude_spacing: The intervals used, in degrees.
     """
 
@@ -90,6 +106,8 @@ class GridGeometry:
     border: list[tuple[float, float]] = field(default_factory=list)
     x_title: str = ""
     y_title: str = ""
+    x_title_position: LabelPosition = LabelPosition.BOTTOM
+    y_title_position: LabelPosition = LabelPosition.LEFT
     longitude_spacing: float = 0.0
     latitude_spacing: float = 0.0
 
@@ -111,6 +129,9 @@ class GridRenderer:
     def __init__(self, wcs=None, config: GridConfig | None = None) -> None:
         self._wcs = wcs
         self._config = config or GridConfig()
+        self._rotation: float = 0.0
+        self._flip_x: bool = False
+        self._flip_y: bool = False
 
     @property
     def wcs(self):
@@ -135,10 +156,41 @@ class GridRenderer:
         """Whether there is a WCS to compute a sky grid from."""
         return bool(self._wcs is not None and getattr(self._wcs, "is_valid", False))
 
+    def set_view(self, rotation: float, flip_x: bool, flip_y: bool) -> None:
+        """Tell the grid how the image is turned on screen.
+
+        DS9's Zoom > Rotate and Zoom > Orient. Without this the grid is laid
+        out in the image's own frame, and a rotated image gets a border and
+        a set of numbers tilted away from the window they are read in.
+        """
+        self._rotation = float(rotation or 0.0)
+        self._flip_x = bool(flip_x)
+        self._flip_y = bool(flip_y)
+
+    @property
+    def view(self) -> tuple[float, bool, bool]:
+        """The rotation and flips the grid is being laid out under."""
+        return (self._rotation, self._flip_x, self._flip_y)
+
+    def frame(self, width: int, height: int) -> DisplayFrame:
+        """The screen frame an image of this size is shown in."""
+        return DisplayFrame(
+            width=max(0, int(width)),
+            height=max(0, int(height)),
+            rotation=self._rotation,
+            flip_x=self._flip_x,
+            flip_y=self._flip_y,
+        )
+
     # -- the sky area the image covers ---------------------------------------
 
     def sky_bounds(self, width: int, height: int) -> tuple[float, float, float, float] | None:
         """The longitude and latitude range the image covers.
+
+        The area asked about is the upright box the *turned* image fills,
+        not the image rectangle: on a rotated frame those differ by four
+        corner wedges, and a grid that stopped at the image would leave them
+        blank inside its own border.
 
         Returns:
             (lon0, lon1, lat0, lat1) in degrees, or None if the WCS cannot
@@ -148,7 +200,7 @@ class GridRenderer:
         if not self.usable or width <= 0 or height <= 0:
             return None
 
-        x, y = _edge_points(width, height)
+        x, y = _edge_points(self.frame(width, height))
         try:
             longitude, latitude = self._wcs.pixel_to_world(x, y)
         except Exception:
@@ -205,7 +257,8 @@ class GridRenderer:
             The geometry. Empty when there is no usable WCS, which the
             caller shows as "no grid" rather than as a wrong one.
         """
-        geometry = GridGeometry(border=_border(width, height))
+        frame = self.frame(width, height)
+        geometry = GridGeometry(border=_border(frame))
         bounds = self.sky_bounds(width, height)
         if bounds is None:
             return geometry
@@ -221,29 +274,31 @@ class GridRenderer:
 
         for longitude in _steps(lon0, lon1, longitude_step):
             latitudes = np.linspace(low_latitude, high_latitude, SAMPLES_PER_LINE)
-            points = self._project(np.full_like(latitudes, longitude), latitudes, width, height)
+            points = self._project(np.full_like(latitudes, longitude), latitudes, frame)
             geometry.longitude_lines.extend(points)
 
         for latitude in _steps(low_latitude, high_latitude, latitude_step):
             longitudes = np.linspace(lon0, lon1, SAMPLES_PER_LINE)
-            points = self._project(longitudes, np.full_like(longitudes, latitude), width, height)
+            points = self._project(longitudes, np.full_like(longitudes, latitude), frame)
             geometry.latitude_lines.extend(points)
 
-        geometry.labels, geometry.ticks = self._edges(
-            width, height, lon0, lon1, low_latitude, high_latitude, longitude_step, latitude_step
+        longitude_labels, latitude_labels, geometry.ticks = self._edges(
+            frame, lon0, lon1, low_latitude, high_latitude, longitude_step, latitude_step
         )
+        geometry.labels = [*longitude_labels, *latitude_labels]
         geometry.x_title = self._config.x_title or self._axis_title(latitude=False)
         geometry.y_title = self._config.y_title or self._axis_title(latitude=True)
+        geometry.x_title_position = _title_edge(longitude_labels, LabelPosition.BOTTOM)
+        geometry.y_title_position = _title_edge(latitude_labels, LabelPosition.LEFT)
         return geometry
 
     def _project(
         self,
         longitude: NDArray[np.floating],
         latitude: NDArray[np.floating],
-        width: int,
-        height: int,
+        frame: DisplayFrame,
     ) -> list[list[tuple[float, float]]]:
-        """Turn one sky curve into the pieces of it that are on the image."""
+        """Turn one sky curve into the pieces of it that are in the box."""
         try:
             x, y = self._wcs.world_to_pixel(longitude, latitude)
         except Exception:
@@ -251,27 +306,31 @@ class GridRenderer:
 
         x = np.atleast_1d(np.asarray(x, dtype=float))
         y = np.atleast_1d(np.asarray(y, dtype=float))
-        return _split(x, y, width, height)
+        return _split(x, y, frame)
 
     def _edges(
         self,
-        width: int,
-        height: int,
+        frame: DisplayFrame,
         lon0: float,
         lon1: float,
         lat0: float,
         lat1: float,
         longitude_step: float,
         latitude_step: float,
-    ) -> tuple[list[Label], list[tuple[float, float, float, float]]]:
+    ) -> tuple[list[Label], list[Label], list[tuple[float, float, float, float]]]:
         """Where each grid line meets the border, and what to write there.
 
         The label goes where the line actually crosses the edge, not at a
         position computed from the value: on a rotated or skewed WCS those
         are different places, and a number that does not sit on its own
         line is worse than no number.
+
+        "Edge" means an edge of the upright screen box, so the numbers read
+        along the top, bottom and sides of the window whatever angle the
+        image is turned to.
         """
-        labels: list[Label] = []
+        longitude_labels: list[Label] = []
+        latitude_labels: list[Label] = []
         ticks: list[tuple[float, float, float, float]] = []
 
         longitude_format = default_format(
@@ -283,35 +342,34 @@ class GridRenderer:
 
         for longitude in _steps(lon0, lon1, longitude_step):
             latitudes = np.linspace(lat0, lat1, SAMPLES_PER_LINE)
-            crossing = self._crossing(np.full_like(latitudes, longitude), latitudes, width, height)
+            crossing = self._crossing(np.full_like(latitudes, longitude), latitudes, frame)
             if crossing is None:
                 continue
             x, y, position = crossing
-            labels.append(Label(format_coordinate(longitude % 360.0, longitude_format), x, y, position))
+            longitude_labels.append(
+                Label(format_coordinate(longitude % 360.0, longitude_format), x, y, position)
+            )
             ticks.append((x, y, *_tick_direction(position)))
 
         for latitude in _steps(lat0, lat1, latitude_step):
             longitudes = np.linspace(lon0, lon1, SAMPLES_PER_LINE)
-            crossing = self._crossing(
-                longitudes, np.full_like(longitudes, latitude), width, height, prefer_side=True
-            )
+            crossing = self._crossing(longitudes, np.full_like(longitudes, latitude), frame, prefer_side=True)
             if crossing is None:
                 continue
             x, y, position = crossing
-            labels.append(Label(format_coordinate(latitude, latitude_format), x, y, position))
+            latitude_labels.append(Label(format_coordinate(latitude, latitude_format), x, y, position))
             ticks.append((x, y, *_tick_direction(position)))
 
-        return (labels, ticks)
+        return (longitude_labels, latitude_labels, ticks)
 
     def _crossing(
         self,
         longitude: NDArray[np.floating],
         latitude: NDArray[np.floating],
-        width: int,
-        height: int,
+        frame: DisplayFrame,
         prefer_side: bool = False,
     ) -> tuple[float, float, LabelPosition] | None:
-        """Where one sky curve first meets the image's edge.
+        """Where one sky curve first meets the edge of the screen box.
 
         Args:
             prefer_side: Label on the left or right edge when the curve
@@ -325,7 +383,7 @@ class GridRenderer:
 
         x = np.atleast_1d(np.asarray(x, dtype=float))
         y = np.atleast_1d(np.asarray(y, dtype=float))
-        inside = _inside(x, y, width, height)
+        inside = _inside(x, y, frame)
         if not inside.any():
             return None
 
@@ -336,7 +394,7 @@ class GridRenderer:
 
         for index in candidates:
             px, py = float(x[index]), float(y[index])
-            position = _nearest_edge(px, py, width, height)
+            position = _nearest_edge(px, py, frame)
             score = 1.0 if (position in (LabelPosition.LEFT, LabelPosition.RIGHT)) == prefer_side else 0.0
             if score > best_score:
                 best_score = score
@@ -358,32 +416,40 @@ class GridRenderer:
 # -- geometry helpers ----------------------------------------------------------
 
 
-def _edge_points(width: int, height: int) -> tuple[NDArray[np.floating], NDArray[np.floating]]:
-    """Points around the image's edge, plus its middle.
+def _edge_points(frame: DisplayFrame) -> tuple[NDArray[np.floating], NDArray[np.floating]]:
+    """Points around the screen box's edge, plus its middle, in image pixels.
 
     The corners alone miss the extreme longitude of a projection that bulges
     along an edge, and the middle catches a pole inside the field.
     """
-    steps = np.linspace(1.0, float(max(width, height)), EDGE_SAMPLES)
-    columns = np.clip(steps, 1.0, float(width))
-    rows = np.clip(steps, 1.0, float(height))
-    ones_x = np.ones_like(rows)
-    ones_y = np.ones_like(columns)
+    left, top, right, bottom = frame.image_box()
+    fraction = np.linspace(0.0, 1.0, EDGE_SAMPLES)
+    columns = left + fraction * (right - left)
+    rows = top + fraction * (bottom - top)
 
-    x = np.concatenate([columns, columns, ones_x, ones_x * width, [width / 2.0]])
-    y = np.concatenate([ones_y, ones_y * height, rows, rows, [height / 2.0]])
-    return (x, y)
+    u = np.concatenate(
+        [columns, columns, np.full_like(rows, left), np.full_like(rows, right), [(left + right) / 2.0]]
+    )
+    v = np.concatenate(
+        [np.full_like(columns, top), np.full_like(columns, bottom), rows, rows, [(top + bottom) / 2.0]]
+    )
+    return frame.display_to_image(u, v)
 
 
-def _border(width: int, height: int) -> list[tuple[float, float]]:
-    """The image's outline, as a closed polyline in image pixels."""
-    return [
-        (0.5, 0.5),
-        (width + 0.5, 0.5),
-        (width + 0.5, height + 0.5),
-        (0.5, height + 0.5),
-        (0.5, 0.5),
-    ]
+def _border(frame: DisplayFrame) -> list[tuple[float, float]]:
+    """The screen box's outline, as a closed polyline in image pixels.
+
+    Upright on the screen, so it comes back here as a *tilted* rectangle in
+    image pixels -- which is the point: the overlay turns it back the other
+    way, and what the reader sees is a border square to the window.
+    """
+    left, top, right, bottom = frame.image_box()
+    # Anticlockwise from the bottom left of the screen, which on an unturned
+    # image is the image's own outline in its original order.
+    u = np.array([left, right, right, left, left])
+    v = np.array([bottom, bottom, top, top, bottom])
+    x, y = frame.display_to_image(u, v)
+    return [(float(px), float(py)) for px, py in zip(x, y, strict=True)]
 
 
 def _steps(low: float, high: float, step: float) -> list[float]:
@@ -403,23 +469,23 @@ def _steps(low: float, high: float, step: float) -> list[float]:
     return [first + index * step for index in range(count)]
 
 
-def _inside(x: NDArray[np.floating], y: NDArray[np.floating], width: int, height: int) -> NDArray[np.bool_]:
-    """Which sampled points fall on the image."""
-    return (
-        np.isfinite(x) & np.isfinite(y) & (x >= 0.5) & (x <= width + 0.5) & (y >= 0.5) & (y <= height + 0.5)
-    )
+def _inside(x: NDArray[np.floating], y: NDArray[np.floating], frame: DisplayFrame) -> NDArray[np.bool_]:
+    """Which sampled points fall inside the screen box."""
+    left, top, right, bottom = frame.image_box()
+    u, v = frame.image_to_display(x, y)
+    return np.isfinite(u) & np.isfinite(v) & (u >= left) & (u <= right) & (v >= top) & (v <= bottom)
 
 
 def _split(
-    x: NDArray[np.floating], y: NDArray[np.floating], width: int, height: int
+    x: NDArray[np.floating], y: NDArray[np.floating], frame: DisplayFrame
 ) -> list[list[tuple[float, float]]]:
-    """Break a sampled curve into the runs of it that are on the image.
+    """Break a sampled curve into the runs of it that are in the box.
 
     A curve that leaves the frame and comes back must not be joined across
     the gap, or a line of declination near a pole draws a chord straight
     through the picture.
     """
-    inside = _inside(x, y, width, height)
+    inside = _inside(x, y, frame)
     pieces: list[list[tuple[float, float]]] = []
     current: list[tuple[float, float]] = []
 
@@ -441,19 +507,47 @@ def _split(
     return pieces
 
 
-def _nearest_edge(x: float, y: float, width: int, height: int) -> LabelPosition:
-    """Which edge a point is closest to."""
+def _nearest_edge(x: float, y: float, frame: DisplayFrame) -> LabelPosition:
+    """Which edge of the screen box a point is closest to.
+
+    Named for where they are on the *screen*: display y counts downwards, so
+    the bottom edge is the one with the larger v. Deciding this in image
+    pixels instead is what put a rotated image's numbers along the wrong
+    sides, offset in the wrong directions.
+    """
+    left, top, right, bottom = frame.image_box()
+    u, v = frame.image_to_display(x, y)
+    u, v = float(u), float(v)
     distances = {
-        LabelPosition.LEFT: x - 0.5,
-        LabelPosition.RIGHT: width + 0.5 - x,
-        LabelPosition.BOTTOM: y - 0.5,
-        LabelPosition.TOP: height + 0.5 - y,
+        LabelPosition.LEFT: u - left,
+        LabelPosition.RIGHT: right - u,
+        LabelPosition.BOTTOM: bottom - v,
+        LabelPosition.TOP: v - top,
     }
     return min(distances, key=lambda edge: distances[edge])
 
 
+def _title_edge(labels: list[Label], fallback: LabelPosition) -> LabelPosition:
+    """Which edge an axis title belongs beside: the one its numbers are on.
+
+    The commonest edge among them, because a curved family can put one
+    stray number round a corner, and the title follows the crowd.
+    """
+    if not labels:
+        return fallback
+    counts: dict[LabelPosition, int] = {}
+    for label in labels:
+        counts[label.position] = counts.get(label.position, 0) + 1
+    return max(counts, key=lambda edge: counts[edge])
+
+
 def _tick_direction(position: LabelPosition) -> tuple[float, float]:
-    """Which way a tick on one edge points, in image pixels."""
+    """Which way a tick on one edge points, in screen pixels, y up.
+
+    Inwards from its own edge. Screen pixels, not image ones: the box is
+    upright on the screen however the image is turned, and the overlay adds
+    these after its transform so that a tick keeps its length at any zoom.
+    """
     return {
         LabelPosition.LEFT: (TICK_LENGTH, 0.0),
         LabelPosition.RIGHT: (-TICK_LENGTH, 0.0),
