@@ -353,7 +353,13 @@ class CatalogWindow(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
-        dialog.exec()
+        # Modeless, and held, so the header can be read beside the list it
+        # describes rather than instead of it. Nothing else owns it, and a
+        # modeless dialog nothing holds is collected the moment it is shown.
+        self._header_window = dialog
+        dialog.finished.connect(lambda _result: setattr(self, "_header_window", None))
+        dialog.show()
+        dialog.raise_()
 
     def print_list(self) -> None:
         """Print the list, separately from the image as DS9 does."""

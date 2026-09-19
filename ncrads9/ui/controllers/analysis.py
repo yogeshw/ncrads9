@@ -76,6 +76,7 @@ from ..dialogs.contour_dialog import ContourDialog
 from ..dialogs.grid_dialog import GridDialog
 from ..dialogs.histogram_dialog import HistogramDialog
 from ..dialogs.mask_dialog import MaskDialog
+from ..dialogs.modeless import make_modeless
 from ..dialogs.pixel_table_dialog import PixelTableDialog
 from ..dialogs.plot_window import PlotWindow
 from ..dialogs.smooth_dialog import SmoothDialog
@@ -238,7 +239,8 @@ class AnalysisController(Controller):
             return
         dialog = SmoothDialog(self.window)
         dialog.smoothing_changed.connect(self.apply_smooth_settings)
-        dialog.exec()
+        # Modeless: the radius is judged by looking at the smoothed image.
+        self.show_window(dialog)
 
     def apply_smooth_settings(self, settings: dict) -> None:
         """Apply smoothing settings from dialog."""
@@ -394,7 +396,10 @@ class AnalysisController(Controller):
         """Show DS9's Coordinate Grid Parameters dialog."""
         dialog = GridDialog(self.grid_config, self.window)
         dialog.grid_changed.connect(self.apply_grid_settings)
-        dialog.exec()
+        # Modeless, like every other parameters window: the grid is drawn on
+        # the image behind it, so blocking that window hides the only thing
+        # the dialog does.
+        self.show_window(dialog)
 
     def apply_grid_settings(self, config) -> None:
         """Take the settings the dialog chose and redraw."""
@@ -415,7 +420,8 @@ class AnalysisController(Controller):
         )
         dialog.mask_changed.connect(self.apply_mask_settings)
         dialog.mask_cleared.connect(self.clear_mask)
-        dialog.exec()
+        # Modeless: the mask is drawn over the image behind it.
+        self.show_window(dialog)
 
     def apply_mask_settings(self, settings, path: str) -> None:
         """Load a mask file if one was chosen, and redraw with the settings."""
@@ -750,7 +756,7 @@ class AnalysisController(Controller):
 
         from .. import plot_theme
 
-        dialog = QDialog(self.window)
+        dialog = make_modeless(QDialog(self.window))
         dialog.setWindowTitle("Radial Profile")
         dialog.setMinimumSize(640, 420)
         layout = QVBoxLayout(dialog)
@@ -771,7 +777,9 @@ class AnalysisController(Controller):
         close_btn.clicked.connect(dialog.accept)
         btn_row.addWidget(close_btn)
         layout.addLayout(btn_row)
-        dialog.exec()
+        # Read beside the image it came from, as the statistics and the
+        # histogram already are.
+        self.show_window(dialog, key="RadialProfileDialog", replace=True)
         self.log_command("radial_profile")
 
     def show_contour_dialog(self) -> None:
@@ -786,7 +794,12 @@ class AnalysisController(Controller):
         dialog.contours_changed.connect(self.apply_contours)
         dialog.contours_export_requested.connect(self.export_contours)
         dialog.contours_file_requested.connect(self.contour_file_command)
-        dialog.exec()
+        # Modeless, which is the whole point of an Apply button: set a level
+        # and watch the contours change on the image. Shown with `exec()` it
+        # was application-modal, so it sat over the picture it was drawing on
+        # and could not be pushed aside -- and every Apply went somewhere the
+        # reader could not see until they closed the window.
+        self.show_window(dialog)
 
     def apply_contours(self, settings: dict) -> None:
         """Compute and display contours based on settings."""

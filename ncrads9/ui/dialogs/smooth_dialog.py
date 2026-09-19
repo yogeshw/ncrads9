@@ -36,6 +36,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from .modeless import make_modeless
+
 
 class SmoothDialog(QDialog):
     """Dialog for configuring image smoothing parameters."""
@@ -50,6 +52,9 @@ class SmoothDialog(QDialog):
         """
         super().__init__(parent)
         self.setWindowTitle("Smoothing Parameters")
+        # A parameters window: read and adjusted while looking at the
+        # image behind it, so it must not block or cover what it changes.
+        make_modeless(self)
         self.setMinimumWidth(350)
         self._setup_ui()
 

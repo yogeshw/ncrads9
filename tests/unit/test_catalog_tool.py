@@ -716,9 +716,10 @@ def test_editing_symbols_from_the_window_redraws(main_window, monkeypatch):
     from ncrads9.ui.controllers import catalog as controller_module
 
     class Accepted(controller_module.SymbolEditorDialog):
-        def exec(self):
+        # The editor is modeless -- it is shown, not `exec`ed, so that the
+        # symbols it is editing stay visible on the image while it is open.
+        def show(self):
             self.symbols_changed.emit([Symbol(condition="1", color="magenta")])
-            return 1
 
     monkeypatch.setattr(controller_module, "SymbolEditorDialog", Accepted)
     main_window.menu_bar.catalog_actions["catgaia"].trigger()

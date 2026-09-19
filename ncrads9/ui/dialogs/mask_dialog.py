@@ -46,6 +46,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ...analysis.mask import MASK_COLORS, BlendMode, MaskMode, MaskSettings
+from .modeless import make_modeless
 
 #: The FITS filter Open offers.
 MASK_FILTER = "FITS Files (*.fits *.fit *.fts *.fits.gz);;All Files (*)"
@@ -74,6 +75,9 @@ class MaskDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Mask Parameters")
+        # A parameters window: read and adjusted while looking at the
+        # image behind it, so it must not block or cover what it changes.
+        make_modeless(self)
         self.settings = settings or MaskSettings()
         self._path = path
 

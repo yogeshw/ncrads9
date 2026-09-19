@@ -519,7 +519,9 @@ class ColorController(Controller):
 
         dialog = ColormapDialog(self.window)
         dialog.colormap_changed.connect(self.apply_dialog_settings)
-        dialog.exec()
+        # Modeless: contrast and bias are set by dragging and looking at the
+        # image, which a dialog over the top of it prevents.
+        self.show_window(dialog)
 
     def apply_dialog_settings(self, settings: dict) -> None:
         """Apply settings from the Colormap Parameters dialog."""

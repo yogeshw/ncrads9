@@ -435,7 +435,12 @@ class CatalogController(Controller):
         """Open DS9's symbol editor on one catalogue (M8-3)."""
         dialog = SymbolEditorDialog(catalog.symbols, catalog.columns, self.window)
         dialog.symbols_changed.connect(lambda symbols, target=catalog: self._apply_symbols(target, symbols))
-        dialog.exec()
+        # Modeless: the rules being edited decide what is drawn over the
+        # image, and one editor per catalogue rather than a stack of them.
+        # `Controller.show_window` by name, because this controller has a
+        # `show_window` of its own that opens a catalogue's list window and
+        # takes a catalogue, not a dialog.
+        Controller.show_window(self, dialog, key=f"SymbolEditorDialog:{catalog.name}")
 
     def _apply_symbols(self, catalog: LoadedCatalog, symbols) -> None:
         """Take the edited rules and redraw."""

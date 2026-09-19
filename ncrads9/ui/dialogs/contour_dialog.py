@@ -40,6 +40,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ...analysis.contour import CONTOUR_METHODS, DEFAULT_SMOOTHNESS
+from .modeless import make_modeless
 
 
 class ContourDialog(QDialog):
@@ -58,6 +59,9 @@ class ContourDialog(QDialog):
         """
         super().__init__(parent)
         self.setWindowTitle("Contour Settings")
+        # A parameters window: read and adjusted while looking at the
+        # image behind it, so it must not block or cover what it changes.
+        make_modeless(self)
         self.setMinimumWidth(400)
         self._contour_color = QColor(0, 255, 0)  # Default green
         self._setup_ui()

@@ -123,7 +123,7 @@ class Controller:
         """Redraw the current frame."""
         self.window.display.display()
 
-    def show_window(self, dialog, key: str | None = None):
+    def show_window(self, dialog, key: str | None = None, replace: bool = False):
         """Show a dialog *beside* the image rather than on top of it.
 
         For the windows you read while looking at the picture -- the
@@ -141,6 +141,11 @@ class Controller:
             dialog: The dialog to show.
             key: What to file it under. Defaults to its class name, which
                 is what makes "the same kind" mean what it should.
+            replace: Close the one already open rather than raising it.
+                For a window whose contents were computed when it was
+                asked for -- a radial profile of one region, say. Raising
+                the old one would show the reader last time's answer and
+                silently drop the one they just asked for.
 
         Returns:
             The dialog now on screen -- the one passed in, or the one
@@ -156,10 +161,14 @@ class Controller:
         if existing is not None and existing is not dialog:
             try:
                 if existing.isVisible():
-                    existing.raise_()
-                    existing.activateWindow()
-                    dialog.deleteLater()
-                    return existing
+                    if replace:
+                        existing.close()
+                        existing.deleteLater()
+                    else:
+                        existing.raise_()
+                        existing.activateWindow()
+                        dialog.deleteLater()
+                        return existing
             except RuntimeError:
                 # The C++ object is gone; the new one replaces it.
                 pass

@@ -60,6 +60,7 @@ from PyQt6.QtWidgets import (
 
 from ...ui import bindings as bindings_module
 from ...utils import preference_defs
+from .modeless import make_modeless
 
 #: How big the window opens.
 WINDOW_SIZE = (820, 560)
@@ -81,6 +82,9 @@ class PreferencesDialog(QDialog):
         """
         super().__init__(parent)
         self.setWindowTitle("Preferences")
+        # A parameters window: read and adjusted while looking at the
+        # image behind it, so it must not block or cover what it changes.
+        make_modeless(self)
         self.resize(*WINDOW_SIZE)
 
         #: Preference key -> the widget editing it.

@@ -65,6 +65,7 @@ from ...grid.grid_config import (
     GridType,
     Placement,
 )
+from .modeless import make_modeless
 
 #: The coordinate systems the Coordinate tab offers.
 SYSTEMS: tuple[str, ...] = ("wcs", "image", "physical")
@@ -97,6 +98,9 @@ class GridDialog(QDialog):
     def __init__(self, config: GridConfig | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Coordinate Grid Parameters")
+        # A parameters window: read and adjusted while looking at the
+        # image behind it, so it must not block or cover what it changes.
+        make_modeless(self)
         self.config = (config or GridConfig()).copy()
         self._widgets: dict[str, QWidget] = {}
 

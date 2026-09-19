@@ -57,6 +57,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ...catalogs.catalog_set import COLORS, SHAPES, Symbol, load_symbols, save_symbols
+from .modeless import make_modeless
 
 #: How big the editor opens.
 WINDOW_SIZE = (900, 420)
@@ -101,6 +102,9 @@ class SymbolEditorDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Symbol Editor")
+        # A parameters window: read and adjusted while looking at the
+        # image behind it, so it must not block or cover what it changes.
+        make_modeless(self)
         self.resize(*WINDOW_SIZE)
         self.symbols = [Symbol(**vars(symbol)) for symbol in (symbols or [Symbol()])]
 

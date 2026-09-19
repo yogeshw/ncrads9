@@ -306,7 +306,9 @@ class EditController(Controller):
         dialog = PreferencesDialog(self.window)
         dialog.load_preferences(self.preferences_dict())
         dialog.preferences_changed.connect(self.apply_preferences)
-        dialog.exec()
+        # Modeless: several preferences change the window as they are
+        # applied, and the whole window was frozen behind this one.
+        self.show_window(dialog)
 
     def apply_preferences(
         self,

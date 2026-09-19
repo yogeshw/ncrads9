@@ -41,6 +41,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ...colormaps.builtin_maps import get_builtin_colormap, list_builtin_colormaps
+from .modeless import make_modeless
 
 
 class ColormapDialog(QDialog):
@@ -61,6 +62,9 @@ class ColormapDialog(QDialog):
         """
         super().__init__(parent)
         self.setWindowTitle("Colormap Selection")
+        # A parameters window: read and adjusted while looking at the
+        # image behind it, so it must not block or cover what it changes.
+        make_modeless(self)
         self.setMinimumSize(500, 600)
         self._current_colormap = "gray"
         self._setup_ui()

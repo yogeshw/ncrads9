@@ -24,6 +24,12 @@ Three faults, each covering several menu entries:
   Scale Parameters -- declared `NonModal` in their own constructors and
   were then shown with `exec()`, which makes a dialog modal whatever it
   asked for. The application froze behind each one.
+* the same fault in the windows you *adjust* while looking at the image:
+  Contour, Coordinate Grid, Smooth, Mask and Colormap Parameters, and
+  Preferences. Each one applies its settings to the picture it is sitting
+  on top of, and each was shown with `exec()` -- so Apply changed something
+  the reader could not see and could not uncover until they closed the
+  window.
 * `Frame -> Lock` has eight flags and only `Block` was live. The other
   seven recorded the tick and never acted on it.
 * `Frame -> Match -> Axes Order` was a stub, `Match -> Bin` promised a
@@ -105,6 +111,18 @@ READING_WINDOWS = [
     ("action_scale_params", "ScaleDialog"),
 ]
 
+#: The windows you *adjust* while looking at the image. Same rule, and the
+#: same test: each applies to the picture behind it, so each has to leave
+#: that picture usable.
+PARAMETER_WINDOWS = [
+    ("action_contour_params", "ContourDialog"),
+    ("action_coordinate_grid_params", "GridDialog"),
+    ("action_smooth_params", "SmoothDialog"),
+    ("action_mask_params", "MaskDialog"),
+    ("action_colormap_params", "ColormapDialog"),
+    ("action_preferences", "PreferencesDialog"),
+]
+
 
 def _visible(qapp) -> dict[str, QDialog]:
     return {
@@ -127,6 +145,45 @@ def test_a_reading_window_opens_beside_the_image(window, qapp, action_name, dial
     assert dialog_name in shown, f"{action_name} put nothing on screen"
     assert shown[dialog_name].windowModality() == Qt.WindowModality.NonModal
     shown[dialog_name].close()
+
+
+@pytest.mark.parametrize(("action_name", "dialog_name"), PARAMETER_WINDOWS)
+def test_a_parameters_window_leaves_the_image_usable(window, qapp, action_name, dialog_name):
+    """Modeless, and a window in its own right.
+
+    Shown with `exec()` these sat over the image they were changing and
+    could not be pushed aside; every Apply went somewhere invisible. As
+    with the reading windows, a regression hangs here rather than failing,
+    which is the same report the user got.
+    """
+    getattr(window.menu_bar, action_name).trigger()
+    qapp.processEvents()
+
+    shown = _visible(qapp)
+    assert dialog_name in shown, f"{action_name} put nothing on screen"
+    dialog = shown[dialog_name]
+    assert dialog.windowModality() == Qt.WindowModality.NonModal
+    assert not dialog.isModal()
+    # A title bar to take hold of, and the buttons to get it out of the way.
+    flags = dialog.windowFlags()
+    assert flags & Qt.WindowType.WindowTitleHint
+    assert flags & Qt.WindowType.WindowMinMaxButtonsHint
+    # Never pinned over the image: that was the other way of making a window
+    # impossible to move aside.
+    assert not (flags & Qt.WindowType.WindowStaysOnTopHint)
+    dialog.close()
+
+
+@pytest.mark.parametrize(("action_name", "dialog_name"), PARAMETER_WINDOWS)
+def test_a_parameters_window_is_not_opened_twice(window, qapp, action_name, dialog_name):
+    for _ in range(3):
+        getattr(window.menu_bar, action_name).trigger()
+        qapp.processEvents()
+    count = sum(
+        1 for widget in qapp.topLevelWidgets() if type(widget).__name__ == dialog_name and widget.isVisible()
+    )
+    assert count == 1
+    _visible(qapp)[dialog_name].close()
 
 
 def test_a_reading_window_is_not_opened_twice(window, qapp):
@@ -173,7 +230,10 @@ def test_no_dialog_that_asks_to_be_modeless_is_shown_modally():
     modeless = set()
     for path in (root / "dialogs").glob("*.py"):
         text = path.read_text()
-        if "NonModal" in text:
+        # Either spelling: the flag set by hand, or `make_modeless`, which
+        # is the same thing plus the window flags. A dialog that switched to
+        # the helper must not drop out of this guard.
+        if "NonModal" in text or "make_modeless(" in text:
             modeless.update(re.findall(r"class (\w+)\(Q\w+\)", text))
     assert modeless, "the dialogs should declare their modality"
 
