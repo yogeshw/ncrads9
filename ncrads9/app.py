@@ -199,7 +199,13 @@ ncrads9 -frame rgb -zoom 2 -pan 1024 1024 image.fits</pre>
 </body>
 </html>
 """
-    help_path = Path(tempfile.gettempdir()) / "ncrads9_cli_help.html"
+    # A per-user private directory, not a fixed name in the shared temp dir.
+    # `mkdtemp` makes a 0700 directory owned by this user, so another local
+    # user cannot pre-plant `ncrads9_cli_help.html` as a symlink and have this
+    # follow it -- overwriting a file the user can write, or feeding the
+    # browser content of the attacker's choosing under the user's name.
+    directory = Path(tempfile.mkdtemp(prefix="ncrads9-help-"))
+    help_path = directory / "cli_help.html"
     help_path.write_text(html, encoding="utf-8")
     return help_path
 

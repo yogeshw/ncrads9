@@ -190,7 +190,10 @@ def test_html_help_opens_browser_and_exits_zero(monkeypatch, tmp_path):
     )
 
     assert run_application(["ncrads9", "--help-html"]) == 0
-    assert opened["url"].endswith("ncrads9_cli_help.html")
+    # Written into a private per-user temp directory rather than under a fixed
+    # world-known name, so the URL ends with the file inside that directory.
+    assert opened["url"].endswith("cli_help.html")
+    assert "ncrads9-help-" in opened["url"]
 
 
 def test_open_cli_help_in_browser_writes_and_opens(monkeypatch, tmp_path):
