@@ -37,10 +37,15 @@ thousand rows is one numpy expression rather than a hundred thousand
 `eval` calls. That is also why the expression is compiled once and the
 column arrays are the only thing that changes.
 
-Nothing here evaluates arbitrary code with builtins available: the
-namespace holds the columns, a short list of maths functions, and nothing
-else. A catalogue filter is typed by the user, but a symbol expression can
-arrive inside a saved symbol file.
+A catalogue filter is not always typed by the person at the keyboard: a
+symbol condition rides in on a saved symbol file, and an XPA `catalog filter`
+command comes from any local process. So the translated expression is not
+handed to a bare `eval` -- an empty `__builtins__` is no sandbox, since an
+expression can climb from any object's attributes to the interpreter's own
+builtins -- but to `utils.safe_expr.safe_eval`, which evaluates it from its
+AST and refuses any node, name or attribute access outside a small allow-list.
+The namespace holds the columns and a short list of maths functions, and
+those names are all an expression may mention.
 
 Author: Yogesh Wadadekar
 """
@@ -52,6 +57,8 @@ import re
 import numpy as np
 from astropy.table import Table
 from numpy.typing import NDArray
+
+from ..utils.safe_expr import UnsafeExpression, safe_eval
 
 
 class FilterError(ValueError):
@@ -233,7 +240,7 @@ def _namespace(table: Table, columns: list[str]) -> dict:
         else:
             values[name] = column.astype(float)
 
-    return {"_c": values, **FUNCTIONS, "__builtins__": {}}
+    return {"_c": values, **FUNCTIONS}
 
 
 def evaluate(table: Table, expression: str) -> NDArray[np.bool_]:
@@ -257,9 +264,11 @@ def evaluate(table: Table, expression: str) -> NDArray[np.bool_]:
     namespace = _namespace(table, columns_used(expression))
 
     try:
-        result = eval(source, namespace)
+        result = safe_eval(source, namespace)
     except FilterError:
         raise
+    except UnsafeExpression as exc:
+        raise FilterError(f"{expression!r} is not a valid filter: {exc}") from exc
     except Exception as exc:
         raise FilterError(f"cannot evaluate {expression!r}: {exc}") from exc
 
@@ -309,7 +318,7 @@ def evaluate_values(table: Table, expression: str, default: float = 0.0) -> NDAr
     try:
         source = translate(expression)
         namespace = _namespace(table, columns_used(expression))
-        result = eval(source, namespace)
+        result = safe_eval(source, namespace)
     except Exception:
         return np.full(rows, float(default))
 
@@ -345,7 +354,7 @@ def evaluate_text(table: Table, expression: str) -> list[str]:
         try:
             source = translate(text)
             namespace = _namespace(table, references)
-            result = eval(source, namespace)
+            result = safe_eval(source, namespace)
             array = np.atleast_1d(np.asarray(result))
             if array.shape[0] == rows:
                 return [_pretty(value) for value in array]

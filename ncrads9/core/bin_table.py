@@ -76,6 +76,7 @@ import numpy as np
 from astropy.io import fits
 from numpy.typing import NDArray
 
+from ..utils.safe_expr import UnsafeExpression, safe_eval
 from .file_spec import BinSpec
 from .image_data import ImageData
 
@@ -278,9 +279,15 @@ def apply_filter(
 
     translated = "(" + expression.replace("&&", ") & (").replace("||", ") | (") + ")"
     try:
-        # No builtins: only the columns are in scope, so an expression cannot
-        # reach anything else even though it comes from a file name.
-        mask = eval(translated, {"__builtins__": {}}, scope)
+        # Not a bare `eval`: the expression arrives inside a FITS *file name*
+        # (`file.fits[bin=x,y][expr]`), so opening a file someone sent would
+        # otherwise run whatever it carried. An empty `__builtins__` is no
+        # sandbox -- an expression can climb from any column array's
+        # attributes to the interpreter's builtins -- so `safe_eval` evaluates
+        # it from its AST and refuses anything but the columns and arithmetic.
+        mask = safe_eval(translated, scope)
+    except UnsafeExpression as exc:
+        raise BinTableError(f"filter {expression!r} is not allowed: {exc}") from exc
     except Exception as exc:
         raise BinTableError(f"cannot apply filter {expression!r}: {exc}") from exc
 
