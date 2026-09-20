@@ -54,6 +54,27 @@ class XPAServer:
     DEFAULT_HOST: str = "localhost"
     DEFAULT_PORT: int = 0
 
+    #: The most a single request may be. An XPA command is a line, sometimes
+    #: with a text payload -- a region list at the largest -- so 16 MiB is far
+    #: more than any real one and still bounds what one client can make the
+    #: server hold. Without a cap, a client that never sends a newline makes
+    #: `_recv_request` accumulate without limit.
+    MAX_REQUEST_BYTES: int = 16 * 1024 * 1024
+
+    #: The most clients handled at once. Each connection is a thread, so an
+    #: unbounded count is an unbounded thread (and file-descriptor) count --
+    #: one client opening thousands of connections could exhaust either.
+    #: XPA clients are short-lived and sequential, so this is generous.
+    MAX_CONNECTIONS: int = 16
+
+    #: The most half-finished xpaset/xpaget transactions kept at once. The
+    #: first stage records the request and the second (`xpadata`) consumes it;
+    #: a client that starts transactions and never sends the second stage
+    #: would otherwise grow the table without bound. Over the cap, the oldest
+    #: abandoned transaction is dropped -- far more than any real client has
+    #: in flight, since it completes each before starting the next.
+    MAX_PENDING_TRANSACTIONS: int = 256
+
     def __init__(
         self,
         name: str = DEFAULT_NAME,
@@ -82,6 +103,9 @@ class XPAServer:
         self._pending_requests: dict[tuple[str, str], dict[str, Any]] = {}
         self._pending_lock = threading.Lock()
         self._next_pending_id = 1
+        #: One permit per client that may be handled at once; a connection
+        #: over the limit is closed rather than given a thread.
+        self._connection_slots = threading.BoundedSemaphore(self.MAX_CONNECTIONS)
         self._xpans_socket: socket.socket | None = None
         self._xpans_stream = None
         self._xpans_process: subprocess.Popen | None = None
@@ -169,8 +193,19 @@ class XPAServer:
                 client_socket, address = self._socket.accept()
                 self._logger.debug(f"Accepted connection from {address}")
 
+                # Take a slot before giving the connection a thread. If they
+                # are all in use, close this one now: a flood of connections
+                # then costs nothing rather than a thread each.
+                if not self._connection_slots.acquire(blocking=False):
+                    self._logger.warning("XPA connection limit reached; dropping %s", address)
+                    try:
+                        client_socket.close()
+                    except OSError:
+                        pass
+                    continue
+
                 client_thread = threading.Thread(
-                    target=self._handle_client,
+                    target=self._handle_client_slot,
                     args=(client_socket, address),
                     daemon=True,
                 )
@@ -182,6 +217,22 @@ class XPAServer:
                 if self.running:
                     self._logger.error("Error accepting connection")
                 break
+
+    def _handle_client_slot(
+        self,
+        client_socket: socket.socket,
+        address: tuple[str, int],
+    ) -> None:
+        """Handle a client, then give the connection slot back.
+
+        The release is in a `finally` so a handler that raises still frees
+        the slot -- otherwise a run of errors would leak the whole pool and
+        the server would stop accepting anything.
+        """
+        try:
+            self._handle_client(client_socket, address)
+        finally:
+            self._connection_slots.release()
 
     def _handle_client(
         self,
@@ -214,8 +265,15 @@ class XPAServer:
                 pass
 
     def _recv_request(self, client_socket: socket.socket) -> bytes:
-        """Receive one request payload."""
-        chunks = []
+        """Receive one request payload, up to `MAX_REQUEST_BYTES`.
+
+        A client that never sends a newline would otherwise keep this loop
+        accumulating for the whole 30-second socket timeout; the cap stops it
+        at a bounded amount. Anything past the cap is refused rather than
+        truncated-and-run: a partial command is not a command.
+        """
+        chunks: list[bytes] = []
+        total = 0
         while True:
             try:
                 chunk = client_socket.recv(4096)
@@ -224,6 +282,10 @@ class XPAServer:
             if not chunk:
                 break
             chunks.append(chunk)
+            total += len(chunk)
+            if total > self.MAX_REQUEST_BYTES:
+                self._logger.warning("XPA request exceeded %d bytes; refusing it", self.MAX_REQUEST_BYTES)
+                return b""
             if b"\n" in chunk:
                 client_socket.settimeout(0.05)
         return b"".join(chunks)
@@ -282,6 +344,11 @@ class XPAServer:
             pending_fd = str(self._next_pending_id)
             self._next_pending_id += 1
             self._pending_requests[(pending_key, pending_fd)] = request
+            # Drop the oldest abandoned transactions once over the cap. A dict
+            # keeps insertion order, so the first key is the oldest.
+            while len(self._pending_requests) > self.MAX_PENDING_TRANSACTIONS:
+                oldest = next(iter(self._pending_requests))
+                self._pending_requests.pop(oldest, None)
         return (
             f"{xpa_id} XPA$DATA connect {pending_key} {pending_fd} "
             f"(NCRADS9:{self.name} {self.host}:{self.port})\n"

@@ -580,3 +580,34 @@ def test_the_iexam_point_expands_a_macro(xpa, main_window):
 def test_imexam_is_an_alias_of_iexam(xpa, main_window):
     _click_soon(main_window, 1.0, 2.0)
     assert xpa.handle("imexam", {"get": True, "args": ["coordinate", "image"]})["result"] == "1 2"
+
+
+# -- denial-of-service hardening -----------------------------------------------
+
+
+def test_connections_over_the_limit_are_dropped(server):
+    """Each IIS connection gets a reading thread; without a cap a flood of
+    connections is a flood of threads. Over the limit, a connection is closed
+    at once rather than served."""
+    import threading
+
+    server.MAX_CONNECTIONS = 2
+    server._connection_slots = threading.BoundedSemaphore(server.MAX_CONNECTIONS)
+
+    held: list[socket.socket] = []
+    try:
+        # Two connections that stay open take both slots. Their handler blocks
+        # in `recv`, so the slots stay held.
+        for _ in range(2):
+            held.append(socket.create_connection(("localhost", server.port), timeout=5))
+        # Let the two handler threads start and take their slots.
+        assert _wait_for(lambda: server._connection_slots._value == 0, seconds=3.0)
+
+        # A third is over the limit: the server closes it, so a read returns
+        # end-of-stream instead of hanging on a live handler.
+        with socket.create_connection(("localhost", server.port), timeout=5) as extra:
+            extra.settimeout(3.0)
+            assert extra.recv(16) == b""
+    finally:
+        for client in held:
+            client.close()

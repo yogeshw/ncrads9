@@ -222,6 +222,12 @@ class IISServer:
     MAX_FRAMES: int = 16
     HEADER_SIZE: int = HEADER_SIZE
 
+    #: The most clients handled at once. Each connection gets a thread that
+    #: loops reading packets, so an unbounded count of connections is an
+    #: unbounded count of threads -- a way for one peer to exhaust the
+    #: process. IRAF drives one connection at a time, so this is ample.
+    MAX_CONNECTIONS: int = 8
+
     def __init__(
         self,
         fifo_in: str = DEFAULT_FIFO_IN,
@@ -248,6 +254,9 @@ class IISServer:
         self._fifo_out_fd: int | None = None
         self._thread: threading.Thread | None = None
         self._logger: logging.Logger = logging.getLogger(__name__)
+        #: One permit per client handled at once; a connection over the limit
+        #: is closed rather than given a thread.
+        self._connection_slots = threading.BoundedSemaphore(self.MAX_CONNECTIONS)
 
         self._frames: dict[int, IISFrame] = {}
         self._current_frame: int = 1
@@ -425,8 +434,18 @@ class IISServer:
                 client, addr = self._socket.accept()
                 self._logger.debug(f"IIS connection from {addr}")
 
+                # Take a slot first; if none is free, close the connection
+                # now rather than spending a thread on it.
+                if not self._connection_slots.acquire(blocking=False):
+                    self._logger.warning("IIS connection limit reached; dropping %s", addr)
+                    try:
+                        client.close()
+                    except OSError:
+                        pass
+                    continue
+
                 client_thread = threading.Thread(
-                    target=self._handle_client,
+                    target=self._handle_client_slot,
                     args=(client,),
                     daemon=True,
                 )
@@ -468,6 +487,17 @@ class IISServer:
                     except OSError:
                         pass
                     self._fifo_out_fd = None
+
+    def _handle_client_slot(self, client: socket.socket) -> None:
+        """Handle a client, then give the connection slot back.
+
+        Released in a `finally` so an error in the handler still frees the
+        slot rather than leaking it out of the pool.
+        """
+        try:
+            self._handle_client(client)
+        finally:
+            self._connection_slots.release()
 
     def _handle_client(self, client: socket.socket) -> None:
         """Handle a client connection.
