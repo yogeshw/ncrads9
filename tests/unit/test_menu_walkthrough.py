@@ -445,3 +445,90 @@ def test_xpa_refuses_a_channel_no_colour_space_has(window):
     reply = commands.handle("hsv", {"args": ["channel", "puce"]})
     assert reply["status"] == "error"
     assert "not a channel" in reply["message"]
+
+
+# -- Frame -> Match -> Frame (the view only, not the colours) ----------------------
+
+
+def test_matching_the_frame_view_copies_pan_zoom_and_orientation(two_frames):
+    """DS9's Match -> Frame -> Image aligns the view: pan, zoom, rotation and
+    orientation, and nothing else."""
+    window = two_frames
+    window.frame_manager.goto_frame(0)
+    source = window.frame_manager.current_frame
+    source.zoom = 3.0
+    source.pan_x, source.pan_y = 40.0, 25.0
+    source.rotation = 90.0
+    source.flip_x = True
+
+    window.frame_controller.match_image()
+
+    other = window.frame_manager.frames[1]
+    assert other.zoom == pytest.approx(3.0)
+    assert other.pan_x == pytest.approx(40.0) and other.pan_y == pytest.approx(25.0)
+    assert other.rotation == pytest.approx(90.0)
+    assert other.flip_x is True
+    assert other.align_wcs is False
+
+
+def test_matching_the_frame_view_leaves_the_colours_and_scale_alone(two_frames):
+    """The bug: matching the view used to clobber every other frame's
+    colormap, scale and limits, which have Match entries of their own."""
+    window = two_frames
+    window.frame_manager.goto_frame(0)
+    source = window.frame_manager.current_frame
+    other = window.frame_manager.frames[1]
+
+    source.colormap = "heat"
+    source.scale = ScaleAlgorithm.LOG
+    source.z1, source.z2 = 1.0, 2.0
+    other.colormap = "cool"
+    other.scale = ScaleAlgorithm.LINEAR
+    other.z1, other.z2 = 10.0, 20.0
+
+    window.frame_controller.match_image()
+
+    # The view matched, the colours and scaling did not.
+    assert other.colormap == "cool"
+    assert other.scale is ScaleAlgorithm.LINEAR
+    assert (other.z1, other.z2) == (10.0, 20.0)
+
+
+def test_matching_wcs_aligns_the_view_without_touching_the_colours(two_frames):
+    window = two_frames
+    window.frame_manager.goto_frame(0)
+    source = window.frame_manager.current_frame
+    other = window.frame_manager.frames[1]
+    if not (source.wcs_handler and source.wcs_handler.is_valid):
+        pytest.skip("fixture frame has no WCS")
+    other.colormap = "cool"
+    source.colormap = "heat"
+    source.zoom = 5.0
+
+    window.frame_controller.match_wcs()
+
+    assert other.zoom == pytest.approx(5.0)
+    assert other.align_wcs is True
+    assert other.colormap == "cool"  # untouched
+
+
+# -- Frame -> Match -> Slice (the cube slice, not the view) ------------------------
+
+
+def test_matching_the_slice_steps_the_other_cube(two_cubes):
+    """Match -> Slice used to align the frame view; it should step the other
+    cubes to the current frame's slice, DS9's MatchCube."""
+    window = two_cubes
+    window.frame_manager.goto_frame(0)
+    window.frame_controller.set_slice(3)
+    other = window.frame_manager.frames[1]
+    other.slice_index = 0
+
+    window.frame_controller.match_slice("image")
+
+    assert other.slice_index == 3
+
+
+def test_matching_the_slice_with_no_cube_says_so(two_frames):
+    two_frames.frame_controller.match_slice("image")
+    assert "no other frame holds a data cube" in two_frames.status_bar.currentMessage().lower()

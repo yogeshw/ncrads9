@@ -150,8 +150,10 @@ class FrameController(Controller):
                 lambda _checked=False, v=system: self.window.crop.match(v)
             )
 
-        menu.action_match_slice_wcs.triggered.connect(self.match_wcs)
-        menu.action_match_slice_image.triggered.connect(self.match_image)
+        # Match -> Slice steps the other cubes to the current frame's slice,
+        # DS9's MatchCube -- not the frame view, which is Match -> Frame.
+        menu.action_match_slice_wcs.triggered.connect(lambda _checked=False: self.match_slice("wcs"))
+        menu.action_match_slice_image.triggered.connect(lambda _checked=False: self.match_slice("image"))
 
         menu.action_match_bin.triggered.connect(self.match_bin)
         menu.action_tile_parameters.triggered.connect(lambda _checked=False: self.show_tile_dialog())
@@ -1326,32 +1328,40 @@ class FrameController(Controller):
             self.match_image()
 
     def match_image(self) -> None:
-        """Match all frames to current image view settings."""
+        """Align every frame's view to the current one, in image pixels.
+
+        Frame -> Match -> Frame -> Image (and Physical/Amplifier/Detector,
+        which coincide with image here). DS9's `MatchFrame` copies only the
+        view -- pan, zoom, rotation and orientation -- and turns WCS
+        alignment off; it does *not* touch the colormap, the scale, the
+        limits or the contrast, which have Match entries of their own. This
+        used to copy all of those too, so aligning two frames also clobbered
+        the second frame's colours and scaling.
+        """
         source = self.frames.current_frame
         if not source:
             self.status("No frame to match", 2000)
             return
+        # DS9 drops WCS alignment on the source as well when matching by image.
+        source.align_wcs = False
         for frame in self.frames.frames:
             if frame is source:
                 continue
-            frame.colormap = source.colormap
-            frame.scale = source.scale
-            frame.invert_colormap = source.invert_colormap
-            frame.z1 = source.z1
-            frame.z2 = source.z2
-            frame.zoom = source.zoom
             frame.pan_x = source.pan_x
             frame.pan_y = source.pan_y
-            frame.rotation = source.rotation
-            frame.flip_x = source.flip_x
-            frame.flip_y = source.flip_y
-            frame.align_wcs = source.align_wcs
-            frame.contrast = source.contrast
-            frame.brightness = source.brightness
+            self._copy_frame_view(source, frame, align_wcs=False)
+        self._render_after_match()
         self.status("Matched frames (image)", 2000)
 
     def match_wcs(self) -> None:
-        """Match all frames to current frame using WCS."""
+        """Align every frame's view to the current one, on the sky.
+
+        Frame -> Match -> Frame -> WCS. Like `match_image`, this copies the
+        view alone -- each frame is panned so the current frame's centre sits
+        at its centre, then given the same zoom, rotation and orientation --
+        and turns WCS alignment on. The colormap, scale and limits are left
+        to their own Match entries; copying them here was a bug.
+        """
         source = self.frames.current_frame
         if not source or not source.wcs_handler or not source.wcs_handler.is_valid:
             self.status("Current frame has no valid WCS", 2000)
@@ -1362,6 +1372,7 @@ class FrameController(Controller):
         cx = source.image_data.shape[1] / 2
         cy = source.image_data.shape[0] / 2
         ra, dec = source.wcs_handler.pixel_to_world(cx, cy)
+        source.align_wcs = True
         for frame in self.frames.frames:
             if frame is source:
                 continue
@@ -1369,19 +1380,71 @@ class FrameController(Controller):
                 fx, fy = frame.wcs_handler.world_to_pixel(ra, dec)
                 frame.pan_x = float(fx)
                 frame.pan_y = float(fy)
-                frame.zoom = source.zoom
-                frame.rotation = source.rotation
-                frame.flip_x = source.flip_x
-                frame.flip_y = source.flip_y
-                frame.align_wcs = True
-                frame.colormap = source.colormap
-                frame.scale = source.scale
-                frame.invert_colormap = source.invert_colormap
-                frame.z1 = source.z1
-                frame.z2 = source.z2
-                frame.contrast = source.contrast
-                frame.brightness = source.brightness
+                self._copy_frame_view(source, frame, align_wcs=True)
+        self._render_after_match()
         self.status("Matched frames (WCS)", 2000)
+
+    def _copy_frame_view(self, source: Frame, frame: Frame, align_wcs: bool) -> None:
+        """Copy the view -- zoom, rotation, orientation -- from one frame to another.
+
+        The pan is handled by the caller, because image and WCS matching
+        compute it differently. Everything else about how a frame *looks* --
+        its colours and scaling -- is deliberately left alone.
+        """
+        frame.zoom = source.zoom
+        frame.rotation = source.rotation
+        frame.flip_x = source.flip_x
+        frame.flip_y = source.flip_y
+        frame.align_wcs = align_wcs
+
+    def _render_after_match(self) -> None:
+        """Redraw so a match is visible at once when frames are tiled.
+
+        In single-frame view the matched frames are not the one on screen, so
+        there is nothing to redraw; tiled, every frame is visible and a match
+        that did not redraw would not show until the next event.
+        """
+        if self.window._frame_display_mode == "tile":
+            self.update_display()
+
+    def match_slice(self, system: str) -> None:
+        """Match the cube slice of every frame to the current one.
+
+        Frame -> Match -> Slice. This used to align the frame *view* instead,
+        because it was wired to `match_wcs`/`match_image`; DS9's `MatchCube`
+        steps the other cubes to the same slice. The slice index is copied
+        (clamped to each cube's own depth); a frame that is not a cube is
+        left alone.
+        """
+        source = self.frames.current_frame
+        if source is None:
+            self.status("No frame to match", 2000)
+            return
+        index = source.slice_index
+        matched = 0
+        for frame in self.frames.frames:
+            if frame is source:
+                continue
+            handler = self.cube_handler(frame)
+            if handler is None:
+                continue
+            depth = handler.depth(frame.axis_order)
+            wanted = max(0, min(int(index), depth - 1))
+            plane = handler.get_slice(wanted, frame.axis_order)
+            if plane is None:
+                continue
+            frame.slice_index = wanted
+            frame.image_data = plane
+            frame.original_image_data = plane
+            frame.z1 = None
+            frame.z2 = None
+            matched += 1
+
+        if matched == 0:
+            self.status("No other frame holds a data cube", 3000)
+            return
+        self._render_after_match()
+        self.status(f"Matched {matched} frame(s) (slice {index + 1})", 2000)
 
     def match_bin(self) -> None:
         """Copy the bin-table binning of this frame to the others.
@@ -1439,6 +1502,7 @@ class FrameController(Controller):
         for frame in self.frames.frames:
             if frame is not source:
                 frame.scale = source.scale
+        self._render_after_match()
         self.status("Matched frames (scale)", 2000)
 
     def match_scale_limits(self) -> None:
@@ -1452,10 +1516,16 @@ class FrameController(Controller):
                 frame.scale = source.scale
                 frame.z1 = source.z1
                 frame.z2 = source.z2
+        self._render_after_match()
         self.status("Matched frames (scale and limits)", 2000)
 
     def match_colorbar(self) -> None:
-        """Match colormap/colorbar choices across frames."""
+        """Match colormap and colorbar across frames.
+
+        DS9's `MatchColor` copies the colormap together with the colorbar's
+        state -- its contrast and bias (and inversion) -- so the whole colour
+        mapping matches, not just the table's name.
+        """
         source = self.frames.current_frame
         if not source:
             self.status("No frame to match", 2000)
@@ -1464,6 +1534,9 @@ class FrameController(Controller):
             if frame is not source:
                 frame.colormap = source.colormap
                 frame.invert_colormap = source.invert_colormap
+                frame.contrast = source.contrast
+                frame.brightness = source.brightness
+        self._render_after_match()
         self.status("Matched frames (colorbar)", 2000)
 
     def match_block(self) -> None:
