@@ -93,6 +93,20 @@ class ImageViewer(QLabel):
         self._transform_cache_key = None
         self._update_display()
 
+    def clear_image(self) -> None:
+        """Drop the displayed image, leaving the viewer blank.
+
+        For an empty frame: switching to one used to leave the previous
+        frame's picture on screen, because nothing replaced the pixmap.
+        """
+        self._source_pixmap = None
+        self._pixmap = None
+        self._scaled_pixmap = None
+        self._transform_cache_key = None
+        self._scaled_cache_key = None
+        self.clear()
+        self.setText("No image loaded")
+
     def set_view_transform(self, rotation: float, flip_x: bool, flip_y: bool) -> None:
         """Set display rotation and flip state."""
         self._rotation = normalize_rotation(rotation)

@@ -111,6 +111,11 @@ class ImageViewerWithRegions(QWidget):
         self.image_viewer.set_image(pixmap)
         self._update_overlay_geometry()
 
+    def clear_image(self) -> None:
+        """Blank the viewer, for a frame with no data."""
+        self.image_viewer.clear_image()
+        self._update_overlay_geometry()
+
     def set_block_factor(self, factor: int) -> None:
         """Pass DS9's Block factor to the viewer and its region overlay.
 

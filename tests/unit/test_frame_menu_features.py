@@ -393,3 +393,49 @@ def test_load_fits_keeps_handler_alive_and_clear_closes_it(main_window: MainWind
     main_window.frame_controller.clear_current()
     assert close_calls["count"] == 1
     assert frame.fits_handler is None
+
+
+# -- a new frame opens empty, as in DS9 --------------------------------------
+
+
+def test_a_new_frame_blanks_the_viewer_rather_than_keeping_the_old_image(main_window):
+    """Opening a new frame used to leave the previous frame's picture on
+    screen, because a frame with no data returned from `update_display`
+    without clearing the viewer. DS9 opens a new frame empty."""
+    frame1 = main_window.frame_manager.current_frame
+    frame1.image_data = np.arange(100, dtype=np.float32).reshape(10, 10)
+    frame1.original_image_data = frame1.image_data
+    main_window.frame_controller.update_display()
+    assert main_window.image_viewer.image_viewer.get_image_size() == (10, 10)
+
+    main_window.frame_controller.new_frame()
+
+    # The new frame has no data of its own...
+    assert main_window.frame_manager.current_frame.image_data is None
+    # ...and the viewer no longer shows the first frame's image.
+    assert main_window.image_viewer.image_viewer.get_image_size() == (0, 0)
+
+
+def test_loading_into_a_new_frame_leaves_the_other_frame_untouched(main_window):
+    """The second half of the report: a new image loaded into a new frame
+    must not also change the frame it was opened from."""
+    frame1 = main_window.frame_manager.current_frame
+    frame1.image_data = np.full((8, 8), 10.0, dtype=np.float32)
+    frame1.original_image_data = frame1.image_data
+
+    main_window.frame_controller.new_frame()
+    frame2 = main_window.frame_manager.current_frame
+    frame2.image_data = np.full((8, 8), 99.0, dtype=np.float32)
+    frame2.original_image_data = frame2.image_data
+    main_window.frame_controller.update_display()
+
+    # Each frame keeps its own data; they are not the same array.
+    assert frame1.image_data is not frame2.image_data
+    assert float(frame1.image_data.max()) == 10.0
+    assert float(frame2.image_data.max()) == 99.0
+
+    # Switching back shows the first frame's own image again.
+    main_window.frame_manager.goto_frame(0)
+    main_window.frame_controller.update_display()
+    assert main_window.image_viewer.image_viewer.get_image_size() == (8, 8)
+    assert main_window.frame_manager.current_frame.image_data is frame1.image_data

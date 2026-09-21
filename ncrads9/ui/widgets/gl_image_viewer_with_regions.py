@@ -128,6 +128,11 @@ class GLImageViewerWithRegions(QWidget):
     def set_value_source(self, data: NDArray[np.float32]) -> None:
         self.gl_canvas.set_value_source(data)
 
+    def clear_image(self) -> None:
+        """Blank the canvas, for a frame with no data."""
+        self.gl_canvas.clear_image()
+        self._update_overlay_transform()
+
     def set_region_mode(self, mode: RegionMode) -> None:
         self.region_overlay.set_mode(mode)
         if mode == RegionMode.NONE:

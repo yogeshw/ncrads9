@@ -506,6 +506,11 @@ class FrameController(Controller):
                 if frame.zoom:
                     self.viewer.zoom_to(frame.zoom)
         else:
+            # A frame with no data. Blank the viewer rather than leaving the
+            # previous frame's picture on screen -- DS9 opens a new frame
+            # empty, and this is what makes ours do the same.
+            if hasattr(self.viewer, "clear_image"):
+                self.viewer.clear_image()
             self.status_bar.update_image_info(None, None)
             if hasattr(self.viewer, "set_direction_arrows"):
                 self.viewer.set_direction_arrows(None, None, False)

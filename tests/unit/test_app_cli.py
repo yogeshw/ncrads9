@@ -221,3 +221,44 @@ def test_apply_startup_cli_colormap_alias(main_window: MainWindow, monkeypatch):
     monkeypatch.setattr(FileController, "open_file", _fake_open)
     apply_startup_cli(main_window, ["ncrads9", "image.fits", "-color", "heat"])
     assert main_window.current_colormap == "heat"
+
+
+def test_apply_startup_cli_opens_each_file_in_its_own_frame(main_window: MainWindow, monkeypatch):
+    """`ncrads9 *.fits` should end with one image per frame, not just the
+    last file loaded over the top of every other."""
+    opened_paths = []
+
+    def _fake_open(self, checked=False, filepath=None):
+        if isinstance(checked, str) and filepath is None:
+            filepath = checked
+        assert filepath is not None
+        opened_paths.append(filepath)
+        frame = self.frames.current_frame
+        frame.filepath = Path(filepath)
+        frame.image_data = np.full((10, 10), float(len(opened_paths)), dtype=np.float32)
+        frame.original_image_data = frame.image_data
+
+    monkeypatch.setattr(FileController, "open_file", _fake_open)
+    apply_startup_cli(main_window, ["ncrads9", "a.fits", "b.fits", "c.fits"])
+
+    assert opened_paths == ["a.fits", "b.fits", "c.fits"]
+    # One frame per file, the first reusing the initial empty frame.
+    assert main_window.frame_manager.num_frames == 3
+    maxes = [float(f.image_data.max()) for f in main_window.frame_manager.frames]
+    assert maxes == [1.0, 2.0, 3.0]
+    # The last file is the one left showing.
+    assert main_window.frame_manager.current_index == 2
+
+
+def test_apply_startup_cli_single_file_uses_the_one_frame(main_window: MainWindow, monkeypatch):
+    def _fake_open(self, checked=False, filepath=None):
+        if isinstance(checked, str) and filepath is None:
+            filepath = checked
+        frame = self.frames.current_frame
+        frame.filepath = Path(filepath)
+        frame.image_data = np.zeros((4, 4), dtype=np.float32)
+        frame.original_image_data = frame.image_data
+
+    monkeypatch.setattr(FileController, "open_file", _fake_open)
+    apply_startup_cli(main_window, ["ncrads9", "only.fits"])
+    assert main_window.frame_manager.num_frames == 1

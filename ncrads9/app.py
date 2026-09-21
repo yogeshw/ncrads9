@@ -336,6 +336,16 @@ def apply_startup_cli(main_window: MainWindow, argv: Sequence[str]) -> None:
 
     for item in items:
         if item.kind == "file":
+            # DS9 gives each file on the command line its own frame: the
+            # first fills the initial empty frame, and every one after it
+            # opens a new frame rather than replacing what is already shown.
+            # `ncrads9 *.fits` should end with one image per frame, not just
+            # the last file. A frame that already holds data is the signal to
+            # make a fresh one -- which also does the right thing when an
+            # option loaded something before the first file argument.
+            current = main_window.frame_manager.current_frame
+            if current is not None and current.has_data:
+                main_window.frame_controller.new_frame()
             main_window.file.open_file(filepath=item.name)
             continue
 

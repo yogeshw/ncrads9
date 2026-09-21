@@ -115,6 +115,18 @@ class GLCanvas(QOpenGLWidget):
         self._image_data = np.asarray(data)
         self._image_height, self._image_width = self._image_data.shape[:2]
 
+    def clear_image(self) -> None:
+        """Drop the image, leaving the canvas at its background colour.
+
+        `paintGL` draws nothing once the dimensions are zero, so a frame with
+        no data shows blank rather than keeping the previous frame's tiles.
+        """
+        self._tile_provider = None
+        self._image_data = None
+        self._image_width = 0
+        self._image_height = 0
+        self.update()
+
     def set_tile_provider(
         self,
         width: int,
