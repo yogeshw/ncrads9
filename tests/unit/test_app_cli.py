@@ -248,9 +248,11 @@ def test_apply_startup_cli_opens_each_file_in_its_own_frame(main_window: MainWin
     assert maxes == [1.0, 2.0, 3.0]
     # The last file is the one left showing.
     assert main_window.frame_manager.current_index == 2
+    # More than one image, so DS9 comes up tiled -- every frame visible.
+    assert main_window._frame_display_mode == "tile"
 
 
-def test_apply_startup_cli_single_file_uses_the_one_frame(main_window: MainWindow, monkeypatch):
+def _install_fake_open(monkeypatch):
     def _fake_open(self, checked=False, filepath=None):
         if isinstance(checked, str) and filepath is None:
             filepath = checked
@@ -260,5 +262,20 @@ def test_apply_startup_cli_single_file_uses_the_one_frame(main_window: MainWindo
         frame.original_image_data = frame.image_data
 
     monkeypatch.setattr(FileController, "open_file", _fake_open)
+
+
+def test_apply_startup_cli_single_file_uses_the_one_frame(main_window: MainWindow, monkeypatch):
+    _install_fake_open(monkeypatch)
     apply_startup_cli(main_window, ["ncrads9", "only.fits"])
     assert main_window.frame_manager.num_frames == 1
+    # One image: single-frame view, as DS9 leaves it.
+    assert main_window._frame_display_mode == "single"
+
+
+def test_apply_startup_cli_trailing_single_overrides_auto_tile(main_window: MainWindow, monkeypatch):
+    """Options are applied in order, so a `-single` after the files wins over
+    the auto-tile the files triggered -- DS9's behaviour."""
+    _install_fake_open(monkeypatch)
+    apply_startup_cli(main_window, ["ncrads9", "a.fits", "b.fits", "-single"])
+    assert main_window.frame_manager.num_frames == 2
+    assert main_window._frame_display_mode == "single"

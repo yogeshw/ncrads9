@@ -347,6 +347,12 @@ def apply_startup_cli(main_window: MainWindow, argv: Sequence[str]) -> None:
             if current is not None and current.has_data:
                 main_window.frame_controller.new_frame()
             main_window.file.open_file(filepath=item.name)
+            # DS9's `MultiLoad` switches to tile once a second frame exists,
+            # so `ncrads9 *.fits` comes up showing every image at once rather
+            # than only the last. Done per file, exactly as DS9 does it, so a
+            # later `-single` or `-tile` in the argument stream still wins.
+            if main_window.frame_manager.num_frames > 1 and main_window._frame_display_mode != "tile":
+                main_window.frame_controller.set_display_mode("tile")
             continue
 
         option = item.name
