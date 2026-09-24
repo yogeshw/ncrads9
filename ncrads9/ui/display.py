@@ -48,6 +48,7 @@ from dataclasses import replace
 
 import numpy as np
 from numpy.typing import NDArray
+from PyQt6.QtCore import QPoint
 from PyQt6.QtGui import QColor, QImage, QPixmap
 
 from ..colormaps.colormap import Colormap
@@ -67,6 +68,41 @@ from .widgets.colorbar_widget import ColorbarEntry
 
 #: DS9's default blank/Inf/NaN colour (`pds9(nan)` in `ds9.tcl:157`).
 DEFAULT_NAN_COLOR = "#ffffff"
+
+#: How the current frame is marked in a tile grid, so it is clear which frame
+#: the next colormap, scale or zoom change acts on. DS9 draws a coloured
+#: border around it; this is that border's colour (RGB) and width in pixels.
+TILE_HIGHLIGHT_COLOR: tuple[int, int, int] = (0, 255, 0)
+TILE_HIGHLIGHT_WIDTH: int = 2
+
+
+def _tile_viewport(rgb: NDArray[np.uint8], zoom: float) -> NDArray[np.uint8]:
+    """The centre `1/zoom` of a tile's RGB, so it fills the cell magnified.
+
+    The crop is centred, which is DS9's tiled zoom about the frame centre; the
+    caller then scales the result up to the cell, so a 2x zoom shows the middle
+    half at twice the size.
+    """
+    height, width = rgb.shape[:2]
+    new_h = max(1, int(round(height / zoom)))
+    new_w = max(1, int(round(width / zoom)))
+    top = (height - new_h) // 2
+    left = (width - new_w) // 2
+    return rgb[top : top + new_h, left : left + new_w]
+
+
+def _outline(rgb: NDArray[np.uint8], color: tuple[int, int, int], width: int) -> NDArray[np.uint8]:
+    """Draw a border of `width` pixels around one tile's RGB, in place-safe copy."""
+    if rgb.shape[0] <= 2 * width or rgb.shape[1] <= 2 * width:
+        return rgb
+    out = rgb.copy()
+    band = np.array(color, dtype=np.uint8)
+    out[:width, :] = band
+    out[-width:, :] = band
+    out[:, :width] = band
+    out[:, -width:] = band
+    return out
+
 
 #: The channels of a colour frame, in the order the colorbar shows them.
 #: These are the storage keys for the three colour planes, whatever colour
@@ -563,17 +599,24 @@ class DisplayPipeline:
         if viewer is None or self.window.image_data is None:
             return None
         zoom = max(self.viewer.get_zoom(), 1e-6)
-        display_x = (
-            self.window.scroll_area.horizontalScrollBar().value()
-            + self.window.scroll_area.viewport().width() / 2
-        ) / zoom
-        display_y = (
-            self.window.scroll_area.verticalScrollBar().value()
-            + self.window.scroll_area.viewport().height() / 2
-        ) / zoom
+        # The viewport centre in the viewer's own coordinates, less the margin
+        # the viewer leaves around a pixmap smaller than itself. Reading the
+        # scrollbars alone ignored that margin, so a zoomed-out image was
+        # recorded as panned well off its centre.
+        viewport = self.window.scroll_area.viewport()
+        centre = viewer.mapFrom(viewport, QPoint(viewport.width() // 2, viewport.height() // 2))
+        pixmap = viewer.pixmap()
+        x_offset = y_offset = 0.0
+        if pixmap is not None and not pixmap.isNull():
+            x_offset = (viewer.width() - pixmap.width()) / 2
+            y_offset = (viewer.height() - pixmap.height()) / 2
+        display_x = (centre.x() - x_offset) / zoom
+        display_y = (centre.y() - y_offset) / zoom
         source_x, source_top_y = viewer.get_view_transform().display_to_source(display_x, display_y)
         source_y = viewer.get_image_size()[1] - 1 - source_top_y
-        return (float(source_x), float(source_y))
+        # Image pixels, as `map_image_to_display_coords` takes them back.
+        block = max(1, int(getattr(viewer, "_block_factor", 1)))
+        return (float(source_x) * block, float(source_y) * block)
 
     def transform_preview(
         self,
@@ -888,14 +931,29 @@ class DisplayPipeline:
         tiled_w, tiled_h = layout.width, layout.height
         tiled_rgb = np.zeros((tiled_h, tiled_w, 3), dtype=np.uint8)
 
-        for placement, rgb in zip(layout.placements(), rgb_frames, strict=True):
+        current_index = self.frames.current_index
+        for placement, rgb, frame_index in zip(layout.placements(), rgb_frames, frame_indices, strict=True):
+            # Zoom into the frame within its tile, if it has been zoomed there.
+            tile_zoom = float(getattr(self.frames.frames[frame_index], "tile_zoom", 1.0) or 1.0)
+            if tile_zoom > 1.0:
+                rgb = _tile_viewport(rgb, tile_zoom)
             if rgb.shape[0] != cell_h or rgb.shape[1] != cell_w:
                 y_idx = np.linspace(0, rgb.shape[0] - 1, cell_h).astype(np.int32)
                 x_idx = np.linspace(0, rgb.shape[1] - 1, cell_w).astype(np.int32)
                 rgb = rgb[y_idx][:, x_idx]
-            # `placement` is bottom-up; `tiled_rgb` rows are top-down.
-            top = tiled_h - placement.y - cell_h
-            tiled_rgb[top : top + cell_h, placement.x : placement.x + cell_w] = rgb
+            if frame_index == current_index:
+                # DS9 marks the current frame in a tile grid so it is clear
+                # which one a colormap, scale or zoom change will act on.
+                rgb = _outline(rgb, TILE_HIGHLIGHT_COLOR, TILE_HIGHLIGHT_WIDTH)
+            # Place each cell at its bottom-up `y`, and let the one flipud
+            # below orient the whole mosaic: the tile content comes off the
+            # pipeline bottom-up like any image, and the layout's `y` is
+            # bottom-up too, so a single flip fixes both. Converting the
+            # arrangement to top-down here *and* flipping afterwards put the
+            # top row of tiles at the bottom of the screen -- so a click that
+            # `tile_at` resolved (in bottom-up coordinates) selected a
+            # different tile from the one under the cursor.
+            tiled_rgb[placement.y : placement.y + cell_h, placement.x : placement.x + cell_w] = rgb
         display_rgb = np.flipud(tiled_rgb)
         display_rgb = np.ascontiguousarray(display_rgb)
 

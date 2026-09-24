@@ -164,6 +164,10 @@ def window(qapp, monkeypatch, tmp_path):
     made = MainWindow()
     made._rebuild_image_viewer(False)
     made.display.load_fits(str(path))
+    # These tests locate the marker as the brightest pixel in the preview, so
+    # they need the bright data value to stay the bright display value: turn
+    # off the default inverted colormap, which is about colour, not geometry.
+    made.color.set_inverted(False)
     yield made
     made.close()
 

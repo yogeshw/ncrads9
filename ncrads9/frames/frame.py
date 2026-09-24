@@ -87,6 +87,12 @@ class Frame:
     zoom: float = 1.0
     pan_x: float = 0.0
     pan_y: float = 0.0
+    #: The zoom applied to this frame *within its tile* when frames are
+    #: tiled, as a factor over fitting the whole image to the cell -- 1.0
+    #: shows the whole frame, 2.0 shows the middle half at twice the size.
+    #: Separate from `zoom`, which is calibrated to the single-frame window,
+    #: so tiling and un-tiling do not disturb either view.
+    tile_zoom: float = 1.0
     rotation: float = 0.0
     flip_x: bool = False
     flip_y: bool = False

@@ -388,3 +388,89 @@ def test_the_console_is_reused(main_window):
     first = main_window.file.show_console()
     assert main_window.file.show_console() is first
     first.close()
+
+
+# -- interacting with tiled frames -------------------------------------------
+
+
+def _two_more_frames(window, tmp_path):
+    """Add two more frames with distinct data, then tile."""
+    for index in range(2):
+        path = tmp_path / f"extra{index}.fits"
+        fits.PrimaryHDU(data=np.full((SIZE, SIZE), float(index + 2) * 10, np.float32)).writeto(path)
+        window.frame_controller.new_frame()
+        window.display.load_fits(str(path))
+    window.frame_controller.set_display_mode("tile")
+
+
+def test_clicking_a_tile_selects_the_frame_shown_there(main_window, tmp_path):
+    """The tile the cursor is over, in the coordinates the viewer reports, is
+    the one selected -- selection and the on-screen arrangement must agree."""
+    _two_more_frames(main_window, tmp_path)
+    layout = main_window._tile_layout
+    assert layout is not None
+
+    # For every tile, a click at its centre selects the frame drawn there.
+    for tile_index, placement in enumerate(layout.placements()):
+        cx = placement.x + layout.cell_width // 2
+        cy = placement.y + layout.cell_height // 2  # bottom-up, as the viewer reports
+        main_window._on_image_clicked(cx, cy, 1)
+        expected = main_window._tile_frame_indices[tile_index]
+        assert main_window.frame_manager.current_index == expected
+
+
+def test_operations_act_on_the_clicked_tile(main_window, tmp_path):
+    """After selecting a tile, a colormap change lands on that frame."""
+    _two_more_frames(main_window, tmp_path)
+    layout = main_window._tile_layout
+    # Select the frame in the first tile.
+    placement = layout.placements()[0]
+    main_window._on_image_clicked(
+        placement.x + layout.cell_width // 2,
+        placement.y + layout.cell_height // 2,
+        1,
+    )
+    selected = main_window.frame_manager.current_index
+    main_window.color.set_colormap("heat")
+    assert main_window.frame_manager.frames[selected].colormap == "heat"
+    # The others are untouched.
+    others = [f.colormap for i, f in enumerate(main_window.frame_manager.frames) if i != selected]
+    assert "heat" not in others
+
+
+def test_zoom_in_tile_mode_zooms_only_the_current_frame(main_window, tmp_path):
+    """Zoom in tile mode magnifies the selected frame within its tile, not the
+    whole composite, and leaves the other frames -- and the single-view zoom
+    -- alone."""
+    _two_more_frames(main_window, tmp_path)
+    current = main_window.frame_manager.current_frame
+    single_zoom_before = current.zoom
+    assert current.tile_zoom == 1.0
+
+    main_window.zoom.zoom_in()
+    assert current.tile_zoom > 1.0
+    # Other frames keep their own tile zoom.
+    assert all(f.tile_zoom == 1.0 for f in main_window.frame_manager.frames if f is not current)
+    # The single-frame zoom is not disturbed by tiled zooming.
+    assert current.zoom == pytest.approx(single_zoom_before)
+
+    main_window.zoom.zoom_fit()
+    assert current.tile_zoom == 1.0
+
+
+def test_match_works_while_tiled(main_window, tmp_path):
+    """Frame -> Match must act on the frames as they sit tiled."""
+    _two_more_frames(main_window, tmp_path)
+    layout = main_window._tile_layout
+    placement = layout.placements()[0]
+    main_window._on_image_clicked(
+        placement.x + layout.cell_width // 2,
+        placement.y + layout.cell_height // 2,
+        1,
+    )
+    source = main_window.frame_manager.current_frame
+    source.colormap = "heat"
+    source.contrast = 2.0
+
+    main_window.frame_controller.match_colorbar()
+    assert {f.colormap for f in main_window.frame_manager.frames} == {"heat"}

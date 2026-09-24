@@ -111,7 +111,16 @@ class ZoomController(Controller):
     # -- zoom ----------------------------------------------------------------
 
     def set_zoom(self, zoom: float) -> None:
-        """Set an explicit zoom level."""
+        """Set an explicit zoom level.
+
+        In tile mode this zooms the *current frame within its tile*, not the
+        whole composite: the tiled view is one image, so zooming the viewer
+        would magnify every frame together. DS9 zooms the selected frame, and
+        clicking a tile chooses it.
+        """
+        if self.window._frame_display_mode == "tile":
+            self._set_tile_zoom(zoom)
+            return
         with self.window.undo.view("Zoom"):
             self.viewer.zoom_to(zoom)
             self.status_bar.update_zoom(self.viewer.get_zoom())
@@ -121,20 +130,48 @@ class ZoomController(Controller):
         self.update_panner_rect()
         self.status(f"Zoom {self.viewer.get_zoom():.5g}", 1000)
 
+    def _set_tile_zoom(self, zoom: float) -> None:
+        """Zoom the current frame inside its tile (a factor over fitting)."""
+        frame = self.frame
+        if frame is None:
+            return
+        frame.tile_zoom = max(1.0, float(zoom))
+        self.window.display.display_tiled()
+        self.status_bar.update_zoom(frame.tile_zoom)
+        self.status(f"Zoom {frame.tile_zoom:.5g} (frame {self.frames.current_index + 1})", 1000)
+
+    def _tile_zoom(self) -> float:
+        """The current frame's tile zoom, or 1.0."""
+        frame = self.frame
+        return float(getattr(frame, "tile_zoom", 1.0) or 1.0) if frame is not None else 1.0
+
+    def _zoom_base(self) -> float:
+        """The zoom the one-step buttons multiply -- per frame when tiled."""
+        if self.window._frame_display_mode == "tile":
+            return self._tile_zoom()
+        return self.viewer.get_zoom()
+
     def zoom_in(self) -> None:
         """Zoom in one step."""
-        self.set_zoom(self.viewer.get_zoom() * ZOOM_STEP)
+        self.set_zoom(self._zoom_base() * ZOOM_STEP)
 
     def zoom_out(self) -> None:
         """Zoom out one step."""
-        self.set_zoom(self.viewer.get_zoom() / ZOOM_STEP)
+        self.set_zoom(self._zoom_base() / ZOOM_STEP)
 
     def zoom_actual(self) -> None:
         """Zoom to 1:1."""
         self.set_zoom(1.0)
 
     def zoom_fit(self) -> None:
-        """Zoom so the whole image fits the viewport."""
+        """Zoom so the whole image fits the viewport.
+
+        In tile mode this fits the current frame back into its tile -- tile
+        zoom 1.0 -- rather than refitting the composite.
+        """
+        if self.window._frame_display_mode == "tile":
+            self._set_tile_zoom(1.0)
+            return
         self.viewer.zoom_fit(self.window._effective_viewport_size())
         self.status_bar.update_zoom(self.viewer.get_zoom())
         self.window.frame_controller.persist_view_state()
@@ -162,6 +199,12 @@ class ZoomController(Controller):
                 return
             numerator, denominator = level.split("/", 1)
             value = float(numerator) / float(denominator)
+
+        # In tile mode this zooms the current frame within its tile, the same
+        # as the Zoom In/Out buttons and the menu.
+        if self.window._frame_display_mode == "tile":
+            self._set_tile_zoom(value)
+            return
 
         self.viewer.zoom_to(value)
         self.status_bar.update_zoom(value)

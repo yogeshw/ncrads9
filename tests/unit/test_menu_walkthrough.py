@@ -454,18 +454,17 @@ def test_matching_the_frame_view_copies_pan_zoom_and_orientation(two_frames):
     """DS9's Match -> Frame -> Image aligns the view: pan, zoom, rotation and
     orientation, and nothing else."""
     window = two_frames
-    window.frame_manager.goto_frame(0)
+    window.frame_controller.goto_index(0)
     source = window.frame_manager.current_frame
-    source.zoom = 3.0
-    source.pan_x, source.pan_y = 40.0, 25.0
     source.rotation = 90.0
     source.flip_x = True
+    window.zoom.set_zoom(3.0)
 
     window.frame_controller.match_image()
 
     other = window.frame_manager.frames[1]
     assert other.zoom == pytest.approx(3.0)
-    assert other.pan_x == pytest.approx(40.0) and other.pan_y == pytest.approx(25.0)
+    assert (other.pan_x, other.pan_y) == pytest.approx((source.pan_x, source.pan_y))
     assert other.rotation == pytest.approx(90.0)
     assert other.flip_x is True
     assert other.align_wcs is False
@@ -510,6 +509,62 @@ def test_matching_wcs_aligns_the_view_without_touching_the_colours(two_frames):
     assert other.zoom == pytest.approx(5.0)
     assert other.align_wcs is True
     assert other.colormap == "cool"  # untouched
+
+
+@pytest.fixture
+def two_sky_frames(window, tmp_path):
+    """Two frames of the same sky, the second offset by (10, -6) pixels."""
+    from astropy.wcs import WCS
+
+    rows, columns = np.indices((SIZE, SIZE))
+    for index, crpix in enumerate(([32.0, 32.0], [42.0, 26.0])):
+        wcs = WCS(naxis=2)
+        wcs.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+        wcs.wcs.crval = [150.0, 2.0]
+        wcs.wcs.crpix = crpix
+        wcs.wcs.cdelt = [-1e-4, 1e-4]
+        path = tmp_path / f"sky{index}.fits"
+        fits.PrimaryHDU(data=(rows + columns).astype(np.float32), header=wcs.to_header()).writeto(path)
+        if index:
+            window.frame_controller.new_frame()
+        window.display.load_fits(str(path))
+    return window
+
+
+def test_matching_wcs_centres_on_where_the_current_frame_looks(two_sky_frames):
+    """The bug: Match -> Frame -> WCS matched the sky at the middle of the
+    current *image*, not at the middle of its *view*, so the other frame
+    ended up looking somewhere else -- up and to the right once zoomed."""
+    window = two_sky_frames
+    window.frame_controller.goto_index(0)
+    source = window.frame_manager.current_frame
+    window.zoom.set_zoom(4.0)
+    source.pan_x, source.pan_y = 20.0, 40.0
+    window.frame_controller.apply_view_state(source)
+    window.frame_controller.persist_view_state()
+    pan = (source.pan_x, source.pan_y)
+
+    window.frame_controller.match_wcs()
+
+    other = window.frame_manager.frames[1]
+    assert other.zoom == pytest.approx(4.0)
+    assert (other.pan_x, other.pan_y) == pytest.approx((pan[0] + 10.0, pan[1] - 6.0), abs=1e-3)
+
+
+def test_a_matched_frame_keeps_its_pan_and_zoom_when_shown(two_sky_frames):
+    """Showing a frame used to re-centre it and record that, throwing away
+    the pan and zoom Match had just given it."""
+    window = two_sky_frames
+    other = window.frame_manager.frames[1]
+    window.frame_controller.goto_index(0)
+    window.zoom.set_zoom(3.0)
+    window.frame_controller.match_wcs()
+    kept = (other.zoom, other.pan_x, other.pan_y)
+
+    window.frame_controller.goto_index(1)
+
+    assert (other.zoom, other.pan_x, other.pan_y) == pytest.approx(kept)
+    assert window.image_viewer.get_zoom() == pytest.approx(3.0)
 
 
 # -- Frame -> Match -> Slice (the cube slice, not the view) ------------------------

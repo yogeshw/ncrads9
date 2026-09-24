@@ -423,6 +423,10 @@ def test_a_colour_frame_shows_one_bar_per_channel(main_window):
             np.float32
         )
     frame.rgb_current_channel = "red"
+    # This is about one bar per channel, not the colour table, so pin the
+    # inversion off -- the default is inverted grey, which the label marks
+    # with "(inv)".
+    main_window.color.set_inverted(False)
     main_window.display.sync_rgb_scalar_view(frame)
     main_window.display.display()
 

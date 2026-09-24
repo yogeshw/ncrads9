@@ -499,14 +499,16 @@ class FrameController(Controller):
         frame = self.frames.current_frame
         self.window.region.show_frame_regions(frame)
         if frame and frame.has_data:
+            # `display()` re-centres the viewer on the new picture and then
+            # records that as the frame's view, which would throw away the
+            # pan and zoom this frame was left at -- or that Frame -> Match
+            # just gave it. Keep them across the redraw and put them back.
+            kept_view = (frame.zoom, frame.pan_x, frame.pan_y)
             self.apply_view_state(frame)
             self.window.display.display()
+            frame.zoom, frame.pan_x, frame.pan_y = kept_view
             self.apply_view_state(frame)
             self.status_bar.update_image_info(frame.image_data.shape[1], frame.image_data.shape[0])
-            if self.window.using_gpu_rendering and hasattr(self.viewer, "gl_canvas"):
-                self.viewer.gl_canvas.reset_view()
-                if frame.zoom:
-                    self.viewer.zoom_to(frame.zoom)
         else:
             # A frame with no data. Blank the viewer rather than leaving the
             # previous frame's picture on screen -- DS9 opens a new frame
@@ -1342,6 +1344,7 @@ class FrameController(Controller):
         if not source:
             self.status("No frame to match", 2000)
             return
+        self._persist_match_source()
         # DS9 drops WCS alignment on the source as well when matching by image.
         source.align_wcs = False
         for frame in self.frames.frames:
@@ -1357,10 +1360,15 @@ class FrameController(Controller):
         """Align every frame's view to the current one, on the sky.
 
         Frame -> Match -> Frame -> WCS. Like `match_image`, this copies the
-        view alone -- each frame is panned so the current frame's centre sits
-        at its centre, then given the same zoom, rotation and orientation --
-        and turns WCS alignment on. The colormap, scale and limits are left
-        to their own Match entries; copying them here was a bug.
+        view alone -- each frame is panned so the sky at the centre of the
+        current frame's *view* sits at its centre, then given the same zoom,
+        rotation and orientation -- and turns WCS alignment on. The colormap,
+        scale and limits are left to their own Match entries; copying them
+        here was a bug.
+
+        The centre is the current pan, as DS9's `MatchFrame` takes it, not
+        the middle of the image: matching on the image middle put every other
+        frame somewhere the current one was not looking.
         """
         source = self.frames.current_frame
         if not source or not source.wcs_handler or not source.wcs_handler.is_valid:
@@ -1369,9 +1377,8 @@ class FrameController(Controller):
         if source.image_data is None:
             self.status("Current frame has no image data", 2000)
             return
-        cx = source.image_data.shape[1] / 2
-        cy = source.image_data.shape[0] / 2
-        ra, dec = source.wcs_handler.pixel_to_world(cx, cy)
+        self._persist_match_source()
+        ra, dec = source.wcs_handler.pixel_to_world(source.pan_x, source.pan_y)
         source.align_wcs = True
         for frame in self.frames.frames:
             if frame is source:
@@ -1383,6 +1390,16 @@ class FrameController(Controller):
                 self._copy_frame_view(source, frame, align_wcs=True)
         self._render_after_match()
         self.status("Matched frames (WCS)", 2000)
+
+    def _persist_match_source(self) -> None:
+        """Record the current frame's on-screen pan and zoom before matching.
+
+        The stored view can lag what is on screen, and a match copies the
+        stored one. Tiled, the viewer shows the whole mosaic rather than the
+        current frame, so there is no single-frame view to read.
+        """
+        if self.window._frame_display_mode != "tile":
+            self.persist_view_state()
 
     def _copy_frame_view(self, source: Frame, frame: Frame, align_wcs: bool) -> None:
         """Copy the view -- zoom, rotation, orientation -- from one frame to another.
