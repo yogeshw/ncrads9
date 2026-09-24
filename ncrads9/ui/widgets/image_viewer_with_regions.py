@@ -40,6 +40,10 @@ class ImageViewerWithRegions(QWidget):
     mouse_moved = pyqtSignal(int, int)
     mouse_clicked = pyqtSignal(int, int, int)
     contrast_changed = pyqtSignal(float, float)
+    #: A wheel notch: +1 to zoom in, -1 to zoom out. Routed through the zoom
+    #: controller rather than zooming the widget directly, so it respects tile
+    #: mode -- where a scroll zooms the current frame, not the whole mosaic.
+    zoom_requested = pyqtSignal(int)
 
     # Region signals
     region_created = pyqtSignal(object)
@@ -321,10 +325,9 @@ class ImageViewerWithRegions(QWidget):
         return False
 
     def wheelEvent(self, event: QWheelEvent) -> None:
-        """Forward wheel events to image viewer."""
-        # The wheel zooms, which resizes the viewer.
-        self.image_viewer.wheelEvent(event)
-        self._update_overlay_geometry()
+        """Zoom on the wheel, through the controller so tile mode is honoured."""
+        self.zoom_requested.emit(1 if event.angleDelta().y() > 0 else -1)
+        event.accept()
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Handle mouse press - check for middle button center."""

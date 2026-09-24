@@ -145,6 +145,19 @@ class ZoomController(Controller):
         frame = self.frame
         return float(getattr(frame, "tile_zoom", 1.0) or 1.0) if frame is not None else 1.0
 
+    def wheel_zoom(self, step: int) -> None:
+        """Zoom on a mouse-wheel notch: +1 in, -1 out.
+
+        Routed here from the viewer rather than zooming the widget directly, so
+        that in tile mode a scroll zooms the current frame within its tile --
+        DS9's behaviour -- instead of magnifying the whole mosaic. In
+        single-frame view it is the ordinary zoom, one notch at a time.
+        """
+        if step > 0:
+            self.zoom_in()
+        elif step < 0:
+            self.zoom_out()
+
     def _zoom_base(self) -> float:
         """The zoom the one-step buttons multiply -- per frame when tiled."""
         if self.window._frame_display_mode == "tile":

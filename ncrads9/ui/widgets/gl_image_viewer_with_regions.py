@@ -41,6 +41,9 @@ class GLImageViewerWithRegions(QWidget):
     mouse_moved = pyqtSignal(int, int)
     mouse_clicked = pyqtSignal(int, int, int)
     contrast_changed = pyqtSignal(float, float)
+    #: A wheel notch: +1 in, -1 out. Routed through the zoom controller so a
+    #: scroll in tile mode zooms the current frame, not the whole mosaic.
+    zoom_requested = pyqtSignal(int)
     region_created = pyqtSignal(object)
     region_activated = pyqtSignal(object)
     region_selected = pyqtSignal(object)
@@ -237,6 +240,13 @@ class GLImageViewerWithRegions(QWidget):
         """Filter events from gl_canvas to handle middle/right mouse buttons."""
         if obj != self.gl_canvas:
             return False
+
+        # Zoom on the wheel through the controller, so a scroll in tile mode
+        # zooms the current frame rather than the whole composite. Handling it
+        # here stops the canvas's own wheelEvent from zooming the composite.
+        if event.type() == QEvent.Type.Wheel:
+            self.zoom_requested.emit(1 if event.angleDelta().y() > 0 else -1)
+            return True
 
         # Handle mouse press events
         if event.type() == QEvent.Type.MouseButtonPress:

@@ -474,3 +474,31 @@ def test_match_works_while_tiled(main_window, tmp_path):
 
     main_window.frame_controller.match_colorbar()
     assert {f.colormap for f in main_window.frame_manager.frames} == {"heat"}
+
+
+def test_wheel_zoom_in_tile_mode_zooms_only_the_current_frame(main_window, tmp_path):
+    """A mouse-wheel notch while tiled magnifies the selected frame within its
+    tile, not the whole composite -- the wheel is routed through the zoom
+    controller, which knows the display mode."""
+    _two_more_frames(main_window, tmp_path)
+    layout = main_window._tile_layout
+    placement = layout.placements()[0]
+    main_window._on_image_clicked(
+        placement.x + layout.cell_width // 2,
+        placement.y + layout.cell_height // 2,
+        1,
+    )
+    current = main_window.frame_manager.current_frame
+    composite_zoom = main_window.image_viewer.get_zoom()
+
+    # A wheel notch in, as the viewer would emit it.
+    main_window.zoom.wheel_zoom(1)
+
+    assert current.tile_zoom > 1.0
+    assert all(f.tile_zoom == 1.0 for f in main_window.frame_manager.frames if f is not current)
+    # The composite is not magnified.
+    assert main_window.image_viewer.get_zoom() == pytest.approx(composite_zoom)
+
+    # A notch out returns it.
+    main_window.zoom.wheel_zoom(-1)
+    assert current.tile_zoom == pytest.approx(1.0)
