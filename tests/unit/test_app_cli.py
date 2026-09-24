@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from astropy.io import fits
 from PyQt6.QtWidgets import QApplication
 
 from ncrads9.app import (
@@ -279,3 +280,23 @@ def test_apply_startup_cli_trailing_single_overrides_auto_tile(main_window: Main
     apply_startup_cli(main_window, ["ncrads9", "a.fits", "b.fits", "-single"])
     assert main_window.frame_manager.num_frames == 2
     assert main_window._frame_display_mode == "single"
+
+
+def test_a_loaded_image_defaults_to_zscale_and_inverted_grey(main_window, monkeypatch, tmp_path):
+    """DS9-clone defaults: images come up zscaled, zoomed to fit, on an
+    inverted grey colormap, so a raw load is legible at once."""
+    # A frame with one hot pixel: minmax would wash it out, zscale ignores it.
+    data = np.random.default_rng(1).normal(100.0, 5.0, size=(120, 120)).astype(np.float32)
+    data[0, 0] = 1.0e6
+    path = tmp_path / "img.fits"
+    fits.PrimaryHDU(data=data).writeto(path)
+
+    main_window.display.load_fits(str(path))
+
+    assert main_window.scale_limits.mode.value == "zscale"
+    assert main_window.invert_colormap is True
+    assert main_window.current_colormap == "grey"
+    # zscale, not minmax: the high limit is far below the hot pixel.
+    assert main_window.z2 < 1.0e5
+    # Zoomed to fit rather than left at 1:1.
+    assert main_window.image_viewer.get_zoom() != pytest.approx(1.0)

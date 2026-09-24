@@ -192,6 +192,12 @@ class ColorController(Controller):
     def set_inverted(self, inverted: bool) -> None:
         """Invert or un-invert the colormap."""
         self.window.invert_colormap = inverted
+        # Keep the menu's checkmark in step, so applying the default at startup
+        # or setting it in code shows in the Color menu, not just on screen.
+        if self.menu.action_invert_colormap.isChecked() != inverted:
+            self.menu.action_invert_colormap.blockSignals(True)
+            self.menu.action_invert_colormap.setChecked(inverted)
+            self.menu.action_invert_colormap.blockSignals(False)
         self.window.frame_controller.persist_view_state()
         if self.window.image_data is not None:
             self.refresh()

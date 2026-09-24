@@ -234,7 +234,7 @@ PREFERENCES: tuple[Preference, ...] = (
         "Scale",
         "Default limits",
         "choice",
-        "MinMax",
+        "ZScale",
         choices=("MinMax", "ZScale", "ZMax", "Percent", "User"),
     ),
     _preference("scale_use_datasec", "Scale", "Use DATASEC", "bool", True),
@@ -265,7 +265,7 @@ PREFERENCES: tuple[Preference, ...] = (
             "color",
         ),
     ),
-    _preference("invert_colormap", "Color", "Invert the colormap", "bool", False),
+    _preference("invert_colormap", "Color", "Invert the colormap", "bool", True),
     _preference("colorbar_numerics", "Color", "Show the colorbar numbers", "bool", True),
     # -- Region, Annulus, Panda ----------------------------------------------
     _preference(

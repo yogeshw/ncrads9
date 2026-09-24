@@ -58,12 +58,11 @@
       <tr><th>Limits</th><th>What they are</th><th>When to use them</th></tr>
       <tr><td><b>Min Max</b></td><td>The smallest and largest pixel in the
       image.</td><td>Rarely useful on real data: one hot pixel or one bright
-      star sets the maximum and flattens everything else. It is the
-      default because it is the only choice that is guaranteed to show every
-      value.</td></tr>
+      star sets the maximum and flattens everything else. Guaranteed to show
+      every value, which is its one virtue.</td></tr>
       <tr><td><b>ZScale</b></td><td>IRAF's algorithm: it samples the image, fits
       the middle of the value distribution and ignores the tails.</td>
-      <td>The usual first move. Shows faint structure without the bright
+      <td>The default, and the usual first move. Shows faint structure without the bright
       sources taking over.</td></tr>
       <tr><td><b>ZMax</b></td><td>ZScale's lower limit with the true
       maximum above it.</td><td>When you want the faint end zscaled but the peak

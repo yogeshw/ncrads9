@@ -46,7 +46,7 @@ from ..frames.blink_controller import (
 from ..frames.frame_manager import FrameManager
 from ..frames.tile_layout import TileLayout, TileSettings
 from ..rendering.scale_algorithms import ScaleAlgorithm
-from ..rendering.scale_limits import ScaleLimits
+from ..rendering.scale_limits import LimitMode, ScaleLimits
 from ..utils.preferences import Preferences
 from .button_bar import ButtonBar
 from .controllers import CONTROLLERS, EditController
@@ -104,12 +104,15 @@ class MainWindow(QMainWindow):
         # Initialize data storage
         self.frame_manager = FrameManager()
         self.current_scale = ScaleAlgorithm.LINEAR
-        # Where the clip limits come from: the mode, min/max method, scope,
-        # DATASEC and ZScale parameters of DS9's Scale menu.
-        self.scale_limits = ScaleLimits()
+        # ZScale by default so an image is legible the moment it loads rather
+        # than washed out by a few bright pixels; `apply_preferences` reads the
+        # Default limits preference over this at startup.
+        self.scale_limits = ScaleLimits(mode=LimitMode.ZSCALE)
         self.current_colormap = "grey"
         self._default_colormap = "grey"
-        self.invert_colormap = False
+        # Inverted grey by default -- dark features on a light ground; the
+        # preference sets it for real at startup.
+        self.invert_colormap = True
         self.custom_colormaps: dict[str, Colormap] = {}
         self._user_colormap_actions: dict[str, object] = {}
         self.current_bin = 1

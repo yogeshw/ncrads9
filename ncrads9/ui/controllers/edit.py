@@ -87,6 +87,15 @@ DEFAULT_SCALES: dict[str, ScaleAlgorithm] = {
     "Asinh": ScaleAlgorithm.ASINH,
 }
 
+#: The Default limits preference's names, mapped to the keys `set_limit_mode`
+#: takes. Percent and User need a figure or a pair, so they are not sensible
+#: as a bare default and are left out -- picking one keeps the current mode.
+DEFAULT_CLIPS: dict[str, str] = {
+    "MinMax": "minmax",
+    "ZScale": "zscale",
+    "ZMax": "zmax",
+}
+
 
 class EditController(Controller):
     """Owns the Edit menu."""
@@ -367,9 +376,22 @@ class EditController(Controller):
         if default_scale in DEFAULT_SCALES:
             window.scale.set_scale(DEFAULT_SCALES[default_scale])
 
+        # The default scale limits -- zscale, minmax, zmax -- which the display
+        # pipeline reads through `window.scale_limits`. Wired here so the
+        # preference actually takes effect; it used to be stored and ignored,
+        # leaving every load on minmax whatever the setting said.
+        default_clip = str(prefs.get("default_clip", "ZScale"))
+        clip_key = DEFAULT_CLIPS.get(default_clip)
+        if clip_key is not None:
+            window.scale.set_limit_mode(clip_key)
+
         default_colormap = window.color.normalize_name(str(prefs.get("default_colormap", "gray")))
         if default_colormap in self.menu.colormap_actions:
             window.color.set_colormap(default_colormap)
+
+        # Whether the colormap is inverted -- likewise stored and ignored
+        # before, so the preference never reached the display.
+        window.color.set_inverted(bool(prefs.get("invert_colormap", False)))
 
         if window.image_data is not None:
             self.refresh()
