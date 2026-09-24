@@ -85,6 +85,12 @@ class Frame:
     z1: float | None = None
     z2: float | None = None
     zoom: float = 1.0
+    #: Whether the zoom is following the window: set when the frame is fitted
+    #: (on load, or by Zoom Fit) and cleared the moment the user picks a zoom
+    #: of their own. While set, resizing the window refits the frame, so the
+    #: picture grows and shrinks with the space available; once the user has
+    #: chosen a zoom, a resize leaves it alone.
+    zoom_fit: bool = True
     pan_x: float = 0.0
     pan_y: float = 0.0
     #: The zoom applied to this frame *within its tile* when frames are

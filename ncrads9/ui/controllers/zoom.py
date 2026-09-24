@@ -121,6 +121,10 @@ class ZoomController(Controller):
         if self.window._frame_display_mode == "tile":
             self._set_tile_zoom(zoom)
             return
+        # A zoom the user picked, so stop following the window on a resize.
+        frame = self.frame
+        if frame is not None:
+            frame.zoom_fit = False
         with self.window.undo.view("Zoom"):
             self.viewer.zoom_to(zoom)
             self.status_bar.update_zoom(self.viewer.get_zoom())
@@ -186,12 +190,39 @@ class ZoomController(Controller):
             self._set_tile_zoom(1.0)
             return
         self.viewer.zoom_fit(self.window._effective_viewport_size())
+        # Now following the window: a resize refits until the user picks a zoom.
+        frame = self.frame
+        if frame is not None:
+            frame.zoom_fit = True
         self.status_bar.update_zoom(self.viewer.get_zoom())
         self.window.frame_controller.persist_view_state()
         self.sync()
         self.window.frame_controller.apply_locks()
         self.update_panner_rect()
         self.status("Zoom to fit", 1000)
+
+    def on_viewport_resized(self) -> None:
+        """Refit the view when the window (and so the viewport) changes size.
+
+        Occupies new space and gives it back: the frame grows and shrinks with
+        the window. In tile mode the whole mosaic is refit to the window; in
+        single-frame view a frame is refit only while it is following the
+        window -- once the user has chosen a zoom, a resize leaves it be.
+        """
+        if self.window.image_data is None:
+            return
+        if self.window._frame_display_mode == "tile":
+            self.viewer.zoom_fit(self.window._effective_viewport_size())
+            self.window.display.display_tiled()
+            self.update_panner_rect()
+            return
+        frame = self.frame
+        if frame is None or not getattr(frame, "zoom_fit", False):
+            return
+        self.viewer.zoom_fit(self.window._effective_viewport_size())
+        self.status_bar.update_zoom(self.viewer.get_zoom())
+        self.window.frame_controller.persist_view_state()
+        self.update_panner_rect()
 
     def on_button_bar_zoom(self, level: str) -> None:
         """Handle a zoom chosen on the button bar.

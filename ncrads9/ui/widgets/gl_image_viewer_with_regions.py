@@ -44,6 +44,8 @@ class GLImageViewerWithRegions(QWidget):
     #: A wheel notch: +1 in, -1 out. Routed through the zoom controller so a
     #: scroll in tile mode zooms the current frame, not the whole mosaic.
     zoom_requested = pyqtSignal(int)
+    #: The viewer was resized (the window changed size), so the view is refit.
+    viewport_resized = pyqtSignal()
     region_created = pyqtSignal(object)
     region_activated = pyqtSignal(object)
     region_selected = pyqtSignal(object)
@@ -336,6 +338,7 @@ class GLImageViewerWithRegions(QWidget):
         self.catalog_overlay.setGeometry(self.gl_canvas.geometry())
         self.illustrate_overlay.setGeometry(self.gl_canvas.geometry())
         self._update_overlay_transform()
+        self.viewport_resized.emit()
 
     def _update_overlay_transform(self) -> None:
         image_width, image_height = self.gl_canvas.image_size

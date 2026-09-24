@@ -406,6 +406,7 @@ class MainWindow(QMainWindow):
         viewer.mouse_clicked.connect(self._on_image_clicked)
         viewer.contrast_changed.connect(self.color.on_contrast_changed)
         viewer.zoom_requested.connect(self.zoom.wheel_zoom)
+        viewer.viewport_resized.connect(self.zoom.on_viewport_resized)
         viewer.region_created.connect(self.region.on_created)
         viewer.region_activated.connect(self.region.show_information)
         self.catalog.attach(viewer)

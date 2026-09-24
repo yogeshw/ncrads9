@@ -44,6 +44,9 @@ class ImageViewerWithRegions(QWidget):
     #: controller rather than zooming the widget directly, so it respects tile
     #: mode -- where a scroll zooms the current frame, not the whole mosaic.
     zoom_requested = pyqtSignal(int)
+    #: The viewer was resized (the window changed size). The zoom controller
+    #: refits the view so the frames grow and shrink with the available space.
+    viewport_resized = pyqtSignal()
 
     # Region signals
     region_created = pyqtSignal(object)
@@ -304,6 +307,7 @@ class ImageViewerWithRegions(QWidget):
         """Handle resize events."""
         super().resizeEvent(event)
         self._update_overlay_geometry()
+        self.viewport_resized.emit()
 
     def eventFilter(self, watched, event) -> bool:
         """Follow the inner viewer's own resizes.

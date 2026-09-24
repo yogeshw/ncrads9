@@ -241,3 +241,32 @@ def test_zoom_to_a_box_is_independent_of_unlaid_out_viewport(main_window: MainWi
 
     main_window.pointer.zoom_to(100.0, 70.0, 140.0, 90.0)
     assert frame.zoom > 1.0
+
+
+def test_resizing_the_viewport_refits_a_fitted_frame(main_window: MainWindow):
+    """Growing the window enlarges the frame to fill it; shrinking it makes
+    the frame smaller -- the view follows the space while it is fit."""
+    _load_test_image(main_window, width=200, height=200)
+    main_window.zoom.zoom_fit()
+    small = main_window.image_viewer.get_zoom()
+
+    # A bigger viewport, then let the controller refit as the resize would.
+    main_window.resize(1300, 1000)
+    main_window.zoom.on_viewport_resized()
+    grown = main_window.image_viewer.get_zoom()
+    assert grown > small
+
+    main_window.resize(500, 450)
+    main_window.zoom.on_viewport_resized()
+    assert main_window.image_viewer.get_zoom() < grown
+
+
+def test_a_manual_zoom_is_not_overridden_by_a_resize(main_window: MainWindow):
+    """Once the user has chosen a zoom, resizing the window leaves it alone."""
+    _load_test_image(main_window, width=200, height=200)
+    main_window.zoom.set_zoom(2.0)
+    assert main_window.frame_manager.current_frame.zoom_fit is False
+
+    main_window.resize(1300, 1000)
+    main_window.zoom.on_viewport_resized()
+    assert main_window.image_viewer.get_zoom() == pytest.approx(2.0)
