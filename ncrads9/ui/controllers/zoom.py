@@ -34,6 +34,7 @@ from __future__ import annotations
 import numpy as np
 from PyQt6.QtCore import QRectF
 
+from ...coordinates import positions
 from ..dialogs.pan_zoom_rotate_dialog import PanZoomRotateDialog
 from ..view_transform import (
     flags_to_orientation,
@@ -81,6 +82,7 @@ class ZoomController(Controller):
         made non-exclusive to clear every button.
         """
         frame = self.frame
+        self.refresh_pan_zoom_dialog()
         if frame is None:
             return
 
@@ -431,7 +433,13 @@ class ZoomController(Controller):
         canvas.update()
 
     def update_panner_rect(self) -> None:
-        """Show the visible region as a rectangle in the panner."""
+        """Show the visible region as a rectangle in the panner.
+
+        Every pan and zoom, from any source, ends up here -- the scrollbar
+        and canvas signals included -- so the Pan Zoom Rotate dialog is
+        refreshed from here too.
+        """
+        self.refresh_pan_zoom_dialog()
         if not hasattr(self.window, "panner_panel"):
             return
         if self.window._tile_mode_enabled or self.window.image_data is None:
@@ -470,27 +478,47 @@ class ZoomController(Controller):
     # -- pan/zoom/rotate dialog ----------------------------------------------
 
     def apply_pan_zoom_rotate_parameters(self, params: dict) -> None:
-        """Apply the Pan Zoom Rotate dialog's settings."""
+        """Apply the Pan Zoom Rotate dialog's settings.
+
+        As DS9's `PanZoomApplyDialog`: zoom to the value *about* the Pan
+        position, then rotate. The position arrives as the two words typed
+        under `pan` in the dialog's coordinate system, and is read with the
+        same grammar `pan to` uses. `pan_x`/`pan_y` in canvas units are
+        still taken, for callers that have a pixel rather than a string.
+        """
         frame = self.require_frame()
         if frame is None:
             return
 
-        zoom = max(MIN_DIALOG_ZOOM, float(params["zoom"]))
-        pan_x = float(params["pan_x"])
-        pan_y = float(params["pan_y"])
+        target: tuple[float, float] | None = None
+        if params.get("pan"):
+            first, second = params["pan"]
+            try:
+                target = positions.to_image(
+                    frame, first, second, params.get("system", "image"), params.get("sky", "fk5")
+                )
+            except Exception as exc:
+                message = f"Cannot read pan position {first} {second}: {exc}"
+                dialog = self._live_pan_zoom_dialog()
+                if dialog is not None:
+                    dialog.warn(message)
+                self.status(message, 3000)
+                return
+        elif "pan_x" in params and "pan_y" in params:
+            target = (float(params["pan_x"]) + 0.5, float(params["pan_y"]) + 0.5)
 
-        frame.align_wcs = bool(params.get("align", frame.align_wcs))
-        self.menu.action_zoom_align.setChecked(frame.align_wcs)
+        zoom = max(MIN_DIALOG_ZOOM, float(params["zoom"]))
+        if "align" in params:
+            frame.align_wcs = bool(params["align"])
+            self.menu.action_zoom_align.setChecked(frame.align_wcs)
         self.viewer.zoom_to(zoom)
         frame.rotation = normalize_rotation(float(params["rotation"]))
         self.window.display.apply_view_transform(frame)
-
-        if self.window.using_gpu_rendering and hasattr(self.viewer, "set_pan"):
-            self.viewer.set_pan(pan_x, pan_y)
-        else:
-            self._scroll_to_image_point(pan_x, pan_y)
-
         self.refresh()
+
+        if target is not None:
+            self.pan_to_image(*target)
+
         self.window.frame_controller.persist_view_state()
         self.sync()
         self.window.frame_controller.apply_locks()
@@ -498,21 +526,74 @@ class ZoomController(Controller):
         self.status("Pan/zoom/rotate updated", 1500)
 
     def show_pan_zoom_rotate_dialog(self) -> None:
-        """Show the Pan Zoom Rotate dialog, seeded from the frame."""
-        frame = self.require_frame()
-        if frame is None:
+        """Show the Pan Zoom Rotate dialog, or raise the one already open.
+
+        Modeless, as DS9's is: it stays up beside the image and follows
+        the frame -- see `refresh_pan_zoom_dialog`.
+        """
+        dialog = PanZoomRotateDialog(self.window)
+        shown = self.show_window(dialog)
+        if shown is dialog:
+            dialog.parameters_changed.connect(self.apply_pan_zoom_rotate_parameters)
+            dialog.coordinates_changed.connect(self.refresh_pan_zoom_dialog)
+            self._pan_zoom_dialog = dialog
+        self.refresh_pan_zoom_dialog()
+
+    def _live_pan_zoom_dialog(self) -> PanZoomRotateDialog | None:
+        """The open Pan Zoom Rotate dialog, if there is one."""
+        dialog = getattr(self, "_pan_zoom_dialog", None)
+        if dialog is None:
+            return None
+        try:
+            return dialog if dialog.isVisible() else None
+        except RuntimeError:
+            # Its C++ side is gone.
+            self._pan_zoom_dialog = None
+            return None
+
+    def _view_centre(self, frame) -> tuple[float, float]:
+        """The image point at the view centre, from one, without storing it.
+
+        `pan_position` persists the view into the frame first, which is
+        right for a command but wrong here: this runs from scrollbar and
+        canvas signals, some of them fired mid-way through a frame switch,
+        when writing the viewer's state into the frame would corrupt it.
+        """
+        if not self.window._tile_mode_enabled and self.window.image_data is not None:
+            if self.window.using_gpu_rendering and hasattr(self.viewer, "gl_canvas"):
+                pan_x, pan_y = self.viewer.gl_canvas.pan_offset
+                return pan_x + 0.5, pan_y + 0.5
+            centre = self.window.display.cpu_pan_center()
+            if centre is not None:
+                return centre[0] + 0.5, centre[1] + 0.5
+        return frame.pan_x + 0.5, frame.pan_y + 0.5
+
+    def refresh_pan_zoom_dialog(self) -> None:
+        """Show the current frame's pan, zoom and rotation in the dialog.
+
+        DS9's `UpdatePanZoomDialog`, called from every pan, zoom, rotate
+        and frame change. A WCS the frame lacks falls back to physical, as
+        `AdjustCoordSystem` does, rather than showing image pixels under a
+        WCS label.
+        """
+        dialog = self._live_pan_zoom_dialog()
+        if dialog is None:
+            return
+        frame = self.frame
+        if frame is None or not frame.has_data:
+            dialog.clear_values()
             return
 
-        dialog = PanZoomRotateDialog(self.window)
-        dialog.set_values(
-            zoom=frame.zoom,
-            pan_x=frame.pan_x,
-            pan_y=frame.pan_y,
-            rotation=frame.rotation,
-            align=frame.align_wcs,
-        )
-        dialog.parameters_changed.connect(self.apply_pan_zoom_rotate_parameters)
-        # Modeless, as the dialog itself asks for: it emits
-        # `parameters_changed` live, so the point is to drag the rotation
-        # and watch the image turn -- not to freeze it and press OK.
-        self.show_window(dialog)
+        button = dialog.coord_button
+        if not positions.has_system(frame, button.system):
+            button.set_system("physical")
+        button.set_available(lambda system: positions.has_system(frame, system))
+
+        x, y = self._view_centre(frame)
+        try:
+            text = positions.from_image(frame, x, y, button.system, button.sky, button.sky_format)
+        except Exception:
+            text = f"{x:.8g} {y:.8g}"
+        words = text.split()
+        zoom = self.viewer.get_zoom() if not self.window._tile_mode_enabled else frame.zoom
+        dialog.set_values(zoom=zoom, rotation=frame.rotation, pan=(words[0], words[1]))
