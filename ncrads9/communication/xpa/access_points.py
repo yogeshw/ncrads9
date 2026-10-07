@@ -4602,11 +4602,18 @@ def _bin(window, args: list[str]) -> str | None:
         return None
 
     if first == "about":
-        # DS9 bins about a point; ours bins about the table's own extent,
-        # which is what `about center` asks for anyway.
+        # `bin about <x> <y>` centres the binned image on a point in column
+        # units; `bin about center` goes back to the middle of the data.
         if rest and rest[0].lower() == "center":
-            return None
-        return "binning about a chosen point is not implemented; `bin about center` is the default"
+            centre = None
+        else:
+            try:
+                centre = (float(rest[0]), float(rest[1]))
+            except (IndexError, ValueError):
+                return "bin about takes an x and a y, or center"
+        window.bin_settings = replace(window.bin_settings, center=centre)
+        controller.rebin()
+        return None
 
     if first == "lock":
         return _lock(window, ["bin", *rest])
