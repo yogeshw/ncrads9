@@ -1316,6 +1316,8 @@ class FrameController(Controller):
                     int(display_y * zoom - viewport.height() / 2)
                 )
         self.window.zoom.sync()
+        # The WCS menu greys the alternate letters this frame's header lacks.
+        self.window.wcs.sync()
 
     def sync_view_state(self) -> None:
         """Persist current view state after rendering."""

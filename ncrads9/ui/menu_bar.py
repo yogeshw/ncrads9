@@ -1880,48 +1880,73 @@ class MenuBar(QMenuBar):
         self.samp_menu.addAction(self.action_samp_marker_size)
 
     def _setup_wcs_menu(self) -> None:
-        """Set up the WCS menu."""
+        """Set up the WCS menu, DS9's `CoordMenu` (`menu.tcl`, `mwcs.tcl`).
+
+        Three independent radio groups -- the system (`WCS` or one of the
+        alternates `WCS a`..`WCS z`), the sky frame and the sky format --
+        then the WCS Parameters window. `Show Direction Arrows` at the end is
+        ours, not DS9's (PLAN.md section 7).
+        """
         self.wcs_menu: QMenu = self.addMenu("&WCS")
 
-        self.wcs_system_group = QActionGroup(self)
-        self.wcs_system_group.setExclusive(True)
+        # The system: DS9's `wcs(system)`.
+        system_group = QActionGroup(self)
+        system_group.setExclusive(True)
+        #: DS9's system token (`wcs`, `wcsa`..`wcsz`) -> its action.
+        self.wcs_system_actions: dict[str, QAction] = {}
 
-        self.action_wcs_fk5: QAction = QAction("FK&5", self)
-        self.action_wcs_fk5.setCheckable(True)
-        self.action_wcs_fk5.setChecked(True)
-        self.wcs_menu.addAction(self.action_wcs_fk5)
-        self.wcs_system_group.addAction(self.action_wcs_fk5)
+        self.action_wcs_wcs: QAction = QAction("&WCS", self)
+        self.action_wcs_wcs.setCheckable(True)
+        self.action_wcs_wcs.setChecked(True)
+        system_group.addAction(self.action_wcs_wcs)
+        self.wcs_menu.addAction(self.action_wcs_wcs)
+        self.wcs_system_actions["wcs"] = self.action_wcs_wcs
 
-        self.action_wcs_fk4: QAction = QAction("FK&4", self)
-        self.action_wcs_fk4.setCheckable(True)
-        self.wcs_menu.addAction(self.action_wcs_fk4)
-        self.wcs_system_group.addAction(self.action_wcs_fk4)
-
-        self.action_wcs_icrs: QAction = QAction("&ICRS", self)
-        self.action_wcs_icrs.setCheckable(True)
-        self.wcs_menu.addAction(self.action_wcs_icrs)
-        self.wcs_system_group.addAction(self.action_wcs_icrs)
-
-        self.action_wcs_galactic: QAction = QAction("&Galactic", self)
-        self.action_wcs_galactic.setCheckable(True)
-        self.wcs_menu.addAction(self.action_wcs_galactic)
-        self.wcs_system_group.addAction(self.action_wcs_galactic)
-
-        self.action_wcs_ecliptic: QAction = QAction("&Ecliptic", self)
-        self.action_wcs_ecliptic.setCheckable(True)
-        self.wcs_menu.addAction(self.action_wcs_ecliptic)
-        self.wcs_system_group.addAction(self.action_wcs_ecliptic)
+        self.wcs_multiple_menu: QMenu = self.wcs_menu.addMenu("&Multiple WCS")
+        for letter in "abcdefghijklmnopqrstuvwxyz":
+            action = QAction(f"WCS {letter}", self)
+            action.setCheckable(True)
+            system_group.addAction(action)
+            self.wcs_multiple_menu.addAction(action)
+            self.wcs_system_actions[f"wcs{letter}"] = action
+        self.wcs_system_action_group = system_group
 
         self.wcs_menu.addSeparator()
 
-        self.action_wcs_sexagesimal: QAction = QAction("&Sexagesimal", self)
-        self.action_wcs_sexagesimal.setCheckable(True)
-        self.action_wcs_sexagesimal.setChecked(True)
-        self.wcs_menu.addAction(self.action_wcs_sexagesimal)
+        # The sky frame, in DS9's order.
+        self.wcs_system_group = QActionGroup(self)
+        self.wcs_system_group.setExclusive(True)
+        for name, label in (
+            ("fk4", "FK&4"),
+            ("fk5", "FK&5"),
+            ("icrs", "&ICRS"),
+            ("galactic", "&Galactic"),
+            ("ecliptic", "&Ecliptic"),
+        ):
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(name == "fk5")
+            self.wcs_menu.addAction(action)
+            self.wcs_system_group.addAction(action)
+            setattr(self, f"action_wcs_{name}", action)
 
-        self.action_wcs_degrees: QAction = QAction("&Degrees", self)
-        self.action_wcs_degrees.setCheckable(True)
-        self.wcs_menu.addAction(self.action_wcs_degrees)
+        self.wcs_menu.addSeparator()
+
+        # The format: radio buttons in DS9, so exactly one is ever ticked.
+        self.wcs_format_group = QActionGroup(self)
+        self.wcs_format_group.setExclusive(True)
+        for name, label in (("degrees", "&Degrees"), ("sexagesimal", "&Sexagesimal")):
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(name == "sexagesimal")
+            self.wcs_menu.addAction(action)
+            self.wcs_format_group.addAction(action)
+            setattr(self, f"action_wcs_{name}", action)
+
+        self.wcs_menu.addSeparator()
+
+        self.action_wcs_parameters: QAction = QAction("WCS &Parameters...", self)
+        self.wcs_menu.addAction(self.action_wcs_parameters)
 
         self.wcs_menu.addSeparator()
 

@@ -1,16 +1,14 @@
 # SAOImageDS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/ds9_menu_tree.py
-# entries: 656 (526 excluding separators)
+# entries: 693 (561 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 #
 # Known limitation: DS9 builds some menus at runtime rather than
 # declaring them literally, so those entries appear as <dynamic> or
-# not at all. The largest case is the WCS menu, assembled by
-# CoordMenu (menu.tcl) from system x sky x format -- roughly 40
-# entries that this static extract cannot see. Treat the .wcs row of
-# tools/menu_diff.py as unreliable; PLAN.md section 5.11 has the real
-# comparison.
+# not at all. The WCS menu, assembled by CoordMenu (menu.tcl) from
+# system x sky x format, is expanded by a transcription of that
+# helper; the rest are loops over lists (colormaps, frames).
 
 # mfile.tcl
 .file|command|Open
@@ -595,6 +593,43 @@
 .illustrate.shape|radiobutton|Text
 .illustrate.shape|radiobutton|Image
 # mwcs.tcl
+.wcs|radiobutton|WCS
+.wcs|cascade|Multiple WCS
+.wcs.wcs|radiobutton|WCS a
+.wcs.wcs|radiobutton|WCS b
+.wcs.wcs|radiobutton|WCS c
+.wcs.wcs|radiobutton|WCS d
+.wcs.wcs|radiobutton|WCS e
+.wcs.wcs|radiobutton|WCS f
+.wcs.wcs|radiobutton|WCS g
+.wcs.wcs|radiobutton|WCS h
+.wcs.wcs|radiobutton|WCS i
+.wcs.wcs|radiobutton|WCS j
+.wcs.wcs|radiobutton|WCS k
+.wcs.wcs|radiobutton|WCS l
+.wcs.wcs|radiobutton|WCS m
+.wcs.wcs|radiobutton|WCS n
+.wcs.wcs|radiobutton|WCS o
+.wcs.wcs|radiobutton|WCS p
+.wcs.wcs|radiobutton|WCS q
+.wcs.wcs|radiobutton|WCS r
+.wcs.wcs|radiobutton|WCS s
+.wcs.wcs|radiobutton|WCS t
+.wcs.wcs|radiobutton|WCS u
+.wcs.wcs|radiobutton|WCS v
+.wcs.wcs|radiobutton|WCS w
+.wcs.wcs|radiobutton|WCS x
+.wcs.wcs|radiobutton|WCS y
+.wcs.wcs|radiobutton|WCS z
+.wcs|separator|---
+.wcs|radiobutton|FK4
+.wcs|radiobutton|FK5
+.wcs|radiobutton|ICRS
+.wcs|radiobutton|Galactic
+.wcs|radiobutton|Ecliptic
+.wcs|separator|---
+.wcs|radiobutton|Degrees
+.wcs|radiobutton|Sexagesimal
 .wcs|separator|---
 .wcs|command|WCS Parameters
 # manalysis.tcl

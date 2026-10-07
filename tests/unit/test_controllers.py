@@ -449,9 +449,11 @@ class TestOneMethodPerAction:
         from ncrads9.communication.xpa.xpa_commands import XPACommands
 
         commands = XPACommands(main_window)
-        commands.handle("wcs", {"action": "set", "system": "galactic"})
+        commands.handle("wcs", {"args": ["galactic"]})
         assert main_window.coord_context.sky is SkyFrame.GALACTIC
-        assert commands.handle("wcs", {})["result"] == "galactic"
+        # A bare `xpaget ds9 wcs` answers with the system, as DS9's does.
+        assert commands.handle("wcs", {"get": True, "args": ["sky"]})["result"] == "galactic"
+        assert commands.handle("wcs", {"get": True})["result"] == "wcs"
 
     def test_cli_wcs_uses_the_controller(self, main_window):
         from ncrads9.app import apply_startup_cli

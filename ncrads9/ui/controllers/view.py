@@ -39,17 +39,12 @@ Author: Yogesh Wadadekar
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import numpy as np
 
 from ...coordinates.physical_coords import PhysicalTransform
 from ...core.wcs_handler import WCSHandler, available_alternates
 from ..layout.view_state import INFO_FIELDS, PANEL_NAMES, ViewLayout
 from .base import Controller
-
-if TYPE_CHECKING:
-    from ..main_window import MainWindow
 
 #: Menu attribute -> the layout it selects.
 LAYOUT_ACTIONS: dict[str, ViewLayout] = {
@@ -81,17 +76,6 @@ UNIMPLEMENTED_PANELS: dict[str, str] = {}
 
 class ViewController(Controller):
     """Owns the View menu, the window's layout, and the information panel."""
-
-    def __init__(self, window: MainWindow) -> None:
-        """
-        Args:
-            window: The main window, as for every controller.
-        """
-        super().__init__(window)
-        #: Alternate WCS handlers for the current frame, and which frame they
-        #: belong to. See `_alternate_handlers`.
-        self._alternates: dict[str, WCSHandler] = {}
-        self._alternates_frame_id: int | None = None
 
     def connect(self) -> None:
         """Wire the View menu."""
@@ -307,11 +291,16 @@ class ViewController(Controller):
         else:
             panel.set_value("")
 
-        handler = self.window.wcs_handler
+        # The WCS row reports through the system on the WCS menu, as DS9's
+        # `LayoutWCSInfoBox` switches it: `WCS a` there makes this `wcsa`.
+        handler = self.window.wcs.handler
         if handler is not None and handler.is_valid:
-            ra, dec = handler.pixel_to_world(x, y)
-            lon, lat = self.coords.format_sky(ra, dec)
-            panel.set_wcs(self.coords.sky.value, lon, lat)
+            ra, dec = handler.pixel_to_icrs(x, y)
+            lon, lat = self.coords.format_sky(float(ra), float(dec))
+            label = self.coords.sky.value
+            if self.coords.wcs_key:
+                label = f"{self.coords.system} {label}"
+            panel.set_wcs(label, lon, lat)
         else:
             panel.set_wcs("", "", "")
 
@@ -347,20 +336,16 @@ class ViewController(Controller):
             )
 
     def _alternate_handlers(self) -> dict[str, WCSHandler]:
-        """The current frame's alternate WCS handlers, built once per frame.
+        """The current frame's alternate WCS handlers.
 
         Building an `astropy.wcs.WCS` is far too slow to do on every mouse
-        move, so they are cached against the frame they came from.
+        move; `Frame.wcs_for` caches them, against the frame's primary WCS so
+        a replaced WCS (`WCS -> WCS Parameters`) is read afresh.
         """
         frame = self.frame
         if frame is None:
             return {}
-        if self._alternates_frame_id == frame.frame_id:
-            return self._alternates
-        header = self._header()
-        self._alternates = {suffix: WCSHandler(header, key=suffix) for suffix in available_alternates(header)}
-        self._alternates_frame_id = frame.frame_id
-        return self._alternates
+        return {suffix: frame.wcs_for(suffix) for suffix in available_alternates(self._header())}
 
     def _refresh_keyword(self) -> None:
         """Show the value of whichever FITS card the user typed."""

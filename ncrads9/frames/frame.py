@@ -126,6 +126,15 @@ class Frame:
     rgb_channel_z2: dict[str, float | None] = None
     rgb_channel_contrast: dict[str, float] = None
     rgb_channel_brightness: dict[str, float] = None
+    #: The WCS keywords the frame was loaded with, kept the first time its
+    #: WCS is replaced or appended to (`WCS -> WCS Parameters`, `xpaset ds9
+    #: wcs replace`) so `wcs reset` can put them back. None while the WCS is
+    #: still the file's own.
+    wcs_original: object | None = None
+    #: The alternate WCS handlers `wcs_for` has built, against the primary
+    #: handler they were built alongside: a reload or a replaced WCS makes a
+    #: new primary, and that is what invalidates them.
+    _alternate_wcs: tuple | None = None
 
     def __post_init__(self):
         if self.regions is None:
@@ -150,6 +159,39 @@ class Frame:
             self.rgb_channel_contrast = {"red": 1.0, "green": 1.0, "blue": 1.0}
         if self.rgb_channel_brightness is None:
             self.rgb_channel_brightness = {"red": 0.0, "green": 0.0, "blue": 0.0}
+
+    def wcs_for(self, key: str = "") -> object | None:
+        """The handler for one of the frame's WCS descriptions.
+
+        Args:
+            key: "" or "wcs" for the primary; "a".."z" or "wcsa".."wcsz" for
+                an alternate, as DS9's `WCS -> Multiple WCS` names them.
+
+        Returns:
+            The primary `wcs_handler` for "", otherwise a handler for the
+            alternate -- one whose `is_valid` is False when the header does
+            not carry that letter. Built once and cached: an
+            `astropy.wcs.WCS` is far too slow to make on every mouse move.
+        """
+        from ..core.wcs_handler import WCSHandler
+
+        letter = key.strip().lower().removeprefix("wcs").upper()
+        if not letter:
+            return self.wcs_handler
+        primary = self.wcs_handler
+        if self._alternate_wcs is None or self._alternate_wcs[0] is not primary:
+            self._alternate_wcs = (primary, {})
+        cache = self._alternate_wcs[1]
+        if letter not in cache:
+            header = self.header if self.header is not None else getattr(self.fits_handler, "header", None)
+            handler = WCSHandler(None)
+            if header is not None and f"CTYPE1{letter}" in header:
+                try:
+                    handler = WCSHandler(header, key=letter)
+                except Exception:
+                    handler = WCSHandler(None)
+            cache[letter] = handler
+        return cache[letter]
 
     @property
     def has_data(self) -> bool:

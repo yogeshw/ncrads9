@@ -453,6 +453,7 @@ class DisplayPipeline:
             stats_msg += f" from a {info.kind.value} HDU"
         if wcs_handler.is_valid:
             stats_msg += " (WCS available)"
+        self.window.wcs.sync()
         self.status(stats_msg, 3000)
 
     def load_array(

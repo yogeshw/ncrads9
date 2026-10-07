@@ -131,6 +131,9 @@ _SKY_LABELS: dict[SkyFrame, tuple[str, str]] = {
     SkyFrame.ECLIPTIC: ("Lon", "Lat"),
 }
 
+#: The letters an alternate WCS description may carry.
+_LETTERS = "abcdefghijklmnopqrstuvwxyz"
+
 #: Frames whose longitude is conventionally written in hours, not degrees.
 _HOUR_ANGLE_FRAMES = frozenset({SkyFrame.FK4, SkyFrame.FK5, SkyFrame.ICRS})
 
@@ -151,12 +154,16 @@ class CoordinateContext:
         sky_format: Degrees or sexagesimal.
         precision: Fractional digits on the seconds field (sexagesimal) or on
             the degree value (degrees).
+        wcs_key: Which of the header's WCS descriptions `frame` WCS means:
+            "" for the primary, "a".."z" for an alternate. DS9 folds the two
+            into one token, `wcs` or `wcsa`..`wcsz`, which `system` spells.
     """
 
     frame: CoordFrame = CoordFrame.WCS
     sky: SkyFrame = SkyFrame.FK5
     sky_format: SkyFormat = SkyFormat.SEXAGESIMAL
     precision: int = 2
+    wcs_key: str = ""
 
     # -- construction from the plain strings the UI and XPA use --------------
 
@@ -179,6 +186,25 @@ class CoordinateContext:
     def with_sky(self, sky: str | SkyFrame) -> "CoordinateContext":
         """Return a copy using a different sky frame."""
         return replace(self, sky=SkyFrame(sky) if isinstance(sky, str) else sky)
+
+    def with_system(self, system: str) -> "CoordinateContext":
+        """Return a copy reporting through another WCS description.
+
+        Args:
+            system: DS9's token, `wcs` or `wcsa`..`wcsz`.
+
+        Raises:
+            ValueError: For anything else.
+        """
+        token = system.strip().lower()
+        if not token.startswith("wcs") or len(token) > 4 or (len(token) == 4 and token[3] not in _LETTERS):
+            raise ValueError(f"not a WCS system: {system}")
+        return replace(self, frame=CoordFrame.WCS, wcs_key=token[3:])
+
+    @property
+    def system(self) -> str:
+        """DS9's name for the WCS reported in: `wcs`, or `wcsa`..`wcsz`."""
+        return f"wcs{self.wcs_key}"
 
     def with_format(self, sky_format: str | SkyFormat) -> "CoordinateContext":
         """Return a copy using a different sky format."""
