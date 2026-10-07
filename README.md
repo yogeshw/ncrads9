@@ -15,11 +15,13 @@ instead.
 
 ## Feature Status
 
-Nine milestones (M0–M9) are complete: the roadmap is in [PLAN.md](PLAN.md) and
+Ten milestones (M0–M10) are complete: the roadmap is in [PLAN.md](PLAN.md) and
 the itemised record, deviations and bugs included, in [TODO.md](TODO.md).
-Menu parity against DS9 is **92%** of its labels, measured by
-`python tools/menu_diff.py --summary`, and 3200 tests cover about 77% of the
-code.
+Menu parity against DS9 is **99%** of its labels (462 of 468), measured by
+`python tools/menu_diff.py --summary`; the six left are DS9's Tcl console
+entries, its macOS-only Window menu and labels it builds at run time. Over
+4000 tests run, among them one that chooses every menu entry on a loaded
+image and two that check what DS9's documented XPA commands actually do.
 
 ### Implemented
 
@@ -54,7 +56,9 @@ code.
   footprint services; the VO registry.
 - **Communication** — an XPA server answering **all 143 of DS9's access
   points**, checked against DS9's own documented examples
-  (`tests/unit/test_xpa_conformance.py`); SAMP with a hub, image and table
+  (`tests/unit/test_xpa_conformance.py`) and for the state each command
+  leaves behind (`test_xpa_semantics.py`, `test_xpa_handler_semantics.py`),
+  with data on standard input (`cat f.fits | xpaset ds9 fits`); SAMP with a hub, image and table
   broadcast and catalogue overlays; the IIS protocol, so IRAF's `display` and
   `imexam` work.
 - **Sessions** — backup and restore, a five-minute autosave, notes, an undo
