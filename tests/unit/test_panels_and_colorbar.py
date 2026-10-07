@@ -44,6 +44,23 @@ from ncrads9.ui.panels.panner import COMPASS_LENGTH
 SIZE = 64
 
 
+
+def _hover(qapp, window, widget, point):
+    """Move the pointer over `widget`, with nothing else in the way.
+
+    `QTest.mouseMove` moves the session's one cursor, and the move goes to
+    whatever top-level window is under it -- so a tool window left open by
+    an earlier test, sitting over the canvas, used to swallow the hover and
+    fail these tests only when run after it.
+    """
+    for other in qapp.topLevelWidgets():
+        if other is not window and other.isVisible():
+            other.close()
+    window.raise_()
+    window.activateWindow()
+    qapp.processEvents()
+    QTest.mouseMove(widget, point)
+
 def _fits(path, cdelt1=-0.001, cdelt2=0.001):
     """An image with a WCS whose orientation the test chooses."""
     rows, columns = np.indices((SIZE, SIZE))
@@ -172,7 +189,7 @@ def test_a_hover_over_the_image_reaches_the_magnifier(window, tmp_path, qapp):
     magnifier = window.magnifier_panel
     assert magnifier._cursor_pos is None, "nothing hovered yet"
 
-    QTest.mouseMove(window.image_viewer.region_overlay, QPoint(300, 120))
+    _hover(qapp, window, window.image_viewer.region_overlay, QPoint(300, 120))
     qapp.processEvents()
 
     assert magnifier._cursor_pos is not None, "a hover must reach the magnifier"
@@ -190,7 +207,7 @@ def test_the_overlay_announces_every_hover(window, tmp_path, qapp):
 
     seen: list[tuple[int, int]] = []
     overlay.hover_moved.connect(lambda x, y: seen.append((x, y)))
-    QTest.mouseMove(overlay, QPoint(200, 120))
+    _hover(qapp, window, overlay, QPoint(200, 120))
     qapp.processEvents()
     assert seen, "the overlay should say where the cursor is"
 
@@ -204,7 +221,7 @@ def test_a_hover_reaches_the_cut_graphs_and_the_pixel_table(window, tmp_path, qa
     window.show()
     qapp.processEvents()
 
-    QTest.mouseMove(window.image_viewer.region_overlay, QPoint(300, 120))
+    _hover(qapp, window, window.image_viewer.region_overlay, QPoint(300, 120))
     qapp.processEvents()
     assert window.horizontal_graph._graph_widget._data is not None
 
@@ -223,7 +240,7 @@ def test_a_hover_while_drawing_a_region_still_reports(window, tmp_path, qapp):
 
     seen: list[tuple[int, int]] = []
     overlay.hover_moved.connect(lambda x, y: seen.append((x, y)))
-    QTest.mouseMove(overlay, QPoint(200, 120))
+    _hover(qapp, window, overlay, QPoint(200, 120))
     qapp.processEvents()
     assert seen
 

@@ -1089,7 +1089,9 @@ def test_the_graph_point_reports_what_it_cannot_do(xpa):
     """DS9's graph has its own font; ours draws with the widget's, and
     saying so beats reporting success and changing nothing."""
     assert "font" in _set(xpa, "graph", "fontsize", "12")["message"]
-    assert _set(xpa, "graph", "method", "median")["status"] == "error"
+    # Median is DS9's third method, and it is implemented now.
+    assert _set(xpa, "graph", "method", "median")["status"] == "ok"
+    assert _set(xpa, "graph", "method", "mode")["status"] == "error"
     assert _set(xpa, "graph", "wibble")["status"] == "error"
 
 
@@ -1164,9 +1166,13 @@ def test_the_bin_point_sets_the_columns(xpa, main_window):
     assert _set(xpa, "bin", "cols", "X")["status"] == "error"
 
 
-def test_the_bin_point_reports_what_it_cannot_do(xpa):
-    assert "about center" in _set(xpa, "bin", "about", "10", "10")["message"]
+def test_the_bin_point_reports_what_it_cannot_do(xpa, main_window):
+    # Binning about a point is DS9's Bin Center, implemented now.
+    assert _set(xpa, "bin", "about", "10", "10")["status"] == "ok"
+    assert main_window.bin_settings.center == (10.0, 10.0)
     assert _set(xpa, "bin", "about", "center")["status"] == "ok"
+    assert main_window.bin_settings.center is None
+    assert _set(xpa, "bin", "about", "x")["status"] == "error"
     assert _set(xpa, "bin", "wibble")["status"] == "error"
 
 

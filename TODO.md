@@ -1284,6 +1284,58 @@ Depends on M2, M3.
 
 ---
 
+## M10 — Parity audit: what the documented commands and dialogs actually do
+
+**Status: complete** (branch `parity-gaps`). M9 left every DS9 access point *answering*; this
+milestone checked what each one *does*, and compared every DS9 dialog against ours side by side.
+
+- [x] **M10-1** XPA semantics. The conformance test only asserted that DS9's examples do not
+      raise; `tests/unit/test_xpa_handler_semantics.py` and `test_xpa_semantics.py` now assert
+      the state each leaves behind. Found and fixed: `zoom to 4` zoomed to 6; `pan to …` refused
+      its own syntax; `cmap invert|value|tag|load|save` were read as colormap names; every
+      `colorbar` sub-command, every `scale` and `fits` read and all of `wcs` were ignored;
+      `scale squared` selected pow; `save` wrote a screenshot rather than FITS; `frame
+      show|move|frameno|lock|match` read the verb as their argument; the crosshair's sky answers
+      were a pixel off and ignored the sky frame; region files in fk5 were placed with degrees
+      as pixels; `regions -format/-system/-sky` were ignored; dozens of table points answered
+      the whole listing for any key. Data on standard input now works
+      (`echo circle … | xpaset ds9 regions`, `cat f.fits | xpaset ds9 fits`). Conformance
+      floor 935 → 1037 accepted commands.
+- [x] **M10-2** Frames are numbered by a persistent id, as DS9's are (delete Frame 1 of two
+      and Frame 2 remains); `frame 7` makes Frame 7 alone.
+- [x] **M10-3** WCS menu as DS9's `CoordMenu` (WCS, Multiple WCS a–z, sky frames,
+      degrees/sexagesimal, WCS Parameters…), alternate WCSs drive the readout, grid and
+      compass; the WCS Parameters dialog with DS9's tabs, `.wcs` files, Apply/Reset;
+      `wcs replace|append|reset|save|align`.
+- [x] **M10-4** Dialogs rebuilt to DS9's layout and behaviour, each modeless, seeded from the
+      state in force, and refreshing while open: Colormap Parameters (contrast/bias sliders),
+      Scale Parameters (histogram with draggable limits), Pan Zoom Rotate (coordinate menu),
+      Contour Parameters (levels list, Generate, Limits/Scale menus, Convert to Polygons),
+      region Get Information (follows a drag; coordinate and distance menus; radii lists),
+      region Save/Open (format and coordinate choice), the Catalog Tool (Object section,
+      its own catalogue, Match and Name Resolution dialogs), Crop, Crosshair and Cube
+      (coordinate menus), Smooth, Block, Bin (Bin Center), Graph, Pixel Table (Save, Copy),
+      Coordinate Grid (Reset, Clear). A shared `CoordMenuButton`/`DistMenuButton` widget and
+      `coordinates/positions.py` serve them all.
+- [x] **M10-5** Bugs found on the way: rotating a frame dropped its zoom and never returned to
+      the GPU viewer; the CPU viewer could not scroll or pan once zoomed past the window; Save
+      Image fixed JPEG quality at 95 and TIFF at LZW (now DS9's prompts and defaults); HSV/HLS
+      channel rows were labelled red/green/blue; Pow and Squared were confused in three places;
+      contouring a frame blocked to one pixel raised.
+- [x] **M10-6** `tests/unit/test_every_menu_action.py` chooses all ~850 menu entries on a loaded
+      image and fails if any slot raises.
+
+Still open, in rough order of what a DS9 user would notice:
+
+- [ ] DS9 `.bck` backups cannot be restored (ours are JSON).
+- [ ] RGB dialog lacks DS9's Lock and Align menus; 3D movies are not made.
+- [ ] The VO dialog has no site checklist; Plot Tool lacks the Canvas menu; Header has no
+      Find/Print; Prism's plot lacks error columns.
+- [ ] Regions are not rotated between image and sky when north is not up; `wcsa`–`wcsz` in
+      region files are read as the primary WCS.
+- [ ] Zoom, block and bin take one factor for both axes; unequal x/y factors are refused.
+- [ ] Cube axes beyond the third are not offered.
+
 ## Continuous
 
 - [x] **C-1** Keep `docs/parity/ncrads9_menus.txt` regenerated in CI (the `parity` job already
