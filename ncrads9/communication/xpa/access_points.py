@@ -388,14 +388,18 @@ _CONTOUR_KEYS = {
     "colour": "color",
     "width": "line_width",
     "nlevels": "num_levels",
-    "smooth": "smooth_sigma",
-    "method": "method",
+    "smooth": "smoothness",
+    "method": "contour_method",
     "scale": "scale",
     "mode": "mode",
     "scope": "scope",
     "limits": "limits",
     "levels": "levels",
 }
+
+#: The settings DS9's Generate reads. Changing one regenerates the levels
+#: (`ContourCmdGenerateDialog`), so an explicit list set earlier is dropped.
+_CONTOUR_GENERATORS = ("num_levels", "smoothness", "scale", "mode", "scope", "limits", "log_exp")
 
 
 def _contour_settings(window) -> dict:
@@ -428,11 +432,16 @@ def _contour_text(window, args: list[str]) -> str:
     if what == "dash":
         return on_off(str(settings.get("line_style", "Solid")).lower() != "solid")
     if what == "smooth":
-        return str(settings.get("smooth_sigma", 1))
+        return str(settings.get("smoothness", 4))
     if what == "width":
         return f"{float(settings.get('line_width', 1)):g}"
     if what == "nlevels":
-        return str(settings.get("num_levels", 10))
+        return str(settings.get("num_levels", 5))
+    if what == "limits":
+        limits = settings.get("limits")
+        if not limits and window._contour_levels:
+            limits = (min(window._contour_levels), max(window._contour_levels))
+        return f"{float(limits[0]):g} {float(limits[1]):g}" if limits else ""
     if what == "log":
         return str(settings.get("log_exp", 1000))
     if what in _CONTOUR_KEYS:
@@ -449,6 +458,8 @@ def _contour(window, args: list[str]) -> str | None:
     [scope local|global] [limits <low> <high>] [levels <v>...]
     [open|close]`.
     """
+    from ...analysis.contour import normalize_mode, normalize_scale
+
     words = [str(word) for word in args]
     controller = window.analysis
     if not words:
@@ -467,6 +478,9 @@ def _contour(window, args: list[str]) -> str | None:
         controller.set_contours(False)
         return None
     if first == "generate":
+        # DS9 regenerates the levels from the parameters, then draws them.
+        if window._contour_settings is not None:
+            window._contour_settings.pop("levels", None)
         controller.update_contours()
         return None
     if first == "open":
@@ -484,7 +498,9 @@ def _contour(window, args: list[str]) -> str | None:
         controller.paste_contours()
         return _contour_style(window, rest)
     if first == "convert":
-        return "contour convert turns contours into regions, which the Region menu does"
+        # DS9's Convert to Polygons: each contour becomes a polygon region.
+        controller.contours_to_polygons()
+        return None
 
     if first == "load":
         # `load levels <file>` reads just the level values.
@@ -532,6 +548,9 @@ def _contour(window, args: list[str]) -> str | None:
             settings["limits"] = (float(rest[0]), float(rest[1]))
         except ValueError:
             return "limits takes two numbers"
+        # DS9's `ContourCmdLimits`: typed limits are User mode.
+        settings["mode"] = "user"
+        settings.pop("levels", None)
         controller.apply_contours(settings)
         return None
 
@@ -541,6 +560,7 @@ def _contour(window, args: list[str]) -> str | None:
             settings["log_exp"] = float(rest[-1])
         except (IndexError, ValueError):
             return "log takes an exponent"
+        settings.pop("levels", None)
         controller.apply_contours(settings)
         return None
 
@@ -549,16 +569,27 @@ def _contour(window, args: list[str]) -> str | None:
             return f"contour {first} needs a value"
         key = _CONTOUR_KEYS[first]
         value: object = " ".join(rest)
-        if key in ("line_width", "num_levels", "smooth_sigma"):
+        if key in ("line_width", "num_levels", "smoothness"):
             try:
-                value = float(rest[0]) if key != "num_levels" else int(float(rest[0]))
+                value = float(rest[0]) if key == "line_width" else max(1, int(float(rest[0])))
             except ValueError:
                 return f"contour {first} takes a number"
-        elif key == "method":
-            value = str(rest[0]).capitalize()
+        elif key == "contour_method":
+            value = str(rest[0]).lower()
+            if value not in ("block", "smooth"):
+                return "method takes block or smooth"
+        elif key == "scale":
+            value = normalize_scale(rest[0])
+        elif key == "mode":
+            value = normalize_mode(rest[0])
+            # DS9's `ContourModeDialog`: the limits come from the new mode.
+            if value != "user":
+                settings.pop("limits", None)
+        elif key == "scope":
+            value = "global" if str(rest[0]).lower() == "global" else "local"
         settings[key] = value
-        if key == "smooth_sigma":
-            settings["smooth"] = float(settings["smooth_sigma"]) > 1
+        if key in _CONTOUR_GENERATORS:
+            settings.pop("levels", None)
         controller.apply_contours(settings)
         return None
 

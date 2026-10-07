@@ -498,3 +498,207 @@ class ContourGenerator:
         dilated = ndimage.binary_dilation(binary)
         edge = dilated ^ binary
         return float(np.sum(edge))
+
+
+# -- DS9's contour levels ------------------------------------------------------
+
+#: The Scale menu of DS9's Contour Parameters dialog (`contour.tcl`), as
+#: (value, label). The values are what DS9's `contour scale` takes.
+CONTOUR_SCALES: tuple[tuple[str, str], ...] = (
+    ("linear", "Linear"),
+    ("log", "Log"),
+    ("pow", "Power"),
+    ("sqrt", "Square Root"),
+    ("squared", "Squared"),
+    ("asinh", "ASINH"),
+    ("sinh", "SINH"),
+    ("histequ", "Histogram Equalization"),
+)
+
+#: The Limits menu, as (value, label), with None where DS9 has a separator.
+CONTOUR_LIMIT_MODES: tuple[tuple[str, str] | None, ...] = (
+    ("minmax", "Min Max"),
+    None,
+    ("99.5", "99.5%"),
+    ("99", "99%"),
+    ("98", "98%"),
+    ("97", "97%"),
+    ("96", "96%"),
+    ("95", "95%"),
+    ("92.5", "92.5%"),
+    ("90", "90%"),
+    None,
+    ("zscale", "ZScale"),
+    ("zmax", "ZMax"),
+    ("user", "User"),
+)
+
+#: DS9's contour defaults (`ContourDef`).
+DEFAULT_NUM_LEVELS = 5
+DEFAULT_LOG_EXPONENT = 1000.0
+
+#: How many bins DS9's histogram equalization uses (`HISTEQUSIZE`).
+HISTEQU_SIZE = 16384
+
+#: Other spellings of a scale name, mapped to DS9's.
+_SCALE_ALIASES = {
+    "power": "pow",
+    "histeq": "histequ",
+    "histogram": "histequ",
+    "logarithmic": "log",
+    "square root": "sqrt",
+}
+
+
+def normalize_scale(scale: str | None) -> str:
+    """DS9's name for a contour scale, `linear` if it is not one."""
+    name = str(scale or "linear").strip().lower()
+    name = _SCALE_ALIASES.get(name, name)
+    return name if name in {value for value, _label in CONTOUR_SCALES} else "linear"
+
+
+def normalize_mode(mode: str | float | None) -> str:
+    """DS9's name for a contour limit mode, `minmax` if it is not one."""
+    text = str(mode if mode is not None else "minmax").strip().lower().rstrip("%")
+    try:
+        text = f"{float(text):g}"
+    except ValueError:
+        pass
+    known = {entry[0] for entry in CONTOUR_LIMIT_MODES if entry is not None}
+    return text if text in known else "minmax"
+
+
+def contour_limits(
+    data: NDArray[np.floating] | None,
+    mode: str = "minmax",
+    scope: str = "local",
+    global_data: NDArray[np.floating] | None = None,
+) -> tuple[float, float] | None:
+    """The low and high a Limits menu entry gives, DS9's `ContourModeDialog`.
+
+    Returns:
+        (low, high), or None for `user` -- whose limits are whatever was
+        typed -- or when there is no data.
+    """
+    from ..rendering.scale_limits import LimitMode, LimitScope, ScaleLimits, compute_limits
+
+    mode = normalize_mode(mode)
+    if mode == "user" or data is None:
+        return None
+    limit_scope = LimitScope.GLOBAL if str(scope).lower() == "global" else LimitScope.LOCAL
+    if mode in ("minmax", "zscale", "zmax"):
+        settings = ScaleLimits(mode=LimitMode(mode), scope=limit_scope)
+    else:
+        settings = ScaleLimits(mode=LimitMode.PERCENT, percent=float(mode), scope=limit_scope)
+    return compute_limits(np.asarray(data), settings, global_data=global_data)
+
+
+def _histequ_table(data: NDArray[np.floating] | None, low: float, high: float) -> NDArray | None:
+    """The cumulative histogram between the limits, normalised to 0..1."""
+    if data is None:
+        return None
+    values = np.asarray(data, dtype=np.float64)
+    values = values[np.isfinite(values)]
+    values = values[(values >= low) & (values <= high)]
+    if values.size == 0 or high <= low:
+        return None
+    counts, _edges = np.histogram(values, bins=HISTEQU_SIZE, range=(low, high))
+    cumulative = np.cumsum(counts).astype(np.float64)
+    return cumulative / cumulative[-1]
+
+
+def ds9_levels(
+    count: int,
+    low: float,
+    high: float,
+    scale: str = "linear",
+    log_exponent: float = DEFAULT_LOG_EXPONENT,
+    data: NDArray[np.floating] | None = None,
+) -> list[float]:
+    """The levels DS9's Generate fills the Levels box with.
+
+    A transcription of tksao's `InverseScale` classes (`inversescale.C`):
+    `count` levels from `low` to `high`, spaced by the inverse of the
+    contour scale. One level is `high` alone, as it is in DS9.
+
+    Args:
+        count: How many levels.
+        low, high: The limits.
+        scale: One of `CONTOUR_SCALES`.
+        log_exponent: The exponent of Log and Power.
+        data: The pixels, which only Histogram Equalization needs.
+    """
+    count = max(1, int(count))
+    low, high = float(low), float(high)
+    if count == 1:
+        return [high]
+    scale = normalize_scale(scale)
+    expo = float(log_exponent) if log_exponent and float(log_exponent) > 1 else DEFAULT_LOG_EXPONENT
+    span = high - low
+    steps = np.arange(count, dtype=np.float64) / (count - 1)
+
+    if scale == "log":
+        fractions = (np.power(expo, steps) - 1.0) / expo
+    elif scale == "pow":
+        fractions = np.log10(expo * steps + 1.0) / np.log10(expo)
+    elif scale == "sqrt":
+        fractions = steps * steps
+    elif scale == "squared":
+        fractions = np.sqrt(steps)
+    elif scale == "asinh":
+        fractions = np.sinh(3.0 * steps) / 10.0
+    elif scale == "sinh":
+        fractions = np.arcsinh(10.0 * steps) / 3.0
+    elif scale == "histequ":
+        table = _histequ_table(data, low, high)
+        if table is None:
+            fractions = steps
+        else:
+            # The first bin whose cumulative fraction passes each step,
+            # capped at the last one, which is DS9's search.
+            index = np.minimum(np.searchsorted(table, steps, side="right"), HISTEQU_SIZE - 1)
+            fractions = index / float(HISTEQU_SIZE)
+    else:
+        fractions = steps
+
+    levels = fractions * span + low
+    return [float(value) if np.isfinite(value) else 0.0 for value in levels]
+
+
+def format_levels(levels) -> str:
+    """Levels as the Levels box shows them: one per line, as DS9 does."""
+    return "\n".join(f"{float(value):.10g}" for value in levels)
+
+
+def parse_levels(text: str) -> list[float]:
+    """The numbers in a levels list, whitespace or newline separated.
+
+    Braces and commas are ignored, so a Tcl list or a comma-separated line
+    reads too; a word that is not a number is skipped.
+    """
+    values: list[float] = []
+    for word in text.replace(",", " ").replace("{", " ").replace("}", " ").split():
+        try:
+            value = float(word)
+        except ValueError:
+            continue
+        if np.isfinite(value):
+            values.append(value)
+    return values
+
+
+def parse_levels_file(text: str) -> list[float]:
+    """The levels in a levels file, DS9's `ContourLoadLevelsNow`.
+
+    A `.lev` file is a plain list of numbers. DS9 also reads a contour
+    file's `level=` lines for its levels, so those are taken when present.
+    """
+    found: list[float] = []
+    for line in text.splitlines():
+        words = line.replace("=", " ").replace("{", " ").replace("}", " ").split()
+        if len(words) >= 2 and words[0].lower() == "level":
+            try:
+                found.append(float(words[1]))
+            except ValueError:
+                continue
+    return found if found else parse_levels(text)
