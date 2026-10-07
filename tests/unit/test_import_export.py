@@ -501,7 +501,11 @@ def test_a_colour_array_export_writes_three_planes(main_window, tmp_path, monkey
 
 
 def test_save_image_writes_the_four_raster_formats(main_window, tmp_path, monkeypatch):
-    from PyQt6.QtWidgets import QFileDialog
+    from PyQt6.QtWidgets import QFileDialog, QInputDialog
+
+    # JPEG asks for a quality and TIFF for a compression, as DS9's do.
+    monkeypatch.setattr(QInputDialog, "getInt", staticmethod(lambda *a, **k: (75, True)))
+    monkeypatch.setattr(QInputDialog, "getItem", staticmethod(lambda *a, **k: ("none", True)))
 
     for name in ("png", "gif", "tiff", "jpeg"):
         path = tmp_path / f"view.{name}"
