@@ -58,6 +58,16 @@ PIL_FORMATS: dict[str, str] = {
 }
 
 
+#: DS9's TIFF compressions, by the names PIL knows them. DS9's default,
+#: like its JPEG quality of 75, is what `write` defaults to.
+TIFF_COMPRESSION: dict[str, str] = {
+    "none": "raw",
+    "jpeg": "jpeg",
+    "packbits": "packbits",
+    "deflate": "tiff_deflate",
+}
+
+
 def file_filter(name: str) -> str:
     """The Open/Save filter for one raster format."""
     patterns = " ".join(f"*{suffix}" for suffix in FORMATS.get(name, ()))
@@ -94,8 +104,8 @@ def write(
     path: str | Path,
     rgb: NDArray[np.uint8],
     name: str,
-    quality: int = 95,
-    compress: str | None = "lzw",
+    quality: int = 75,
+    compress: str | None = None,
 ) -> Path:
     """Write a rendered image out as a picture.
 
@@ -127,8 +137,8 @@ def write(
     options: dict[str, Any] = {}
     if name == "jpeg":
         options["quality"] = int(quality)
-    elif name == "tiff" and compress:
-        options["compression"] = compress
+    elif name == "tiff" and compress and compress != "none":
+        options["compression"] = TIFF_COMPRESSION.get(compress, compress)
     elif name == "gif":
         # GIF holds 256 colours; PIL needs telling which 256.
         picture = picture.convert("P", palette=Image.Palette.ADAPTIVE)

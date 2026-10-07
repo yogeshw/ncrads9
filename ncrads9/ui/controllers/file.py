@@ -720,8 +720,21 @@ class FileController(Controller):
         except Exception as exc:
             self._report(f"Could not save the rendered image to\n{filepath}", exc)
 
-    def _save_image_raster(self, image_format: str, pixmap: QPixmap, path: str | None = None) -> bool:
-        """Write the rendered view as one of DS9's four raster formats."""
+    def _save_image_raster(
+        self,
+        image_format: str,
+        pixmap: QPixmap,
+        path: str | None = None,
+        quality: int | None = None,
+        compress: str | None = None,
+    ) -> bool:
+        """Write the rendered view as one of DS9's four raster formats.
+
+        Interactively, JPEG asks for its quality and TIFF for its
+        compression, as DS9's JPEG and TIFF dialogs do; the answer is
+        remembered for next time. XPA's `saveimage jpeg foo.jpg 90` passes
+        them instead.
+        """
         if path is None:
             path, _ = QFileDialog.getSaveFileName(
                 self.window,
@@ -729,15 +742,49 @@ class FileController(Controller):
                 "",
                 raster.file_filter(image_format),
             )
+            if not path:
+                return False
+            if image_format == "jpeg" and quality is None:
+                quality, ok = QInputDialog.getInt(
+                    self.window, "JPEG", "Quality:", value=self._jpeg_quality, min=1, max=100
+                )
+                if not ok:
+                    return False
+            if image_format == "tiff" and compress is None:
+                choices = list(raster.TIFF_COMPRESSION)
+                compress, ok = QInputDialog.getItem(
+                    self.window,
+                    "TIFF",
+                    "Compression:",
+                    choices,
+                    choices.index(self._tiff_compress),
+                    False,
+                )
+                if not ok:
+                    return False
         if not path:
             return False
+        quality = self._jpeg_quality if quality is None else int(quality)
+        compress = self._tiff_compress if compress is None else str(compress)
+        self.window._jpeg_quality, self.window._tiff_compress = quality, compress
         try:
-            raster.write(path, self._pixmap_rgb(pixmap), image_format)
+            raster.write(path, self._pixmap_rgb(pixmap), image_format, quality=quality, compress=compress)
         except Exception as exc:
             self._report(f"Could not save the rendered image to\n{path}", exc)
             return False
         self.status(f"Saved the rendered image to {Path(path).name}", 3000)
         return True
+
+    @property
+    def _jpeg_quality(self) -> int:
+        """DS9's `export(jpeg,quality)`, 75 until changed."""
+        return int(getattr(self.window, "_jpeg_quality", 75))
+
+    @property
+    def _tiff_compress(self) -> str:
+        """DS9's `export(tiff,compress)`, none until changed."""
+        value = getattr(self.window, "_tiff_compress", "none")
+        return value if value in raster.TIFF_COMPRESSION else "none"
 
     @staticmethod
     def _pixmap_rgb(pixmap: QPixmap) -> np.ndarray:

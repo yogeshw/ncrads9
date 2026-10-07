@@ -252,10 +252,22 @@ def test_save_image_writes_the_view(window, qapp, tmp_path, monkeypatch, suffix)
 
     target = tmp_path / f"shot.{suffix}"
     monkeypatch.setattr(QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: (str(target), "")))
+    # JPEG asks for a quality and TIFF for a compression, as DS9's do.
+    from PyQt6.QtWidgets import QInputDialog
+
+    monkeypatch.setattr(QInputDialog, "getInt", staticmethod(lambda *a, **k: (90, True)))
+    monkeypatch.setattr(QInputDialog, "getItem", staticmethod(lambda *a, **k: ("packbits", True)))
     window.zoom.set_zoom(4.0)
     qapp.processEvents()
 
     window.file.save_image(suffix)
+    if suffix == "jpeg":
+        assert window._jpeg_quality == 90
+    if suffix == "tiff":
+        from PIL import Image
+
+        with Image.open(target) as picture:
+            assert picture.info.get("compression") == "packbits"
     assert target.is_file() and target.stat().st_size > 0
 
     from PyQt6.QtGui import QImage

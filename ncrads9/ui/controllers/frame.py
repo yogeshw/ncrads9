@@ -963,13 +963,19 @@ class FrameController(Controller):
             ("Linear", ScaleAlgorithm.LINEAR),
             ("Log", ScaleAlgorithm.LOG),
             ("Sqrt", ScaleAlgorithm.SQRT),
-            ("Squared", ScaleAlgorithm.POWER),
+            ("Pow", ScaleAlgorithm.POWER),
+            ("Squared", ScaleAlgorithm.SQUARED),
             ("Asinh", ScaleAlgorithm.ASINH),
+            ("Sinh", ScaleAlgorithm.SINH),
             ("HistEq", ScaleAlgorithm.HISTOGRAM_EQUALIZATION),
         ]
         channel_settings: dict[str, dict[str, object]] = {}
-        for row, channel in enumerate(self.window.display.channel_names(), start=1):
-            settings_layout.addWidget(QLabel(channel.capitalize()), row, 0)
+        # The channels are stored as red, green and blue whatever the frame's
+        # colour space; an HSV frame's rows are hue, saturation and value.
+        for row, (channel, label) in enumerate(
+            zip(self.window.display.channel_names(), labels, strict=True), start=1
+        ):
+            settings_layout.addWidget(QLabel(label.capitalize()), row, 0)
 
             scale_combo = QComboBox(settings_group)
             for label, _scale in scale_choices:
@@ -1062,7 +1068,7 @@ class FrameController(Controller):
                     ):
                         combo.setCurrentIndex(item_index)
                         break
-            source_layout.addRow(channel.capitalize(), combo)
+            source_layout.addRow(dict(zip(self.window.display.channel_names(), labels, strict=True))[channel].capitalize(), combo)
             source_combos[channel] = combo
         layout.addWidget(source_group)
 
@@ -1276,14 +1282,14 @@ class FrameController(Controller):
             self.window.z2 = frame.z2
         self.window.color.sync()
         self.menu.action_invert_colormap.setChecked(self.window.invert_colormap)
-        self.menu.action_scale_linear.setChecked(self.window.current_scale == ScaleAlgorithm.LINEAR)
-        self.menu.action_scale_log.setChecked(self.window.current_scale == ScaleAlgorithm.LOG)
-        self.menu.action_scale_sqrt.setChecked(self.window.current_scale == ScaleAlgorithm.SQRT)
-        self.menu.action_scale_squared.setChecked(self.window.current_scale == ScaleAlgorithm.POWER)
-        self.menu.action_scale_asinh.setChecked(self.window.current_scale == ScaleAlgorithm.ASINH)
-        self.menu.action_scale_histeq.setChecked(
-            self.window.current_scale == ScaleAlgorithm.HISTOGRAM_EQUALIZATION
-        )
+        # Every Scale entry, from the scale controller's own table, so that
+        # Pow and Squared -- two different scales -- are never confused.
+        from .scale import SCALE_ACTIONS
+
+        for name, algorithm in SCALE_ACTIONS.items():
+            action = getattr(self.menu, f"action_scale_{name}", None)
+            if action is not None:
+                action.setChecked(self.window.current_scale == algorithm)
         cmap_name_map = {
             "grey": "Gray",
             "heat": "Heat",
