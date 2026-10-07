@@ -87,9 +87,22 @@ class XPAProtocol:
         try:
             text = data.decode(self.ENCODING).replace("\r\n", "\n").strip("\x00")
             return self._parse_text_request(text)
+        except UnicodeDecodeError:
+            pass
+        # `cat foo.fits | xpaset ds9 fits`: a text command line followed by
+        # binary data, which is handed on as bytes, untouched.
+        header, _newline, payload = data.partition(b"\n")
+        try:
+            request = self._parse_text_request(header.decode(self.ENCODING).strip("\x00"))
         except UnicodeDecodeError as e:
             self._logger.error(f"Failed to decode XPA request: {e}")
             return {"command": "", "params": {}, "error": "decode_error"}
+        if payload:
+            request.setdefault("params", {})["data"] = payload
+            request["data"] = payload
+            if request.get("msg_type") == XPAMessageType.GET.value:
+                request["msg_type"] = XPAMessageType.SET.value
+        return request
 
     def _parse_text_request(self, text: str) -> dict[str, Any]:
         """Parse a text XPA request.

@@ -223,6 +223,13 @@ class XPACommands:
 
         if point.set is None:
             return {"status": "error", "message": f"{point.name} cannot be set"}
+        data = params.get("data")
+        if data and point.name in ("regions", "region"):
+            # `echo "circle 100 100 20" | xpaset ds9 regions`: the regions
+            # arrive on standard input, in DS9's region syntax.
+            text = data.decode("utf-8", errors="replace") if isinstance(data, bytes) else str(data)
+            problem = access_points._region_command(self.viewer, text)
+            return {"status": "error", "message": problem} if problem else {"status": "ok"}
         problem = point.set(self.viewer, args)
         if problem:
             return {"status": "error", "message": problem}
@@ -438,6 +445,18 @@ class XPACommands:
             return {"status": "ok"}
         return {"status": "error", "message": "Invalid file command"}
 
+    def _load_piped_fits(self, data: bytes, verb: str) -> dict[str, Any]:
+        """`cat foo.fits | xpaset ds9 fits [new|slice|mask]`: the file on stdin.
+
+        Written to a temporary file and loaded from there, so every loader
+        -- cube, mask, new frame -- sees an ordinary path.
+        """
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(prefix="ncrads9-xpa-", suffix=".fits", delete=False) as handle:
+            handle.write(data if isinstance(data, bytes) else str(data).encode("latin-1"))
+        return self._handle_file({"args": [verb, handle.name]})
+
     def _handle_fits(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle FITS-specific commands.
 
@@ -447,6 +466,11 @@ class XPACommands:
         Returns:
             Response dictionary.
         """
+        data = params.get("data")
+        if data:
+            words = [str(word).lower() for word in self._args(params)]
+            verb = next((word for word in words if word in ("new", "slice", "mask")), "load")
+            return self._load_piped_fits(data, verb)
         params = dict(params)
         if "action" not in params:
             params["action"] = "load"

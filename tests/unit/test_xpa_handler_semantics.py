@@ -340,3 +340,37 @@ def test_frame_has_reads_the_header(xpa):
     assert _get(xpa, "frame has wcs wcsb") == "no"
     assert _get(xpa, "frame has system physical") == "yes"
     assert _get(xpa, "frame has system image") == "yes"
+
+
+# -- data on standard input ----------------------------------------------------
+
+
+def test_regions_piped_on_standard_input_are_added(window, xpa):
+    frame = window.frame_manager.current_frame
+    before = len(frame.regions)
+    reply = xpa.handle("regions", {"args": [], "data": "circle 10 10 5"})
+    assert reply["status"] == "ok", reply
+    assert len(frame.regions) == before + 1
+
+
+def test_a_fits_file_piped_on_standard_input_is_loaded(window, xpa):
+    import io
+
+    buffer = io.BytesIO()
+    fits.PrimaryHDU(data=np.ones((8, 9), dtype=np.float32)).writeto(buffer)
+    reply = xpa.handle("fits", {"args": [], "data": buffer.getvalue()})
+    assert reply["status"] == "ok", reply
+    assert window.frame_manager.current_frame.image_data.shape == (8, 9)
+
+
+def test_the_protocol_keeps_a_binary_payload_as_bytes():
+    import io
+
+    from ncrads9.communication.xpa.xpa_protocol import XPAProtocol
+
+    buffer = io.BytesIO()
+    fits.PrimaryHDU(data=np.arange(4, dtype=np.int16).reshape(2, 2) + 200).writeto(buffer)
+    payload = buffer.getvalue() + bytes([0xFF, 0xFE])
+    request = XPAProtocol().parse_request(b"xpaset ds9 fits\n" + payload)
+    assert request["command"] == "fits"
+    assert request["params"]["data"] == payload
