@@ -228,17 +228,17 @@ def test_ds9s_catalogue_does_not_yet_cover_a_dialog(qapp):
     labels, so it covers about a fifth of what a typical dialog says, and
     only the smallest ones (Scale) reach the threshold. This test is the record of that, and it will
     fail -- usefully -- when translations are written and one does."""
-    # Smoothing rather than Scale: the Scale dialog is now DS9's own --
-    # a plot, Low, High, Apply and Close -- and DS9's menu catalogue
-    # covers nearly all of so few labels.
-    from ncrads9.ui.dialogs.smooth_dialog import SmoothDialog
+    # The Coordinate Grid dialog rather than Scale or Smooth: those are now
+    # DS9's own, few-labelled windows, and DS9's menu catalogue covers
+    # nearly all of what they say. The grid dialog has fifty fields.
+    from ncrads9.ui.dialogs.grid_dialog import GridDialog
 
     french = catalogue.Catalogue.load("fr")
-    made = SmoothDialog()
+    made = GridDialog()
     translated, total = translation.coverage(made, french.translate)
     made.close()
     assert total > 10, "a dialog with labels to count"
     assert translated < translation.THRESHOLD * total, (
-        f"the French catalogue now covers {translated}/{total} of the Smooth dialog; "
+        f"the French catalogue now covers {translated}/{total} of the Grid dialog; "
         "if translations have been written, raise this and let the dialogs translate"
     )

@@ -15,208 +15,263 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
-Smoothing parameters dialog.
+DS9's Smooth Parameters window (`SmoothDialog`, `smooth.tcl`).
+
+A File menu (Apply, Clear, Close), the Function choice -- Boxcar, Tophat,
+Gaussian, Elliptical Gaussian, and NCRADS9's Median -- and the sliders that
+function takes: Radius for all, Sigma for the Gaussians, and the minor
+radius, minor sigma and angle for the elliptical one. Apply turns smoothing
+on with these settings; Clear turns it off, as DS9's do.
+
+It opens on the settings in force, not on defaults: reopening it used to
+show a Gaussian of sigma 2 whatever was on screen, so Apply undid what the
+user had chosen.
 
 Author: Yogesh Wadadekar
 """
 
+from __future__ import annotations
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QAction, QKeySequence
 from PyQt6.QtWidgets import (
+    QButtonGroup,
     QCheckBox,
-    QComboBox,
     QDialog,
-    QDoubleSpinBox,
-    QFormLayout,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
+    QMenuBar,
     QPushButton,
-    QSpinBox,
+    QRadioButton,
+    QSlider,
     QVBoxLayout,
+    QWidget,
 )
 
 from .modeless import make_modeless
 
+#: DS9's functions, by the label it gives them and the kernel name kept in
+#: the settings. Median is NCRADS9's.
+FUNCTIONS: tuple[tuple[str, str, bool], ...] = (
+    ("Boxcar", "Boxcar", False),
+    ("Tophat", "Tophat", False),
+    ("Gaussian", "Gaussian", False),
+    ("Elliptical Gaussian", "Gaussian", True),
+    ("Median", "Median", False),
+)
+
+#: DS9's defaults (`smooth.tcl`, `SmoothDef`).
+DEFAULTS: dict = {
+    "kernel_type": "Gaussian",
+    "elliptical": False,
+    "major_radius": 3,
+    "minor_radius": 3,
+    "sigma": 1.5,
+    "major_sigma": 1.5,
+    "minor_sigma": 1.5,
+    "position_angle": 0.0,
+    "preserve_nan": True,
+    "normalize": True,
+}
+
+
+class _Slider(QWidget):
+    """DS9's `slider`: a label, a scale and an entry."""
+
+    def __init__(self, label: str, low: float, high: float, integer: bool, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._low, self._high, self._integer = low, high, integer
+        self._steps = int(high - low) if integer else 1000
+        layout = QGridLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.title = QLabel(label)
+        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider.setRange(0, self._steps)
+        self.entry = QLineEdit()
+        self.entry.setFixedWidth(70)
+        layout.addWidget(self.title, 0, 0)
+        layout.addWidget(self.slider, 0, 1)
+        layout.addWidget(self.entry, 0, 2)
+        #: The value itself; the slider holds only the nearest step of it.
+        self._value = float(low)
+        self.slider.valueChanged.connect(self._from_slider)
+        self.entry.editingFinished.connect(self._from_entry)
+
+    def _text(self, value: float) -> str:
+        return str(int(round(value))) if self._integer else f"{value:.4g}"
+
+    def _from_slider(self, step: int) -> None:
+        value = self._low + (self._high - self._low) * step / self._steps
+        self._value = float(round(value)) if self._integer else value
+        self.entry.setText(self._text(self._value))
+
+    def value(self) -> float:
+        return self._value
+
+    def set_value(self, value: float) -> None:
+        value = min(max(float(value), self._low), self._high)
+        self._value = float(round(value)) if self._integer else value
+        self.slider.blockSignals(True)
+        self.slider.setValue(round((value - self._low) / (self._high - self._low) * self._steps))
+        self.slider.blockSignals(False)
+        self.entry.setText(self._text(value))
+
+    def _from_entry(self) -> None:
+        try:
+            self.set_value(float(self.entry.text()))
+        except ValueError:
+            self.entry.setText(self._text(self.value()))
+
 
 class SmoothDialog(QDialog):
-    """Dialog for configuring image smoothing parameters."""
+    """The Smooth Parameters window.
 
+    Args:
+        parent: The main window, or nothing.
+        settings: The smoothing in force, to open on.
+    """
+
+    #: Apply: the settings to smooth with.
     smoothing_changed = pyqtSignal(dict)
+    #: Clear: turn smoothing off.
+    smoothing_cleared = pyqtSignal()
 
-    def __init__(self, parent: QDialog | None = None) -> None:
-        """Initialize the smooth dialog.
-
-        Args:
-            parent: Parent widget.
-        """
+    def __init__(self, parent: QWidget | None = None, settings: dict | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Smoothing Parameters")
+        self.setWindowTitle("Smooth Parameters")
         # A parameters window: read and adjusted while looking at the
         # image behind it, so it must not block or cover what it changes.
         make_modeless(self)
-        self.setMinimumWidth(350)
+        self.setMinimumWidth(380)
         self._setup_ui()
+        self.set_settings(settings or getattr(parent, "_smooth_settings", None) or {})
 
     def _setup_ui(self) -> None:
-        """Set up the dialog UI."""
         layout = QVBoxLayout(self)
+        layout.setMenuBar(self._build_menus())
 
-        # Kernel settings
-        kernel_group = QGroupBox("Kernel")
-        kernel_layout = QFormLayout(kernel_group)
+        function_group = QGroupBox("Function")
+        function_layout = QHBoxLayout(function_group)
+        self._functions = QButtonGroup(self)
+        self._function_buttons: list[QRadioButton] = []
+        for index, (label, _kernel, _elliptical) in enumerate(FUNCTIONS):
+            button = QRadioButton(label)
+            self._functions.addButton(button, index)
+            self._function_buttons.append(button)
+            function_layout.addWidget(button)
+        self._functions.idToggled.connect(lambda _id, on: on and self._enable())
+        layout.addWidget(function_group)
 
-        self._kernel_combo = QComboBox()
-        self._kernel_combo.addItems(["Gaussian", "Boxcar", "Tophat", "Median"])
-        self._kernel_combo.currentTextChanged.connect(self._on_kernel_changed)
-        kernel_layout.addRow("Type:", self._kernel_combo)
+        parameters = QGroupBox("Parameters")
+        parameters_layout = QVBoxLayout(parameters)
+        self.radius = _Slider("Radius", 1, 20, True)
+        self.radius_minor = _Slider("Radius Minor", 1, 20, True)
+        self.sigma = _Slider("Sigma", 1, 20, False)
+        self.sigma_minor = _Slider("Sigma Minor", 1, 20, False)
+        self.angle = _Slider("Angle", 0, 180, False)
+        for widget in (self.radius, self.radius_minor, self.sigma, self.sigma_minor, self.angle):
+            parameters_layout.addWidget(widget)
+        self._width_note = QLabel()
+        parameters_layout.addWidget(self._width_note)
+        self.radius.slider.valueChanged.connect(lambda _v: self._describe())
+        layout.addWidget(parameters)
 
-        self._sigma_spin = QDoubleSpinBox()
-        self._sigma_spin.setRange(0.1, 100.0)
-        self._sigma_spin.setValue(2.0)
-        self._sigma_spin.setDecimals(2)
-        self._sigma_spin.setSingleStep(0.5)
-        kernel_layout.addRow("Sigma (pixels):", self._sigma_spin)
+        self._preserve_nan = QCheckBox("Preserve NaN values")
+        layout.addWidget(self._preserve_nan)
 
-        self._kernel_size_spin = QDoubleSpinBox()
-        self._kernel_size_spin.setRange(1, 101)
-        self._kernel_size_spin.setValue(5)
-        self._kernel_size_spin.setSingleStep(2)
-        kernel_layout.addRow("Kernel size:", self._kernel_size_spin)
+        buttons = QHBoxLayout()
+        for label, slot in (("Apply", self.apply), ("Clear", self.clear), ("Close", self.close)):
+            button = QPushButton(label)
+            button.clicked.connect(lambda _checked=False, s=slot: s())
+            buttons.addWidget(button)
+        layout.addLayout(buttons)
 
-        layout.addWidget(kernel_group)
+    def _build_menus(self) -> QMenuBar:
+        bar = QMenuBar(self)
+        file_menu = bar.addMenu("&File")
+        for label, slot, key in (
+            ("Apply", self.apply, None),
+            ("Clear", self.clear, None),
+            (None, None, None),
+            ("Close", self.close, QKeySequence.StandardKey.Close),
+        ):
+            if label is None:
+                file_menu.addSeparator()
+                continue
+            action = QAction(label, self)
+            if key is not None:
+                action.setShortcut(QKeySequence(key))
+            action.triggered.connect(lambda _checked=False, s=slot: s())
+            file_menu.addAction(action)
+        return bar
 
-        # Elliptical kernel options
-        self._ellipse_group = QGroupBox("Elliptical Kernel")
-        ellipse_layout = QFormLayout(self._ellipse_group)
+    # -- state ---------------------------------------------------------------
 
-        self._elliptical_check = QCheckBox("Use elliptical kernel")
-        ellipse_layout.addRow("", self._elliptical_check)
+    def _function(self) -> tuple[str, str, bool]:
+        return FUNCTIONS[max(0, self._functions.checkedId())]
 
-        # DS9's own four controls (`smooth.tcl:124`): a radius and a sigma
-        # for each axis. The axis ratio below is kept for the settings
-        # already saved with it.
-        self._major_radius_spin = QSpinBox()
-        self._major_radius_spin.setRange(1, 20)
-        self._major_radius_spin.setValue(3)
-        ellipse_layout.addRow("Major radius:", self._major_radius_spin)
+    def _enable(self) -> None:
+        label, kernel, elliptical = self._function()
+        self.sigma.setEnabled(kernel == "Gaussian")
+        for widget in (self.radius_minor, self.sigma_minor, self.angle):
+            widget.setEnabled(elliptical)
+        self._describe()
 
-        self._minor_radius_spin = QSpinBox()
-        self._minor_radius_spin.setRange(1, 20)
-        self._minor_radius_spin.setValue(2)
-        ellipse_layout.addRow("Minor radius:", self._minor_radius_spin)
+    def _describe(self) -> None:
+        label, kernel, _elliptical = self._function()
+        width = 2 * int(self.radius.value()) + 1
+        name = "Width" if kernel in ("Boxcar", "Median") else "Diameter"
+        self._width_note.setText(f"{name}: 2*radius+1 = {width}")
 
-        self._major_sigma_spin = QDoubleSpinBox()
-        self._major_sigma_spin.setRange(0.1, 20.0)
-        self._major_sigma_spin.setValue(2.0)
-        ellipse_layout.addRow("Major sigma:", self._major_sigma_spin)
+    def set_settings(self, settings: dict) -> None:
+        """Show these settings; DS9's defaults fill what is missing."""
+        merged = {**DEFAULTS, **settings}
+        kernel = str(merged.get("kernel_type", "Gaussian")).capitalize()
+        elliptical = bool(merged.get("elliptical")) and kernel == "Gaussian"
+        index = next(
+            (i for i, (_l, k, e) in enumerate(FUNCTIONS) if k == kernel and e == elliptical),
+            2,
+        )
+        self._function_buttons[index].setChecked(True)
+        radius = merged.get("major_radius")
+        if radius is None or ("kernel_size" in settings and "major_radius" not in settings):
+            radius = max(1, (int(merged.get("kernel_size", 7)) - 1) // 2)
+        self.radius.set_value(radius)
+        self.radius_minor.set_value(merged.get("minor_radius", radius))
+        self.sigma.set_value(merged.get("major_sigma", merged.get("sigma", 1.5)) if elliptical else merged.get("sigma", 1.5))
+        self.sigma_minor.set_value(merged.get("minor_sigma", 1.5))
+        self.angle.set_value(merged.get("position_angle", 0.0))
+        self._preserve_nan.setChecked(bool(merged.get("preserve_nan", True)))
+        self._enable()
 
-        self._minor_sigma_spin = QDoubleSpinBox()
-        self._minor_sigma_spin.setRange(0.1, 20.0)
-        self._minor_sigma_spin.setValue(1.0)
-        ellipse_layout.addRow("Minor sigma:", self._minor_sigma_spin)
-
-        self._ratio_spin = QDoubleSpinBox()
-        self._ratio_spin.setRange(0.1, 10.0)
-        self._ratio_spin.setValue(1.0)
-        self._ratio_spin.setDecimals(2)
-        ellipse_layout.addRow("Axis ratio:", self._ratio_spin)
-
-        self._angle_spin = QDoubleSpinBox()
-        self._angle_spin.setRange(0.0, 180.0)
-        self._angle_spin.setValue(0.0)
-        self._angle_spin.setDecimals(1)
-        self._angle_spin.setSuffix(" deg")
-        ellipse_layout.addRow("Position angle:", self._angle_spin)
-
-        layout.addWidget(self._ellipse_group)
-
-        # Options
-        options_group = QGroupBox("Options")
-        options_layout = QFormLayout(options_group)
-
-        self._preserve_nan_check = QCheckBox("Preserve NaN values")
-        self._preserve_nan_check.setChecked(True)
-        options_layout.addRow("", self._preserve_nan_check)
-
-        self._normalize_check = QCheckBox("Normalize kernel")
-        self._normalize_check.setChecked(True)
-        options_layout.addRow("", self._normalize_check)
-
-        layout.addWidget(options_group)
-
-        # Info label
-        self._info_label = QLabel()
-        self._update_info()
-        layout.addWidget(self._info_label)
-
-        # Button row
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-
-        apply_btn = QPushButton("Apply")
-        apply_btn.clicked.connect(self._apply)
-        button_layout.addWidget(apply_btn)
-
-        ok_btn = QPushButton("OK")
-        ok_btn.clicked.connect(self._ok)
-        button_layout.addWidget(ok_btn)
-
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.clicked.connect(self.reject)
-        button_layout.addWidget(cancel_btn)
-
-        layout.addLayout(button_layout)
-
-    def _on_kernel_changed(self, kernel_type: str) -> None:
-        """Handle kernel type change.
-
-        Args:
-            kernel_type: Selected kernel type.
-        """
-        is_gaussian = kernel_type == "Gaussian"
-        self._sigma_spin.setEnabled(is_gaussian)
-        self._ellipse_group.setEnabled(is_gaussian)
-        self._update_info()
-
-    def _update_info(self) -> None:
-        """Update the info label."""
-        kernel = self._kernel_combo.currentText()
-        if kernel == "Gaussian":
-            self._info_label.setText("Gaussian smoothing with specified sigma.")
-        elif kernel == "Boxcar":
-            self._info_label.setText("Simple box average (mean filter).")
-        elif kernel == "Tophat":
-            self._info_label.setText("Circular tophat smoothing kernel.")
-        elif kernel == "Median":
-            self._info_label.setText("Median filter (good for noise reduction).")
-
-    def _get_settings(self) -> dict:
-        """Get current smoothing settings.
-
-        Returns:
-            Dictionary of smoothing settings.
-        """
+    def settings(self) -> dict:
+        """The settings shown, in the keys the smoothing code reads."""
+        _label, kernel, elliptical = self._function()
+        radius = int(self.radius.value())
         return {
-            "kernel_type": self._kernel_combo.currentText(),
-            "sigma": self._sigma_spin.value(),
-            "kernel_size": int(self._kernel_size_spin.value()),
-            "elliptical": self._elliptical_check.isChecked(),
-            "axis_ratio": self._ratio_spin.value(),
-            "major_radius": self._major_radius_spin.value(),
-            "minor_radius": self._minor_radius_spin.value(),
-            "major_sigma": self._major_sigma_spin.value(),
-            "minor_sigma": self._minor_sigma_spin.value(),
-            "position_angle": self._angle_spin.value(),
-            "preserve_nan": self._preserve_nan_check.isChecked(),
-            "normalize": self._normalize_check.isChecked(),
+            "kernel_type": kernel,
+            "elliptical": elliptical,
+            "kernel_size": 2 * radius + 1,
+            "major_radius": radius,
+            "minor_radius": int(self.radius_minor.value()),
+            "sigma": self.sigma.value(),
+            "major_sigma": self.sigma.value(),
+            "minor_sigma": self.sigma_minor.value(),
+            "position_angle": self.angle.value(),
+            "preserve_nan": self._preserve_nan.isChecked(),
+            "normalize": True,
         }
 
-    def _apply(self) -> None:
-        """Apply current settings."""
-        self.smoothing_changed.emit(self._get_settings())
+    # Kept for callers from before the rewrite.
+    _get_settings = settings
 
-    def _ok(self) -> None:
-        """Apply settings and close dialog."""
-        self._apply()
-        self.accept()
+    def apply(self) -> None:
+        """DS9's Apply: smooth with these settings."""
+        self.smoothing_changed.emit(self.settings())
+
+    def clear(self) -> None:
+        """DS9's Clear: smoothing off."""
+        self.smoothing_cleared.emit()

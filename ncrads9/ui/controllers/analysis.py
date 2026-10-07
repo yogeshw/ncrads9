@@ -256,8 +256,9 @@ class AnalysisController(Controller):
         if self.window.image_data is None:
             self.status("No image loaded", 2000)
             return
-        dialog = SmoothDialog(self.window)
+        dialog = SmoothDialog(self.window, settings=dict(self.window._smooth_settings or {}))
         dialog.smoothing_changed.connect(self.apply_smooth_settings)
+        dialog.smoothing_cleared.connect(lambda: self.set_smooth(False))
         # Modeless: the radius is judged by looking at the smoothed image.
         self.show_window(dialog)
 
@@ -341,7 +342,11 @@ class AnalysisController(Controller):
                     angle=float(settings.get("position_angle", 0.0)),
                 )
             else:
-                smoothed = gaussian_smooth(working, sigma)
+                # DS9 cuts its Gaussian off at the radius; by default the
+                # kernel reaches four sigma, whatever the radius says.
+                radius = settings.get("major_radius")
+                truncate = float(radius) / max(sigma, 1e-6) if radius else 4.0
+                smoothed = gaussian_smooth(working, sigma, truncate=truncate)
         elif kernel == "boxcar":
             smoothed = boxcar_smooth(working, int(settings.get("kernel_size", 5)))
         elif kernel == "tophat":
