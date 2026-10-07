@@ -744,3 +744,27 @@ def test_the_image_is_not_stretched_to_the_viewport(qapp, tmp_path, monkeypatch)
     # A square image stays square whatever shape the viewport is.
     assert pixmap.width() == pixmap.height()
     window.close()
+
+
+# -- DS9's Reset and Clear on the grid dialog ----------------------------------
+
+
+def test_the_grid_dialogs_reset_and_clear(qapp):
+    from ncrads9.grid.grid_config import GridConfig
+    from ncrads9.ui.dialogs.grid_dialog import GridDialog
+
+    config = GridConfig()
+    config.visible = True
+    config.grid_type = next(choice for choice in type(config.grid_type) if choice is not config.grid_type)
+    dialog = GridDialog(config)
+    seen = []
+    dialog.grid_changed.connect(seen.append)
+
+    dialog.clear()
+    assert seen[-1].visible is False
+    assert seen[-1].grid_type == config.grid_type, "Clear keeps the settings"
+
+    dialog.reset()
+    assert seen[-1].visible is True
+    assert seen[-1].grid_type == GridConfig().grid_type, "Reset restores the defaults"
+    dialog.replacement.close()

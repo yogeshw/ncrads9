@@ -23,11 +23,15 @@ Author: Yogesh Wadadekar
 
 import numpy as np
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QAction, QKeySequence
 from PyQt6.QtWidgets import (
+    QApplication,
     QComboBox,
     QDialog,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
+    QMenuBar,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -109,6 +113,7 @@ class PixelTableDialog(QDialog):
     def _setup_ui(self) -> None:
         """Set up the user interface."""
         layout = QVBoxLayout()
+        layout.setMenuBar(self._build_menus())
 
         # Title
         self._title = QLabel()
@@ -146,6 +151,63 @@ class PixelTableDialog(QDialog):
 
         layout.addLayout(button_layout)
         self.setLayout(layout)
+
+    def _build_menus(self) -> QMenuBar:
+        """DS9's File (Save, Close), Edit (Copy) and Size menus (`pixel.tcl`)."""
+        bar = QMenuBar(self)
+        file_menu = bar.addMenu("&File")
+        save = QAction("&Save...", self)
+        save.setShortcut(QKeySequence(QKeySequence.StandardKey.Save))
+        save.triggered.connect(lambda _checked=False: self.save())
+        file_menu.addAction(save)
+        file_menu.addSeparator()
+        close = QAction("&Close", self)
+        close.setShortcut(QKeySequence(QKeySequence.StandardKey.Close))
+        close.triggered.connect(self.close)
+        file_menu.addAction(close)
+
+        edit_menu = bar.addMenu("&Edit")
+        copy = QAction("&Copy", self)
+        copy.setShortcut(QKeySequence(QKeySequence.StandardKey.Copy))
+        copy.triggered.connect(self.copy)
+        edit_menu.addAction(copy)
+
+        size_menu = bar.addMenu("Si&ze")
+        for size in TABLE_SIZES:
+            action = QAction(f"{size}x{size}", self)
+            action.triggered.connect(lambda _checked=False, n=size: self._size_combo.setCurrentText(f"{n}x{n}"))
+            size_menu.addAction(action)
+        return bar
+
+    def table_text(self) -> str:
+        """The table as text: a header row of x, then each row with its y.
+
+        Rows run top to bottom as on screen, the layout DS9 saves.
+        """
+        columns = [self.table.horizontalHeaderItem(c).text() for c in range(self.table.columnCount())]
+        lines = ["\t".join(["", *columns])]
+        for row in range(self.table.rowCount()):
+            header = self.table.verticalHeaderItem(row)
+            cells = [
+                (self.table.item(row, column).text() if self.table.item(row, column) else "")
+                for column in range(self.table.columnCount())
+            ]
+            lines.append("\t".join([header.text() if header else "", *cells]))
+        return "\n".join(lines) + "\n"
+
+    def save(self, path: str | None = None) -> bool:
+        """Write the table to a text file, asking where when not told."""
+        if path is None:
+            path, _ = QFileDialog.getSaveFileName(self, "Save Pixel Table", "", "Text Files (*.txt);;All Files (*)")
+            if not path:
+                return False
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(self.table_text())
+        return True
+
+    def copy(self) -> None:
+        """Put the table on the clipboard."""
+        QApplication.clipboard().setText(self.table_text())
 
     def _on_size_changed(self, label: str) -> None:
         """Switch to another of DS9's table sizes."""

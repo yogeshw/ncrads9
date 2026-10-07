@@ -130,6 +130,11 @@ class GridDialog(QDialog):
         buttons.button(QDialogButtonBox.StandardButton.Open).clicked.connect(self.load)
         buttons.button(QDialogButtonBox.StandardButton.Save).setText("Save...")
         buttons.button(QDialogButtonBox.StandardButton.Save).clicked.connect(self.save)
+        # DS9's Reset (back to the defaults) and Clear (grid off).
+        reset = buttons.addButton("Reset", QDialogButtonBox.ButtonRole.ResetRole)
+        reset.clicked.connect(self.reset)
+        clear = buttons.addButton("Clear", QDialogButtonBox.ButtonRole.ActionRole)
+        clear.clicked.connect(self.clear)
         layout.addWidget(buttons)
 
     # -- tabs ----------------------------------------------------------------
@@ -362,12 +367,33 @@ class GridDialog(QDialog):
             QMessageBox.warning(self, "Load Grid", str(exc))
             return
 
-        replacement = GridDialog(loaded, self.parentWidget())
+        self._replace(loaded)
+        self.status_path = Path(path)
+
+    def reset(self) -> None:
+        """DS9's Reset: every setting back to its default, the grid still shown."""
+        defaults = GridConfig()
+        defaults.visible = True
+        self._replace(defaults)
+
+    def clear(self) -> None:
+        """DS9's Clear: take the grid off, keeping the settings."""
+        self._show.setChecked(False)
+        self.apply()
+
+    def _replace(self, config: GridConfig) -> GridDialog:
+        """Show `config` in a fresh dialog and apply it.
+
+        Rebuilt rather than updated field by field: there are fifty
+        fields, and one missed would silently keep an old value.
+        """
+        replacement = GridDialog(config, self.parentWidget())
         replacement.grid_changed.connect(self.grid_changed.emit)
         self.accept()
         replacement.show()
-        self.grid_changed.emit(loaded.copy())
-        self.status_path = Path(path)
+        self.grid_changed.emit(config.copy())
+        self.replacement = replacement
+        return replacement
 
 
 def _hint(text: str) -> QWidget:
