@@ -163,6 +163,12 @@ class ImageViewer(QLabel):
             self._scaled_cache_key = scaled_key
 
         self.setPixmap(self._scaled_pixmap)
+        # The label sits in a layout inside a resizable scroll area, so a
+        # bare `resize` is undone at the next layout pass and the scroll
+        # area never learns the image is bigger than the window: zoomed in,
+        # it could not be scrolled or panned at all. A minimum size is what
+        # the layout and the scroll area both honour.
+        self.setMinimumSize(scaled_size.expandedTo(QSize(100, 100)))
         self.resize(scaled_size)
 
     def zoom_in(self) -> None:

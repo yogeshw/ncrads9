@@ -374,3 +374,32 @@ def test_the_protocol_keeps_a_binary_payload_as_bytes():
     request = XPAProtocol().parse_request(b"xpaset ds9 fits\n" + payload)
     assert request["command"] == "fits"
     assert request["params"]["data"] == payload
+
+
+# -- rotation changes the renderer, not the view -------------------------------
+
+
+def test_rotating_keeps_the_zoom_and_the_pan(window, xpa, qapp):
+    window.show()
+    window.zoom.set_zoom(32)
+    _set(xpa, "pan to 20 25 image")
+    window.zoom.set_rotation(90)
+    for _ in range(3):
+        qapp.processEvents()
+    assert float(_get(xpa, "zoom")) == pytest.approx(32)
+    assert [float(v) for v in _get(xpa, "pan").split()] == pytest.approx([20, 25], abs=0.6)
+    window.zoom.set_rotation(0)
+    for _ in range(3):
+        qapp.processEvents()
+    assert window.using_gpu_rendering, "an upright frame goes back to the GPU viewer"
+    assert float(_get(xpa, "zoom")) == pytest.approx(32)
+
+
+def test_the_cpu_viewer_scrolls_when_zoomed_past_the_window(window, qapp):
+    window.show()
+    window._rebuild_image_viewer(False)
+    window.zoom.set_zoom(32)
+    for _ in range(3):
+        qapp.processEvents()
+    assert window.scroll_area.horizontalScrollBar().maximum() > 0
+    assert window.scroll_area.verticalScrollBar().maximum() > 0

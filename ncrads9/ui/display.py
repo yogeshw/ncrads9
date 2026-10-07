@@ -48,7 +48,7 @@ from dataclasses import replace
 
 import numpy as np
 from numpy.typing import NDArray
-from PyQt6.QtCore import QPoint
+from PyQt6.QtCore import QPoint, QTimer
 from PyQt6.QtGui import QColor, QImage, QPixmap
 
 from ..colormaps.colormap import Colormap
@@ -582,17 +582,44 @@ class DisplayPipeline:
         return np.ascontiguousarray(data[y : y + h, x : x + w])
 
     def apply_view_transform(self, frame: Frame) -> None:
-        """Apply per-frame orientation/rotation to the active viewer."""
-        if self.window.using_gpu_rendering and (
-            not np.isclose(frame.rotation, 0.0) or frame.flip_x or frame.flip_y
-        ):
-            self.window._rebuild_image_viewer(False)
-            self.status(
-                "Switched to CPU rendering for rotated/flipped display",
-                2500,
-            )
+        """Apply per-frame orientation/rotation to the active viewer.
+
+        The GPU viewer draws the image upright only, so a rotated or flipped
+        frame is drawn by the CPU viewer, and an upright one goes back to
+        the GPU if that is where it came from. Changing viewer replaces the
+        widget, so the zoom and the pan are carried across: rotating used to
+        drop the frame back to zoom 1, centred.
+        """
+        transformed = not np.isclose(frame.rotation, 0.0) or frame.flip_x or frame.flip_y
+        if self.window.using_gpu_rendering and transformed:
+            self._switch_viewer(frame, use_gpu=False)
+            self.window._gpu_suspended = True
+            self.status("Switched to CPU rendering for rotated/flipped display", 2500)
+        elif not transformed and getattr(self.window, "_gpu_suspended", False):
+            self.window._gpu_suspended = False
+            self._switch_viewer(frame, use_gpu=True)
         if hasattr(self.viewer, "set_view_transform"):
             self.viewer.set_view_transform(frame.rotation, frame.flip_x, frame.flip_y)
+
+    def _switch_viewer(self, frame: Frame, use_gpu: bool) -> None:
+        """Change rendering backend, keeping the zoom and the pan."""
+        zoom = self.viewer.get_zoom() if hasattr(self.viewer, "get_zoom") else frame.zoom
+        self.window.frame_controller.persist_view_state()
+        pan = (frame.pan_x, frame.pan_y)
+        self.window._rebuild_image_viewer(use_gpu)
+        self.viewer.zoom_to(zoom)
+        frame.zoom = zoom
+        frame.pan_x, frame.pan_y = pan
+        if self.window.using_gpu_rendering and hasattr(self.viewer, "set_pan"):
+            self.viewer.set_pan(*pan)
+        else:
+            # The new scroll area has no range until it is laid out, which
+            # happens on the next turn of the event loop.
+            def restore() -> None:
+                self.window.zoom._scroll_to_image_point(*pan)
+                self.window.frame_controller.persist_view_state()
+
+            QTimer.singleShot(0, restore)
 
     def cpu_pan_center(self) -> tuple[float, float] | None:
         """Return the current CPU-view center in source image coordinates."""
