@@ -335,14 +335,21 @@ class ContourOverlay(OverlayTransformMixin, QWidget):
         metrics = painter.fontMetrics()
 
         box = self._image_edges(geometry)
-        clearance = metrics.height() + 2.0 * NUMBER_MARGIN
-
-        self._paint_one_axis_title(
-            painter, geometry.x_title, geometry.x_title_position, box, clearance, metrics
-        )
-        self._paint_one_axis_title(
-            painter, geometry.y_title, geometry.y_title_position, box, clearance, metrics
-        )
+        for text, position in (
+            (geometry.x_title, geometry.x_title_position),
+            (geometry.y_title, geometry.y_title_position),
+        ):
+            clearance = metrics.height() + 2.0 * NUMBER_MARGIN
+            if position in (LabelPosition.LEFT, LabelPosition.RIGHT):
+                # The numbers up a side are written across it, so what the
+                # title has to clear is their *width*: clearing one line's
+                # height put it on top of "47:16:00.0".
+                widest = max(
+                    (metrics.horizontalAdvance(label.text) for label in geometry.labels if label.position is position),
+                    default=0,
+                )
+                clearance = max(clearance, widest + 2.0 * NUMBER_MARGIN + metrics.height() / 2.0)
+            self._paint_one_axis_title(painter, text, position, box, clearance, metrics)
 
     def _paint_one_axis_title(self, painter, text, position, box, clearance, metrics) -> None:
         """Draw one axis title in its own lane outside one edge of the box."""

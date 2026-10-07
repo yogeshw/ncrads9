@@ -332,7 +332,8 @@ class InfoPanel(QWidget):
         # DS9 writes the angle's label *after* its value in the horizontal
         # layout and before it in the narrow one; the same two widgets serve.
         head = self._value("frame", width=8)
-        zoom_label, angle_label = self._title("Zoom"), self._title("Angle")
+        # DS9 titles the angle with a degree sign after it (`info.tcl`).
+        zoom_label, angle_label = self._title("Zoom"), self._title("\u00b0")
         zoom, angle = self._value("zoom"), self._value("angle")
         self._add_row(
             "frame",
