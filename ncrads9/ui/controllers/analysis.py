@@ -51,7 +51,6 @@ from PyQt6.QtWidgets import (
     QDialog,
     QFileDialog,
     QHBoxLayout,
-    QInputDialog,
     QPushButton,
     QVBoxLayout,
 )
@@ -511,26 +510,10 @@ class AnalysisController(Controller):
         self.status("Mask cleared")
 
     def show_graph_dialog(self) -> None:
-        """Show graph panel visibility controls."""
-        current = "None"
-        if self.window.horizontal_graph.isVisible() and self.window.vertical_graph.isVisible():
-            current = "Both"
-        elif self.window.horizontal_graph.isVisible():
-            current = "Horizontal"
-        elif self.window.vertical_graph.isVisible():
-            current = "Vertical"
-        mode, ok = QInputDialog.getItem(
-            self,
-            "Graph Parameters",
-            "Visible graph panels:",
-            ["None", "Horizontal", "Vertical", "Both"],
-            ["None", "Horizontal", "Vertical", "Both"].index(current),
-            False,
-        )
-        if not ok:
-            return
-        self.set_graph_visibility(mode)
-        self.status(f"Graph panels: {mode}", 2000)
+        """Show DS9's Graph Parameters window, modeless."""
+        from ..dialogs.graph_dialog import GraphDialog
+
+        self.show_window(GraphDialog(self.window))
 
     def set_graph_visibility(self, mode: str) -> None:
         """Set visibility for horizontal/vertical graph docks."""

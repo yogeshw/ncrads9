@@ -3240,7 +3240,7 @@ def _graph_text(window) -> str:
 def _graph(window, args: list[str]) -> str | None:
     """DS9's `graph`: the horizontal and vertical cut graphs.
 
-    `[grid yes|no] [log yes|no] [method average|sum] [size <n>]
+    `[grid yes|no] [log yes|no] [method average|sum|median] [size <n>]
     [thickness <n>] [open|close]`, plus the `horizontal|vertical|both|none`
     our View menu offers, which DS9 spells `view graph`.
     """
@@ -3270,8 +3270,8 @@ def _graph(window, args: list[str]) -> str | None:
         return None
 
     if first == "method":
-        if not rest or rest[0].lower() not in ("average", "sum"):
-            return "method takes average or sum"
+        if not rest or rest[0].lower() not in ("average", "sum", "median"):
+            return "method takes average, sum or median"
         for graph in graphs:
             graph.set_method(rest[0].lower())
         return None

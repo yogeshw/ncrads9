@@ -195,10 +195,12 @@ def test_both_panels_take_ds9s_settings(panels):
         assert panel._graph_widget.settings is panel.settings
 
 
-def test_a_method_that_is_neither_is_refused(panels):
+def test_a_method_that_is_none_of_ds9s_is_refused(panels):
+    # DS9's three are average, sum and median.
     for panel in panels:
-        with pytest.raises(ValueError, match="averaged or summed"):
-            panel.set_method("median")
+        panel.set_method("median")
+        with pytest.raises(ValueError, match="averaged, summed or the median"):
+            panel.set_method("mode")
 
 
 def test_the_size_sets_the_across_the_cut_dimension(panels):
