@@ -532,8 +532,7 @@ class MainWindow(QMainWindow):
             self.status_bar.update_pixel_value(value)
 
         # Update WCS coordinates if available
-        if self.wcs_handler and self.wcs_handler.is_valid:
-            self.wcs.update_readout(x, y)
+        self.wcs.update_readout(x, y)
 
         # Update magnifier panel (DS9 style)
         if hasattr(self, "magnifier_panel"):

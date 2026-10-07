@@ -188,6 +188,56 @@ class WCSHandler:
         x, y = self._wcs.wcs_world2pix(longitude, latitude, 0)
         return x, y
 
+    # -- the same, through ICRS -------------------------------------------------
+
+    def _native_frame(self):
+        """The celestial frame this WCS declares, or None if it is ICRS-like.
+
+        FK5 counts as ICRS, as it always has in the readout: J2000 FK5 and
+        ICRS differ by tens of milliarcseconds, and converting on every
+        mouse move would cost far more than that is worth.
+        """
+        if not hasattr(self, "_native"):
+            self._native = None
+            try:
+                from astropy.wcs.utils import wcs_to_celestial_frame
+
+                frame = wcs_to_celestial_frame(self._wcs)
+                if frame.name not in ("icrs", "fk5"):
+                    self._native = frame
+            except Exception:
+                self._native = None
+        return self._native
+
+    def pixel_to_icrs(
+        self, x: float | NDArray, y: float | NDArray
+    ) -> tuple[float | NDArray, float | NDArray]:
+        """Pixel to ICRS (RA, Dec) in degrees, whatever frame the WCS is in.
+
+        `CoordinateContext` takes ICRS and converts to the sky frame on the
+        WCS menu, so anything that reports through it wants this rather
+        than `pixel_to_world`. The two only differ for a WCS that is not
+        equatorial -- a galactic alternate (`CTYPE1A = 'GLON-TAN'`), say,
+        which DS9's `WCS -> Multiple WCS` readily selects.
+        """
+        longitude, latitude = self.pixel_to_world(x, y)
+        native = self._native_frame()
+        if native is None:
+            return longitude, latitude
+        coord = SkyCoord(longitude * u.deg, latitude * u.deg, frame=native).icrs
+        return coord.ra.deg, coord.dec.deg
+
+    def icrs_to_pixel(
+        self, ra: float | NDArray, dec: float | NDArray
+    ) -> tuple[float | NDArray, float | NDArray]:
+        """The inverse of `pixel_to_icrs`."""
+        native = self._native_frame()
+        if native is None:
+            return self.world_to_pixel(ra, dec)
+        coord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg, frame="icrs").transform_to(native)
+        spherical = coord.spherical
+        return self.world_to_pixel(spherical.lon.deg, spherical.lat.deg)
+
     def get_pixel_scale(self) -> float | None:
         """Get the pixel scale in arcseconds per pixel.
 

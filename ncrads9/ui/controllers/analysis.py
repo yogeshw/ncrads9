@@ -348,9 +348,21 @@ class AnalysisController(Controller):
 
     def _grid_renderer_usable(self) -> bool:
         """Whether the current frame has a WCS to draw a grid through."""
-        frame = self.frame
-        handler = getattr(frame, "wcs_handler", None) if frame else None
+        handler = self._grid_wcs()
         return bool(handler is not None and getattr(handler, "is_valid", False))
+
+    def _grid_wcs(self):
+        """The WCS the grid is drawn through: the system on the WCS menu.
+
+        DS9's `UpdateWCS` sets the grid's system to the WCS menu's, so
+        choosing `WCS a` draws the graticule of the alternate description.
+        """
+        frame = self.frame
+        if frame is None:
+            return None
+        if hasattr(frame, "wcs_for"):
+            return frame.wcs_for(self.coords.wcs_key)
+        return getattr(frame, "wcs_handler", None)
 
     def refresh_grid(self) -> None:
         """Recompute the graticule and hand it to the overlay.
@@ -372,7 +384,7 @@ class AnalysisController(Controller):
         frame = self.frame
         data = getattr(frame, "image_data", None) if frame else None
         renderer = self._grid_renderer
-        renderer.wcs = getattr(frame, "wcs_handler", None) if frame else None
+        renderer.wcs = self._grid_wcs()
         renderer.config = self.grid_config
         # DS9 lays its grid out on the canvas, not on the image
         # (`tksao/frame/grid2d.C`), so the renderer has to be told how the

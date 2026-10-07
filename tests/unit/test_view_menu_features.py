@@ -363,7 +363,10 @@ def test_alternate_handlers_are_cached_per_frame(main_window):
     main_window.view.update_cursor(1, 1)
     first = main_window.view._alternate_handlers()
     main_window.view.update_cursor(2, 2)
-    assert main_window.view._alternate_handlers() is first
+    # The cache lives on the frame now (`Frame.wcs_for`): the same handlers
+    # come back from one mouse move to the next.
+    again = main_window.view._alternate_handlers()
+    assert first and all(again[key] is handler for key, handler in first.items())
 
 
 def test_alternate_wcs_reads_its_own_frame(main_window):

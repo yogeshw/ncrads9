@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 1045 (908 excluding separators)
+# entries: 1076 (937 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -858,14 +858,45 @@
 .vo.samp|command|Marker Shape
 .vo.samp|command|Marker Size
 # WCS
-.wcs|radiobutton|FK5
+.wcs|radiobutton|WCS
+.wcs|cascade|Multiple WCS
+.wcs.multiplewcs|radiobutton|WCS a
+.wcs.multiplewcs|radiobutton|WCS b
+.wcs.multiplewcs|radiobutton|WCS c
+.wcs.multiplewcs|radiobutton|WCS d
+.wcs.multiplewcs|radiobutton|WCS e
+.wcs.multiplewcs|radiobutton|WCS f
+.wcs.multiplewcs|radiobutton|WCS g
+.wcs.multiplewcs|radiobutton|WCS h
+.wcs.multiplewcs|radiobutton|WCS i
+.wcs.multiplewcs|radiobutton|WCS j
+.wcs.multiplewcs|radiobutton|WCS k
+.wcs.multiplewcs|radiobutton|WCS l
+.wcs.multiplewcs|radiobutton|WCS m
+.wcs.multiplewcs|radiobutton|WCS n
+.wcs.multiplewcs|radiobutton|WCS o
+.wcs.multiplewcs|radiobutton|WCS p
+.wcs.multiplewcs|radiobutton|WCS q
+.wcs.multiplewcs|radiobutton|WCS r
+.wcs.multiplewcs|radiobutton|WCS s
+.wcs.multiplewcs|radiobutton|WCS t
+.wcs.multiplewcs|radiobutton|WCS u
+.wcs.multiplewcs|radiobutton|WCS v
+.wcs.multiplewcs|radiobutton|WCS w
+.wcs.multiplewcs|radiobutton|WCS x
+.wcs.multiplewcs|radiobutton|WCS y
+.wcs.multiplewcs|radiobutton|WCS z
+.wcs|separator|---
 .wcs|radiobutton|FK4
+.wcs|radiobutton|FK5
 .wcs|radiobutton|ICRS
 .wcs|radiobutton|Galactic
 .wcs|radiobutton|Ecliptic
 .wcs|separator|---
-.wcs|checkbutton|Sexagesimal
-.wcs|checkbutton|Degrees
+.wcs|radiobutton|Degrees
+.wcs|radiobutton|Sexagesimal
+.wcs|separator|---
+.wcs|command|WCS Parameters
 .wcs|separator|---
 .wcs|checkbutton|Show Direction Arrows
 # Illustrate

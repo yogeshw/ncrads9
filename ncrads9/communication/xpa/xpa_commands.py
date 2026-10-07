@@ -1316,24 +1316,47 @@ class XPACommands:
         return done(f"colorbar has no {verb}")
 
     def _handle_wcs(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle WCS commands.
+        """`xpaset ds9 wcs ...`: DS9's whole `wcs` grammar.
 
-        Args:
-            params: Command parameters.
+        `[[system] wcs|wcsa..wcsz] [[sky] fk4|fk5|icrs|galactic|ecliptic]
+        [[skyformat] degrees|sexagesimal] [align yes|no] [reset]
+        [load <file>] [replace [<int>] [<file>]] [append [<int>] [<file>]]
+        [save [<int>] <file>] [open|close]`
 
-        Returns:
-            Response dictionary.
+        The grammar lives in `WCSController.command`, which the `-wcs`
+        command-line option runs too, so the two cannot read it differently.
+        `replace` and `append` with no file read what `xpaset` sent on its
+        standard input.
         """
         viewer_error = self._require_viewer()
         if viewer_error:
             return viewer_error
 
-        action = str(params.get("action", self._first_arg(params, "get"))).lower()
-        if action == "set":
-            system = str(params.get("system", self._first_arg(params, "fk5"))).lower()
-            self.viewer.wcs.set_sky_frame(system)
-            return {"status": "ok", "result": system}
-        return {"status": "ok", "result": self.viewer.coord_context.sky.value}
+        words = [str(word) for word in self._args(params)]
+        if not words and params.get("system"):
+            # The keyword form callers inside the application used to use.
+            words = [str(params["system"])]
+        data = params.get("data")
+        if isinstance(data, bytes):
+            data = data.decode("utf-8", errors="replace")
+        problem = self.viewer.wcs.command(words, data=data or None)
+        if problem:
+            return {"status": "error", "message": problem}
+        return {"status": "ok", "result": self.viewer.wcs.report([])}
+
+    def _read_wcs(self, args: list[str]) -> dict[str, Any]:
+        """`xpaget ds9 wcs [system|sky|skyformat|align]`.
+
+        A bare `wcs` answers with the system, as DS9's `wcssendparser.tac`
+        does: `wcs`, or `wcsa`..`wcsz`.
+        """
+        viewer_error = self._require_viewer()
+        if viewer_error:
+            return viewer_error
+        try:
+            return {"status": "ok", "result": self.viewer.wcs.report(args)}
+        except ValueError as exc:
+            return {"status": "error", "message": str(exc)}
 
     #: What `save` calls each of the `Save as` writers.
     _SAVE_WRITERS = {

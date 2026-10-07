@@ -36,6 +36,7 @@ from PyQt6.QtWidgets import QApplication
 from ncrads9 import __version__
 from ncrads9.communication.xpa import XPAServer
 from ncrads9.communication.xpa.xpa_commands import XPACommands
+from ncrads9.ui.controllers.wcs import command_length as wcs_command_length
 from ncrads9.ui.main_window import MainWindow
 from ncrads9.utils.config import Config
 from ncrads9.utils.logger import setup_logging
@@ -109,7 +110,10 @@ Frames:
   -red / -green / -blue F  load F into an RGB channel
 
 Coordinates:
-  -wcs SYSTEM              fk5 | fk4 | icrs | galactic | ecliptic
+  -wcs ARGS                DS9's wcs command: [system] wcs|wcsa..wcsz,
+                           [sky] fk5|fk4|icrs|galactic|ecliptic,
+                           [skyformat] degrees|sexagesimal, align yes|no,
+                           reset, load F, replace F, append F, save F
   -fk5 -fk4 -icrs          shorthands for the above
   -galactic -ecliptic
   -sexagesimal / -degrees  coordinate format
@@ -185,7 +189,7 @@ ncrads9 -frame rgb -zoom 2 -pan 1024 1024 image.fits</pre>
 
   <h2>WCS and binning</h2>
   <ul>
-    <li><code>-wcs fk5|fk4|icrs|galactic|ecliptic</code></li>
+    <li><code>-wcs [[system] wcs|wcsa..wcsz] [[sky] fk5|fk4|icrs|galactic|ecliptic] [[skyformat] degrees|sexagesimal] [align yes|no] [reset] [load file] [replace [n] file] [append [n] file] [save [n] file] [open|close]</code></li>
     <li><code>-fk5</code>, <code>-fk4</code>, <code>-icrs</code>, <code>-galactic</code>, <code>-ecliptic</code></li>
     <li><code>-sexagesimal</code>, <code>-degrees</code></li>
     <li><code>-bin N</code></li>
@@ -229,7 +233,6 @@ def parse_cli_sequence(args: Sequence[str]) -> list[CLIItem]:
         "red",
         "green",
         "blue",
-        "wcs",
         "bin",
         "cmap",
         "colormap",
@@ -276,6 +279,18 @@ def parse_cli_sequence(args: Sequence[str]) -> list[CLIItem]:
                         break
                     option_args.append(current)
                     i += 1
+            elif option == "wcs":
+                # DS9's `wcs` takes as many words as its grammar does --
+                # `-wcs sky galactic`, `-wcs replace 1 foo.wcs` -- and the
+                # file names after it are files, not more of the command.
+                candidates: list[str] = []
+                while i + len(candidates) < len(args) and not _is_option_token(
+                    str(args[i + len(candidates)])
+                ):
+                    candidates.append(str(args[i + len(candidates)]))
+                taken = wcs_command_length(candidates)
+                option_args.extend(candidates[:taken])
+                i += taken
             elif option in one_arg_options:
                 if i < len(args):
                     current = str(args[i])
@@ -416,8 +431,11 @@ def apply_startup_cli(main_window: MainWindow, argv: Sequence[str]) -> None:
         if option in {"sexagesimal", "degrees"}:
             main_window.wcs.set_format(option)
             continue
-        if option == "wcs" and args:
-            main_window.wcs.set_sky_frame(str(args[0]).lower())
+        if option == "wcs":
+            # The same grammar, and the same code, as `xpaset ds9 wcs`.
+            problem = main_window.wcs.command([str(word) for word in args])
+            if problem:
+                logger.warning("CLI option -wcs failed: %s", problem)
             continue
         if option == "bin" and args:
             try:

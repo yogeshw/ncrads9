@@ -447,9 +447,11 @@ and its own file format (`illustrate*.tcl`, 3,900 lines). NCRADS9 has no equival
 system (`wcs`, `wcsa`…`wcsz`, `image`, `physical`, `amplifier`, `detector`) ×
 sky (`fk4`, `fk5`, `icrs`, `galactic`, `ecliptic`) × format (`degrees`, `sexagesimal`).
 
-✅ fk4/fk5/icrs/galactic/ecliptic · ✅ degrees/sexagesimal · ○ Multiple WCS (a–z) ·
-○ image/physical/amplifier/detector as display systems · ○ WCS Parameters dialog (edit/replace
-WCS, reset, load/save WCS from file) · ✅ direction arrows *(modern addition, keep)*
+✅ fk4/fk5/icrs/galactic/ecliptic · ✅ degrees/sexagesimal · ✅ Multiple WCS (a–z; the
+readouts, grid, compass and crosshair report follow the selected system) ·
+○ image/physical/amplifier/detector as display systems (not on DS9's main WCS menu either) ·
+✅ WCS Parameters dialog (edit/replace WCS, reset, load/save `.wcs` files) · ✅ XPA/CLI `wcs`
+full grammar · ✅ direction arrows *(modern addition, keep)*
 
 ### 5.12 Analysis menu
 
@@ -603,6 +605,8 @@ Kept as modern-UX improvements; documented so they are not mistaken for gaps:
 - **Direction arrows over the image** in the WCS menu — not in DS9. As of M3 the N/E compass is
   drawn in the panner, which is where DS9 puts it; this toggle additionally draws it over the
   data, and now defaults off.
+- **`WCS → Multiple WCS` greys the letters the current image lacks**; DS9 leaves all 26 live.
+  And `xpaset ds9 wcs galactic degrees` runs every word, where DS9's parser takes one.
 - **`View → Fullscreen` and `Show Status Bar`** — not in DS9's View menu. DS9's `Icons` toggle
   and our `Show Toolbar` are the same action rather than two entries that could disagree.
 - **`Color → Show Colorbar`** — DS9 keeps colorbar visibility in View only. Ours appears in both

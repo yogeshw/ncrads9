@@ -83,6 +83,36 @@ _LABEL_COMPOSITE_REV_RE = re.compile(r"-label\s+\"([^\"\[]*?)\s*\[msgcat::mc\s+\
 
 _CONTINUATION_RE = re.compile(r"\\\n\s*")
 
+#: ``CoordMenu $ds9(mb).wcs wcs system 0 sky skyformat UpdateWCS`` -- a call
+#: to the helper in ``menu.tcl`` that builds a whole coordinate menu.
+_COORD_MENU_RE = re.compile(
+    r"^CoordMenu\s+\$ds9\(mb\)(?P<path>[a-zA-Z0-9._]*)\s+\S+\s+\S+\s+"
+    r"(?P<other>\d)\s+(?P<sky>\{\}|\S+)\s+(?P<format>\{\}|\S+)"
+)
+
+
+def _coord_menu(path: str, other: str, sky: str, skyformat: str) -> list[str]:
+    """The entries DS9's ``CoordMenu`` helper adds, as ``path|kind|label``.
+
+    A transcription of ``proc CoordMenu`` in ``menu.tcl``: the helper builds
+    its entries in loops and from its arguments, so there is no literal
+    ``add`` line for the regexes above to find. It is how DS9's whole WCS
+    menu is made, which this extract used to report as one entry.
+    """
+    lines = [f"{path}|radiobutton|WCS", f"{path}|cascade|Multiple WCS"]
+    lines += [f"{path}.wcs|radiobutton|WCS {letter}" for letter in "abcdefghijklmnopqrstuvwxyz"]
+    if other in ("1", "2"):
+        lines.append(f"{path}|separator|---")
+        systems = ("Image", "Physical", "Amplifier", "Detector") if other == "1" else ("Image",)
+        lines += [f"{path}|radiobutton|{label}" for label in systems]
+    if sky != "{}":
+        lines.append(f"{path}|separator|---")
+        lines += [f"{path}|radiobutton|{label}" for label in ("FK4", "FK5", "ICRS", "Galactic", "Ecliptic")]
+    if skyformat != "{}":
+        lines.append(f"{path}|separator|---")
+        lines += [f"{path}|radiobutton|{label}" for label in ("Degrees", "Sexagesimal")]
+    return lines
+
 
 def _label_for(rest: str, kind: str) -> str:
     """Extract the user-visible label from the tail of an ``add`` call."""
@@ -122,6 +152,17 @@ def extract(ds9_root: Path) -> list[str]:
         lines.append(f"# {stem}.tcl")
         text = _CONTINUATION_RE.sub(" ", source.read_text(errors="replace"))
         for raw in text.split("\n"):
+            coord = _COORD_MENU_RE.match(raw.strip())
+            if coord:
+                lines.extend(
+                    _coord_menu(
+                        coord.group("path") or ".",
+                        coord.group("other"),
+                        coord.group("sky"),
+                        coord.group("format"),
+                    )
+                )
+                continue
             match = _ENTRY_RE.search(raw.strip())
             if not match:
                 continue
@@ -161,11 +202,9 @@ def main(argv: list[str] | None = None) -> int:
             "#",
             "# Known limitation: DS9 builds some menus at runtime rather than",
             "# declaring them literally, so those entries appear as <dynamic> or",
-            "# not at all. The largest case is the WCS menu, assembled by",
-            "# CoordMenu (menu.tcl) from system x sky x format -- roughly 40",
-            "# entries that this static extract cannot see. Treat the .wcs row of",
-            "# tools/menu_diff.py as unreliable; PLAN.md section 5.11 has the real",
-            "# comparison.",
+            "# not at all. The WCS menu, assembled by CoordMenu (menu.tcl) from",
+            "# system x sky x format, is expanded by a transcription of that",
+            "# helper; the rest are loops over lists (colormaps, frames).",
             "",
             *lines,
             "",

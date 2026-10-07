@@ -1905,7 +1905,9 @@ def _image_server(window, server: str, args: list[str]) -> str | None:
 def _crosshair_world(window) -> tuple[float, float] | None:
     """Where the crosshair is in degrees, or None if it is nowhere useful."""
     placed = window.crosshair.position()
-    handler = getattr(window.frame_manager.current_frame, "wcs_handler", None)
+    # Through the system on the WCS menu, `wcs` or `wcsa`..`wcsz`, as DS9
+    # reports a coordinate in whichever the user selected.
+    handler = getattr(getattr(window, "wcs", None), "handler", None)
     if placed is None or handler is None or not getattr(handler, "is_valid", False):
         return None
     longitude, latitude = handler.pixel_to_world(placed[0], placed[1])
