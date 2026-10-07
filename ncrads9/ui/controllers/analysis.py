@@ -70,6 +70,7 @@ from ...analysis.smooth import (
     gaussian_smooth,
     tophat_smooth,
 )
+from ...catalogs import name_server
 from ...frames.frame import Frame
 from ...grid import GridConfig, GridRenderer
 from ..dialogs.contour_dialog import ContourDialog
@@ -77,6 +78,7 @@ from ..dialogs.grid_dialog import GridDialog
 from ..dialogs.histogram_dialog import HistogramDialog
 from ..dialogs.mask_dialog import MaskDialog
 from ..dialogs.modeless import make_modeless
+from ..dialogs.name_resolution_dialog import NameResolutionDialog
 from ..dialogs.pixel_table_dialog import PixelTableDialog
 from ..dialogs.plot_window import PlotWindow
 from ..dialogs.smooth_dialog import SmoothDialog
@@ -120,6 +122,15 @@ class AnalysisController(Controller):
         #: out where its lines go.
         #: The pixel table, while it is open. DS9's follows the cursor.
         self.pixel_table = None
+        #: The name server every lookup uses, DS9's `pnres(server)`.
+        self.name_server = name_server.DEFAULT_SERVER
+        #: How names are resolved: called with (name, server), returns a
+        #: SkyCoord. `None` is the real Sesame client; tests replace it.
+        self.name_resolver = None
+        #: The Name Resolution dialog, while it is open.
+        self._name_dialog: NameResolutionDialog | None = None
+        #: The last position resolved.
+        self._last_resolved: SkyCoord | None = None
         self.grid_config = GridConfig()
         self._grid_renderer = GridRenderer(config=self.grid_config)
 
@@ -510,69 +521,131 @@ class AnalysisController(Controller):
         # the pointer from here, which is not what DS9's crosshair does.
         self.window.crosshair.refresh()
 
+    # -- Name Resolution (nameres.tcl) ---------------------------------------
+
+    def resolve_coordinate(self, name: str, server: str | None = None) -> SkyCoord:
+        """Resolve one object name, through the chosen name server.
+
+        Every name lookup in the application comes here -- this menu, the
+        catalog tool's Name entry, the image servers' -- so `name_resolver`
+        is the one thing a test replaces to keep off the network.
+
+        Raises:
+            name_server.NameResolveError: If it cannot be resolved.
+        """
+        return name_server.resolve(name, server or self.name_server, resolver=self.name_resolver)
+
     def resolve_name(self, name: str) -> str | None:
         """Resolve one object name and pan to it, without asking for it.
 
         What the `nameserver` XPA point calls; `resolve_object_name` is the
-        menu entry that asks first and then comes here.
+        menu entry, which opens DS9's dialog.
 
         Returns:
             None if it worked, or what went wrong.
         """
         query = str(name).strip()
-        if not query:
-            return "an object name is needed"
         try:
-            coord = SkyCoord.from_name(query)
-        except Exception as exc:
+            coord = self.resolve_coordinate(query)
+        except name_server.NameResolveError as exc:
             self.status(f"Name resolution failed: {exc}", 3500)
-            return f"could not resolve {query}: {exc}"
+            return str(exc)
 
         self.window._last_resolved_name = query
-        handler = self.window.wcs_handler
-        if handler is None or not handler.is_valid:
+        self._last_resolved = coord
+        dialog = self._name_dialog
+        if dialog is not None:
+            dialog.set_object_name(query)
+            dialog.set_result(coord)
+        if not self.pan_to_sky(coord):
             self.status(f"{query}: {coord.to_string('hmsdms')} (no WCS to pan to)", 4000)
             return None
-        x, y = handler.world_to_pixel(coord.ra.deg, coord.dec.deg)
-        self.window.zoom.on_panner_pan(float(x), float(y))
-        self.status(f"{query}: panned to {x:.1f} {y:.1f}", 3000)
+        self.status(f"{query}: RA {coord.ra.deg:.6f} deg, Dec {coord.dec.deg:.6f} deg", 4000)
+        self.log_command(f"name {query}")
         return None
 
-    def resolve_object_name(self) -> None:
-        """Resolve an object name and pan to it if WCS is available."""
-        name, ok = QInputDialog.getText(self.window, "Name Resolution", "Object name:")
-        if not ok or not name.strip():
-            return
-        query = name.strip()
+    def resolve_object_name(self) -> NameResolutionDialog:
+        """DS9's Analysis -> Name Resolution: open its dialog, or raise it."""
+        dialog = self._name_dialog
+        if dialog is not None:
+            dialog.raise_()
+            dialog.activateWindow()
+            return dialog
+        dialog = NameResolutionDialog(self.name_server, self.window)
+        dialog.retrieve_requested.connect(lambda name, server, d=dialog: self._resolve_into(d, name, server))
+        dialog.command_requested.connect(lambda command, d=dialog: self._name_command(d, command))
+        dialog.finished.connect(lambda _result: setattr(self, "_name_dialog", None))
+        self._name_dialog = dialog
+        dialog.show()
+        return dialog
+
+    def _resolve_into(self, dialog: NameResolutionDialog, name: str, server: str) -> SkyCoord | None:
+        """Answer the dialog's Retrieve."""
+        # The dialog's choice of server is DS9's `pnres(server)`: global.
+        self.name_server = server
         try:
-            coord = SkyCoord.from_name(query)
-        except Exception as exc:
-            self.status(f"Name resolution failed: {exc}", 3500)
+            coord = self.resolve_coordinate(name, server)
+        except name_server.NameResolveError as exc:
+            dialog.set_result(None)
+            dialog.set_status(str(exc))
+            self.status(str(exc), 4000)
+            return None
+        self.window._last_resolved_name = name
+        self._last_resolved = coord
+        dialog.set_result(coord)
+        self.log_command(f"name {name}")
+        return coord
+
+    def _name_command(self, dialog: NameResolutionDialog, command: str) -> None:
+        """Pan To or Crosshair To the resolved position."""
+        if dialog.coord is None:
+            dialog.set_status("Retrieve a position first")
             return
+        done = self.pan_to_sky(dialog.coord) if command == "pan" else self.crosshair_to_sky(dialog.coord)
+        if not done:
+            dialog.set_status("This frame has no WCS to place that position on")
 
-        if self.window.wcs_handler and self.window.wcs_handler.is_valid:
-            try:
-                x, y = self.window.wcs_handler.world_to_pixel(coord.ra.deg, coord.dec.deg)
-                if self.window.using_gpu_rendering and hasattr(self.viewer, "set_pan"):
-                    self.viewer.set_pan(float(x), float(y))
-                    self.window.frame_controller.persist_view_state()
-                    self.window.zoom.update_panner_rect()
-                else:
-                    self.window.zoom.on_panner_pan(float(x), float(y))
-                self.status(
-                    f"{query}: RA {coord.ra.deg:.6f} deg, Dec {coord.dec.deg:.6f} deg",
-                    4000,
-                )
-                self.log_command(f"name {query}")
-                return
-            except Exception:
-                pass
+    def _sky_to_image(self, coord: SkyCoord) -> tuple[float, float] | None:
+        """Where a sky position falls on the current frame, or None."""
+        handler = self.window.wcs_handler
+        if handler is None or not handler.is_valid:
+            return None
+        try:
+            x, y = handler.world_to_pixel(coord.icrs.ra.deg, coord.icrs.dec.deg)
+        except Exception:
+            return None
+        return (float(x), float(y))
 
-        self.status(
-            f"{query}: RA {coord.ra.deg:.6f} deg, Dec {coord.dec.deg:.6f} deg",
-            4000,
-        )
-        self.log_command(f"name {query}")
+    def pan_to_sky(self, coord: SkyCoord) -> bool:
+        """Centre the image on a sky position, DS9's `PanTo`.
+
+        Returns:
+            Whether the frame had a WCS to do it with.
+        """
+        position = self._sky_to_image(coord)
+        if position is None:
+            return False
+        x, y = position
+        if self.window.using_gpu_rendering and hasattr(self.viewer, "set_pan"):
+            self.viewer.set_pan(x, y)
+            self.window.frame_controller.persist_view_state()
+            self.window.zoom.update_panner_rect()
+        else:
+            self.window.zoom.on_panner_pan(x, y)
+        return True
+
+    def crosshair_to_sky(self, coord: SkyCoord) -> bool:
+        """Put the crosshair on a sky position, in crosshair mode (`NRESCrosshair`).
+
+        Returns:
+            Whether the frame had a WCS to do it with.
+        """
+        position = self._sky_to_image(coord)
+        if position is None:
+            return False
+        self.window.edit.set_mode("crosshair")
+        self.window.crosshair.move_to(*position)
+        return True
 
     def set_command_log(self, checked: bool) -> None:
         """Toggle analysis command logging preference."""

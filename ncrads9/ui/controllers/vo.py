@@ -23,7 +23,7 @@ and NCRADS9 substitutes a `VO` menu where DS9 has `Illustrate`
 (PLAN.md §1, §7). M8 builds the real catalog and image-server subsystems and
 folds these entries back under Analysis where a DS9 user will look for them.
 
-What works today: a 2MASS SIAP image query, a VizieR catalog overlay, and a
+What works today: a 2MASS SIAP image query, VizieR through the catalog tool, and a
 SAMP client that can receive `table.load.votable` and `image.load.fits` and
 draw the result as markers. SAMP tables arrive on a worker thread, so they are
 handed to the GUI thread through the window's `samp_table_received` signal
@@ -45,7 +45,6 @@ from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QColorDialog, QDialog, QInputDialog
 
 from ...catalogs import vo_registry
-from ...catalogs.vizier import VizierCatalog
 from ...communication.samp import SAMPClient
 from ...frames.frame import Frame
 from ...image_servers.sia_client import SIAClient
@@ -88,8 +87,9 @@ class VOController(Controller):
         menu.action_samp_marker_shape.triggered.connect(self.choose_marker_shape)
         menu.action_samp_marker_size.triggered.connect(self.choose_marker_size)
 
-        # DS9 puts these under Analysis; both routes reach the same method.
-        menu.action_analysis_2mass.triggered.connect(self.query_2mass_image)
+        # Analysis -> Image Servers -> 2MASS is the image-server controller's;
+        # wiring it here as well opened a second, modal 2MASS query over the
+        # image server's own dialog.
         menu.action_vo_registry.triggered.connect(lambda _checked=False: self.show_registry())
 
         for name, action in menu.archive_actions.items():
@@ -99,8 +99,9 @@ class VOController(Controller):
             lambda _checked=False: self.window.catalog.query_footprints("fpcxc")
         )
         menu.action_analysis_vizier.triggered.connect(self.query_vizier_catalog)
-        menu.action_catalog_tool.triggered.connect(self.query_vizier_catalog)
-        menu.action_virtual_observatory.triggered.connect(self.query_vizier_catalog)
+        # Catalog Tool is the catalog controller's alone. Virtual Observatory
+        # is DS9's list of VO services, which the registry browser is.
+        menu.action_virtual_observatory.triggered.connect(lambda _checked=False: self.show_registry())
 
     def query_2mass_image(self) -> None:
         """Query 2MASS via SIAP and load image into new frame."""
@@ -250,38 +251,17 @@ class VOController(Controller):
             )
         )
 
-    def query_vizier_catalog(self) -> None:
-        """Query VizieR and overlay catalog sources."""
-        ra, dec = self.query_coordinates()
-        dialog = VOQueryDialog(self.window, ra, dec, radius_deg=0.05, title="VizieR Catalog Query")
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        ra, dec, radius = dialog.values()
+    def query_vizier_catalog(self):
+        """Open the catalog tool to query any VizieR catalogue.
 
-        catalog = VizierCatalog(catalog="II/246/out")
-        coord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg, frame="icrs")
-        table = catalog.query_region(coord, radius=radius * u.deg)
-        if table is None or len(table) == 0:
-            self.status("No VizieR sources found", 3000)
-            return
-        coords = catalog.get_coordinates(table)
-        if not coords:
-            self.status("Catalog has no usable coordinates", 3000)
-            return
-        if not self.window.wcs_handler or not self.window.wcs_handler.is_valid:
-            self.status("Current frame has no WCS for overlay", 3000)
-            return
-
-        for coord in coords:
-            pixel = self.window.region.world_to_pixel(coord.ra.deg, coord.dec.deg)
-            if pixel is None:
-                continue
-            x, y = pixel
-            region = Point(center=(x, y), origin="vizier_catalog")
-            self.window.region.on_created(region)
-            self.viewer.add_region(region)
-
-        self.status(f"Overlayed {len(coords)} catalog sources", 3000)
+        It used to query 2MASS point sources whatever was wanted. Now it is
+        the Catalog Tool with no catalogue chosen yet: pick one of DS9's, or
+        type a VizieR identifier, and Retrieve.
+        """
+        window = self.window.catalog.open_tool(None)
+        self.window.catalog.update_from_frame(window)
+        window.set_status("Choose a catalog, or type a VizieR identifier, and Retrieve")
+        return window
 
     def init_samp(self) -> None:
         """Initialize SAMP client and callbacks."""
