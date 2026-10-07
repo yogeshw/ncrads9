@@ -29,6 +29,7 @@ from ..catalogs.servers import SECTIONS as CATALOG_SECTIONS
 from ..catalogs.servers import in_section as catalogs_in_section
 from ..colormaps.bundled import CATEGORIES, colormap_label
 from ..core.bin_table import BUFFER_SIZES, DEFAULT_BUFFER_SIZE
+from ..image_servers.servers import SEPARATOR_AFTER as IMAGE_SERVER_SEPARATORS
 from ..image_servers.servers import SERVERS as IMAGE_SERVERS
 from ..regions.region_template import bundled_templates
 from .help_documents import BY_NAME as HELP_BY_NAME
@@ -2105,23 +2106,28 @@ class MenuBar(QMenuBar):
             action = QAction(f"{server.label}...", self)
             self.analysis_image_servers_menu.addAction(action)
             self.image_server_actions[server.name] = action
+            if server.name in IMAGE_SERVER_SEPARATORS:
+                self.analysis_image_servers_menu.addSeparator()
         # Kept as a name of its own: the VO menu and the XPA reach it.
         self.action_analysis_2mass: QAction = self.image_server_actions["twomass"]
+        # DS9's order (`manalysis.tcl`): Search for Catalogs, Clear All and
+        # Match, then the catalogues by wavelength. VizieR and Load Catalog
+        # are NCRADS9's and come after them.
         self.analysis_catalogs_menu: QMenu = self.analysis_menu.addMenu("&Catalogs")
-        self._fill_catalogs_menu(self.analysis_catalogs_menu)
-        # Kept as a name of its own: the VO menu and the XPA both reach it.
-        self.action_analysis_vizier: QAction = QAction("&VizieR...", self)
-        self.analysis_catalogs_menu.addSeparator()
-        self.analysis_catalogs_menu.addAction(self.action_analysis_vizier)
         self.action_catalog_search: QAction = QAction("&Search for Catalogs...", self)
         self.analysis_catalogs_menu.addAction(self.action_catalog_search)
+        self.action_catalog_clear_all: QAction = QAction("&Clear All", self)
+        self.analysis_catalogs_menu.addAction(self.action_catalog_clear_all)
+        self.action_catalog_match: QAction = QAction("&Match...", self)
+        self.analysis_catalogs_menu.addAction(self.action_catalog_match)
         self.analysis_catalogs_menu.addSeparator()
+        self._fill_catalogs_menu(self.analysis_catalogs_menu)
+        self.analysis_catalogs_menu.addSeparator()
+        # Kept as a name of its own: the VO menu and the XPA both reach it.
+        self.action_analysis_vizier: QAction = QAction("&VizieR...", self)
+        self.analysis_catalogs_menu.addAction(self.action_analysis_vizier)
         self.action_catalog_load: QAction = QAction("&Load Catalog...", self)
         self.analysis_catalogs_menu.addAction(self.action_catalog_load)
-        self.action_catalog_match: QAction = QAction("&Match Catalogs...", self)
-        self.analysis_catalogs_menu.addAction(self.action_catalog_match)
-        self.action_catalog_clear_all: QAction = QAction("&Clear All Catalogs", self)
-        self.analysis_catalogs_menu.addAction(self.action_catalog_clear_all)
 
         self.analysis_menu.addSeparator()
         archives_menu = self.analysis_menu.addMenu("&Archives")

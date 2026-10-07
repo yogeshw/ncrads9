@@ -349,7 +349,13 @@ SKYVIEW_SURVEYS: tuple[Survey, ...] = (
     Survey("Fermi 5", "fermi5"),
 )
 
-#: The servers, in the order DS9's Image Servers menu has them.
+#: The servers, in the order DS9's Image Servers menu has them: the three
+#: DSS, then the IPAC and NRAO surveys, then SkyView. SDSS is NCRADS9's
+#: addition and comes last.
+#: Where DS9's menu puts a separator: after these servers.
+SEPARATOR_AFTER: frozenset[str] = frozenset({"dssstsci", "vlss", "skyview"})
+
+#: The servers themselves.
 SERVERS: tuple[ImageServer, ...] = (
     ImageServer(
         name="dsssao",
@@ -368,7 +374,7 @@ SERVERS: tuple[ImageServer, ...] = (
     ),
     ImageServer(
         name="dssstsci",
-        label="DSS (STScI)",
+        label="DSS (STSCI)",
         url="https://stdatu.stsci.edu/cgi-bin/dss_search",
         size_unit=SizeUnit.ARCMIN,
         surveys=STSCI_SURVEYS,
@@ -376,28 +382,11 @@ SERVERS: tuple[ImageServer, ...] = (
     ),
     ImageServer(
         name="twomass",
-        label="2MASS (IPAC)",
+        label="2MASS (NASA/IPAC)",
         url="https://irsa.ipac.caltech.edu/cgi-bin/Oasis/2MASSImg/nph-2massimg",
         size_unit=SizeUnit.ARCMIN,
         surveys=TWOMASS_SURVEYS,
         build=_twomass,
-    ),
-    ImageServer(
-        name="sdss",
-        label="SDSS",
-        url="https://skyserver.sdss.org/dr18/SkyserverWS/SIAP/getSIAP",
-        size_unit=SizeUnit.DEGREES,
-        protocol=Protocol.SIA,
-        build=_sia,
-    ),
-    ImageServer(
-        name="skyview",
-        label="SkyView (HEASARC)",
-        url="https://skyview.gsfc.nasa.gov/cgi-bin/images",
-        size_unit=SizeUnit.DEGREES,
-        surveys=SKYVIEW_SURVEYS,
-        build=_skyview,
-        takes_pixels=True,
     ),
     ImageServer(
         name="vla",
@@ -420,6 +409,23 @@ SERVERS: tuple[ImageServer, ...] = (
         url="https://www.cv.nrao.edu/cgi-bin/newVLSSpostage.pl",
         size_unit=SizeUnit.DEGREES,
         build=_vlss,
+    ),
+    ImageServer(
+        name="skyview",
+        label="SkyView (NASA/HEASARC)",
+        url="https://skyview.gsfc.nasa.gov/cgi-bin/images",
+        size_unit=SizeUnit.DEGREES,
+        surveys=SKYVIEW_SURVEYS,
+        build=_skyview,
+        takes_pixels=True,
+    ),
+    ImageServer(
+        name="sdss",
+        label="SDSS",
+        url="https://skyserver.sdss.org/dr18/SkyserverWS/SIAP/getSIAP",
+        size_unit=SizeUnit.DEGREES,
+        protocol=Protocol.SIA,
+        build=_sia,
     ),
 )
 

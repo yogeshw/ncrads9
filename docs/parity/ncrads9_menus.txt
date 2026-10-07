@@ -1,6 +1,6 @@
 # NCRADS9 menu tree -- GENERATED, do not edit by hand.
 # Regenerate with: python tools/dump_menus.py --output docs/parity/ncrads9_menus.txt
-# entries: 1042 (908 excluding separators)
+# entries: 1045 (908 excluding separators)
 #
 # Format: <menu path>|<kind>|<label>
 
@@ -954,14 +954,21 @@
 .analysis|cascade|Image Servers
 .analysis.imageservers|command|DSS (SAO)
 .analysis.imageservers|command|DSS (ESO)
-.analysis.imageservers|command|DSS (STScI)
-.analysis.imageservers|command|2MASS (IPAC)
-.analysis.imageservers|command|SDSS
-.analysis.imageservers|command|SkyView (HEASARC)
+.analysis.imageservers|command|DSS (STSCI)
+.analysis.imageservers|separator|---
+.analysis.imageservers|command|2MASS (NASA/IPAC)
 .analysis.imageservers|command|VLA (NRAO)
 .analysis.imageservers|command|NVSS (NRAO)
 .analysis.imageservers|command|VLSS (NRAO)
+.analysis.imageservers|separator|---
+.analysis.imageservers|command|SkyView (NASA/HEASARC)
+.analysis.imageservers|separator|---
+.analysis.imageservers|command|SDSS
 .analysis|cascade|Catalogs
+.analysis.catalogs|command|Search for Catalogs
+.analysis.catalogs|command|Clear All
+.analysis.catalogs|command|Match
+.analysis.catalogs|separator|---
 .analysis.catalogs|cascade|Database
 .analysis.catalogs.database|command|NED
 .analysis.catalogs.database|command|SIMBAD
@@ -1009,11 +1016,7 @@
 .analysis.catalogs.observationlogs|command|XMM Observation
 .analysis.catalogs|separator|---
 .analysis.catalogs|command|VizieR
-.analysis.catalogs|command|Search for Catalogs
-.analysis.catalogs|separator|---
 .analysis.catalogs|command|Load Catalog
-.analysis.catalogs|command|Match Catalogs
-.analysis.catalogs|command|Clear All Catalogs
 .analysis|separator|---
 .analysis|cascade|Archives
 .analysis.archives|command|Chandra Public Archive by ObsId
