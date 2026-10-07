@@ -44,11 +44,11 @@ import numpy as np
 from PyQt6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
 from ...analysis.centroid import DEFAULT_ITERATIONS, DEFAULT_RADIUS, centroid_at
-from ...regions import group_manager, region_analysis, region_template
+from ...coordinates.ds9_coords import CoordinateError
+from ...regions import group_manager, region_analysis, region_coords, region_template
 from ...regions.base_region import BaseRegion
 from ...regions.region_formats import RegionFormat, dropped_shapes
 from ...regions.region_parser import RegionParser
-from ...regions.region_writer import RegionWriter
 from ...regions.shapes.composite import Composite
 from ...regions.shapes.point import Point
 from ..dialogs.centroid_dialog import CentroidDialog
@@ -152,6 +152,11 @@ class RegionController(Controller):
         self._analysis: dict[tuple[int, str], object] = {}
         #: Which of DS9's Auto Plot toggles are on.
         self._auto: set[str] = set()
+
+        #: DS9's `marker(system)`, `(sky)`, `(skyformat)` and `(strip)`: how
+        #: a listing or a saved file is written. None follows the WCS menu,
+        #: which is where DS9 takes them from until they are set.
+        self.output: dict[str, object] = {"system": None, "sky": None, "skyformat": "degrees", "strip": False}
 
     def connect(self) -> None:
         """Wire the Region menu."""
@@ -869,16 +874,26 @@ class RegionController(Controller):
         """Show every region as DS9 would write them."""
         self._show_listing(self._regions(), "Regions")
 
-    def _show_listing(self, regions: list[BaseRegion], title: str) -> None:
-        """Put a region listing in a scrollable message box."""
+    def _show_listing(self, regions: list[BaseRegion], title: str, modal: bool = True) -> None:
+        """Put a region listing in a scrollable message box.
+
+        Args:
+            modal: False shows it and returns at once, which is what an XPA
+                `regions list` needs -- a modal box would hold its reply.
+        """
         if not regions:
             self.status("No regions to list")
             return
-        text = RegionWriter(coordinate_system=self.window.coord_context.frame.value).to_string(regions)
+        text = self.render(regions)
         box = QMessageBox(self.window)
         box.setWindowTitle(title)
         box.setText(f"{len(regions)} regions")
         box.setDetailedText(text)
+        if not modal:
+            box.setModal(False)
+            box.show()
+            self._listing_box = box
+            return
         box.exec()
 
     def save_selection(self) -> None:
@@ -907,7 +922,7 @@ class RegionController(Controller):
         if not filepath:
             return
         try:
-            regions = RegionParser().parse_file(filepath)
+            regions = self.read(filepath)
         except Exception as exc:
             self.status(f"Error loading regions: {exc}", 3000)
             return
@@ -935,7 +950,7 @@ class RegionController(Controller):
             None on success, or a message saying what went wrong.
         """
         try:
-            regions = RegionParser().parse_file(filepath)
+            regions = self.read(filepath)
         except Exception as exc:
             return f"Error loading regions: {exc}"
 
@@ -953,6 +968,7 @@ class RegionController(Controller):
         filepath: str,
         selected_only: bool = False,
         region_format: RegionFormat | str | None = None,
+        **options,
     ) -> str | None:
         """Write regions to a file without asking, as `region save` does.
 
@@ -969,22 +985,65 @@ class RegionController(Controller):
         regions = self.selection() if selected_only else self._regions()
         if not regions:
             return "No regions to save"
-        if region_format is None:
-            region_format = self.window.preferences.get("region_format", RegionFormat.DS9.value)
         try:
-            RegionWriter(
-                coordinate_system=self.window.coord_context.frame.value,
-                region_format=RegionFormat(region_format),
-            ).write_file(regions, filepath)
+            text = self.render(regions, region_format=region_format, **options)
+            Path(filepath).write_text(text + "\n", encoding="utf-8")
         except (OSError, ValueError) as exc:
             return f"Error saving regions: {exc}"
         self.status(f"Saved {len(regions)} regions to {filepath}", 3000)
         return None
 
-    def listing(self, selected_only: bool = False) -> str:
-        """The regions as DS9 writes them, which `xpaget regions` answers."""
+    def listing(self, selected_only: bool = False, **options) -> str:
+        """The regions as DS9 writes them, which `xpaget regions` answers.
+
+        Args:
+            selected_only: Only the selection, DS9's `-prop select 1`.
+            **options: `region_format`, `system`, `sky`, `skyformat` and
+                `strip`, overriding the stored output settings for this
+                listing alone -- `xpaget ds9 regions -system wcs`.
+        """
         regions = self.selection() if selected_only else self._regions()
-        return RegionWriter(coordinate_system=self.window.coord_context.frame.value).to_string(regions)
+        return self.render(regions, **options)
+
+    def output_settings(self) -> dict[str, object]:
+        """How a listing is written: the stored settings, the gaps filled.
+
+        DS9 takes the system and sky frame from the WCS menu until a
+        `regions system|sky` sets them, and its own format until a
+        `regions format` does.
+        """
+        context = self.window.coord_context
+        return {
+            "region_format": self.window.preferences.get("region_format", RegionFormat.DS9.value),
+            "system": self.output.get("system") or context.frame.value,
+            "sky": self.output.get("sky") or context.sky.value,
+            "skyformat": self.output.get("skyformat") or "degrees",
+            "strip": bool(self.output.get("strip")),
+        }
+
+    def render(self, regions: list[BaseRegion], **options) -> str:
+        """Regions as a region file, in the system and format asked for."""
+        settings = self.output_settings()
+        settings.update({key: value for key, value in options.items() if value is not None})
+        return region_coords.write(
+            regions,
+            self.frame,
+            region_format=settings["region_format"],
+            system=str(settings["system"]),
+            sky=str(settings["sky"]),
+            sky_format=str(settings["skyformat"]),
+            strip=bool(settings["strip"]),
+        )
+
+    def read(self, filepath: str | None = None, text: str | None = None) -> list[BaseRegion]:
+        """Parse a region file or text, and put it in image coordinates.
+
+        Raises:
+            CoordinateError: A sky region with no WCS to place it through.
+        """
+        parser = RegionParser()
+        regions = parser.parse_file(filepath) if filepath is not None else parser.parse_string(text or "")
+        return region_coords.place(regions, self.frame)
 
     def save_regions(self) -> None:
         """Write the current frame's regions to a DS9 region file."""
@@ -1015,11 +1074,8 @@ class RegionController(Controller):
 
         lost = dropped_shapes(regions, region_format)
         try:
-            RegionWriter(
-                coordinate_system=self.window.coord_context.frame.value,
-                region_format=region_format,
-            ).write_file(regions, filepath)
-        except OSError as exc:
+            Path(filepath).write_text(self.render(regions, region_format=region_format) + "\n", encoding="utf-8")
+        except (OSError, CoordinateError) as exc:
             self.status(f"Error saving regions: {exc}", 5000)
             return
 

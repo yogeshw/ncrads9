@@ -883,7 +883,7 @@ class FileController(Controller):
             return (None, "")
         return (data, target.name)
 
-    def export_file(self, name: str, path: str | None = None) -> bool:
+    def export_file(self, name: str, path: str | None = None, big_endian: bool | None = None) -> bool:
         """One entry of DS9's Export cascade.
 
         Export writes the frame *as* its format: the data itself for the
@@ -893,6 +893,9 @@ class FileController(Controller):
         Args:
             name: One of `MenuBar.export_actions`' keys.
             path: The file, or None to ask.
+            big_endian: The byte order for the array kinds; None asks, as
+                the menu does. XPA's `export array foo.arr little` says,
+                and must not be met with a dialog nobody can answer.
 
         Returns:
             Whether anything was written.
@@ -929,8 +932,7 @@ class FileController(Controller):
         if not path:
             return False
 
-        big_endian = True
-        if name in ("array", "nrrd", "envi") or name in COLOUR_ARRAYS:
+        if big_endian is None and (name in ("array", "nrrd", "envi") or name in COLOUR_ARRAYS):
             dialog = ArrayDialog(None, self.window, exporting=True)
             chosen = dialog.choose()
             if chosen is None:
@@ -938,7 +940,7 @@ class FileController(Controller):
             big_endian = chosen.big_endian
 
         try:
-            self._write_export(name, path, data, big_endian)
+            self._write_export(name, path, data, True if big_endian is None else big_endian)
         except Exception as exc:
             self._report(f"Could not export to\n{path}", exc)
             return False
@@ -1268,12 +1270,16 @@ class FileController(Controller):
 
     # -- header --------------------------------------------------------------
 
-    def show_header(self) -> None:
+    def show_header(self, index: int | None = None) -> None:
         """Show the FITS header of the current frame.
 
         The dialog gets the whole HDU list, so its extension selector can
         switch between them -- the reason M4-12 exists is that the selector
         was built but its handler was a comment saying "placeholder".
+
+        Args:
+            index: Which HDU to open on, counting from zero; the frame's
+                own by default. DS9's `header <ext>`.
         """
         handler = self.window.fits_handler
         if handler is None:
@@ -1283,7 +1289,8 @@ class FileController(Controller):
         from ..dialogs.header_dialog import HeaderDialog
 
         frame = self.frames.current_frame
-        index = getattr(frame, "hdu_index", None) or 0
+        if index is None:
+            index = getattr(frame, "hdu_index", None) or 0
         try:
             extensions = handler.extensions()
             header = handler.get_header(index)
