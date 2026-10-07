@@ -32,8 +32,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import astropy.units as u
+import numpy as np
 from astropy.coordinates import SkyCoord
-from PyQt6.QtWidgets import QFileDialog, QInputDialog
+from PyQt6.QtWidgets import QDialog, QFileDialog, QInputDialog
 
 from ...catalogs import (
     catalog_file,
@@ -41,16 +42,17 @@ from ...catalogs import (
     catalog_query,
     catalog_search,
     footprints,
+    name_server,
     servers,
+    sky_position,
 )
+from ...catalogs.catalog_query import DEFAULT_ROW_LIMIT
 from ...catalogs.catalog_set import CatalogSet, LoadedCatalog
+from ..dialogs.catalog_match_dialog import CatalogMatchDialog, MatchParameters
 from ..dialogs.catalog_search_dialog import CatalogSearchDialog
 from ..dialogs.catalog_window import CatalogWindow
 from ..dialogs.symbol_editor_dialog import SymbolEditorDialog
 from .base import Controller
-
-#: The radius a menu query uses, in arcseconds. DS9's `pcat(loc)`.
-DEFAULT_RADIUS_ARCSEC = 500.0
 
 #: The colour footprint outlines are drawn in.
 FOOTPRINT_COLOR = "yellow"
@@ -75,8 +77,11 @@ class CatalogController(Controller):
         super().__init__(window)
         #: The catalogues loaded, and their symbols.
         self.catalogs = CatalogSet()
-        #: One list window per catalogue, by name.
+        #: One list window per catalogue, by name; an empty Catalog Tool is
+        #: filed under a key no catalogue can have.
         self._windows: dict[str, CatalogWindow] = {}
+        #: How many catalog windows have been made, for those keys.
+        self._tools = 0
         #: How queries are made. Replaced in tests; `None` means the real
         #: network client.
         self.transport = None
@@ -152,40 +157,194 @@ class CatalogController(Controller):
             return None
         return SkyCoord(float(longitude) * u.deg, float(latitude) * u.deg)
 
-    def query(self, name: str, radius_arcsec: float = DEFAULT_RADIUS_ARCSEC) -> LoadedCatalog | None:
-        """Query one of DS9's catalogues around the frame's centre.
+    def query(self, name: str, radius_arcsec: float | None = None) -> LoadedCatalog | None:
+        """Query one of DS9's catalogues, as its Catalogs menu entry does.
+
+        DS9 opens the catalogue's dialog with its Object section filled in
+        from the current frame -- the centre, and a radius of a quarter of
+        the frame's width plus height -- and retrieves at once. So does
+        this; the dialog then stays up to change the position, the radius
+        or the row limit and Retrieve again.
 
         Args:
             name: DS9's catalogue name, e.g. `catgaia`.
-            radius_arcsec: The cone radius.
+            radius_arcsec: A radius to use instead of the frame's.
 
         Returns:
             The catalogue loaded, or None if the query found nothing.
         """
+        server = servers.by_name(name)
+        if server is None:
+            self.status(f"No such catalog: {name}", 3000)
+            return None
+        return self._query_server(server, radius_arcsec)
+
+    def _query_server(
+        self, server: servers.CatalogServer, radius_arcsec: float | None = None
+    ) -> LoadedCatalog | None:
+        """Open a tool on one server, fill it in from the frame, retrieve."""
+        window = self.open_tool(server)
+        if not self.update_from_frame(window):
+            message = "This frame has no WCS, so there is nothing to search around"
+            self.status(message, 4000)
+            window.set_status(message)
+            return None
+        if radius_arcsec is not None:
+            window.set_radius(float(radius_arcsec) * u.arcsec)
+        return self.retrieve(window)
+
+    def open_tool(self, server: servers.CatalogServer | None = None) -> CatalogWindow:
+        """Open an empty catalog dialog, DS9's Catalog Tool."""
+        window = self._make_window(None, server)
+        window.mirror = self.mirror
+        window.name_server = self.window.analysis.name_server
+        for value, action in window.mirror_actions.items():
+            action.setChecked(value == self.mirror)
+        for value, action in window.name_server_actions.items():
+            action.setChecked(value == window.name_server)
+        try:
+            window.set_max_rows(int(self.settings.get("maxrows", DEFAULT_ROW_LIMIT)))
+        except ValueError:
+            pass
+        sky = self.settings.get("sky", "")
+        if sky:
+            window.set_sky(sky, self.settings.get("skyformat") or None)
+        window.show()
+        return window
+
+    def update_from_frame(self, window: CatalogWindow) -> bool:
+        """DS9's Update from Current Frame (`TBLUpdate`).
+
+        The position becomes the frame's centre and the radius a quarter
+        of its width plus height, in the radius unit chosen.
+
+        Returns:
+            Whether the frame had a WCS to take them from.
+        """
         center = self.frame_center()
         if center is None:
-            self.status("This frame has no WCS, so there is nothing to search around", 4000)
-            return None
+            return False
+        window.set_object_name("")
+        window.set_position(center)
+        size = self.frame_size()
+        if size is not None:
+            window.set_radius((size[0] + size[1]) / 4.0)
+        return True
 
+    def update_from_crosshair(self, window: CatalogWindow) -> bool:
+        """DS9's Update from Current Crosshair (`TBLCrosshair`).
+
+        Returns:
+            Whether there was a position to take, on a frame with a WCS.
+        """
+        frame = self.frame
+        handler = getattr(frame, "wcs_handler", None) if frame else None
+        if handler is None or not getattr(handler, "is_valid", False):
+            window.set_status("This frame has no WCS")
+            return False
+        placed = getattr(frame, "crosshair", None)
+        if not placed:
+            # DS9 always has a crosshair, at the centre until it is moved.
+            return self.update_from_frame(window)
         try:
-            request = catalog_query.request_for(name, center, radius_arcsec * u.arcsec, mirror=self.mirror)
-        except catalog_query.CatalogQueryError as exc:
-            self.status(str(exc), 3000)
+            longitude, latitude = handler.pixel_to_world(float(placed[0]), float(placed[1]))
+        except Exception:
+            return False
+        window.set_object_name("")
+        window.set_position(SkyCoord(float(longitude) * u.deg, float(latitude) * u.deg))
+        return True
+
+    def frame_size(self) -> tuple[u.Quantity, u.Quantity] | None:
+        """The frame's width and height on the sky, or None with no WCS."""
+        frame = self.frame
+        handler = getattr(frame, "wcs_handler", None) if frame else None
+        data = getattr(frame, "image_data", None) if frame else None
+        if handler is None or not getattr(handler, "is_valid", False) or data is None:
+            return None
+        height, width = data.shape[0], data.shape[1]
+        try:
+            # Across the middle in each direction, edge to edge -- what DS9's
+            # `get fits size` measures, and right for a rotated WCS too.
+            ends = handler.pixel_to_world(
+                np.array([-0.5, width - 0.5, (width - 1) / 2.0, (width - 1) / 2.0]),
+                np.array([(height - 1) / 2.0, (height - 1) / 2.0, -0.5, height - 0.5]),
+            )
+        except Exception:
+            return None
+        points = SkyCoord(np.asarray(ends[0]) * u.deg, np.asarray(ends[1]) * u.deg)
+        return (points[0].separation(points[1]), points[2].separation(points[3]))
+
+    def resolve_into(self, window: CatalogWindow) -> bool:
+        """Resolve the dialog's Name through its name server into its position."""
+        try:
+            coord = self.window.analysis.resolve_coordinate(window.object_name(), window.name_server)
+        except name_server.NameResolveError as exc:
+            window.set_status(str(exc))
+            self.status(str(exc), 4000)
+            return False
+        window.set_position(coord)
+        return True
+
+    def retrieve(self, window: CatalogWindow) -> LoadedCatalog | None:
+        """Ask the dialog's catalogue about the dialog's position, DS9's Retrieve.
+
+        A name, if one is typed, is resolved first and its position used,
+        as `CATApply` does; otherwise the position typed, or the frame's
+        centre if there is none.
+        """
+        server = window.selected_server()
+        if server is None:
+            window.set_status("Choose a catalog to retrieve from")
+            self.status("Choose a catalog to retrieve from", 3000)
+            return None
+        if window.object_name() and not self.resolve_into(window):
             return None
 
-        self.status(f"Querying {request.server.label}...")
+        center = window.position()
+        if center is None:
+            if not self.update_from_frame(window):
+                window.set_status("Give a position, or an object name to resolve")
+                self.status("This frame has no WCS, so there is nothing to search around", 4000)
+                return None
+            center = window.position()
+        try:
+            radius = window.radius()
+        except sky_position.PositionError as exc:
+            window.set_status(str(exc))
+            return None
+
+        request = catalog_query.QueryRequest(
+            server=server,
+            center=center,
+            radius=radius,
+            row_limit=window.max_rows(),
+            mirror=window.mirror,
+        )
+        window.set_status(f"Querying {server.label}...")
+        self.status(f"Querying {server.label}...")
         result = catalog_query.run(request, transport=self.transport)
+        window.set_status(result.message)
         self.status(result.message, 4000)
         if result.table is None:
             return None
 
-        return self.add(
-            LoadedCatalog(
-                name=request.server.label,
-                table=result.table,
-                source=f"{request.server.service.value}:{request.server.identifier or name}",
-            )
+        loaded = LoadedCatalog(
+            name=server.label,
+            table=result.table,
+            source=f"{server.service.value}:{server.identifier or server.name}",
         )
+        previous = None if window.empty else window.catalog
+        if previous is not None and self.catalogs.by_name(previous.name) is previous:
+            # A second Retrieve replaces what this dialog showed, keeping its
+            # symbols and filter, rather than piling up copies.
+            loaded.symbols = previous.symbols
+            loaded.filter_expression = previous.filter_expression
+            self.catalogs.remove(previous.name)
+        self.catalogs.add(loaded)
+        self._rekey(window, loaded.name)
+        window.set_catalog(loaded)
+        self.refresh_overlay()
+        return loaded
 
     def load_file(self, path: str | None = None) -> LoadedCatalog | None:
         """Load a local catalogue file, DS9's Load Catalog."""
@@ -234,11 +393,6 @@ class CatalogController(Controller):
         Not on DS9's menu, so it has no `catXXX` name; a server entry is
         made for it on the spot.
         """
-        center = self.frame_center()
-        if center is None:
-            self.status("This frame has no WCS, so there is nothing to search around", 4000)
-            return None
-
         server = servers.CatalogServer(
             label=identifier,
             name=f"cat:{identifier}",
@@ -246,18 +400,7 @@ class CatalogController(Controller):
             identifier=identifier,
             section="",
         )
-        request = catalog_query.QueryRequest(
-            server=server,
-            center=center,
-            radius=DEFAULT_RADIUS_ARCSEC * u.arcsec,
-            mirror=self.mirror,
-        )
-        self.status(f"Querying {identifier}...")
-        result = catalog_query.run(request, transport=self.transport)
-        self.status(result.message, 4000)
-        if result.table is None:
-            return None
-        return self.add(LoadedCatalog(name=identifier, table=result.table, source=f"cds:{identifier}"))
+        return self._query_server(server)
 
     # -- the catalogues on the frame ----------------------------------------------
 
@@ -268,12 +411,9 @@ class CatalogController(Controller):
         self.refresh_overlay()
         return added
 
-    def show_tool(self) -> None:
-        """Open the list window of the catalogue most recently loaded."""
-        if not self.catalogs:
-            self.status("No catalogs are loaded", 3000)
-            return
-        self.show_window(self.catalogs.catalogs[-1])
+    def show_tool(self) -> CatalogWindow:
+        """DS9's Analysis -> Catalog Tool: a new, empty catalog dialog."""
+        return self.open_tool(None)
 
     def show_window(self, catalog: LoadedCatalog) -> CatalogWindow:
         """Open, or raise, one catalogue's list window."""
@@ -283,22 +423,60 @@ class CatalogController(Controller):
             existing.raise_()
             existing.activateWindow()
             return existing
-
-        window = CatalogWindow(catalog, self.window)
-        window.selection_changed.connect(lambda _rows: self.refresh_overlay())
-        window.filter_changed.connect(lambda _text: self.refresh_overlay())
-        window.command_requested.connect(
-            lambda command, name=catalog.name: self.window_command(name, command)
-        )
-        window.finished.connect(lambda _result, name=catalog.name: self._windows.pop(name, None))
-        self._windows[catalog.name] = window
+        window = self._make_window(catalog, None)
         window.show()
         return window
 
-    def window_command(self, name: str, command: str) -> None:
-        """Run one of the list window's commands."""
-        catalog = self.catalogs.by_name(name)
+    def _make_window(
+        self, catalog: LoadedCatalog | None, server: servers.CatalogServer | None
+    ) -> CatalogWindow:
+        """Build a catalog window and wire it to this controller."""
+        window = CatalogWindow(catalog, self.window, server=server)
+        window.selection_changed.connect(lambda _rows: self.refresh_overlay())
+        window.filter_changed.connect(lambda _text: self.refresh_overlay())
+        window.command_requested.connect(lambda command, w=window: self.window_command(w, command))
+        window.finished.connect(lambda _result, w=window: self._forget(w))
+        self._tools += 1
+        key = catalog.name if catalog is not None else f"\x00tool{self._tools}"
+        self._windows[key] = window
+        return window
+
+    def _rekey(self, window: CatalogWindow, name: str) -> None:
+        """File a window under the catalogue it now shows."""
+        self._forget(window)
+        self._windows[name] = window
+
+    def _forget(self, window: CatalogWindow) -> None:
+        """Drop a window from the index, under whatever key it was filed."""
+        for key, value in list(self._windows.items()):
+            if value is window:
+                del self._windows[key]
+
+    def window_command(self, target, command: str) -> None:
+        """Run one of the list window's commands.
+
+        Args:
+            target: The window, or the name of the catalogue it shows.
+            command: The command.
+        """
+        window = target if isinstance(target, CatalogWindow) else self._windows.get(target)
+        tool = {
+            "retrieve": self.retrieve,
+            "update_frame": self.update_from_frame,
+            "update_crosshair": self.update_from_crosshair,
+        }.get(command)
+        if tool is not None and window is not None:
+            tool(window)
+            return
+
+        if isinstance(target, str):
+            name = target
+        else:
+            name = "" if window.empty else window.catalog.name
+        catalog = self.catalogs.by_name(name) if name else None
         if catalog is None:
+            if window is not None:
+                window.set_status("Retrieve a catalog first")
             return
         if command.startswith("pan:"):
             self.pan_to(catalog, int(command.split(":", 1)[1]))
@@ -497,41 +675,55 @@ class CatalogController(Controller):
             )
         )
 
-    def show_match_dialog(self) -> None:
-        """Ask which two catalogues to match, and with what radius."""
+    def match_parameters(self) -> MatchParameters:
+        """The match settings as DS9 keeps them between matches (`icat`)."""
+        loaded = [entry.name for entry in self.catalogs]
+        error = self.settings.get("match_error", "2 arcsec").split()
+        try:
+            angle = sky_position.radius_quantity(error[0], error[1] if len(error) > 1 else "arcsec")
+            arcsec = sky_position.radius_in(angle, "arcsec")
+        except (IndexError, sky_position.PositionError):
+            arcsec = catalog_match.DEFAULT_RADIUS_ARCSEC
+        first = self.settings.get("match1", "")
+        second = self.settings.get("match2", "")
+        return MatchParameters(
+            first=first if first in loaded else (loaded[-2] if len(loaded) > 1 else ""),
+            second=second if second in loaded else (loaded[-1] if loaded else ""),
+            radius_arcsec=arcsec,
+            function=self.settings.get("match_function", "1and2"),
+            unique=str(self.settings.get("match_unique", "yes")).lower() in ("yes", "1", "true", "on"),
+            returned=self.settings.get("match_return", "1and2"),
+        )
+
+    def show_match_dialog(self) -> LoadedCatalog | None:
+        """DS9's Catalog Match dialog: both catalogues and the rules in one window."""
         names = [entry.name for entry in self.catalogs]
         if len(names) < 2:
             self.status("Load two catalogs to match them", 3000)
-            return
+            return None
 
-        first, accepted = QInputDialog.getItem(
-            self.window, "Catalog Match", "First catalog:", names, 0, False
+        dialog = CatalogMatchDialog(names, self.match_parameters(), self.window)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        chosen = dialog.values()
+        self.settings.update(
+            {
+                "match1": chosen.first,
+                "match2": chosen.second,
+                "match_error": f"{chosen.radius_arcsec:g} arcsec",
+                "match_function": chosen.function,
+                "match_unique": "yes" if chosen.unique else "no",
+                "match_return": chosen.returned,
+            }
         )
-        if not accepted:
-            return
-        second, accepted = QInputDialog.getItem(
-            self.window, "Catalog Match", "Second catalog:", names, 1, False
+        return self.match(
+            chosen.first,
+            chosen.second,
+            chosen.radius_arcsec,
+            chosen.function,
+            chosen.returned,
+            chosen.unique,
         )
-        if not accepted:
-            return
-        radius, accepted = QInputDialog.getDouble(
-            self.window,
-            "Catalog Match",
-            "Radius (arcsec):",
-            catalog_match.DEFAULT_RADIUS_ARCSEC,
-            0.01,
-            3600.0,
-            2,
-        )
-        if not accepted:
-            return
-        functions = [choice.value for choice in catalog_match.MatchFunction]
-        function, accepted = QInputDialog.getItem(
-            self.window, "Catalog Match", "Function:", functions, 0, False
-        )
-        if not accepted:
-            return
-        self.match(first, second, radius, function)
 
     def clear(self, catalog: LoadedCatalog) -> None:
         """Remove one catalogue."""

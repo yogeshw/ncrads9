@@ -106,12 +106,12 @@ class ImageServerController(Controller):
 
     def resolve(self, name: str, dialog: ImageServerDialog) -> None:
         """Resolve an object name to coordinates and fill the dialog in."""
-        from astropy.coordinates import SkyCoord
+        from ...catalogs.name_server import NameResolveError
 
         try:
-            coordinate = SkyCoord.from_name(name)
-        except Exception as exc:
-            dialog.set_message(f"Could not resolve {name}: {exc}")
+            coordinate = self.window.analysis.resolve_coordinate(name)
+        except NameResolveError as exc:
+            dialog.set_message(str(exc))
             return
         dialog.set_center(coordinate.ra.deg, coordinate.dec.deg)
         dialog.set_message(f"{name}: {coordinate.ra.deg:.6f} {coordinate.dec.deg:.6f}")

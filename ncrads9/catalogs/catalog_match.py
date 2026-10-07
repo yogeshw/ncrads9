@@ -62,10 +62,11 @@ class MatchFunction(Enum):
 
 
 class MatchReturn(Enum):
-    """Which columns a `1and2` match returns."""
+    """Which columns a `1and2` match returns: both, the first's, the second's."""
 
     BOTH = "1and2"
     FIRST = "1only"
+    SECOND = "2only"
 
 
 #: What the two catalogues' columns are prefixed with when both are kept.
@@ -178,7 +179,12 @@ def _joined(
     if not pairs:
         # An empty result still needs its columns, or the caller has
         # nothing to show and no way to say what was asked.
-        empty = first[:0] if wanted is MatchReturn.FIRST else _template(first, second)
+        if wanted is MatchReturn.FIRST:
+            empty = first[:0]
+        elif wanted is MatchReturn.SECOND:
+            empty = second[:0]
+        else:
+            empty = _template(first, second)
         empty["separation"] = np.array([], dtype=float)
         return empty
 
@@ -188,6 +194,10 @@ def _joined(
 
     if wanted is MatchReturn.FIRST:
         result = Table(first[left_rows])
+        result["separation"] = gaps
+        return result
+    if wanted is MatchReturn.SECOND:
+        result = Table(second[right_rows])
         result["separation"] = gaps
         return result
 
