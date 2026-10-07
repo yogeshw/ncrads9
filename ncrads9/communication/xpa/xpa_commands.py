@@ -29,8 +29,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from ...coordinates import positions
 from ...rendering.scale_algorithms import ScaleAlgorithm
-from . import access_points, positions
+from . import access_points
 
 
 class XPACommandType(Enum):
