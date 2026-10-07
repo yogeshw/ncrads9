@@ -748,10 +748,9 @@ class RegionParser:
     ) -> BaseRegion:
         centre = (values[0], values[1])
         radii = values[2:]
-        # `annulus x y inner outer n=#` divides the span into n rings; the
-        # region's own extent is the same either way, so the count is kept
-        # only so the writer can put it back.
-        return Annulus(center=centre, inner_radius=radii[0], outer_radius=radii[-1], **common)
+        # `annulus x y r1 r2 r3 ...` is that many rings, and every one is
+        # kept: the dialog edits them and the radial profile measures each.
+        return Annulus(center=centre, inner_radius=radii[0], outer_radius=radii[-1], radii=radii, **common)
 
     def _build_panda(
         self,

@@ -38,6 +38,7 @@ Author: Yogesh Wadadekar
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -55,6 +56,7 @@ from ..dialogs.centroid_dialog import CentroidDialog
 from ..dialogs.group_dialog import GroupDialog
 from ..dialogs.region_analysis_dialog import RegionPlotDialog, RegionStatisticsDialog
 from ..dialogs.region_dialog import RegionDialog, analysis_commands_for
+from ..dialogs.region_file_dialog import RegionFileDialog, RegionFileOptions
 from ..menu_bar import (
     DEFAULT_REGION_COLOR,
     DEFAULT_REGION_FONT,
@@ -152,6 +154,9 @@ class RegionController(Controller):
         self._analysis: dict[tuple[int, str], object] = {}
         #: Which of DS9's Auto Plot toggles are on.
         self._auto: set[str] = set()
+
+        #: The last Save and Open choices, which DS9 offers again next time.
+        self._file_options: dict[str, RegionFileOptions] = {}
 
         #: DS9's `marker(system)`, `(sky)`, `(skyformat)` and `(strip)`: how
         #: a listing or a saved file is written. None follows the WCS menu,
@@ -377,12 +382,15 @@ class RegionController(Controller):
             "histogram": (self._histogram_of, "Histogram", ("Value", "Pixels"), "bar"),
             "radial": (self._radial_of, "Radial Profile", ("Radius (pixels)", "Surface brightness"), "line"),
             "plot2d": (self._cut_of, "Plot 2D", ("Distance (pixels)", "Value"), "line"),
-            "plot3d": (self._depth_of, "Plot 3D", ("Slice", "Sum in region"), "line"),
+            "plot3d": (self._depth_of, "Plot 3D", ("Slice", "Value in region"), "line"),
         }
         if name not in plots:
             return None
         provider, title, labels, style = plots[name]
-        return RegionPlotDialog(region, provider, title, labels, style, self.window)
+        # Plot 2D and Plot 3D carry DS9's Method menu, Average by default
+        # (`markeranalysisplot3d.tcl:21`).
+        methods = region_analysis.METHODS if name in ("plot2d", "plot3d") else ()
+        return RegionPlotDialog(region, provider, title, labels, style, self.window, methods=methods)
 
     # -- what the windows ask for ------------------------------------------------
 
@@ -401,14 +409,14 @@ class RegionController(Controller):
     def _radial_of(self, region: BaseRegion):
         return region_analysis.radial_profile(region, self._image())
 
-    def _cut_of(self, region: BaseRegion):
-        distances, values = region_analysis.cut(region, self._image())
+    def _cut_of(self, region: BaseRegion, method: str = "average"):
+        distances, values = region_analysis.cut(region, self._image(), method)
         return (distances, values, None)
 
-    def _depth_of(self, region: BaseRegion):
+    def _depth_of(self, region: BaseRegion, method: str = "average"):
         frame = self.frame
         cube = None if frame is None else getattr(getattr(frame, "image", None), "data", None)
-        slices, totals = region_analysis.depth_profile(region, cube)
+        slices, totals = region_analysis.depth_profile(region, cube, method)
         return (slices, totals, None)
 
     # -- the Auto toggles (M6-26) -------------------------------------------------
@@ -734,7 +742,7 @@ class RegionController(Controller):
             return
 
         frame = self.frame
-        dialog = RegionDialog(region, getattr(frame, "wcs_handler", None), self.window)
+        dialog = RegionDialog(region, getattr(frame, "wcs_handler", None), self.window, frame=frame)
         dialog.region_changed.connect(self._on_region_changed)
         for name, action in dialog.analysis_actions.items():
             action.triggered.connect(lambda _checked=False, r=region, key=name: self.open_analysis(r, key))
@@ -747,6 +755,29 @@ class RegionController(Controller):
         """Redraw, and re-measure anything watching this region."""
         self.refresh_overlay()
         self.refresh_analysis(region)
+        self.refresh_information(region)
+
+    def refresh_information(self, region: BaseRegion | None = None) -> None:
+        """Reload open Get Information dialogs from their regions.
+
+        Called on every change to a region, the canvas's drags included, so
+        a dialog always shows where its region is -- and Apply after a drag
+        does not snap the region back to where the dialog last saw it.
+        """
+        for dialog in list(self._dialogs.values()):
+            if region is None or dialog.region is region:
+                dialog.load()
+
+    def on_canvas_change(self) -> None:
+        """A region is being dragged, reshaped or rotated on the canvas.
+
+        Everything watching the regions that are selected -- which is what a
+        drag moves -- follows it live: their Get Information dialogs and
+        their analysis windows, as DS9's do.
+        """
+        for region in self.selection_only():
+            self.refresh_information(region)
+            self.refresh_analysis(region)
 
     def _delete_one(self, region: BaseRegion) -> None:
         """Delete one region, from its own dialog."""
@@ -907,12 +938,16 @@ class RegionController(Controller):
     # -- file operations -----------------------------------------------------
 
     def load_regions(self, replace: bool = False) -> None:
-        """Open a DS9 region file, adding its regions to the current frame.
+        """Open a region file, adding its regions to the current frame.
 
         Adding, not replacing, which is what DS9's `Region -> Open` does --
         and is why DS9 has a second entry for the other behaviour. This
         replaced, so opening a second file silently threw away the first
         one's regions and there was no way to load two files at once.
+
+        After the file, DS9's load dialog (`MarkerLoadDialog`) asks for the
+        format, the system an X Y file is in, and whether to load into the
+        current frame or every frame.
 
         Args:
             replace: Delete the frame's regions first, as DS9's `Delete All
@@ -921,46 +956,120 @@ class RegionController(Controller):
         filepath, _ = QFileDialog.getOpenFileName(self.window, "Load Region File", "", REGION_FILTER)
         if not filepath:
             return
-        try:
-            regions = self.read(filepath)
-        except Exception as exc:
-            self.status(f"Error loading regions: {exc}", 3000)
+        options = self.ask_file_options("load", filepath)
+        if options is None:
             return
+        error = self.load_file(
+            filepath,
+            append=not replace,
+            all_frames=options.all_frames,
+            options=options,
+            label=f"Open {Path(filepath).name}",
+        )
+        if error:
+            self.status(error, 3000)
 
+    def ask_file_options(
+        self, mode: str, filepath: str = "", region_format: RegionFormat | None = None
+    ) -> RegionFileOptions | None:
+        """Ask DS9's Save or Open follow-up questions, or None if cancelled.
+
+        Args:
+            mode: "save" or "load".
+            filepath: The file chosen, whose extension can suggest X Y.
+            region_format: A format to start on, overriding the last one.
+        """
+        wcs = self._wcs_systems()
+        initial = self._file_options.get(mode)
+        if initial is None and mode == "save":
+            settings = self.output_settings()
+            system = str(settings["system"])
+            initial = RegionFileOptions(
+                region_format=RegionFormat(settings["region_format"]),
+                system=system if system in wcs or not system.startswith("wcs") else "physical",
+                sky=str(settings["sky"]),
+                sky_format=str(settings["skyformat"]),
+            )
+        if region_format is None and mode == "load" and Path(filepath).suffix.lower() == ".xy":
+            region_format = RegionFormat.XY
+        if region_format is not None:
+            initial = replace(
+                initial or RegionFileOptions(system="wcs" if wcs else "physical"), region_format=region_format
+            )
+        dialog = RegionFileDialog(mode, wcs, initial, self.window)
+        if not dialog.exec():
+            return None
+        options = dialog.options()
+        self._file_options[mode] = options
+        return options
+
+    def _wcs_systems(self) -> tuple[str, ...]:
+        """The WCS systems the current frame carries."""
         frame = self.frame
-        if frame is not None:
-            kept = [] if replace else list(frame.regions)
-            with self.window.undo.regions(f"Open {Path(filepath).name}"):
-                frame.regions = kept + list(regions)
-            self.show_frame_regions(frame)
-        self.status(f"Loaded {len(regions)} regions from {filepath}", 3000)
+        handler = getattr(frame, "wcs_handler", None)
+        return ("wcs",) if handler is not None and getattr(handler, "is_valid", False) else ()
 
     def delete_all_and_load_regions(self) -> None:
         """DS9's `Delete All and Open`: the frame's regions, then a file."""
         self.load_regions(replace=True)
 
-    def load_file(self, filepath: str, append: bool = False) -> str | None:
+    def _read_into(self, filepath: str, frame, options: RegionFileOptions | None) -> list[BaseRegion]:
+        """Parse a file for one frame, placed through that frame's own WCS.
+
+        An X Y file is one position a line, in the system the Open dialog
+        named; it becomes points, as DS9 makes it.
+        """
+        text = Path(filepath).read_text(encoding="utf-8", errors="replace")
+        if options is not None and options.region_format is RegionFormat.XY:
+            lead = options.sky if options.system.startswith("wcs") else options.system
+            points = [
+                f"point({','.join(line.split()[:2])})"
+                for line in text.splitlines()
+                if len(line.split()) >= 2 and not line.lstrip().startswith("#")
+            ]
+            text = "\n".join([lead, *points])
+        return region_coords.place(RegionParser().parse_string(text), frame)
+
+    def load_file(
+        self,
+        filepath: str,
+        append: bool = False,
+        all_frames: bool = False,
+        options: RegionFileOptions | None = None,
+        label: str = "Load Regions",
+    ) -> str | None:
         """Load a region file without asking, as XPA's `region load` does.
 
         Args:
             filepath: What to read.
             append: Whether to add to what is there rather than replace it.
+            all_frames: Load into every frame, DS9's Load into All, each
+                frame placing the regions through its own WCS.
+            options: The format and system, from the Open dialog.
+            label: What the undo stack calls it.
 
         Returns:
             None on success, or a message saying what went wrong.
         """
-        try:
-            regions = self.read(filepath)
-        except Exception as exc:
-            return f"Error loading regions: {exc}"
-
         frame = self.frame
         if frame is None:
             return "No frame to load regions into"
-        with self.window.undo.regions("Load Regions"):
-            frame.regions = [*frame.regions, *regions] if append else list(regions)
+        targets = [target for target in self.frames.frames if target is not None] if all_frames else [frame]
+        loaded: dict[int, list[BaseRegion]] = {}
+        try:
+            for target in targets:
+                loaded[id(target)] = self._read_into(filepath, target, options)
+        except Exception as exc:
+            return f"Error loading regions: {exc}"
+
+        with self.window.undo.regions(label):
+            for target in targets:
+                regions = loaded[id(target)]
+                target.regions = [*target.regions, *regions] if append else list(regions)
         self.show_frame_regions(frame)
-        self.status(f"Loaded {len(regions)} regions from {filepath}", 3000)
+        count = len(loaded.get(id(frame), []))
+        where = f" into {len(targets)} frames" if all_frames else ""
+        self.status(f"Loaded {count} regions from {filepath}{where}", 3000)
         return None
 
     def save_file(
@@ -1054,10 +1163,12 @@ class RegionController(Controller):
         self._write(regions)
 
     def _write(self, regions: list[BaseRegion]) -> None:
-        """Prompt for a path and a format, then write.
+        """Prompt for a path, then DS9's format and coordinate system, then write.
 
-        The format is taken from the chosen filter, so DS9's File Format menu
-        is the file dialog's own -- one fewer dialog for the same choice.
+        DS9's `MarkerSaveDialog` asks, after the file name, for the format
+        and the coordinate system -- system, sky frame and sky format -- the
+        file is written in; so does this. A format named by the chooser's
+        filter is where that dialog starts.
         """
         filters = ";;".join(f"{value.value.upper()} region files (*.reg)" for value in RegionFormat)
         filepath, chosen = QFileDialog.getSaveFileName(
@@ -1065,23 +1176,28 @@ class RegionController(Controller):
         )
         if not filepath:
             return
+        named = next((value for value in RegionFormat if chosen.lower().startswith(value.value)), None)
+        options = self.ask_file_options("save", filepath, named)
+        if options is None:
+            return
 
-        region_format = RegionFormat.DS9
-        for value in RegionFormat:
-            if chosen.lower().startswith(value.value):
-                region_format = value
-                break
-
-        lost = dropped_shapes(regions, region_format)
+        lost = dropped_shapes(regions, options.region_format)
         try:
-            Path(filepath).write_text(self.render(regions, region_format=region_format) + "\n", encoding="utf-8")
+            text = self.render(
+                regions,
+                region_format=options.region_format,
+                system=options.system,
+                sky=options.sky,
+                skyformat=options.sky_format,
+            )
+            Path(filepath).write_text(text + "\n", encoding="utf-8")
         except (OSError, CoordinateError) as exc:
             self.status(f"Error saving regions: {exc}", 5000)
             return
 
         message = f"Saved {len(regions)} regions to {filepath}"
         if lost:
-            message += f"; {region_format.value} cannot hold {', '.join(lost)}"
+            message += f"; {options.region_format.value} cannot hold {', '.join(lost)}"
         self.status(message, 4000)
 
     def clear_regions(self) -> None:
@@ -1125,8 +1241,13 @@ class RegionController(Controller):
 
         A context manager cannot hold a snapshot across two mouse events,
         so the two ends are taken here: `begin` opens one and `finish`
-        closes it, and a drag that changed nothing records nothing.
+        closes it, and a drag that changed nothing records nothing. Between
+        them every `move` keeps the dialogs and plots watching the dragged
+        region up to date.
         """
+        if phase == "move":
+            self.on_canvas_change()
+            return
         undo = self.window.undo
         if phase == "begin":
             self._edit = undo.regions("Move Region")
@@ -1136,6 +1257,7 @@ class RegionController(Controller):
         if pending is not None:
             self._edit = None
             pending.__exit__(None, None, None)
+        self.on_canvas_change()
 
     def on_selected(self, region: BaseRegion) -> None:
         """Report the region the user just clicked."""

@@ -26,8 +26,32 @@ from typing import Any
 from ..base_region import BaseRegion
 
 
+def generate_radii(inner: float, outer: float, count: int, method: str = "dist") -> list[float]:
+    """`count` annuli from `inner` to `outer`: DS9's Generate.
+
+    The arithmetic of `MarkerBaseAnnulusGenerateCircle` in
+    `ds9/library/markerbaseannulus.tcl`: "dist" spaces the radii equally,
+    "area" gives every ring the same area.
+    """
+    count = max(1, int(count))
+    inner, outer = float(inner), float(outer)
+    if method == "area":
+        area = math.pi * (outer * outer - inner * inner) / count
+        radii = [inner]
+        for _ring in range(count):
+            radii.append(math.sqrt((area + math.pi * radii[-1] ** 2) / math.pi))
+        return radii
+    step = (outer - inner) / count
+    return [inner + step * index for index in range(count + 1)]
+
+
 class Annulus(BaseRegion):
-    """A circular annulus region defined by center and inner/outer radii."""
+    """A circular annulus: a centre and a list of radii, smallest first.
+
+    DS9's annulus is any number of concentric rings -- `annulus(x,y,r1,r2,
+    r3,...)` -- and its dialog edits them as a list with a Generate button.
+    `inner_radius` and `outer_radius` are its two ends.
+    """
 
     def __init__(
         self,
@@ -39,6 +63,7 @@ class Annulus(BaseRegion):
         font: str = "helvetica 10 normal roman",
         text: str = "",
         tags: list[str] | None = None,
+        radii: list[float] | None = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -53,30 +78,49 @@ class Annulus(BaseRegion):
             font: The font specification for text labels.
             text: The text label for the region.
             tags: Optional list of tags for grouping regions.
+            radii: Every radius, smallest first, when there are more than
+                two. Its ends override `inner_radius` and `outer_radius`.
         """
         super().__init__(center, color, width, font, text, tags, **kwargs)
-        self._inner_radius = inner_radius
-        self._outer_radius = outer_radius
+        self._radii: list[float] = [float(inner_radius), float(outer_radius)]
+        if radii is not None:
+            self.radii = radii
+
+    @property
+    def radii(self) -> list[float]:
+        """Every radius, smallest first."""
+        return list(self._radii)
+
+    @radii.setter
+    def radii(self, values: list[float]) -> None:
+        """Set every radius. Fewer than two is not an annulus and is ignored."""
+        cleaned = sorted(values, key=float)
+        if len(cleaned) >= 2:
+            self._radii = cleaned
 
     @property
     def inner_radius(self) -> float:
         """Get the inner radius."""
-        return self._inner_radius
+        return self._radii[0]
 
     @inner_radius.setter
     def inner_radius(self, value: float) -> None:
-        """Set the inner radius."""
-        self._inner_radius = value
+        """Set the inner radius, keeping the rings still inside the span."""
+        outer = self._radii[-1]
+        between = [radius for radius in self._radii[1:-1] if value < radius < outer]
+        self._radii = [value, *between, outer]
 
     @property
     def outer_radius(self) -> float:
         """Get the outer radius."""
-        return self._outer_radius
+        return self._radii[-1]
 
     @outer_radius.setter
     def outer_radius(self, value: float) -> None:
-        """Set the outer radius."""
-        self._outer_radius = value
+        """Set the outer radius, keeping the rings still inside the span."""
+        inner = self._radii[0]
+        between = [radius for radius in self._radii[1:-1] if inner < radius < value]
+        self._radii = [inner, *between, value]
 
     def draw(self, context: Any) -> None:
         """
@@ -99,7 +143,7 @@ class Annulus(BaseRegion):
         """
         cx, cy = self.center
         distance = math.sqrt((x - cx) ** 2 + (y - cy) ** 2)
-        return self._inner_radius <= distance <= self._outer_radius
+        return self.inner_radius <= distance <= self.outer_radius
 
     def move(self, dx: float, dy: float) -> None:
         """
@@ -121,8 +165,7 @@ class Annulus(BaseRegion):
             scale_y: The scale factor in the y direction.
         """
         scale = (scale_x + scale_y) / 2
-        self._inner_radius *= scale
-        self._outer_radius *= scale
+        self._radii = [radius * scale for radius in self._radii]
 
     def to_ds9_string(self) -> str:
         """
@@ -132,11 +175,10 @@ class Annulus(BaseRegion):
             The annulus as a DS9 format string.
         """
         cx, cy = self.center
-        return f"annulus({cx},{cy},{self._inner_radius},{self._outer_radius})"
+        return f"annulus({cx},{cy},{','.join(str(radius) for radius in self._radii)})"
 
     def __repr__(self) -> str:
         """Return a string representation of the annulus."""
         return (
-            f"Annulus(center={self.center}, inner_radius={self._inner_radius}, "
-            f"outer_radius={self._outer_radius})"
+            f"Annulus(center={self.center}, radii={self._radii})"
         )

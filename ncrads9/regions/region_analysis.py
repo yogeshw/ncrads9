@@ -338,7 +338,7 @@ def annuli(region: BaseRegion) -> list[BaseRegion]:
     every ring together would say nothing a plain circle does not.
     """
     if isinstance(region, Annulus):
-        radii = [region.inner_radius, region.outer_radius]
+        radii = region.radii
     elif isinstance(region, Panda):
         radii = _steps(region.inner_radius, region.outer_radius, region.num_radii)
     elif isinstance(region, EllipseAnnulus):
@@ -410,8 +410,36 @@ def radial_profile(
     return (radii, brightness, errors)
 
 
-def cut(region: BaseRegion, data: NDArray[np.floating]) -> tuple[list[float], list[float]]:
+#: DS9's Plot 2D and Plot 3D Method menu (`markeranalysisplot3d.tcl`).
+METHODS: tuple[str, ...] = ("average", "sum", "median")
+
+
+def combine(values: NDArray[np.floating], method: str) -> float:
+    """Reduce pixel values by one of DS9's methods: average, sum or median.
+
+    Non-finite pixels are left out, as DS9 leaves out blanks.
+    """
+    values = np.asarray(values, dtype=np.float64)
+    values = values[np.isfinite(values)]
+    if method == "sum":
+        return float(values.sum())
+    if values.size == 0:
+        return float("nan")
+    if method == "median":
+        return float(np.median(values))
+    if method == "average":
+        return float(values.mean())
+    raise AnalysisError(f"unknown method {method!r}: expected one of {', '.join(METHODS)}")
+
+
+def cut(
+    region: BaseRegion, data: NDArray[np.floating], method: str = "average"
+) -> tuple[list[float], list[float]]:
     """The pixel values along a line, DS9's Plot 2D.
+
+    A projection with a thickness reads a strip across the line at each
+    step, one pixel apart, and reduces it by `method` -- average, sum or
+    median, DS9's Method menu. Every other line reads one pixel per step.
 
     Returns:
         Distance from the start in pixels, and the value there. Values are
@@ -431,16 +459,29 @@ def cut(region: BaseRegion, data: NDArray[np.floating]) -> tuple[list[float], li
     steps = max(2, int(length * CUT_SAMPLES_PER_PIXEL) + 1)
 
     height, width = values_shape(data)
+    thickness = float(getattr(region, "projection_width", 0.0) or 0.0)
+    across = int(thickness) // 2
+    if length > 0:
+        normal = (-(end[1] - start[1]) / length, (end[0] - start[0]) / length)
+    else:
+        normal = (0.0, 0.0)
+    offsets = range(-across, across + 1)
+
     distances: list[float] = []
     values: list[float] = []
     for step in range(steps):
         fraction = step / (steps - 1)
         x = start[0] + (end[0] - start[0]) * fraction
         y = start[1] + (end[1] - start[1]) * fraction
-        column, row = int(round(x)) - 1, int(round(y)) - 1
-        if 0 <= column < width and 0 <= row < height:
+        strip: list[float] = []
+        for offset in offsets:
+            column = int(round(x + normal[0] * offset)) - 1
+            row = int(round(y + normal[1] * offset)) - 1
+            if 0 <= column < width and 0 <= row < height:
+                strip.append(float(data[row, column]))
+        if strip:
             distances.append(length * fraction)
-            values.append(float(data[row, column]))
+            values.append(strip[0] if len(strip) == 1 else combine(np.asarray(strip), method))
     return (distances, values)
 
 
@@ -457,12 +498,18 @@ def _ends(
     return (region.start, region.end)
 
 
-def depth_profile(region: BaseRegion, cube: NDArray[np.floating]) -> tuple[list[int], list[float]]:
-    """The sum inside a region on each slice of a cube, DS9's Plot 3D.
+def depth_profile(
+    region: BaseRegion, cube: NDArray[np.floating], method: str = "sum"
+) -> tuple[list[int], list[float]]:
+    """The pixels inside a region on each slice of a cube, DS9's Plot 3D.
+
+    Args:
+        method: How each slice's pixels are reduced: average, sum or
+            median, DS9's Method menu.
 
     Returns:
         The slice numbers, counting from one as DS9's Cube dialog does, and
-        the sum inside the region on each.
+        the reduced value inside the region on each.
 
     Raises:
         AnalysisError: If the data is not a cube.
@@ -478,9 +525,8 @@ def depth_profile(region: BaseRegion, cube: NDArray[np.floating]) -> tuple[list[
     totals: list[float] = []
     for index in range(cube.shape[0]):
         plane = np.asarray(cube[index], dtype=np.float64)[inside]
-        plane = plane[np.isfinite(plane)]
         slices.append(index + 1)
-        totals.append(float(plane.sum()))
+        totals.append(combine(plane, method))
     return (slices, totals)
 
 

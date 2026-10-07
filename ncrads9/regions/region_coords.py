@@ -136,9 +136,16 @@ def place(regions: list[BaseRegion], frame) -> list[BaseRegion]:
         for name in ("vertices", "points"):
             if hasattr(region, name):
                 setattr(region, name, [to_image(point) for point in getattr(region, name)])
-        for name in LENGTHS.get(type(region).__name__, ()):
-            value = ds9_coords.length_to_image(frame, getattr(region, name), system, "degrees")
-            setattr(region, name, value)
+        if isinstance(getattr(region, "radii", None), list):
+            # An annulus of any number of rings: every radius, not only the
+            # two ends `inner_radius` and `outer_radius` name.
+            region.radii = [
+                ds9_coords.length_to_image(frame, radius, system, "degrees") for radius in region.radii
+            ]
+        else:
+            for name in LENGTHS.get(type(region).__name__, ()):
+                value = ds9_coords.length_to_image(frame, getattr(region, name), system, "degrees")
+                setattr(region, name, value)
         setattr(region, SYSTEM_ATTRIBUTE, "image")
 
     for region in regions:
@@ -269,6 +276,9 @@ class _Converter:
 
         if name in ("ellipse", "box"):
             lengths = tuple(range(2, len(numbers) - 1)) if len(numbers) > 5 else (2, 3)
+        elif name == "annulus":
+            # Every radius after the centre, however many rings there are.
+            lengths = tuple(range(2, len(numbers)))
         else:
             lengths = _TEXT_LENGTHS.get(name, ())
         for index in lengths:

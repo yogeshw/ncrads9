@@ -286,7 +286,11 @@ def region_file(tmp_path):
 def _answer_with(monkeypatch, path):
     from PyQt6.QtWidgets import QFileDialog
 
+    from ncrads9.ui.dialogs.region_file_dialog import RegionFileDialog
+
     monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(lambda *a, **k: (str(path), "")))
+    # DS9's load dialog follows the chooser; accept what it offers.
+    monkeypatch.setattr(RegionFileDialog, "exec", lambda self: 1)
 
 
 def test_open_adds_to_what_is_already_there(window, monkeypatch, region_file):
