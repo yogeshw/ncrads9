@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from ...rendering.scale_algorithms import ScaleAlgorithm
-from . import access_points
+from . import access_points, positions
 
 
 class XPACommandType(Enum):
@@ -257,6 +257,122 @@ class XPACommands:
         """
         self._command_handlers[name.lower()] = handler
 
+    # -- file and fits -----------------------------------------------------
+
+    def _read_file(self, args: list[str]) -> dict[str, Any]:
+        """`xpaget ds9 file`: what the current frame was loaded from."""
+        viewer_error = self._require_viewer()
+        if viewer_error:
+            return viewer_error
+        frame = self.viewer.frame_manager.current_frame
+        if frame is None or frame.filepath is None:
+            return {"status": "ok", "result": ""}
+        return {"status": "ok", "result": str(frame.file_spec or frame.filepath)}
+
+    def _read_fits(self, args: list[str]) -> dict[str, Any]:
+        """`xpaget ds9 fits [width|height|depth|bitpix|size ...|count|header
+        [<ext>] [keyword <name>]|image|table|slice]`.
+
+        Bare, or with `image`, `table` or `slice`, the answer is the FITS
+        file itself, as bytes, for `xpaget ds9 fits > foo.fits`.
+        """
+        viewer_error = self._require_viewer()
+        if viewer_error:
+            return viewer_error
+        frame = self.viewer.frame_manager.current_frame
+        if frame is None or frame.image_data is None:
+            return {"status": "error", "message": "the frame is empty"}
+        words = [word.lower() for word in args]
+        what = words[0] if words else ""
+
+        image = getattr(frame, "image", None)
+        shape = image.data.shape if image is not None else frame.image_data.shape
+        width, height = int(shape[-1]), int(shape[-2])
+        depth = int(shape[-3]) if len(shape) >= 3 else 1
+
+        if what == "width":
+            return {"status": "ok", "result": str(width)}
+        if what == "height":
+            return {"status": "ok", "result": str(height)}
+        if what == "depth":
+            return {"status": "ok", "result": str(depth)}
+        if what == "bitpix":
+            bitpix = getattr(image, "bitpix", None) if image is not None else None
+            if bitpix is None:
+                bitpix = (frame.header or {}).get("BITPIX", -32)
+            return {"status": "ok", "result": str(bitpix)}
+        if what == "count":
+            segments = getattr(frame, "mosaic_segments", None)
+            return {"status": "ok", "result": str(len(segments) if segments else 1)}
+        if what == "size":
+            return {"status": "ok", "result": self._fits_size(frame, words[1:], width, height)}
+        if what == "header":
+            return self._fits_header(frame, args[1:])
+        if what in ("", "image", "table", "slice"):
+            return {"status": "ok", "result": self._fits_bytes(frame, what)}
+        return {"status": "error", "message": f"fits has no {what}"}
+
+    @staticmethod
+    def _fits_size(frame, words: list[str], width: int, height: int) -> str:
+        """The image's size in pixels, or on the sky in the units asked for."""
+        _values, system, sky, _format = positions.split_spec(words)
+        unit = next((word for word in words if word in ("degrees", "arcmin", "arcsec", "arcsecs")), "degrees")
+        if not system.startswith("wcs"):
+            return f"{width} {height}"
+        handler = positions.wcs_handler(frame, system)
+        if handler is None:
+            return f"{width} {height}"
+        from astropy.wcs.utils import proj_plane_pixel_scales
+
+        scales = proj_plane_pixel_scales(handler.wcs)
+        factor = {"degrees": 1.0, "arcmin": 60.0}.get(unit, 3600.0)
+        return f"{width * scales[0] * factor:.8g} {height * scales[1] * factor:.8g}"
+
+    def _fits_header(self, frame, words: list[str]) -> dict[str, Any]:
+        """`fits header [<ext>] [keyword <name>]`."""
+        from astropy.io import fits
+
+        keyword = None
+        if "keyword" in [word.lower() for word in words]:
+            at = [word.lower() for word in words].index("keyword")
+            keyword = words[at + 1] if at + 1 < len(words) else None
+            words = words[:at]
+        header = None
+        if words and words[0].lstrip("-").isdigit() and frame.filepath is not None:
+            # DS9 counts extensions from one for the primary; a minus sign
+            # asks for inheritance, which a single header does not need.
+            ext = abs(int(words[0])) - 1
+            try:
+                header = fits.getheader(str(frame.filepath), ext=ext)
+            except (OSError, IndexError) as exc:
+                return {"status": "error", "message": str(exc)}
+        if header is None:
+            raw = frame.header or {}
+            header = raw if isinstance(raw, fits.Header) else fits.Header(raw)
+        if keyword is not None:
+            value = header.get(keyword.upper())
+            return {"status": "ok", "result": "" if value is None else str(value)}
+        return {"status": "ok", "result": "\n".join(str(card) for card in header.cards)}
+
+    @staticmethod
+    def _fits_bytes(frame, what: str) -> bytes:
+        """The frame's data as a FITS file in memory."""
+        import io
+
+        from astropy.io import fits
+
+        raw = frame.header or {}
+        header = raw.copy() if isinstance(raw, fits.Header) else fits.Header(raw)
+        data = frame.image_data
+        image = getattr(frame, "image", None)
+        if what in ("", "image") and image is not None and image.data.ndim >= 3 and what == "":
+            data = image.data
+        for key in ("SIMPLE", "XTENSION", "BITPIX", "EXTEND", "PCOUNT", "GCOUNT"):
+            header.remove(key, ignore_missing=True, remove_all=True)
+        buffer = io.BytesIO()
+        fits.PrimaryHDU(data=data, header=header).writeto(buffer)
+        return buffer.getvalue()
+
     def _handle_file(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle file command for loading/saving files.
 
@@ -271,7 +387,7 @@ class XPACommands:
             return viewer_error
 
         args = [str(word) for word in self._args(params)]
-        verbs = {"load", "open", "save", "saveas", "get", "current", "new", "delete", "slice"}
+        verbs = {"load", "open", "save", "saveas", "get", "current", "new", "delete", "slice", "mask"}
 
         # `xpaset -p ds9 file foo.fits` is DS9's own first rule and the
         # commonest XPA command there is: a bare filename, no verb. The
@@ -292,11 +408,21 @@ class XPACommands:
                 "status": "ok",
                 "result": str(frame.filepath) if frame and frame.filepath else "",
             }
-        if action in {"load", "open", "new", "slice"}:
+        if action in {"load", "open", "new", "slice", "mask"}:
             if not path:
                 return {"status": "error", "message": "No file path specified"}
+            if action == "mask":
+                # `fits mask foo.fits`: an overlay on the frame, not a new image.
+                if not self.viewer.analysis.load_mask(str(path)):
+                    return {"status": "error", "message": f"could not load {path} as a mask"}
+                return {"status": "ok", "result": f"Loaded mask: {path}"}
             if action == "new":
                 self.viewer.frame_controller.new_frame()
+            if action == "slice":
+                problem = self.viewer.file.open_as("slice", str(path))
+                if problem:
+                    return {"status": "error", "message": problem}
+                return {"status": "ok", "result": f"Loaded: {path}"}
             self.viewer.file.open_file(filepath=str(path))
             return {"status": "ok", "result": f"Loaded: {path}"}
         if action in {"save", "saveas"}:
@@ -325,110 +451,192 @@ class XPACommands:
             params["action"] = "load"
         return self._handle_file(params)
 
+    # -- frame -------------------------------------------------------------
+
+    # DS9 names frames by number, and a frame keeps its number when another
+    # is deleted or the order changes: delete Frame 1 of two and what is
+    # left is Frame 2. These points therefore speak in frame ids, not in
+    # positions in the list.
+
+    def _frame_ids(self) -> list[int]:
+        return [frame.frame_id for frame in self.viewer.frame_manager.frames]
+
+    def _frame_index(self, frame_id: int) -> int | None:
+        """Where the frame with this id is in the list, or None."""
+        for index, frame in enumerate(self.viewer.frame_manager.frames):
+            if frame.frame_id == frame_id:
+                return index
+        return None
+
+    def _current_frame_id(self) -> str:
+        frame = self.viewer.frame_manager.current_frame
+        return str(frame.frame_id) if frame is not None else "0"
+
+    def _goto_frame_id(self, frame_id: int) -> None:
+        """Go to a frame by number, creating it if there is none, as DS9 does."""
+        frames = self.viewer.frame_manager
+        controller = self.viewer.frame_controller
+        index = self._frame_index(frame_id)
+        if index is None:
+            # DS9 makes the frame asked for, under that number.
+            controller.new_frame_of_type("base", frame_id=frame_id)
+            index = self._frame_index(frame_id)
+            if index is None:
+                return
+        frame = frames.frames[index]
+        if frame.frame_id not in self.viewer._active_frame_ids:
+            controller.set_active(frame.frame_id, True)
+        controller.goto_index(index)
+
+    def _targets(self, words: list[str]) -> list[int] | None:
+        """The frames `[<integer>|all]` names, as list indices.
+
+        Returns None if a number names no frame.
+        """
+        frames = self.viewer.frame_manager
+        if not words:
+            return [frames.current_index]
+        if words[0].lower() == "all":
+            return list(range(len(frames.frames)))
+        if not words[0].isdigit():
+            return None
+        index = self._frame_index(int(words[0]))
+        return None if index is None else [index]
+
+    def _on_frames(self, indices: list[int], act) -> None:
+        """Do something to each of several frames, coming back to this one."""
+        frames = self.viewer.frame_manager
+        home = frames.current_frame
+        for index in indices:
+            frames.goto_frame(index)
+            act()
+        if home is not None and home in frames.frames:
+            frames.goto_frame(frames.frames.index(home))
+        self.viewer.frame_controller.update_display()
+
     def _handle_frame(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle frame commands.
+        """DS9's `frame`.
 
-        Args:
-            params: Command parameters including 'action' and 'number'.
-
-        Returns:
-            Response dictionary.
+        `frame <n>` goes to a frame (making it if need be), `frame new
+        [rgb|hsv|hls|3d]` makes one, `delete|clear|reset|refresh|center|
+        hide|show [<n>|all]` act on one frame or every frame, `move
+        first|back|forward|last` reorders, `first|next|prev|last` step,
+        and `match|lock <coordsys>` are Frame -> Match and Lock.
         """
         viewer_error = self._require_viewer()
         if viewer_error:
             return viewer_error
 
-        action = str(params.get("action", self._first_arg(params, "get"))).lower()
-        args = self._args(params)
+        words = [str(word) for word in self._args(params)]
+        if not words and params.get("action") is not None:
+            words = [str(params["action"])]
+            if params.get("number") is not None:
+                words.append(str(params["number"]))
+        if not words:
+            return {"status": "ok", "result": self._current_frame_id()}
+        action = words[0].lower()
+        rest = words[1:]
+        controller = self.viewer.frame_controller
+        frames = self.viewer.frame_manager
 
-        # DS9's reads reach `_read_frame` above; these are the same names
-        # arriving as a write, which `frame has grid` does when a caller
-        # forgets the `-p`. Answering rather than making a frame called
-        # `has` is the kinder reading.
-        if action in ("frameno", "all", "active", "has") and not (action == "frameno" and args[1:]):
-            answer = self._frame_read(action, [str(word) for word in args])
+        def done(problem: str | None = None) -> dict[str, Any]:
+            if problem:
+                return {"status": "error", "message": problem}
+            return {"status": "ok", "result": self._current_frame_id()}
+
+        # The reads, arriving as a write -- `frame has grid` without `-p`.
+        if action in ("all", "active", "has", "get") or (action == "frameno" and not rest):
+            answer = self._frame_read(action, words)
             if answer is not None:
                 return {"status": "ok", "result": answer}
 
-        moved = self._frame_write(action, [str(word) for word in args])
-        if moved is not None:
-            return moved
-        number = params.get("number")
-        if number is None and action == "set" and args:
-            number = args[0]
-        if action not in {
-            "new",
-            "rgb",
-            "hsv",
-            "hls",
-            "3d",
-            "delete",
-            "deleteall",
-            "delete_all",
-            "clear",
-            "reset",
-            "refresh",
-            "first",
-            "last",
-            "next",
-            "prev",
-            "previous",
-            "get",
-            "set",
-        }:
-            if isinstance(action, (int, float)) or str(action).isdigit():
-                number = action
-                action = "set"
-
+        if action.isdigit():
+            self._goto_frame_id(int(action))
+            return done()
+        if action == "frameno":
+            if not rest[0].isdigit():
+                return done(f"{rest[0]} is not a frame number")
+            self._goto_frame_id(int(rest[0]))
+            return done()
+        if action == "set" and rest and rest[0].isdigit():
+            self._goto_frame_id(int(rest[0]))
+            return done()
         if action == "new":
-            self.viewer.frame_controller.new_frame()
-        elif action in {"rgb", "hsv", "hls", "3d"}:
-            if hasattr(self.viewer.frame_controller, "new_frame_of_type"):
-                self.viewer.frame_controller.new_frame_of_type(action)
-            else:
-                self.viewer.frame_controller.new_frame()
-        elif action == "delete":
-            self.viewer.frame_controller.delete_current()
-        elif action in {"deleteall", "delete_all"}:
-            if hasattr(self.viewer.frame_controller, "delete_all"):
-                self.viewer.frame_controller.delete_all()
-        elif action == "clear":
-            if hasattr(self.viewer.frame_controller, "clear_current"):
-                self.viewer.frame_controller.clear_current()
-        elif action == "reset":
-            if hasattr(self.viewer.frame_controller, "reset_current"):
-                self.viewer.frame_controller.reset_current()
-        elif action == "refresh":
-            if hasattr(self.viewer.frame_controller, "refresh_current"):
-                self.viewer.frame_controller.refresh_current()
-        elif action == "first":
-            self.viewer.frame_controller.first()
-        elif action in {"prev", "previous"}:
-            self.viewer.frame_controller.previous()
-        elif action == "next":
-            self.viewer.frame_controller.next()
-        elif action == "last":
-            self.viewer.frame_controller.last()
-        elif action == "set":
-            if number is None:
-                return {"status": "error", "message": "Frame number required"}
-            index = max(0, int(number) - 1)
-            frame = self.viewer.frame_manager.goto_frame(index)
-            if frame is None:
-                return {"status": "error", "message": f"Invalid frame: {number}"}
-            self.viewer.frame_controller.update_display()
-        elif action == "get":
-            return {
-                "status": "ok",
-                "result": str(self.viewer.frame_manager.current_index + 1),
-            }
-        else:
-            return {"status": "error", "message": "Invalid frame command"}
+            kind = rest[0].lower() if rest else "base"
+            if kind == "hvsv":
+                # DS9's own documentation spells it so.
+                kind = "hsv"
+            if kind not in ("base", "rgb", "hsv", "hls", "3d"):
+                return done(f"{rest[0]} is not a kind of frame")
+            controller.new_frame_of_type(kind)
+            return done()
+        if action in ("rgb", "hsv", "hls", "3d"):
+            controller.new_frame_of_type(action)
+            return done()
+        if action in ("first", "next", "prev", "previous", "last"):
+            {
+                "first": controller.first,
+                "next": controller.next,
+                "prev": controller.previous,
+                "previous": controller.previous,
+                "last": controller.last,
+            }[action]()
+            return done()
+        if action == "move":
+            where = rest[0].lower() if rest else ""
+            mover = {
+                "first": controller.move_first,
+                "back": controller.move_back,
+                "forward": controller.move_forward,
+                "last": controller.move_last,
+            }.get(where)
+            if mover is None:
+                return done("move takes first, back, forward or last")
+            mover()
+            return done()
+        if action in ("match", "lock"):
+            if not rest:
+                return done(f"frame {action} takes a coordinate system")
+            point = self._points.get(action)
+            problem = point.set(self.viewer, ["frame", *rest]) if point is not None else None
+            return done(problem)
 
-        return {
-            "status": "ok",
-            "result": str(self.viewer.frame_manager.current_index + 1),
-        }
+        if action in ("delete", "deleteall", "delete_all", "clear", "reset", "refresh", "center", "hide", "show"):
+            if action in ("deleteall", "delete_all"):
+                action, rest = "delete", ["all"]
+            targets = self._targets(rest)
+            if targets is None:
+                return done(f"there is no frame {rest[0]}")
+            if action == "delete":
+                if rest and rest[0].lower() == "all":
+                    controller.delete_all()
+                    return done()
+                frames.goto_frame(targets[0])
+                controller.delete_current()
+                return done()
+            if action == "hide":
+                for index in targets:
+                    controller.set_active(frames.frames[index].frame_id, False)
+                return done()
+            if action == "show":
+                if rest and rest[0].lower() == "all":
+                    controller.show_all()
+                    return done()
+                for index in targets:
+                    controller.set_active(frames.frames[index].frame_id, True)
+                return done()
+            act = {
+                "clear": controller.clear_current,
+                "reset": controller.reset_current,
+                "refresh": controller.refresh_current,
+                "center": self.viewer.zoom.center_image,
+            }[action]
+            if targets == [frames.current_index]:
+                act()
+            else:
+                self._on_frames(targets, act)
+            return done()
+        return done(f"{words[0]} is not a frame command")
 
     def _read_frame(self, args: list[str]) -> dict[str, Any]:
         """`xpaget ds9 frame ...`, which has a grammar of its own."""
@@ -438,7 +646,7 @@ class XPACommands:
         action = args[0].lower() if args else ""
         answer = self._frame_read(action, args)
         if answer is None:
-            answer = str(self.viewer.frame_manager.current_index + 1)
+            answer = self._current_frame_id()
         return {"status": "ok", "result": answer}
 
     def _frame_read(self, action: str, args: list[str]) -> str | None:
@@ -452,11 +660,11 @@ class XPACommands:
         controller = self.viewer.frame_controller
 
         if action in ("", "get", "frameno"):
-            return str(frames.current_index + 1)
+            return self._current_frame_id()
         if action == "all":
-            return " ".join(str(index + 1) for index in range(len(frames.frames)))
+            return " ".join(str(frame_id) for frame_id in self._frame_ids())
         if action == "active":
-            return " ".join(str(index + 1) for index in controller.active_indices())
+            return " ".join(str(frames.frames[index].frame_id) for index in controller.active_indices())
         if action == "lock":
             # The same text the `lock` point answers with, so the two
             # spellings of DS9's question give one answer.
@@ -468,6 +676,31 @@ class XPACommands:
             return access_points.on_off(self._frame_has([w for w in args if w.lower() != "has"]))
         return None
 
+    @staticmethod
+    def _frame_has_wcs(frame, words: list[str]) -> bool:
+        """`frame has wcs [celestial|linear] [<wcssys>]`."""
+        kind = words[0] if words and words[0] in ("celestial", "linear") else ""
+        names = [word for word in words if word not in ("celestial", "linear")]
+        system = names[0] if names else "wcs"
+        header = getattr(frame, "header", None)
+        if not header:
+            return False
+        key = "" if system == "wcs" else system[3:].upper()
+        if f"CTYPE1{key}" not in header:
+            return False
+        try:
+            from astropy.io import fits
+            from astropy.wcs import WCS
+
+            described = WCS(header if isinstance(header, fits.Header) else fits.Header(header), key=key or " ")
+        except Exception:
+            return False
+        if kind == "celestial":
+            return bool(described.has_celestial)
+        if kind == "linear":
+            return not described.has_celestial
+        return True
+
     def _frame_has(self, words: list[str]) -> bool:
         """Whether the current frame has what `frame has ...` asks about."""
         frame = self.viewer.frame_manager.current_frame
@@ -475,8 +708,6 @@ class XPACommands:
             return False
         what = " ".join(word.lower() for word in words)
         data = getattr(frame, "image_data", None)
-        handler = getattr(frame, "wcs_handler", None)
-
         if what.startswith("fits"):
             if data is None:
                 return False
@@ -487,10 +718,16 @@ class XPACommands:
             if what == "fits mosaic":
                 return bool(getattr(frame, "is_mosaic", False))
             return True
+        if what.startswith("system "):
+            system = what.split()[1]
+            if system == "image":
+                return data is not None
+            what = "physical" if system in ("physical", "amplifier", "detector") else "wcs " + system
         if what.startswith("wcs"):
-            return bool(handler is not None and getattr(handler, "is_valid", False))
-        if what in ("physical", "system physical"):
-            return getattr(frame, "physical_transform", None) is not None
+            return self._frame_has_wcs(frame, what.split()[1:])
+        if what == "physical":
+            header = getattr(frame, "header", None) or {}
+            return any(key in header for key in ("LTM1_1", "LTM2_2", "LTV1", "LTV2"))
         if what in ("amplifier", "detector"):
             return False
         if what in ("datamin", "irafmin", "datasec"):
@@ -514,112 +751,157 @@ class XPACommands:
             return bool(regions)
         return False
 
-    def _frame_write(self, action: str, args: list[str]) -> dict[str, Any] | None:
-        """DS9's frame rules the block below does not cover, or None."""
-        controller = self.viewer.frame_controller
+    # -- zoom --------------------------------------------------------------
 
-        if action == "hide":
-            frame = self.viewer.frame_manager.current_frame
-            if frame is not None:
-                controller.set_active(frame.frame_id, False)
-            return {"status": "ok"}
-        if action == "show":
-            frames = self.viewer.frame_manager.frames
-            wanted = (
-                int(args[0]) - 1 if args and args[0].isdigit() else self.viewer.frame_manager.current_index
-            )
-            if not 0 <= wanted < len(frames):
-                return {"status": "error", "message": f"there is no frame {wanted + 1}"}
-            controller.set_active(frames[wanted].frame_id, True)
-            return {"status": "ok"}
-        if action == "move":
-            where = args[0].lower() if args else ""
-            handler = {
-                "first": controller.move_first,
-                "back": controller.move_back,
-                "forward": controller.move_forward,
-                "last": controller.move_last,
-            }.get(where)
-            if handler is None:
-                return {"status": "error", "message": "move takes first, back, forward or last"}
-            handler()
-            return {"status": "ok"}
-        if action == "center":
-            # `center`, `center <n>`, `center all`: DS9 re-centres the
-            # image in the frame, which is what a zoom-to-fit pan does.
-            self.viewer.zoom.center_image()
-            return {"status": "ok"}
-        if action == "frameno" and args:
-            return self._handle_frame({"action": "set", "args": args})
-        if action in ("match", "lock") and args:
-            point = self._points.get(action)
-            if point is not None and point.set is not None:
-                problem = point.set(self.viewer, args)
-                if problem:
-                    return {"status": "error", "message": problem}
-                return {"status": "ok"}
-        return None
+    @staticmethod
+    def _zoom_value(word: str) -> float:
+        """A zoom factor as DS9 writes it: `4`, `0.25` or `1/4`."""
+        if "/" in word:
+            numerator, denominator = word.split("/", 1)
+            return float(numerator) / float(denominator)
+        return float(word)
+
+    def _zoom_text(self) -> str:
+        zoom = self.viewer.image_viewer.get_zoom()
+        return f"{zoom:.6g}"
+
+    def _read_zoom(self, args: list[str]) -> dict[str, Any]:
+        """`xpaget ds9 zoom`: the current frame's zoom."""
+        viewer_error = self._require_viewer()
+        if viewer_error:
+            return viewer_error
+        return {"status": "ok", "result": self._zoom_text()}
 
     def _handle_zoom(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle zoom commands.
+        """DS9's `zoom`.
 
-        Args:
-            params: Command parameters including 'level' or 'action'.
-
-        Returns:
-            Response dictionary.
+        `zoom <value>` and `zoom to <value>` set the zoom absolutely, `zoom
+        to fit` fits, `zoom in` and `zoom out` step, `zoom open|close`
+        shows the Pan Zoom Rotate window. DS9's two-value form zooms x and
+        y apart; NCRADS9 zooms both axes together, so two different
+        values are refused rather than half applied.
         """
         viewer_error = self._require_viewer()
         if viewer_error:
             return viewer_error
 
-        level = params.get("level")
-        action = params.get("action")
-        args = self._args(params)
-        if action is None and args:
-            action = str(args[0]).lower()
-            if action not in {"fit", "in", "out", "to", "set", "get"}:
-                level = args[0]
+        words = [str(word).lower() for word in self._args(params)]
+        if not words and params.get("level") is not None:
+            words = [str(params["level"])]
+        elif not words and params.get("action") is not None:
+            words = [str(params["action"]).lower()]
+        if words and words[0] == "to":
+            words = words[1:]
+        zoom = self.viewer.zoom
 
-        if level is not None:
-            self.viewer.image_viewer.zoom_to(float(level))
-            self.viewer.status_bar.update_zoom(self.viewer.image_viewer.get_zoom())
-            return {"status": "ok", "result": f"{self.viewer.image_viewer.get_zoom():.6g}"}
-        if action in {"fit", "tofit"}:
-            self.viewer.zoom.zoom_fit()
-            return {"status": "ok", "result": f"{self.viewer.image_viewer.get_zoom():.6g}"}
-        if action in {"in", "incr"}:
-            self.viewer.zoom.zoom_in()
-            return {"status": "ok", "result": f"{self.viewer.image_viewer.get_zoom():.6g}"}
-        if action in {"out", "decr"}:
-            self.viewer.zoom.zoom_out()
-            return {"status": "ok", "result": f"{self.viewer.image_viewer.get_zoom():.6g}"}
-        return {"status": "ok", "result": f"{self.viewer.image_viewer.get_zoom():.6g}"}
+        if not words or words[0] in ("get",):
+            return {"status": "ok", "result": self._zoom_text()}
+        if words[0] in ("fit", "tofit"):
+            zoom.zoom_fit()
+        elif words[0] in ("in", "incr"):
+            zoom.zoom_in()
+        elif words[0] in ("out", "decr"):
+            zoom.zoom_out()
+        elif words[0] == "open":
+            zoom.show_pan_zoom_rotate_dialog()
+        elif words[0] == "close":
+            self._close_window("PanZoomRotateDialog")
+        else:
+            try:
+                values = [self._zoom_value(word) for word in words[:2]]
+            except (ValueError, ZeroDivisionError):
+                return {"status": "error", "message": f"{' '.join(words)} is not a zoom"}
+            if len(values) == 2 and abs(values[0] - values[1]) > 1e-9:
+                return {"status": "error", "message": "zooming x and y apart is not supported"}
+            if values[0] <= 0:
+                return {"status": "error", "message": "a zoom has to be positive"}
+            zoom.set_zoom(values[0])
+        return {"status": "ok", "result": self._zoom_text()}
+
+    def _close_window(self, name: str) -> None:
+        """Close a tool window opened through `Controller.show_window`."""
+        held = getattr(self.viewer, "_open_windows", {}) or {}
+        dialog = held.get(name)
+        if dialog is None:
+            return
+        try:
+            dialog.close()
+        except RuntimeError:
+            # Already destroyed on the C++ side.
+            pass
+
+    # -- pan ---------------------------------------------------------------
+
+    def _read_pan(self, args: list[str]) -> dict[str, Any]:
+        """`xpaget ds9 pan [<coordsys> [<skyframe>] [<skyformat>]]`."""
+        viewer_error = self._require_viewer()
+        if viewer_error:
+            return viewer_error
+        place = self.viewer.zoom.pan_position()
+        if place is None:
+            return {"status": "ok", "result": "0 0"}
+        _values, system, sky, sky_format = positions.split_spec(args)
+        frame = self.viewer.frame_manager.current_frame
+        return {"status": "ok", "result": positions.from_image(frame, *place, system, sky, sky_format)}
 
     def _handle_pan(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle pan commands.
+        """DS9's `pan`: `pan <x> <y> <coordsys> [<sky>]` moves by that much,
+        `pan to <x> <y> <coordsys> [<sky>]` moves to there.
 
-        Args:
-            params: Command parameters including 'x', 'y' coordinates.
-
-        Returns:
-            Response dictionary.
+        A relative pan in a sky system is an offset in that system's
+        units -- degrees, or the sexagesimal it is written in -- applied
+        at the current centre, as DS9 applies it.
         """
         viewer_error = self._require_viewer()
         if viewer_error:
             return viewer_error
 
-        x = params.get("x")
-        y = params.get("y")
-        args = self._args(params)
-        if (x is None or y is None) and len(args) >= 2:
-            x, y = args[0], args[1]
-        if x is not None and y is not None:
-            self.viewer.zoom.on_panner_pan(float(x), float(y))
+        words = [str(word) for word in self._args(params)]
+        if not words and params.get("x") is not None and params.get("y") is not None:
+            words = ["to", str(params["x"]), str(params["y"]), "image"]
+        if not words:
+            return self._read_pan([])
+        lowered = words[0].lower()
+        if lowered == "open":
+            self.viewer.zoom.show_pan_zoom_rotate_dialog()
+            return {"status": "ok"}
+        if lowered == "close":
+            self._close_window("PanZoomRotateDialog")
+            return {"status": "ok"}
+
+        absolute = lowered == "to"
+        if absolute:
+            words = words[1:]
+        values, system, sky, _format = positions.split_spec(words)
+        if len(values) < 2:
+            return {"status": "error", "message": "pan takes an x and a y"}
         frame = self.viewer.frame_manager.current_frame
-        if frame is None:
-            return {"status": "ok", "result": "0 0"}
-        return {"status": "ok", "result": f"{frame.pan_x:.6g} {frame.pan_y:.6g}"}
+        place = self.viewer.zoom.pan_position()
+        if frame is None or place is None:
+            return {"status": "error", "message": "there is no image to pan"}
+
+        try:
+            if absolute:
+                x, y = positions.to_image(frame, values[0], values[1], system, sky)
+            elif system == "image":
+                x, y = place[0] + float(values[0]), place[1] + float(values[1])
+            elif system in ("physical", "amplifier", "detector"):
+                transform = positions._physical(frame)
+                px, py = transform.image_to_physical(*place)
+                x, y = transform.physical_to_image(px + float(values[0]), py + float(values[1]))
+            else:
+                here = positions.from_image(frame, *place, system, sky, "degrees").split()
+                x, y = positions.to_image(
+                    frame,
+                    str(float(here[0]) + float(values[0])),
+                    str(float(here[1]) + float(values[1])),
+                    system,
+                    sky,
+                )
+        except ValueError as exc:
+            return {"status": "error", "message": str(exc)}
+        self.viewer.zoom.pan_to_image(x, y)
+        return {"status": "ok"}
 
     @staticmethod
     def _is_number(value: Any) -> bool:
@@ -629,6 +911,51 @@ class XPACommands:
         except (TypeError, ValueError):
             return False
         return True
+
+    #: Our algorithms by the names DS9's `scale` reads and writes.
+    _SCALE_NAMES = {
+        ScaleAlgorithm.LINEAR: "linear",
+        ScaleAlgorithm.LOG: "log",
+        ScaleAlgorithm.POWER: "pow",
+        ScaleAlgorithm.SQRT: "sqrt",
+        ScaleAlgorithm.SQUARED: "squared",
+        ScaleAlgorithm.ASINH: "asinh",
+        ScaleAlgorithm.SINH: "sinh",
+        ScaleAlgorithm.HISTOGRAM_EQUALIZATION: "histequ",
+    }
+
+    def _scale_name(self) -> str:
+        current = self.viewer.current_scale
+        return self._SCALE_NAMES.get(current, current.name.lower())
+
+    def _read_scale(self, args: list[str]) -> dict[str, Any]:
+        """`xpaget ds9 scale [log exp|datasec|limits|mode|scope|lock [limits]]`."""
+        viewer_error = self._require_viewer()
+        if viewer_error:
+            return viewer_error
+        words = [word.lower() for word in args]
+        scale = self.viewer.scale
+        settings = scale.settings
+        what = words[0] if words else ""
+        if what == "":
+            answer = self._scale_name()
+        elif what == "log":
+            answer = f"{settings.log_exponent:g}"
+        elif what == "datasec":
+            answer = access_points.on_off(settings.use_datasec)
+        elif what == "limits":
+            low, high = scale.current_limits()
+            answer = f"{low:.8g} {high:.8g}"
+        elif what == "mode":
+            answer = scale.mode_key(settings)
+        elif what == "scope":
+            answer = settings.scope.value
+        elif what == "lock":
+            flag = "scale_limits" if words[1:2] == ["limits"] else "scale"
+            answer = access_points.on_off(self.viewer.frame_controller.is_locked(flag))
+        else:
+            return {"status": "error", "message": f"scale has no {what}"}
+        return {"status": "ok", "result": answer}
 
     def _handle_scale(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle scale/contrast commands.
@@ -653,7 +980,8 @@ class XPACommands:
             "linear": ScaleAlgorithm.LINEAR,
             "log": ScaleAlgorithm.LOG,
             "sqrt": ScaleAlgorithm.SQRT,
-            "squared": ScaleAlgorithm.POWER,
+            "squared": ScaleAlgorithm.SQUARED,
+            "pow": ScaleAlgorithm.POWER,
             "power": ScaleAlgorithm.POWER,
             "sinh": ScaleAlgorithm.SINH,
             "asinh": ScaleAlgorithm.ASINH,
@@ -724,13 +1052,28 @@ class XPACommands:
             # `scale log exp 100`: the log scale and its exponent at once.
             self.viewer.scale.set_scale(ScaleAlgorithm.LOG)
             self.viewer.scale.set_log_exponent(float(rest[-1]))
-            return {"status": "ok", "result": self.viewer.current_scale.name.lower()}
-        if mode in ("match", "lock", "open", "close"):
-            point = self._points.get(mode)
-            if point is not None and point.set is not None:
-                problem = point.set(self.viewer, ["scalelimits", *rest] if mode != "open" else rest)
-                if problem:
-                    return {"status": "error", "message": problem}
+            return {"status": "ok", "result": self._scale_name()}
+        if mode in ("match", "lock"):
+            # `scale match`, `scale match limits`, `scale lock [yes|no]`,
+            # `scale lock limits [yes|no]`: the scale and the limits are
+            # two separate locks, as they are on Frame -> Lock.
+            limits_too = bool(rest) and rest[0].lower() == "limits"
+            flag = "scale_limits" if limits_too else "scale"
+            controller = self.viewer.frame_controller
+            if mode == "match":
+                (controller.match_scale_limits if limits_too else controller.match_scale)()
+                return {"status": "ok"}
+            values = rest[1:] if limits_too else rest
+            wanted = self._as_bool(values[0]) if values else True
+            if wanted is None:
+                return {"status": "error", "message": f"{values[0]} is not yes or no"}
+            controller.set_lock_flag(flag, wanted)
+            return {"status": "ok"}
+        if mode == "open":
+            self.viewer.scale.show_dialog()
+            return {"status": "ok"}
+        if mode == "close":
+            self._close_window("ScaleDialog")
             return {"status": "ok"}
 
         if mode in {"zscale"}:
@@ -750,100 +1093,227 @@ class XPACommands:
             self.viewer.z2 = float(args[1])
             self.viewer.display.display()
 
-        return {"status": "ok", "result": self.viewer.current_scale.name.lower()}
+        return {"status": "ok", "result": self._scale_name()}
 
-    def _handle_cmap(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle colormap commands.
+    # -- cmap --------------------------------------------------------------
 
-        Args:
-            params: Command parameters including 'name'.
-
-        Returns:
-            Response dictionary.
-        """
+    def _read_cmap(self, args: list[str]) -> dict[str, Any]:
+        """`xpaget ds9 cmap [file|invert|value]`."""
         viewer_error = self._require_viewer()
         if viewer_error:
             return viewer_error
-
-        name = params.get("name", self._first_arg(params))
-        if name is not None:
-            selected = str(name).lower().strip()
-            if selected == "gray":
-                selected = "grey"
-            if hasattr(self.viewer.color, "available_colormaps"):
-                available = set(self.viewer.color.available_colormaps())
-            else:
-                available = {"grey", "heat", "cool", "rainbow", "viridis", "plasma", "inferno", "magma"}
-            if selected not in available:
-                return {"status": "error", "message": f"Unsupported colormap: {name}"}
-            self.viewer.color.set_colormap(selected)
+        what = args[0].lower() if args else ""
+        if what == "invert":
+            return {"status": "ok", "result": access_points.on_off(self.viewer.invert_colormap)}
+        if what == "value":
+            contrast, bias = self.viewer.color.contrast_bias()
+            return {"status": "ok", "result": f"{contrast:.6g} {bias:.6g}"}
+        if what == "file":
+            return {"status": "ok", "result": f"{self.viewer.current_colormap}.lut"}
+        if what in ("lock", "match"):
+            locked = self.viewer.frame_controller.is_locked("colorbar")
+            return {"status": "ok", "result": access_points.on_off(locked)}
         return {"status": "ok", "result": self.viewer.current_colormap}
 
-    def _handle_colorbar(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle colorbar commands.
-
-        Args:
-            params: Command parameters including 'visible'.
-
-        Returns:
-            Response dictionary.
-        """
+    def _handle_cmap(self, params: dict[str, Any]) -> dict[str, Any]:
+        """DS9's `cmap`: a colormap by name, `load`, `save`, `invert`, a
+        contrast and bias, `tag load|save|delete`, `match`, `lock` and
+        `open|close`."""
         viewer_error = self._require_viewer()
         if viewer_error:
             return viewer_error
 
-        args = self._args(params)
-        visible = params.get("visible")
-        if visible is None and args:
-            candidate = self._as_bool(args[0])
-            if candidate is not None:
-                visible = candidate
-        if visible is not None:
-            visible_bool = self._as_bool(visible)
-            if visible_bool is not None and hasattr(self.viewer.view, "set_colorbar_visible"):
-                self.viewer.view.set_colorbar_visible(visible_bool)
+        words = [str(word) for word in self._args(params)]
+        if not words and params.get("name") is not None:
+            words = [str(params["name"])]
+        if not words:
+            return self._read_cmap([])
+        color = self.viewer.color
+        verb = words[0].lower()
+        rest = words[1:]
 
-        orientation = params.get("orientation")
-        if orientation is None and args:
-            first = str(args[0]).lower()
-            if first in {"horizontal", "vertical"}:
-                orientation = first
-        if orientation is not None and hasattr(self.viewer.color, "set_colorbar_orientation"):
-            self.viewer.color.set_colorbar_orientation(str(orientation).lower())
+        def done(problem: str | None = None) -> dict[str, Any]:
+            if problem:
+                return {"status": "error", "message": problem}
+            return {"status": "ok", "result": self.viewer.current_colormap}
 
-        numerics = params.get("numerics")
-        if numerics is None and len(args) > 1:
-            numerics = args[1]
-        if numerics is not None and hasattr(self.viewer.color, "set_colorbar_numerics"):
-            numerics_bool = self._as_bool(numerics)
-            if numerics_bool is not None:
-                self.viewer.color.set_colorbar_numerics(numerics_bool)
+        if verb == "load":
+            return done(color.load_user_colormap(rest[0]) if rest else "cmap load takes a file")
+        if verb == "save":
+            return done(color.save_current_colormap(rest[0]) if rest else "cmap save takes a file")
+        if verb == "invert":
+            wanted = self._as_bool(rest[0]) if rest else True
+            if wanted is None:
+                return done(f"{rest[0]} is not yes or no")
+            color.set_inverted(wanted)
+            return done()
+        if verb == "value" or (self._is_number(verb) and rest and self._is_number(rest[0])):
+            numbers = rest if verb == "value" else words
+            if len(numbers) < 2 or not all(self._is_number(word) for word in numbers[:2]):
+                return done("cmap value takes a contrast and a bias")
+            contrast, bias = float(numbers[0]), float(numbers[1])
+            if not 0 <= contrast <= 10 or not 0 <= bias <= 1:
+                return done("contrast runs from 0 to 10 and bias from 0 to 1")
+            color.set_contrast_bias(contrast, bias)
+            return done()
+        if verb == "tag":
+            what = rest[0].lower() if rest else ""
+            if what == "load":
+                return done(color.load_tags(rest[1]) if len(rest) > 1 else "cmap tag load takes a file")
+            if what == "save":
+                return done(color.save_tags(rest[1]) if len(rest) > 1 else "cmap tag save takes a file")
+            if what in ("delete", "clear"):
+                color.delete_tags()
+                return done()
+            return done("cmap tag takes load, save or delete")
+        if verb == "match":
+            self.viewer.frame_controller.match_colorbar()
+            return done()
+        if verb == "lock":
+            wanted = self._as_bool(rest[0]) if rest else True
+            self.viewer.frame_controller.set_lock_flag("colorbar", bool(wanted))
+            return done()
+        if verb == "open":
+            color.show_dialog()
+            return done()
+        if verb == "close":
+            self._close_window("ColormapDialog")
+            return done()
 
-        spacing = params.get("spacing")
-        if spacing is not None and hasattr(self.viewer.color, "set_colorbar_spacing"):
-            spacing_mode = str(spacing).lower()
-            if spacing_mode in {"value", "distance"}:
-                self.viewer.color.set_colorbar_spacing(spacing_mode)
+        selected = color.normalize_name(words[0])
+        if selected not in set(color.available_colormaps()):
+            return done(f"Unsupported colormap: {words[0]}")
+        color.set_colormap(selected)
+        return done()
 
-        ticks = params.get("ticks")
-        if ticks is not None and hasattr(self.viewer, "colorbar_widget"):
-            try:
-                self.viewer.colorbar_widget.set_tick_count(int(ticks))
-            except (TypeError, ValueError):
-                pass
+    # -- colorbar ----------------------------------------------------------
 
-        size = params.get("size")
-        if size is not None and hasattr(self.viewer, "colorbar_widget"):
-            try:
-                self.viewer.colorbar_widget.set_bar_size(int(size))
-            except (TypeError, ValueError):
-                pass
-
-        result = "yes"
+    def _colorbar_values(self) -> dict[str, str]:
+        """Every setting `xpaget ds9 colorbar <name>` can ask for."""
+        bar = self.viewer.colorbar_widget
         state = getattr(self.viewer, "view_state", None)
-        if state is not None:
-            result = "yes" if state.colorbar else "no"
-        return {"status": "ok", "result": result}
+        locked = self.viewer.frame_controller.is_locked("colorbar") if hasattr(
+            self.viewer.frame_controller, "is_locked"
+        ) else False
+        return {
+            "": access_points.on_off(state.colorbar if state is not None else True),
+            "orientation": getattr(bar, "orientation", "horizontal"),
+            "numerics": access_points.on_off(getattr(bar, "show_numerics", True)),
+            "space": getattr(bar, "spacing_mode", "value"),
+            "font": getattr(bar, "label_font_family", "helvetica"),
+            "fontsize": str(getattr(bar, "label_font_size", 9)),
+            "fontweight": getattr(bar, "label_font_weight", "normal"),
+            "fontslant": getattr(bar, "label_font_slant", "roman"),
+            "size": str(getattr(bar, "bar_size", 20)),
+            "ticks": str(getattr(bar, "tick_count", 11)),
+            "lock": access_points.on_off(locked),
+        }
+
+    def _read_colorbar(self, args: list[str]) -> dict[str, Any]:
+        """`xpaget ds9 colorbar [<setting>]`."""
+        viewer_error = self._require_viewer()
+        if viewer_error:
+            return viewer_error
+        what = args[0].lower() if args else ""
+        values = self._colorbar_values()
+        if what not in values:
+            return {"status": "error", "message": f"colorbar has no {what}"}
+        return {"status": "ok", "result": values[what]}
+
+    def _handle_colorbar(self, params: dict[str, Any]) -> dict[str, Any]:
+        """DS9's `colorbar`: shown or not, orientation, numerics, spacing,
+        font, size, ticks, `match` and `lock`."""
+        viewer_error = self._require_viewer()
+        if viewer_error:
+            return viewer_error
+
+        words = [str(word).lower() for word in self._args(params)]
+        if not words:
+            # The application's own callers pass keywords, several at once;
+            # each is the DS9 command of the same name.
+            keyed = []
+            for key in ("visible", "orientation", "numerics", "spacing", "ticks", "size"):
+                value = params.get(key)
+                if value is None:
+                    continue
+                text = access_points.on_off(value) if isinstance(value, bool) else str(value).lower()
+                name = {"visible": None, "spacing": "space"}.get(key, key)
+                keyed.append(([name] if name else []) + [text])
+            if not keyed:
+                return self._read_colorbar([])
+            reply: dict[str, Any] = {"status": "ok"}
+            for command in keyed:
+                reply = self._handle_colorbar({"args": command})
+                if reply.get("status") != "ok":
+                    return reply
+            return reply
+
+        color = self.viewer.color
+        bar = self.viewer.colorbar_widget
+        verb, rest = words[0], words[1:]
+        value = rest[0] if rest else ""
+
+        def done(problem: str | None = None) -> dict[str, Any]:
+            if problem:
+                return {"status": "error", "message": problem}
+            return {"status": "ok", "result": self._colorbar_values()[""]}
+
+        shown = self._as_bool(verb)
+        if shown is not None:
+            color.set_colorbar_visible(shown)
+            return done()
+        if verb in ("horizontal", "vertical"):
+            color.set_colorbar_orientation(verb)
+            return done()
+        if verb == "orientation":
+            if value not in ("horizontal", "vertical"):
+                return done("orientation is horizontal or vertical")
+            color.set_colorbar_orientation(value)
+            return done()
+        if verb == "numerics":
+            wanted = self._as_bool(value) if value else True
+            if wanted is None:
+                return done(f"{value} is not yes or no")
+            color.set_colorbar_numerics(wanted)
+            return done()
+        if verb in ("space", "spacing"):
+            if value not in ("value", "distance"):
+                return done("space is value or distance")
+            color.set_colorbar_spacing(value)
+            return done()
+        if verb == "font":
+            if value not in bar.FONT_FAMILIES:
+                return done("font is times, helvetica or courier")
+            bar.set_label_font(family=value)
+            return done()
+        if verb == "fontweight":
+            if value not in ("normal", "bold"):
+                return done("fontweight is normal or bold")
+            bar.set_label_font(weight=value)
+            return done()
+        if verb == "fontslant":
+            if value not in ("roman", "italic"):
+                return done("fontslant is roman or italic")
+            bar.set_label_font(slant=value)
+            return done()
+        if verb in ("fontsize", "size", "ticks"):
+            if not value.isdigit():
+                return done(f"colorbar {verb} takes a whole number")
+            if verb == "fontsize":
+                color.set_colorbar_font_size(int(value))
+            elif verb == "size":
+                bar.set_bar_size(int(value))
+            else:
+                bar.set_tick_count(int(value))
+            return done()
+        if verb == "match":
+            self.viewer.frame_controller.match_colorbar()
+            return done()
+        if verb == "lock":
+            wanted = self._as_bool(value) if value else True
+            self.viewer.frame_controller.set_lock_flag("colorbar", bool(wanted))
+            return done()
+        return done(f"colorbar has no {verb}")
 
     def _handle_wcs(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle WCS commands.
@@ -865,28 +1335,53 @@ class XPACommands:
             return {"status": "ok", "result": system}
         return {"status": "ok", "result": self.viewer.coord_context.sky.value}
 
+    #: What `save` calls each of the `Save as` writers.
+    _SAVE_WRITERS = {
+        "fits": "image",
+        "rgbimage": "rgb_image",
+        "rgbcube": "rgb_cube",
+        "hsvimage": "hsv_image",
+        "hsvcube": "hsv_cube",
+        "hlsimage": "hls_image",
+        "hlscube": "hls_cube",
+        "mecube": "mef_cube",
+        "mosaic": "image",
+        "mosaicimage": "image",
+    }
+
     def _handle_save(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle save commands.
+        """DS9's `save [fits|rgbimage|rgbcube|mecube|mosaic|mosaicimage]
+        <filename> [image|table|slice]`: the frame's data, as FITS.
 
-        Args:
-            params: Command parameters including 'path', 'format'.
-
-        Returns:
-            Response dictionary.
+        This is not `saveimage`, which writes the rendered picture; `save`
+        writes the data, which is what a script calling it wants back.
         """
         viewer_error = self._require_viewer()
         if viewer_error:
             return viewer_error
-        path = params.get("path", self._first_arg(params))
-        if not path:
+        words = [str(word) for word in self._args(params)]
+        if params.get("path") is not None:
+            words = [*([str(params["format"])] if params.get("format") else []), str(params["path"])]
+        writer = "image"
+        if words and words[0].lower() in self._SAVE_WRITERS:
+            writer = self._SAVE_WRITERS[words.pop(0).lower()]
+        # The trailing `image|table|slice` chooses what of a binned table
+        # or cube is written; the frame holds the image and the slice
+        # already, so it is accepted and has nothing more to choose.
+        if words and words[-1].lower() in ("image", "table", "slice") and len(words) > 1:
+            words.pop()
+        if not words:
             return {"status": "error", "message": "No save path specified"}
-        pixmap = self.viewer.file.current_pixmap()
-        if pixmap is None:
-            return {"status": "error", "message": "No image to save"}
-        target = Path(str(path))
-        if not pixmap.save(str(target)):
-            return {"status": "error", "message": f"Failed to save {target}"}
-        return {"status": "ok", "result": str(target)}
+        path = words[0]
+        file_controller = self.viewer.file
+        frame = self.viewer.frame_manager.current_frame
+        if frame is None or frame.image_data is None:
+            return {"status": "error", "message": "nothing to save; the frame is empty"}
+        try:
+            file_controller._write_as(Path(path), writer, frame)
+        except Exception as exc:
+            return {"status": "error", "message": f"could not write {path}: {exc}"}
+        return {"status": "ok", "result": path}
 
     def _handle_exit(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle exit/quit commands.

@@ -71,18 +71,28 @@ class FrameManager:
         "hls": HLSFrame,
     }
 
-    def new_frame(self, frame_type: str = "base") -> Frame:
+    def new_frame(self, frame_type: str = "base", frame_id: int | None = None) -> Frame:
         """Create a new empty frame of the requested type.
 
         Unknown types fall back to a plain Frame rather than raising, so a
         stale preference or an XPA client asking for a type this build does
         not have (3d, until M9) still gets a usable frame.
+
+        Args:
+            frame_type: The kind of frame.
+            frame_id: The number to give it, as DS9's `frame 7` asks for
+                Frame 7 alone. The next number by default; one already in
+                use is refused.
         """
+        if frame_id is None:
+            frame_id = self._next_id
+        elif any(existing.frame_id == frame_id for existing in self._frames):
+            raise ValueError(f"there is already a frame {frame_id}")
         cls = self.FRAME_TYPES.get(frame_type, Frame)
-        frame = cls(frame_id=self._next_id, frame_type=frame_type)
+        frame = cls(frame_id=frame_id, frame_type=frame_type)
         self._frames.append(frame)
         self._current_index = len(self._frames) - 1
-        self._next_id += 1
+        self._next_id = max(self._next_id, frame_id + 1)
         return frame
 
     def delete_frame(self, index: int | None = None) -> bool:

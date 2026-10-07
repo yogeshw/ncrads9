@@ -244,9 +244,8 @@ class ViewController(Controller):
         panel.set_object(str(header.get("OBJECT", "")) if header else "")
         panel.set_units(str(header.get("BUNIT", "")) if header else "")
 
-        index = self.frames.current_index + 1
         panel.set_frame(
-            f"Frame {index}",
+            f"Frame {frame.frame_id}",
             f"{self._zoom():.4g}",
             f"{getattr(frame, 'rotation', 0.0):.4g}",
         )

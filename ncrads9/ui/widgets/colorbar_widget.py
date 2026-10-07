@@ -92,6 +92,10 @@ class ColorbarWidget(QWidget):
         self.tick_count = 7
         self.bar_size = 40
         self.label_font_size = 8
+        #: DS9's colorbar font: family, weight and slant (`colorbar font`).
+        self.label_font_family = "helvetica"
+        self.label_font_weight = "normal"
+        self.label_font_slant = "roman"
 
         layout = QVBoxLayout()
         layout.setContentsMargins(5, 5, 5, 5)
@@ -295,7 +299,7 @@ class ColorbarWidget(QWidget):
         if not self.show_numerics:
             return
         tick_length = 5
-        font = QFont("Arial", self.label_font_size)
+        font = self.label_font()
         painter.setFont(font)
         values = self._tick_values()
         for value in values:
@@ -309,7 +313,7 @@ class ColorbarWidget(QWidget):
         if not self.show_numerics:
             return
         tick_length = 5
-        font = QFont("Arial", self.label_font_size)
+        font = self.label_font()
         painter.setFont(font)
         values = np.linspace(self.vmin, self.vmax, max(2, int(self.tick_count)))
         for value in values:
@@ -361,6 +365,38 @@ class ColorbarWidget(QWidget):
         """Set numeric label font size."""
         self.label_font_size = max(6, int(size))
         self._update_colorbar()
+
+    #: DS9's three font names and the Qt families that stand in for them.
+    FONT_FAMILIES = {"times": "Times", "helvetica": "Helvetica", "courier": "Courier"}
+
+    def set_label_font(self, family: str | None = None, weight: str | None = None, slant: str | None = None) -> None:
+        """Set the numerics' font family, weight and slant, DS9's way.
+
+        Args:
+            family: times, helvetica or courier.
+            weight: normal or bold.
+            slant: roman or italic.
+        """
+        if family is not None and family.lower() in self.FONT_FAMILIES:
+            self.label_font_family = family.lower()
+        if weight is not None and weight.lower() in ("normal", "bold"):
+            self.label_font_weight = weight.lower()
+        if slant is not None and slant.lower() in ("roman", "italic"):
+            self.label_font_slant = slant.lower()
+        self._update_colorbar()
+
+    def label_font(self, size: int | None = None) -> QFont:
+        """The font the numerics are drawn in."""
+        font = QFont(self.FONT_FAMILIES.get(self.label_font_family, "Helvetica"), size or self.label_font_size)
+        if self.label_font_family == "courier":
+            font.setStyleHint(QFont.StyleHint.Monospace)
+        elif self.label_font_family == "times":
+            font.setStyleHint(QFont.StyleHint.Serif)
+        else:
+            font.setStyleHint(QFont.StyleHint.SansSerif)
+        font.setBold(self.label_font_weight == "bold")
+        font.setItalic(self.label_font_slant == "italic")
+        return font
 
     def _draw_multiple(self) -> None:
         """Draw several bars stacked across the widget's short axis.
@@ -432,7 +468,7 @@ class ColorbarWidget(QWidget):
         else:
             painter.drawPixmap(offset, 0, QPixmap.fromImage(image))
 
-        painter.setFont(QFont("Arial", max(6, self.label_font_size - 1)))
+        painter.setFont(self.label_font(max(6, self.label_font_size - 1)))
         if not self.show_numerics or thickness < painter.fontMetrics().height():
             # Several thin strips leave no room for a number inside each; a
             # label drawn anyway lands on its neighbour.

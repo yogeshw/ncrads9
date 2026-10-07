@@ -142,7 +142,7 @@ class ZoomController(Controller):
         frame.tile_zoom = max(1.0, float(zoom))
         self.window.display.display_tiled()
         self.status_bar.update_zoom(frame.tile_zoom)
-        self.status(f"Zoom {frame.tile_zoom:.5g} (frame {self.frames.current_index + 1})", 1000)
+        self.status(f"Zoom {frame.tile_zoom:.5g} (frame {frame.frame_id})", 1000)
 
     def _tile_zoom(self) -> float:
         """The current frame's tile zoom, or 1.0."""
@@ -351,6 +351,32 @@ class ZoomController(Controller):
         self.window.frame_controller.apply_locks()
         self.update_panner_rect()
         self.status("Centered image", 1500)
+
+    # The canvas pans in its own units, in which pixel n (counting from
+    # zero) spans [n, n + 1). DS9's image coordinates count from one and
+    # put a pixel's centre on the whole number, so the two differ by half
+    # a pixel: image = canvas + 0.5.
+
+    def pan_position(self) -> tuple[float, float] | None:
+        """The image point at the centre of the view, counting from one."""
+        frame = self.frame
+        if frame is None or self.window.image_data is None:
+            return None
+        self.window.frame_controller.persist_view_state()
+        return frame.pan_x + 0.5, frame.pan_y + 0.5
+
+    def pan_to_image(self, x: float, y: float) -> None:
+        """Centre the view on an image point, counting from one as DS9 does."""
+        if self.require_frame() is None or self.window.image_data is None:
+            return
+        if self.window.using_gpu_rendering and hasattr(self.viewer, "set_pan"):
+            self.viewer.set_pan(x - 0.5, y - 0.5)
+        else:
+            self._scroll_to_image_point(x - 0.5, y - 0.5)
+        self.window.frame_controller.persist_view_state()
+        self.window.frame_controller.apply_locks()
+        self.update_panner_rect()
+        self.status(f"Panned to ({x:g}, {y:g})", 1000)
 
     def on_panner_pan(self, x: float, y: float) -> None:
         """Handle a pan requested by clicking in the panner."""

@@ -559,7 +559,7 @@ class MainWindow(QMainWindow):
             self.display.display_tiled()
             self.frame_controller.update_title()
             self.statusBar().showMessage(
-                f"Selected frame {self.frame_manager.current_index + 1}",
+                f"Selected frame {self.frame_manager.current_frame.frame_id}",
                 1500,
             )
 

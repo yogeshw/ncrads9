@@ -420,7 +420,7 @@ class DisplayPipeline:
         filename = spec.path.name
         if spec.extension is not None:
             filename += f"[{spec.extension}]"
-        frame_info = f"Frame {self.frames.current_index + 1}/{self.frames.num_frames}"
+        frame_info = f"Frame {frame.frame_id}"
         self.window.setWindowTitle(f"NCRADS9 - {filename} [{frame_info}]")
 
         self._autoload_regions(frame, fits_handler)
@@ -513,7 +513,7 @@ class DisplayPipeline:
         if hasattr(self.viewer, "reset_contrast_brightness"):
             self.viewer.reset_contrast_brightness()
 
-        frame_info = f"Frame {self.frames.current_index + 1}/{self.frames.num_frames}"
+        frame_info = f"Frame {frame.frame_id}"
         self.window.setWindowTitle(f"NCRADS9 - {name} [{frame_info}]")
 
         self.display()

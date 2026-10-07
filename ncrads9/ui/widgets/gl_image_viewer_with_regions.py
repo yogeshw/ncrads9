@@ -254,17 +254,14 @@ class GLImageViewerWithRegions(QWidget):
         if event.type() == QEvent.Type.MouseButtonPress:
             mouse_event = event
             # Debug: print what button was pressed
-            # print(f"Mouse press: button={mouse_event.button()}, Middle={Qt.MouseButton.MiddleButton}, Right={Qt.MouseButton.RightButton}")
 
             if mouse_event.button() == Qt.MouseButton.MiddleButton:
                 # Middle-click centers image at cursor (DS9 style)
-                print("Middle button detected in event filter")
                 self._center_on_point(mouse_event.position().x(), mouse_event.position().y())
                 return True  # Event handled, don't pass to gl_canvas
 
             elif mouse_event.button() == Qt.MouseButton.RightButton:
                 # Right-drag for contrast/brightness
-                print("Right button detected in event filter")
                 self._adjusting_contrast = True
                 self._last_pos = mouse_event.position()
                 return True  # Event handled
@@ -280,7 +277,6 @@ class GLImageViewerWithRegions(QWidget):
                 self._contrast_scale = max(0.1, min(self._contrast_scale + contrast_delta, 10.0))
                 self._brightness_offset = max(-1.0, min(self._brightness_offset + brightness_delta, 1.0))
                 self._last_pos = mouse_event.position()
-                print(f"Contrast: {self._contrast_scale:.2f}, Brightness: {self._brightness_offset:.2f}")
                 self.contrast_changed.emit(self._contrast_scale, self._brightness_offset)
                 return True  # Event handled
 
@@ -288,7 +284,6 @@ class GLImageViewerWithRegions(QWidget):
         elif event.type() == QEvent.Type.MouseButtonRelease:
             mouse_event = event
             if mouse_event.button() == Qt.MouseButton.RightButton:
-                print("Right button released")
                 self._adjusting_contrast = False
                 self._last_pos = None
                 return True  # Event handled

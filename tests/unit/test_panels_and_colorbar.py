@@ -336,12 +336,11 @@ def test_the_colormap_dialog_opens_and_previews_the_chosen_map(qapp):
 
     dialog = ColormapDialog()
     try:
-        names = [dialog._cmap_list.item(i).text() for i in range(dialog._cmap_list.count())]
-        assert "heat" in names
-        dialog._cmap_list.setCurrentRow(names.index("heat"))
+        dialog._current_colormap = "heat"
+        dialog._update_preview()
         image = dialog._preview_label.pixmap().toImage()
-        left = image.pixelColor(2, 20).getRgb()[:3]
-        right = image.pixelColor(image.width() - 3, 20).getRgb()[:3]
+        left = image.pixelColor(2, 10).getRgb()[:3]
+        right = image.pixelColor(image.width() - 3, 10).getRgb()[:3]
         assert left != right, "the preview should ramp"
         assert right[0] > right[2], "heat runs to a warm colour, not to grey"
     finally:

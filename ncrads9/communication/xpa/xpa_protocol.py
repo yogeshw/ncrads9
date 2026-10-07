@@ -229,6 +229,8 @@ class XPAProtocol:
 
         if status == "ok":
             result = response.get("result", "")
+            if isinstance(result, bytes):
+                return result
             if result is None:
                 text = ""
             elif isinstance(result, bool):

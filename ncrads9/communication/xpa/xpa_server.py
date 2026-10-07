@@ -376,6 +376,9 @@ class XPAServer:
             msg_type = str(pending.get("msg_type", "xpaset"))
             if msg_type == "xpaset":
                 return f"{xpa_id} XPA$OK\n".encode()
+            if isinstance(result, bytes):
+                # `xpaget ds9 fits > foo.fits`: the file itself, untouched.
+                return result
             return f"{result}\n".encode()
         message = str(response.get("message", "Unknown error"))
         return f"{xpa_id} XPA$ERROR {message}\n".encode()

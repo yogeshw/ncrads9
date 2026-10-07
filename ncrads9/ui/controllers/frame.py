@@ -238,8 +238,10 @@ class FrameController(Controller):
         current_index = self.frames.current_index
 
         self.menu.goto_frame_menu.clear()
+        # Frames are named by their number, which stays with the frame when
+        # another is deleted or the order changes, as DS9's does.
         for idx, _frame in enumerate(self.frames.frames):
-            action = QAction(f"Frame {idx + 1}", self.window)
+            action = QAction(f"Frame {_frame.frame_id}", self.window)
             action.setCheckable(True)
             action.setChecked(idx == current_index)
             action.triggered.connect(lambda checked=False, i=idx: self.goto_index(i))
@@ -249,8 +251,8 @@ class FrameController(Controller):
         self.menu.show_hide_frames_menu.addAction(self.menu.action_show_all_frames)
         self.menu.show_hide_frames_menu.addAction(self.menu.action_hide_all_frames)
         self.menu.show_hide_frames_menu.addSeparator()
-        for idx, frame in enumerate(self.frames.frames):
-            action = QAction(f"Frame {idx + 1}", self.window)
+        for frame in self.frames.frames:
+            action = QAction(f"Frame {frame.frame_id}", self.window)
             action.setCheckable(True)
             action.setChecked(frame.frame_id in self.window._active_frame_ids)
             action.triggered.connect(lambda checked, fid=frame.frame_id: self.set_active(fid, checked))
@@ -265,9 +267,14 @@ class FrameController(Controller):
                 self.viewer.reset_contrast_brightness()
             self.update_display()
 
-    def new_frame_of_type(self, frame_type: str) -> None:
-        """Create a new frame of the requested DS9-style type."""
-        frame = self.frames.new_frame(frame_type=frame_type)
+    def new_frame_of_type(self, frame_type: str, frame_id: int | None = None) -> None:
+        """Create a new frame of the requested DS9-style type.
+
+        Args:
+            frame_type: base, rgb, hsv, hls or 3d.
+            frame_id: The number to give it; the next one by default.
+        """
+        frame = self.frames.new_frame(frame_type=frame_type, frame_id=frame_id)
         self.window._known_frame_ids.add(frame.frame_id)
         self.window._active_frame_ids.add(frame.frame_id)
         self.window.z1 = None
@@ -275,7 +282,7 @@ class FrameController(Controller):
         if hasattr(self.viewer, "reset_contrast_brightness"):
             self.viewer.reset_contrast_brightness()
         self.update_display()
-        self.status(f"Created Frame {self.frames.current_index + 1} ({frame_type})", 2000)
+        self.status(f"Created Frame {frame.frame_id} ({frame_type})", 2000)
 
     def new_frame(self) -> None:
         """Create a new empty frame."""
@@ -318,7 +325,8 @@ class FrameController(Controller):
                 if hasattr(self.viewer, "reset_contrast_brightness"):
                     self.viewer.reset_contrast_brightness()
                 self.update_display()
-            frame_info = f"Frame {self.frames.current_index + 1}/{self.frames.num_frames}"
+            frame = self.frames.current_frame
+            frame_info = f"Frame {frame.frame_id}" if frame else "Frame"
             self.status(f"Deleted frame, now at {frame_info}", 2000)
         else:
             self.status("Cannot delete last frame", 2000)
@@ -477,7 +485,7 @@ class FrameController(Controller):
     def update_title(self) -> None:
         """Update window title with current frame info."""
         frame = self.frames.current_frame
-        frame_info = f"Frame {self.frames.current_index + 1}/{self.frames.num_frames}"
+        frame_info = f"Frame {frame.frame_id}" if frame else "Frame"
         if frame and frame.filepath:
             self.window.setWindowTitle(f"NCRADS9 - {frame.filepath.name} [{frame_info}]")
         else:
@@ -1039,7 +1047,7 @@ class FrameController(Controller):
             combo.addItem("Keep current data", "KEEP")
             combo.addItem("None (clear)", "CLEAR")
             for index, source_frame in source_frames:
-                label = f"Frame {index + 1}"
+                label = f"Frame {source_frame.frame_id}"
                 if source_frame.filepath:
                     label += f" - {source_frame.filepath.name}"
                 combo.addItem(label, index)

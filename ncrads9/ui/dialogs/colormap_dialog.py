@@ -15,173 +15,303 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
-Colormap selection dialog.
+DS9's Colormap Parameters window (`ColormapDialog`, `colorbar.tcl`).
+
+A menubar -- File, Colormap -- over two sliders, Contrast from 0 to 10 and
+Bias from 0 to 1, and Apply and Close. The sliders act as they are dragged,
+as DS9's do. The Colormap menu holds the main window's own colormap
+actions rather than copies of them, so a tick in one is a tick in the other
+and there is nothing to keep in step.
+
+A ramp through the current colormap is drawn under the sliders; DS9 has
+none, but the colorbar it would be compared against is usually behind the
+dialog.
 
 Author: Yogesh Wadadekar
 """
 
+from __future__ import annotations
+
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QImage, QPixmap
+from PyQt6.QtGui import QAction, QColor, QImage, QKeySequence, QPixmap
 from PyQt6.QtWidgets import (
-    QCheckBox,
-    QComboBox,
     QDialog,
-    QFormLayout,
-    QGroupBox,
+    QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
+    QLineEdit,
+    QMenuBar,
     QPushButton,
     QSlider,
     QVBoxLayout,
+    QWidget,
 )
 
-from ...colormaps.builtin_maps import get_builtin_colormap, list_builtin_colormaps
+from ...colormaps.builtin_maps import get_builtin_colormap
 from .modeless import make_modeless
+
+#: Slider steps across each range, so a step is a hundredth of bias.
+SLIDER_STEPS = 1000
+
+#: DS9's ranges.
+CONTRAST_RANGE = (0.0, 10.0)
+BIAS_RANGE = (0.0, 1.0)
+
+CONTRAST_BIAS_FILTER = "Contrast/Bias Files (*.bias *.txt);;All Files (*)"
+
+
+class _Slider(QWidget):
+    """DS9's `slider`: a label, a scale and an entry that agree."""
+
+    changed = pyqtSignal(float)
+
+    def __init__(self, label: str, low: float, high: float, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._low, self._high = low, high
+        layout = QGridLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.title = QLabel(label)
+        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider.setRange(0, SLIDER_STEPS)
+        self.entry = QLineEdit()
+        self.entry.setFixedWidth(80)
+        layout.addWidget(self.title, 0, 0, 1, 2)
+        layout.addWidget(self.slider, 1, 0)
+        layout.addWidget(self.entry, 1, 1)
+        self.slider.valueChanged.connect(self._from_slider)
+        self.entry.editingFinished.connect(self._from_entry)
+
+    def value(self) -> float:
+        return self._low + (self._high - self._low) * self.slider.value() / SLIDER_STEPS
+
+    def set_value(self, value: float) -> None:
+        value = min(max(float(value), self._low), self._high)
+        self.slider.blockSignals(True)
+        self.slider.setValue(round((value - self._low) / (self._high - self._low) * SLIDER_STEPS))
+        self.slider.blockSignals(False)
+        self.entry.setText(f"{value:.6g}")
+
+    def _from_slider(self, _step: int) -> None:
+        self.entry.setText(f"{self.value():.6g}")
+        self.changed.emit(self.value())
+
+    def _from_entry(self) -> None:
+        try:
+            value = float(self.entry.text())
+        except ValueError:
+            self.entry.setText(f"{self.value():.6g}")
+            return
+        self.set_value(value)
+        self.changed.emit(self.value())
 
 
 class ColormapDialog(QDialog):
-    """Dialog for selecting and configuring colormaps."""
+    """The Colormap Parameters window.
 
+    Args:
+        parent: The main window, whose Color menu and colour controller the
+            dialog works through. Without one it is a bare pair of sliders,
+            which is what the tests build.
+    """
+
+    #: Emitted with `{"colormap", "invert", "contrast", "bias"}` on Apply.
     colormap_changed = pyqtSignal(dict)
 
-    # Standard astronomical colormaps
-    COLORMAPS: list[str] = list(
-        dict.fromkeys("gray" if cmap == "grey" else cmap for cmap in list_builtin_colormaps())
-    )
-
-    def __init__(self, parent: QDialog | None = None) -> None:
-        """Initialize the colormap dialog.
-
-        Args:
-            parent: Parent widget.
-        """
+    def __init__(self, parent: Any | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Colormap Selection")
+        self.setWindowTitle("Colormap Parameters")
         # A parameters window: read and adjusted while looking at the
         # image behind it, so it must not block or cover what it changes.
         make_modeless(self)
-        self.setMinimumSize(500, 600)
-        self._current_colormap = "gray"
+        self.setMinimumWidth(420)
+        self._window = parent if hasattr(parent, "color") else None
+        self._current_colormap = getattr(parent, "current_colormap", "grey") if self._window else "grey"
         self._setup_ui()
+        self.sync()
+
+    # -- construction --------------------------------------------------------
+
+    @property
+    def _color(self):
+        return self._window.color if self._window is not None else None
 
     def _setup_ui(self) -> None:
-        """Set up the dialog UI."""
         layout = QVBoxLayout(self)
+        layout.setMenuBar(self._build_menus())
 
-        # Colormap list
-        cmap_group = QGroupBox("Colormaps")
-        cmap_layout = QVBoxLayout(cmap_group)
-
-        self._cmap_list = QListWidget()
-        for cmap_name in self.COLORMAPS:
-            item = QListWidgetItem(cmap_name)
-            self._cmap_list.addItem(item)
-        # Selected *before* the signal is connected, and the preview drawn
-        # once at the end of this method. Connecting first made
-        # `setCurrentRow` fire `_on_colormap_selected` -> `_update_preview`
-        # before `_invert_check` existed, so constructing this dialog
-        # raised `AttributeError` and Color -> Colormap Parameters could
-        # never be opened at all.
-        if self.COLORMAPS:
-            self._cmap_list.setCurrentRow(0)
-            self._current_colormap = self._cmap_list.currentItem().text()
-        self._cmap_list.currentItemChanged.connect(self._on_colormap_selected)
-        cmap_layout.addWidget(self._cmap_list)
-
-        layout.addWidget(cmap_group)
-
-        # Preview
-        preview_group = QGroupBox("Preview")
-        preview_layout = QVBoxLayout(preview_group)
+        self.contrast_slider = _Slider("Contrast", *CONTRAST_RANGE)
+        self.bias_slider = _Slider("Bias", *BIAS_RANGE)
+        self.contrast_slider.changed.connect(self._adjust)
+        self.bias_slider.changed.connect(self._adjust)
+        layout.addWidget(self.contrast_slider)
+        layout.addWidget(self.bias_slider)
 
         self._preview_label = QLabel()
-        self._preview_label.setMinimumHeight(50)
+        self._preview_label.setMinimumHeight(30)
         self._preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        preview_layout.addWidget(self._preview_label)
+        layout.addWidget(self._preview_label)
 
-        layout.addWidget(preview_group)
+        buttons = QHBoxLayout()
+        apply_button = QPushButton("Apply")
+        apply_button.clicked.connect(self._apply)
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(self.close)
+        buttons.addWidget(apply_button)
+        buttons.addWidget(close_button)
+        layout.addLayout(buttons)
 
-        # Options
-        options_group = QGroupBox("Options")
-        options_layout = QFormLayout(options_group)
+    def _build_menus(self) -> QMenuBar:
+        bar = QMenuBar(self)
+        file_menu = bar.addMenu("&File")
 
-        self._invert_check = QCheckBox("Invert colormap")
-        self._invert_check.stateChanged.connect(self._on_option_changed)
-        options_layout.addRow("", self._invert_check)
+        def add(menu, label: str, slot, shortcut: QKeySequence.StandardKey | None = None) -> QAction:
+            action = QAction(label, self)
+            if shortcut is not None:
+                action.setShortcut(QKeySequence(shortcut))
+            action.triggered.connect(lambda _checked=False: slot())
+            menu.addAction(action)
+            return action
 
-        self._gamma_slider = QSlider(Qt.Orientation.Horizontal)
-        self._gamma_slider.setRange(10, 300)
-        self._gamma_slider.setValue(100)
-        self._gamma_slider.valueChanged.connect(self._on_option_changed)
-        options_layout.addRow("Gamma:", self._gamma_slider)
+        self.action_open = add(file_menu, "Open...", self._open, QKeySequence.StandardKey.Open)
+        self.action_save = add(file_menu, "Save...", self._save, QKeySequence.StandardKey.Save)
+        file_menu.addSeparator()
+        add(file_menu, "Apply", self._apply)
+        file_menu.addSeparator()
+        add(file_menu, "Load Contrast/Bias...", self._load_contrast_bias)
+        add(file_menu, "Save Contrast/Bias...", self._save_contrast_bias)
+        file_menu.addSeparator()
+        add(file_menu, "Load Color Tags...", lambda: self._color and self._color.load_tags())
+        add(file_menu, "Save Color Tags...", lambda: self._color and self._color.save_tags())
+        add(file_menu, "Delete Color Tags", lambda: self._color and self._color.delete_tags())
+        file_menu.addSeparator()
+        add(file_menu, "Close", self.close, QKeySequence.StandardKey.Close)
 
-        self._gamma_label = QLabel("1.00")
-        options_layout.addRow("", self._gamma_label)
+        self.colormap_menu = bar.addMenu("&Colormap")
+        menu = getattr(self._window, "menu_bar", None)
+        if menu is not None:
+            # The main window's own actions: one QAction may sit in any
+            # number of menus, and its check mark is shared by all of them.
+            submenus = set(getattr(menu, "colormap_submenus", {}).values())
+            for action in menu.color_menu.actions():
+                child = action.menu()
+                if child is not None and (child in submenus or child is menu.user_colormap_menu):
+                    self.colormap_menu.addMenu(child)
+                elif action in menu.colormap_actions.values():
+                    self.colormap_menu.addAction(action)
+                elif action.isSeparator() and self.colormap_menu.actions():
+                    if not self.colormap_menu.actions()[-1].isSeparator():
+                        self.colormap_menu.addSeparator()
+            if self.colormap_menu.actions() and not self.colormap_menu.actions()[-1].isSeparator():
+                self.colormap_menu.addSeparator()
+            self.colormap_menu.addAction(menu.action_invert_colormap)
+            reset = QAction("Reset Colormap", self)
+            reset.triggered.connect(self._reset)
+            self.colormap_menu.addAction(reset)
+            for action in menu.colormap_actions.values():
+                action.triggered.connect(self._after_colormap_change)
+        return bar
 
-        self._stretch_combo = QComboBox()
-        self._stretch_combo.addItems(["Linear", "Log", "Power", "Sqrt", "Asinh"])
-        options_layout.addRow("Stretch:", self._stretch_combo)
+    # -- state ---------------------------------------------------------------
 
-        layout.addWidget(options_group)
-
-        # Button row
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-
-        apply_btn = QPushButton("Apply")
-        apply_btn.clicked.connect(self._apply)
-        button_layout.addWidget(apply_btn)
-
-        ok_btn = QPushButton("OK")
-        ok_btn.clicked.connect(self._ok)
-        button_layout.addWidget(ok_btn)
-
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.clicked.connect(self.reject)
-        button_layout.addWidget(cancel_btn)
-
-        layout.addLayout(button_layout)
-
-        # Everything the preview reads now exists.
+    def sync(self) -> None:
+        """Show the window's current contrast, bias and colormap."""
+        if self._color is not None:
+            contrast, bias = self._color.contrast_bias()
+            self._current_colormap = self._window.current_colormap
+        else:
+            contrast, bias = 1.0, 0.5
+        self.contrast_slider.set_value(contrast)
+        self.bias_slider.set_value(bias)
         self._update_preview()
 
-    def _on_colormap_selected(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
-        """Handle colormap selection.
+    def _after_colormap_change(self, _checked: bool = False) -> None:
+        try:
+            if self.isVisible():
+                self.sync()
+        except RuntimeError:
+            # The dialog has been destroyed; the connection outlived it.
+            pass
 
-        Args:
-            current: Currently selected item.
-            previous: Previously selected item.
-        """
-        if current:
-            self._current_colormap = current.text()
-            self._update_preview()
+    def _adjust(self, _value: float = 0.0) -> None:
+        """Apply the sliders as they move, as DS9's `AdjustColormap` does."""
+        if self._color is not None:
+            self._color.set_contrast_bias(self.contrast_slider.value(), self.bias_slider.value())
 
-    def _on_option_changed(self) -> None:
-        """Handle option change."""
-        gamma = self._gamma_slider.value() / 100.0
-        self._gamma_label.setText(f"{gamma:.2f}")
-        self._update_preview()
+    def _apply(self) -> None:
+        self._adjust()
+        self.colormap_changed.emit(self._get_settings())
+
+    def _reset(self) -> None:
+        self.contrast_slider.set_value(1.0)
+        self.bias_slider.set_value(0.5)
+        self._adjust()
+
+    def _get_settings(self) -> dict:
+        return {
+            "colormap": self._current_colormap,
+            "invert": bool(getattr(self._window, "invert_colormap", False)),
+            "contrast": self.contrast_slider.value(),
+            "bias": self.bias_slider.value(),
+        }
+
+    def get_colormap(self) -> str:
+        """The colormap the dialog shows."""
+        return self._current_colormap
+
+    # -- files ---------------------------------------------------------------
+
+    def _open(self) -> None:
+        if self._color is not None:
+            self._color.load_user_colormap()
+            self.sync()
+
+    def _save(self) -> None:
+        if self._color is not None:
+            self._color.save_current_colormap()
+
+    def _load_contrast_bias(self, path: str | None = None) -> str | None:
+        """Read DS9's contrast/bias file: one line, `<contrast> <bias>`."""
+        if path is None:
+            path, _ = QFileDialog.getOpenFileName(self, "Load Contrast/Bias", "", CONTRAST_BIAS_FILTER)
+            if not path:
+                return None
+        try:
+            with open(path, encoding="utf-8") as handle:
+                words = handle.readline().split()
+            contrast, bias = float(words[0]), float(words[1])
+        except (OSError, IndexError, ValueError) as exc:
+            return f"could not read {path}: {exc}"
+        self.contrast_slider.set_value(contrast)
+        self.bias_slider.set_value(bias)
+        self._apply()
+        return None
+
+    def _save_contrast_bias(self, path: str | None = None) -> str | None:
+        """Write DS9's contrast/bias file."""
+        if path is None:
+            path, _ = QFileDialog.getSaveFileName(self, "Save Contrast/Bias", "", CONTRAST_BIAS_FILTER)
+            if not path:
+                return None
+        try:
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(f"{self.contrast_slider.value():g} {self.bias_slider.value():g}\n")
+        except OSError as exc:
+            return f"could not write {path}: {exc}"
+        return None
+
+    # -- preview -------------------------------------------------------------
 
     def _update_preview(self) -> None:
-        """Draw a ramp through the chosen colormap, inverted and gammaed.
-
-        It used to draw the same grey ramp whatever was selected, with a
-        comment saying the real colormap "would use matplotlib" -- which
-        `colormaps/` has done since M5. A preview that shows grey for
-        `heat` is worse than no preview.
-        """
-        width, height = 400, 40
+        """Draw a ramp through the current colormap."""
+        width, height = 400, 24
         ramp = np.linspace(0.0, 1.0, width, dtype=np.float64)
-        if self._invert_check.isChecked():
+        if getattr(self._window, "invert_colormap", False):
             ramp = 1.0 - ramp
-        gamma = max(0.1, self._gamma_slider.value() / 100.0)
-        ramp = np.clip(ramp, 0.0, 1.0) ** gamma
-
         colours = self._ramp_colours(ramp)
         image = QImage(width, height, QImage.Format.Format_RGB32)
         for x in range(width):
@@ -189,47 +319,19 @@ class ColormapDialog(QDialog):
             colour = QColor(red, green, blue)
             for y in range(height):
                 image.setPixelColor(x, y, colour)
-
         self._preview_label.setPixmap(QPixmap.fromImage(image))
 
     def _ramp_colours(self, ramp: NDArray[np.floating]) -> NDArray[np.uint8]:
-        """The ramp through the selected colormap, as RGB rows.
-
-        Falls back to grey when the name is not one we hold, which is what
-        a preview of an unknown colormap honestly is.
-        """
-        colormap = get_builtin_colormap(self._current_colormap)
+        """The ramp through the current colormap, as RGB rows."""
+        colormap = None
+        if self._color is not None:
+            try:
+                colormap = self._color.colormap(self._current_colormap)
+            except ValueError:
+                colormap = None
+        if colormap is None:
+            colormap = get_builtin_colormap(self._current_colormap)
         if colormap is None:
             grey = np.clip(ramp * 255.0, 0, 255).astype(np.uint8)
             return np.stack([grey, grey, grey], axis=-1)
         return colormap.apply_normalized(ramp)
-
-    def _get_settings(self) -> dict:
-        """Get current colormap settings.
-
-        Returns:
-            Dictionary of colormap settings.
-        """
-        return {
-            "colormap": self._current_colormap,
-            "invert": self._invert_check.isChecked(),
-            "gamma": self._gamma_slider.value() / 100.0,
-            "stretch": self._stretch_combo.currentText(),
-        }
-
-    def _apply(self) -> None:
-        """Apply current settings."""
-        self.colormap_changed.emit(self._get_settings())
-
-    def _ok(self) -> None:
-        """Apply settings and close dialog."""
-        self._apply()
-        self.accept()
-
-    def get_colormap(self) -> str:
-        """Get the selected colormap name.
-
-        Returns:
-            Selected colormap name.
-        """
-        return self._current_colormap

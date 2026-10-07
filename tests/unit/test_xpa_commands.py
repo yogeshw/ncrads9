@@ -67,7 +67,9 @@ class _DummyColorbarWidget:
 
 
 class _DummyFrame:
-    def __init__(self) -> None:
+    def __init__(self, frame_id: int = 1) -> None:
+        # DS9 names frames by a number that stays with the frame.
+        self.frame_id = frame_id
         self.filepath = None
         self.pan_x = 0.0
         self.pan_y = 0.0
@@ -101,11 +103,20 @@ class _DummyFrameController:
         return self.window.frame_manager
 
     def new_frame(self):
-        self._frames.frames.append(_DummyFrame())
-        self._frames.current_index = len(self._frames.frames) - 1
+        self.new_frame_of_type("base")
 
-    def new_frame_of_type(self, frame_type):
-        self.new_frame()
+    def new_frame_of_type(self, frame_type, frame_id=None):
+        if frame_id is None:
+            frame_id = max(frame.frame_id for frame in self._frames.frames) + 1
+        self._frames.frames.append(_DummyFrame(frame_id))
+        self._frames.current_index = len(self._frames.frames) - 1
+        self.window._active_frame_ids.add(frame_id)
+
+    def goto_index(self, index):
+        self._frames.goto_frame(index)
+
+    def set_active(self, frame_id, active):
+        (self.window._active_frame_ids.add if active else self.window._active_frame_ids.discard)(frame_id)
 
     def delete_current(self):
         if len(self._frames.frames) > 1:
@@ -199,6 +210,13 @@ class _DummyColorController:
     def __init__(self, window):
         self.window = window
 
+    @staticmethod
+    def normalize_name(name: str) -> str:
+        return name.strip().lower()
+
+    def set_colorbar_visible(self, visible: bool):
+        self.window.view.set_colorbar_visible(visible)
+
     def available_colormaps(self):
         return ["grey", "heat", "cool", "rainbow", "viridis", "magma"]
 
@@ -241,6 +259,25 @@ class _DummyWCSController:
         self.window.coord_context = self.window.coord_context.with_sky(system)
 
 
+class _DummyZoomController:
+    """The slice of ZoomController that XPA calls."""
+
+    def __init__(self, window):
+        self.window = window
+
+    def set_zoom(self, zoom: float):
+        self.window.image_viewer.zoom_to(zoom)
+
+    def zoom_fit(self):
+        self.window._zoom_fit()
+
+    def zoom_in(self):
+        self.window._zoom_in()
+
+    def zoom_out(self):
+        self.window._zoom_out()
+
+
 class _DummyViewer:
     def __init__(self) -> None:
         self.frame_manager = _DummyFrameManager()
@@ -276,6 +313,8 @@ class _DummyViewer:
         self.color = _DummyColorController(self)
         self.scale = _DummyScaleController(self)
         self.wcs = _DummyWCSController(self)
+        self.zoom = _DummyZoomController(self)
+        self._active_frame_ids = {1}
         self._w = 800
         self._h = 600
 

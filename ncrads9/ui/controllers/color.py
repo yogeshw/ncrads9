@@ -80,13 +80,13 @@ class ColorController(Controller):
 
         self.menu.action_invert_colormap.triggered.connect(self.set_inverted)
         self.menu.action_reset_colormap.triggered.connect(self.reset)
-        self.menu.action_load_user_colormap.triggered.connect(self.load_user_colormap)
-        self.menu.action_save_user_colormap.triggered.connect(self.save_current_colormap)
+        self.menu.action_load_user_colormap.triggered.connect(lambda: self.load_user_colormap())
+        self.menu.action_save_user_colormap.triggered.connect(lambda: self.save_current_colormap())
         self.menu.action_colormap_params.triggered.connect(self.show_dialog)
         self.menu.action_reset_colorbar.triggered.connect(self.reset_contrast_bias)
 
-        self.menu.action_load_color_tags.triggered.connect(self.load_tags)
-        self.menu.action_save_color_tags.triggered.connect(self.save_tags)
+        self.menu.action_load_color_tags.triggered.connect(lambda: self.load_tags())
+        self.menu.action_save_color_tags.triggered.connect(lambda: self.save_tags())
         self.menu.action_delete_color_tags.triggered.connect(self.delete_tags)
 
         self.menu.action_colorbar.triggered.connect(self.set_colorbar_visible)
@@ -215,16 +215,24 @@ class ColorController(Controller):
             action.triggered.connect(lambda _checked=False, cmap=name: self.set_colormap(cmap))
             self.window._user_colormap_actions[name] = action
 
-    def load_user_colormap(self) -> None:
-        """Load a colormap from a DS9 `.lut` or `.sao` file."""
-        filepath, _ = QFileDialog.getOpenFileName(
-            self.window,
-            "Load Colormap",
-            "",
-            "Colormap Files (*.lut *.sao);;LUT Files (*.lut);;SAO Files (*.sao);;All Files (*)",
-        )
-        if not filepath:
-            return
+    def load_user_colormap(self, filepath: str | None = None) -> str | None:
+        """Load a colormap from a DS9 `.lut` or `.sao` file.
+
+        Args:
+            filepath: The file; asked for when not given, as the menu does.
+
+        Returns:
+            None on success, or what went wrong -- XPA's `cmap load` reports it.
+        """
+        if filepath is None:
+            filepath, _ = QFileDialog.getOpenFileName(
+                self.window,
+                "Load Colormap",
+                "",
+                "Colormap Files (*.lut *.sao);;LUT Files (*.lut);;SAO Files (*.sao);;All Files (*)",
+            )
+            if not filepath:
+                return None
         try:
             parse = parse_sao_file if filepath.lower().endswith(".sao") else parse_lut_file
             cmap = parse(filepath)
@@ -233,28 +241,40 @@ class ColorController(Controller):
             self.status(f"Loaded colormap: {cmap.name}", 3000)
         except Exception as exc:
             self.status(f"Error loading colormap: {exc}", 3000)
+            return f"could not load {filepath}: {exc}"
+        return None
 
-    def save_current_colormap(self) -> None:
-        """Write the current colormap out as a `.lut` file."""
+    def save_current_colormap(self, filepath: str | None = None) -> str | None:
+        """Write the current colormap out as a `.lut` file.
+
+        Args:
+            filepath: The file; asked for when not given.
+
+        Returns:
+            None on success, or what went wrong.
+        """
         try:
             cmap = self.colormap(self.window.current_colormap)
         except ValueError as exc:
             self.status(str(exc), 3000)
-            return
+            return str(exc)
 
-        filepath, _ = QFileDialog.getSaveFileName(
-            self.window,
-            "Save Colormap",
-            f"{self.window.current_colormap}.lut",
-            "LUT Files (*.lut);;All Files (*)",
-        )
-        if not filepath:
-            return
+        if filepath is None:
+            filepath, _ = QFileDialog.getSaveFileName(
+                self.window,
+                "Save Colormap",
+                f"{self.window.current_colormap}.lut",
+                "LUT Files (*.lut);;All Files (*)",
+            )
+            if not filepath:
+                return None
         try:
             save_lut_file(cmap, filepath)
             self.status(f"Saved colormap: {filepath}", 3000)
         except Exception as exc:
             self.status(f"Error saving colormap: {exc}", 3000)
+            return f"could not save {filepath}: {exc}"
+        return None
 
     # -- colour tags ---------------------------------------------------------
 
@@ -339,39 +359,51 @@ class ColorController(Controller):
         self.refresh_tags()
         self.status(f"Deleted {count} colour tag{'s' if count != 1 else ''}")
 
-    def load_tags(self) -> None:
-        """Load a DS9 colour tag file onto the current frame."""
+    def load_tags(self, filepath: str | None = None) -> str | None:
+        """Load a DS9 colour tag file onto the current frame.
+
+        Returns:
+            None on success, or what went wrong.
+        """
         if self.require_frame("No image to tag") is None:
-            return
-        filepath, _ = QFileDialog.getOpenFileName(self.window, "Load Color Tags", "", TAG_FILTER)
-        if not filepath:
-            return
+            return "there is no image to tag"
+        if filepath is None:
+            filepath, _ = QFileDialog.getOpenFileName(self.window, "Load Color Tags", "", TAG_FILTER)
+            if not filepath:
+                return None
         try:
             loaded = ColorTagSet.load(filepath)
         except (ColorTagError, OSError) as exc:
             self.status(f"Error loading colour tags: {exc}", 5000)
-            return
+            return f"could not load {filepath}: {exc}"
         frame = self.frame
         if frame is not None:
             frame.color_tags = loaded
         self.refresh_tags()
         self.status(f"Loaded {len(loaded)} colour tags from {filepath}", 3000)
+        return None
 
-    def save_tags(self) -> None:
-        """Write the current frame's colour tags to a file."""
+    def save_tags(self, filepath: str | None = None) -> str | None:
+        """Write the current frame's colour tags to a file.
+
+        Returns:
+            None on success, or what went wrong.
+        """
         tags = self.tags()
         if not tags:
             self.status("No colour tags to save")
-            return
-        filepath, _ = QFileDialog.getSaveFileName(self.window, "Save Color Tags", "", TAG_FILTER)
-        if not filepath:
-            return
+            return "there are no colour tags to save"
+        if filepath is None:
+            filepath, _ = QFileDialog.getSaveFileName(self.window, "Save Color Tags", "", TAG_FILTER)
+            if not filepath:
+                return None
         try:
             tags.save(filepath)
         except OSError as exc:
             self.status(f"Error saving colour tags: {exc}", 5000)
-            return
+            return f"could not save {filepath}: {exc}"
         self.status(f"Saved {len(tags)} colour tags to {filepath}", 3000)
+        return None
 
     def refresh_tags(self) -> None:
         """Redraw after a tag change.
@@ -421,6 +453,28 @@ class ColorController(Controller):
             self.edit_tag(index, edited.start, edited.stop, edited.color)
 
     # -- contrast and bias ---------------------------------------------------
+
+    # The viewers keep a contrast and a *brightness*, the shift of the
+    # window as a fraction of its width, centred on zero. DS9 keeps a
+    # contrast and a *bias*, the colour the middle of the window gets,
+    # centred on one half. They are the same quantity offset by 0.5.
+
+    def contrast_bias(self) -> tuple[float, float]:
+        """The current contrast and bias, on DS9's scales."""
+        viewer = self.viewer
+        if not hasattr(viewer, "get_contrast_brightness"):
+            viewer = getattr(viewer, "image_viewer", viewer)
+        if not hasattr(viewer, "get_contrast_brightness"):
+            return 1.0, 0.5
+        contrast, brightness = viewer.get_contrast_brightness()
+        return float(contrast), float(brightness) + 0.5
+
+    def set_contrast_bias(self, contrast: float, bias: float) -> None:
+        """Set contrast (0 to 10) and bias (0 to 1) as DS9 spells them."""
+        self.set_contrast_brightness(float(contrast), float(bias) - 0.5)
+        self.window.frame_controller.persist_view_state()
+        if self.window.image_data is not None:
+            self.refresh()
 
     def set_contrast_brightness(self, contrast: float, brightness: float) -> None:
         """Push contrast and bias onto whichever viewer backend is active."""
