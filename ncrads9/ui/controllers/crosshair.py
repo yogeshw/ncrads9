@@ -109,6 +109,13 @@ class CrosshairController(Controller):
 
         if propagate and self.locked:
             self.propagate(x, y, self.lock_system)
+        self._reload_dialog()
+
+    def _reload_dialog(self) -> None:
+        """Keep an open Crosshair Parameters dialog on the crosshair."""
+        dialog = getattr(self, "_dialog", None)
+        if dialog is not None:
+            dialog.reload()
 
     def propagate(self, x: float, y: float, system: str = "wcs") -> int:
         """Move every other frame's crosshair to the same place.
@@ -249,6 +256,7 @@ class CrosshairController(Controller):
     def sync(self) -> None:
         """Redraw after a frame change, since the crosshair is per frame."""
         self.refresh()
+        self._reload_dialog()
 
     def set_locked(self, locked: bool, system: str = "wcs") -> None:
         """Lock the crosshair across frames, DS9's Lock -> Crosshair.

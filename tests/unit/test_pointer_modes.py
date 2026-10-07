@@ -456,6 +456,8 @@ def dialog(main_window):
     from ncrads9.ui.dialogs.crosshair_dialog import CrosshairDialog
 
     made = CrosshairDialog(main_window.crosshair, main_window)
+    # DS9 starts the dialog in WCS; these tests type pixels.
+    made.system.set_system("image")
     yield made
     made.close()
 

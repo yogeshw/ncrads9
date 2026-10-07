@@ -804,19 +804,71 @@ class FrameController(Controller):
         self.propagate("axes_order")
 
     def update_cube_coordinate(self) -> None:
-        """Show the current slice's world coordinate on the Cube dialog."""
+        """Show the current slice's world coordinate on the Cube dialog.
+
+        Beside the slider in the primary WCS, as before; in the WCS entry in
+        whichever system the dialog's coordinate menu names, with the axis's
+        CTYPE as its label, as DS9's `UpdateCubeDialog` does.
+        """
         handler = self.cube_handler()
         frame = self.frames.current_frame
         dialog = self.window.cube_dialog
         if handler is None or frame is None:
             dialog.set_coordinate("")
+            dialog.set_wcs_value("")
+            dialog.set_axis_name("")
             return
-        coordinate = handler.slice_coordinate(frame.slice_index, frame.axis_order)
+        order = frame.axis_order
+        dialog.adjust_systems(lambda system: handler.image_to_world_z(1, order, system[3:]) is not None)
+
+        coordinate = handler.slice_coordinate(frame.slice_index, order)
         if coordinate is None:
             dialog.set_coordinate("")
+        else:
+            value, unit = coordinate
+            dialog.set_coordinate(f"{value:.6g} {unit}".strip())
+
+        system = dialog.coord_system
+        if system == "image":
+            dialog.set_wcs_value(str(frame.slice_index + 1))
+            dialog.set_axis_name("image")
             return
-        value, unit = coordinate
-        dialog.set_coordinate(f"{value:.6g} {unit}".strip())
+        key = system[3:]
+        world = handler.slice_coordinate(frame.slice_index, order, key)
+        dialog.set_wcs_value("" if world is None else f"{world[0]:.10g}")
+        dialog.set_axis_name(handler.slice_axis_name(order, key))
+
+    def goto_cube_coordinate(self, text: str) -> bool:
+        """DS9's `CubeApplyWCS`: show the slice nearest a typed coordinate.
+
+        Args:
+            text: A world value of the slice axis in the Cube dialog's
+                coordinate system, or a slice number (from one) in image.
+
+        Returns:
+            Whether a slice was found for it.
+        """
+        handler = self.cube_handler()
+        frame = self.frames.current_frame
+        if handler is None or frame is None:
+            return False
+        system = self.window.cube_dialog.coord_system
+        try:
+            value = float(text)
+        except ValueError:
+            self.status(f"Not a number: {text}", 3000)
+            return False
+        if system == "image":
+            depth = handler.depth(frame.axis_order)
+            wanted = max(0, min(int(round(value)) - 1, depth - 1))
+        else:
+            wanted = handler.slice_from_world(value, frame.axis_order, system[3:])
+            if wanted is None:
+                self.status(f"The cube's slice axis has no {system} coordinates", 3000)
+                return False
+        self.window.cube_dialog.set_slice(wanted, notify=False)
+        self.set_slice(wanted)
+        return True
 
     def sync_cube_dialog(self) -> None:
         """Bring the Cube dialog in step with the current frame."""

@@ -451,6 +451,10 @@ class MainWindow(QMainWindow):
         self.cube_dialog = CubePanel(self)
         self.cube_dialog.slice_changed.connect(self.frame_controller.set_slice)
         self.cube_dialog.axis_order_changed.connect(self.frame_controller.set_axis_order)
+        self.cube_dialog.coordinate_requested.connect(self.frame_controller.goto_cube_coordinate)
+        self.cube_dialog.system_changed.connect(
+            lambda _system: self.frame_controller.update_cube_coordinate()
+        )
 
     #: Button-bar command family -> the controller method that services it.
     #: Buttons whose menu entry is a single `QAction` trigger that action
