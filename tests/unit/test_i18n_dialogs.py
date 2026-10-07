@@ -225,17 +225,20 @@ def test_a_form_rows_colon_does_not_hide_the_word():
 
 def test_ds9s_catalogue_does_not_yet_cover_a_dialog(qapp):
     """The honest state of M9-31: DS9's catalogue is a catalogue of *menu*
-    labels, so it covers about a fifth of what a dialog says and no dialog
-    reaches the threshold. This test is the record of that, and it will
+    labels, so it covers about a fifth of what a typical dialog says, and
+    only the smallest ones (Scale) reach the threshold. This test is the record of that, and it will
     fail -- usefully -- when translations are written and one does."""
-    from ncrads9.ui.dialogs.scale_dialog import ScaleDialog
+    # Smoothing rather than Scale: the Scale dialog is now DS9's own --
+    # a plot, Low, High, Apply and Close -- and DS9's menu catalogue
+    # covers nearly all of so few labels.
+    from ncrads9.ui.dialogs.smooth_dialog import SmoothDialog
 
     french = catalogue.Catalogue.load("fr")
-    made = ScaleDialog()
+    made = SmoothDialog()
     translated, total = translation.coverage(made, french.translate)
     made.close()
     assert total > 10, "a dialog with labels to count"
     assert translated < translation.THRESHOLD * total, (
-        f"the French catalogue now covers {translated}/{total} of the Scale dialog; "
+        f"the French catalogue now covers {translated}/{total} of the Smooth dialog; "
         "if translations have been written, raise this and let the dialogs translate"
     )

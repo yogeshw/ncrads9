@@ -788,6 +788,8 @@ class DisplayPipeline:
             self.window.analysis.update_contours()
         self.window.wcs.update_direction_arrows()
         self.window.view.refresh_info()
+        # An open Scale Parameters window follows the frame and its limits.
+        self.window.scale.refresh_dialog()
         self.window.analysis.refresh_overlays()
 
     def display_rgb_frame(self, frame: Frame) -> bool:
@@ -858,6 +860,8 @@ class DisplayPipeline:
             self.window.analysis.update_contours()
         self.window.wcs.update_direction_arrows()
         self.window.view.refresh_info()
+        # An open Scale Parameters window follows the frame and its limits.
+        self.window.scale.refresh_dialog()
         self.window.analysis.refresh_overlays()
         return True
 
