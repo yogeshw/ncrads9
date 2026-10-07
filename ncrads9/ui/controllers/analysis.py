@@ -235,21 +235,27 @@ class AnalysisController(Controller):
         self.set_block_factor(factor)
 
     def show_block_dialog(self) -> None:
-        """Show block-factor parameter dialog."""
+        """Show DS9's Block Parameters window, modeless."""
+        from ..dialogs.block_dialog import BlockDialog
+
         frame = self.frames.current_frame
         current = getattr(frame, "block_factor", 1) if frame else 1
-        value, ok = QInputDialog.getInt(
-            self.window,
-            "Block Parameters",
-            "Block factor:",
-            int(current),
-            BLOCK_FACTORS[0],
-            BLOCK_FACTORS[-1],
-            1,
-        )
-        if not ok:
+        dialog = BlockDialog(self.window, int(current))
+        # Any whole factor, as DS9's dialog takes; the menu offers presets.
+        dialog.block_requested.connect(lambda factor: (self.set_block(factor), self.log_command(f"block {factor}")))
+        self.show_window(dialog)
+
+    def refresh_block_dialog(self) -> None:
+        """Show the factor in force in an open Block Parameters window."""
+        dialog = (getattr(self.window, "_open_windows", None) or {}).get("BlockDialog")
+        frame = self.frames.current_frame
+        if dialog is None or frame is None:
             return
-        self.set_block_factor(value)
+        try:
+            dialog.set_factor(getattr(frame, "block_factor", 1))
+        except RuntimeError:
+            # Already destroyed.
+            pass
 
     def show_smooth_dialog(self) -> None:
         """Show smoothing parameters dialog."""
@@ -785,6 +791,7 @@ class AnalysisController(Controller):
 
         frame.block_factor = max(1, int(factor))
         self.window.current_bin = frame.block_factor
+        self.refresh_block_dialog()
         # Blocking averages pixels together, which narrows the distribution,
         # so the limits are no longer the ones that were measured.
         self.window.z1 = None
