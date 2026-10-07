@@ -59,7 +59,15 @@ from scipy import ndimage
 
 from ...analysis import contour_file
 from ...analysis import mask as mask_module
-from ...analysis.contour import ContourGenerator
+from ...analysis.contour import (
+    DEFAULT_LOG_EXPONENT,
+    DEFAULT_NUM_LEVELS,
+    ContourGenerator,
+    contour_limits,
+    ds9_levels,
+    normalize_mode,
+    normalize_scale,
+)
 from ...analysis.mask import MaskSettings
 from ...analysis.pixel_table import PixelTable
 from ...analysis.plot import PlotState, PlotStyle
@@ -795,23 +803,110 @@ class AnalysisController(Controller):
         self.log_command("radial_profile")
 
     def show_contour_dialog(self) -> None:
-        """Show contour dialog and apply contours."""
+        """Show DS9's Contour Parameters window, seeded from the contours in force."""
         if self.window.image_data is None:
             self.status("No image loaded", 2000)
             return
 
-        dialog = ContourDialog(self.window)
-        if self.window._contour_settings is not None:
-            dialog.load_settings(self.window._contour_settings)
+        held = getattr(self.window, "_open_windows", None) or {}
+        existing = held.get("ContourDialog")
+        if existing is not None:
+            try:
+                if existing.isVisible():
+                    existing.raise_()
+                    existing.activateWindow()
+                    return
+            except RuntimeError:
+                pass
+
+        dialog = ContourDialog(self.window, data_source=self.contour_data_source)
+        settings = self.window._contour_settings or self.default_contour_settings()
+        shown = self.menu.action_contours.isChecked() and self.window._contour_levels is not None
+        dialog.load_settings(settings, levels=self.window._contour_levels if shown else None)
         dialog.contours_changed.connect(self.apply_contours)
         dialog.contours_export_requested.connect(self.export_contours)
         dialog.contours_file_requested.connect(self.contour_file_command)
+        dialog.contours_cleared.connect(lambda: self.set_contours(False))
         # Modeless, which is the whole point of an Apply button: set a level
         # and watch the contours change on the image. Shown with `exec()` it
         # was application-modal, so it sat over the picture it was drawing on
         # and could not be pushed aside -- and every Apply went somewhere the
         # reader could not see until they closed the window.
         self.show_window(dialog)
+
+    def contour_data_source(self):
+        """The pixels the contour dialog measures: analysis data and the whole extension."""
+        frame = self.frames.current_frame
+        if frame is None or frame.image_data is None:
+            return None
+        data = self.analysis_image_data(frame)
+        image = getattr(frame, "image", None)
+        whole = getattr(image, "data", None) if image is not None else None
+        if whole is not None and np.ndim(whole) < 2:
+            whole = None
+        return data, whole
+
+    def default_contour_settings(self) -> dict:
+        """DS9's contours with no dialog open: the frame's own scale and limits.
+
+        `UpdateContour` takes the colour scale, the log exponent, the clip
+        mode and the scope from the frame, and the rest from `ContourDef`.
+        """
+        from ...rendering.scale_limits import LimitMode
+        from .scale import BUTTON_LABELS
+
+        scale = "linear"
+        algorithm = getattr(self.window, "current_scale", None)
+        if algorithm is not None:
+            scale = normalize_scale(BUTTON_LABELS.get(algorithm, "linear"))
+        limits = getattr(self.window, "scale_limits", None)
+        mode, scope, log_exp = "minmax", "local", DEFAULT_LOG_EXPONENT
+        if limits is not None:
+            if limits.mode is LimitMode.PERCENT:
+                mode = normalize_mode(limits.percent)
+            else:
+                mode = normalize_mode(limits.mode.value)
+            scope = limits.scope.value
+            log_exp = float(limits.log_exponent)
+        settings = {
+            "color": "green",
+            "line_width": 1.0,
+            "line_style": "Solid",
+            "contour_method": "smooth",
+            "smoothness": 4,
+            "num_levels": DEFAULT_NUM_LEVELS,
+            "scale": scale,
+            "log_exp": log_exp,
+            "mode": mode,
+            "scope": scope,
+            "show_labels": False,
+        }
+        if mode == "user" and limits is not None:
+            settings["limits"] = (float(limits.user_low), float(limits.user_high))
+        return settings
+
+    def ds9_contour_levels(self, settings: dict) -> list[float]:
+        """Generate levels from the number, scale and limits, as DS9's Generate does."""
+        frame = self.frames.current_frame
+        found = self.contour_data_source() if frame is not None else None
+        data, whole = found if found is not None else (None, None)
+        mode = normalize_mode(settings.get("mode", "minmax"))
+        limits = settings.get("limits")
+        if mode != "user" or limits is None or len(limits) != 2:
+            measured = contour_limits(
+                data, mode if mode != "user" else "minmax", settings.get("scope", "local"), whole
+            )
+            limits = measured if measured is not None else limits
+        if limits is None:
+            return []
+        return ds9_levels(
+            int(settings.get("num_levels", DEFAULT_NUM_LEVELS)),
+            float(limits[0]),
+            float(limits[1]),
+            settings.get("scale", "linear"),
+            float(settings.get("log_exp", DEFAULT_LOG_EXPONENT) or DEFAULT_LOG_EXPONENT),
+            data=data,
+        )
 
     def apply_contours(self, settings: dict) -> None:
         """Compute and display contours based on settings."""
@@ -838,16 +933,7 @@ class AnalysisController(Controller):
 
         if checked:
             if self.window._contour_settings is None:
-                self.window._contour_settings = {
-                    "method": "Linear",
-                    "num_levels": 10,
-                    "smooth": False,
-                    "smooth_sigma": 1.0,
-                    "line_width": 1.0,
-                    "line_style": "Solid",
-                    "color": "#00ff00",
-                    "show_labels": False,
-                }
+                self.window._contour_settings = self.default_contour_settings()
             self.update_contours()
             self.log_command("contour on")
             self.status("Contours enabled", 2000)
@@ -906,6 +992,7 @@ class AnalysisController(Controller):
             "save": self.save_contours,
             "copy": self.copy_contours,
             "paste": self.paste_contours,
+            "polygons": self.contours_to_polygons,
         }.get(name)
         if handler is None:
             self.status(f"Unknown contour command: {name}", 3000)
@@ -1048,8 +1135,71 @@ class AnalysisController(Controller):
         self.show_contour_set(contours)
         self.status(f"Pasted {len(contours)} contour levels")
 
+    def contours_to_polygons(self) -> int:
+        """DS9's Convert to Polygons: each contour becomes a polygon region.
+
+        The contours are then deleted, as `Contour2Polygons` deletes them.
+
+        Returns:
+            How many polygons were made.
+        """
+        from ...regions.shapes.polygon import Polygon
+
+        frame = self.frames.current_frame
+        paths = self.window._contour_paths
+        if frame is None or not paths or not self.menu.action_contours.isChecked():
+            self.status("No contours to convert", 3000)
+            return 0
+
+        settings = self.window._contour_settings or {}
+        color = str(settings.get("color", "green"))
+        width = max(1, int(float(settings.get("line_width", 1)) or 1))
+        dash = str(settings.get("line_style", "Solid")).lower() != "solid"
+        # Contours are traced on the displayed, possibly blocked, pixels;
+        # regions live on the unblocked image.
+        block = max(1, int(getattr(frame, "block_factor", 1) or 1))
+        made = []
+        for level_paths in paths:
+            for path in level_paths:
+                points = np.asarray(path, dtype=float)
+                if points.ndim != 2 or points.shape[0] < 3:
+                    continue
+                if np.allclose(points[0], points[-1]):
+                    # A closed contour repeats its first point; a polygon
+                    # closes itself.
+                    points = points[:-1]
+                if points.shape[0] < 3:
+                    continue
+                vertices = [(float(x) * block, float(y) * block) for x, y in points]
+                polygon = Polygon(vertices=vertices, color=color, width=width)
+                if dash:
+                    polygon.dash = True
+                made.append(polygon)
+        if made:
+            with self.window.undo.regions("Convert Contours to Polygons"):
+                frame.regions = [*frame.regions, *made]
+            self.window.region.show_frame_regions(frame)
+        self.set_contours(False)
+        self.status(f"Converted the contours to {len(made)} polygons", 3000)
+        return len(made)
+
     def contour_levels(self, generator: ContourGenerator, settings: dict) -> list:
-        """Compute contour levels based on settings."""
+        """The levels to draw, as DS9's `UpdateContour` chooses them.
+
+        An explicit list -- the dialog's Levels box, or `contour levels` --
+        is drawn exactly. Otherwise the levels are generated from the
+        number, the scale and the limits, the limits coming from the mode
+        unless it is User. Settings from before the dialog matched DS9's
+        (a `method` of Linear, Logarithmic, Square Root or Custom) still
+        work below.
+        """
+        explicit = settings.get("levels")
+        if explicit:
+            return [float(value) for value in explicit]
+
+        if "scale" in settings or "mode" in settings:
+            return self.ds9_contour_levels(settings)
+
         if settings.get("use_sigma"):
             sigmas = settings.get("sigma_levels") or [3.0, 5.0, 10.0]
             base = settings.get("sigma_base", "Median")

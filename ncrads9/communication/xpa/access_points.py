@@ -538,14 +538,18 @@ _CONTOUR_KEYS = {
     "colour": "color",
     "width": "line_width",
     "nlevels": "num_levels",
-    "smooth": "smooth_sigma",
-    "method": "method",
+    "smooth": "smoothness",
+    "method": "contour_method",
     "scale": "scale",
     "mode": "mode",
     "scope": "scope",
     "limits": "limits",
     "levels": "levels",
 }
+
+#: The settings DS9's Generate reads. Changing one regenerates the levels
+#: (`ContourCmdGenerateDialog`), so an explicit list set earlier is dropped.
+_CONTOUR_GENERATORS = ("num_levels", "smoothness", "scale", "mode", "scope", "limits", "log_exp")
 
 
 def _contour_settings(window) -> dict:
@@ -578,24 +582,16 @@ def _contour_text(window, args: list[str]) -> str:
     if what == "dash":
         return on_off(str(settings.get("line_style", "Solid")).lower() != "solid")
     if what == "smooth":
-        return f"{float(settings.get('smooth_sigma', 1)):g}"
-    if what == "limits":
-        limits = settings.get("limits")
-        if not limits:
-            return ""
-        return " ".join(f"{float(value):g}" for value in limits)
-    if what == "method":
-        return str(settings.get("contour_method", "block")).lower()
-    if what == "scale":
-        return str(settings.get("scale", "linear"))
-    if what == "mode":
-        return str(settings.get("mode", "minmax"))
-    if what == "scope":
-        return str(settings.get("scope", "local"))
+        return str(settings.get("smoothness", 4))
     if what == "width":
         return f"{float(settings.get('line_width', 1)):g}"
     if what == "nlevels":
-        return str(settings.get("num_levels", 10))
+        return str(settings.get("num_levels", 5))
+    if what == "limits":
+        limits = settings.get("limits")
+        if not limits and window._contour_levels:
+            limits = (min(window._contour_levels), max(window._contour_levels))
+        return f"{float(limits[0]):g} {float(limits[1]):g}" if limits else ""
     if what == "log":
         return str(settings.get("log_exp", 1000))
     if what in _CONTOUR_KEYS:
@@ -612,6 +608,8 @@ def _contour(window, args: list[str]) -> str | None:
     [scope local|global] [limits <low> <high>] [levels <v>...]
     [open|close]`.
     """
+    from ...analysis.contour import normalize_mode, normalize_scale
+
     words = [str(word) for word in args]
     controller = window.analysis
     if not words:
@@ -630,6 +628,9 @@ def _contour(window, args: list[str]) -> str | None:
         controller.set_contours(False)
         return None
     if first == "generate":
+        # DS9 regenerates the levels from the parameters, then draws them.
+        if window._contour_settings is not None:
+            window._contour_settings.pop("levels", None)
         controller.update_contours()
         return None
     if first == "open":
@@ -647,7 +648,9 @@ def _contour(window, args: list[str]) -> str | None:
         controller.paste_contours()
         return _contour_style(window, rest)
     if first == "convert":
-        return "contour convert turns contours into regions, which the Region menu does"
+        # DS9's Convert to Polygons: each contour becomes a polygon region.
+        controller.contours_to_polygons()
+        return None
 
     if first == "load":
         # `load levels <file>` reads just the level values.
@@ -677,16 +680,14 @@ def _contour(window, args: list[str]) -> str | None:
         return None
 
     if first == "levels":
-        # DS9's own example braces the list -- `contour levels {1 2 3}` --
-        # which arrives as `{1`, `2`, `3}`.
-        rest = [word.strip("{}\"'") for word in " ".join(rest).replace(",", " ").split()]
         try:
-            values = [float(word) for word in rest if word]
+            values = [float(word) for word in rest]
         except ValueError:
             return "levels takes numbers"
         if not values:
             return "at least one level is needed"
-        _custom_levels(settings, values)
+        settings["levels"] = values
+        settings["num_levels"] = len(values)
         controller.apply_contours(settings)
         return None
 
@@ -694,57 +695,23 @@ def _contour(window, args: list[str]) -> str | None:
         if len(rest) < 2:
             return "limits takes a low and a high"
         try:
-            low, high = float(rest[0]), float(rest[1])
+            settings["limits"] = (float(rest[0]), float(rest[1]))
         except ValueError:
             return "limits takes two numbers"
-        # The keys the level generator reads; `limits` alone was read by
-        # nothing, so the limits never reached a contour.
-        settings["limits"] = (low, high)
-        settings["min_level"], settings["max_level"] = low, high
+        # DS9's `ContourCmdLimits`: typed limits are User mode.
         settings["mode"] = "user"
-        _uncustom(settings)
+        settings.pop("levels", None)
         controller.apply_contours(settings)
         return None
 
     if first == "log":
-        # `contour log exp 1000`: DS9's log scale takes an exponent; the
-        # level generator here spaces log levels by powers of ten.
-        return "the contour log exponent is not implemented"
-
-    if first == "method":
-        if not rest or rest[0].lower() not in ("block", "smooth"):
-            return "method takes block or smooth"
-        # The tracer's method. `method` in the settings is the level
-        # *scale*, so writing this there turned every scale into linear.
-        settings["contour_method"] = rest[0].lower()
+        # `contour log exp 1000`.
+        try:
+            settings["log_exp"] = float(rest[-1])
+        except (IndexError, ValueError):
+            return "log takes an exponent"
+        settings.pop("levels", None)
         controller.apply_contours(settings)
-        return None
-
-    if first == "scale":
-        scales = {"linear": "Linear", "log": "Logarithmic", "sqrt": "Square Root"}
-        if not rest or rest[0].lower() not in scales:
-            return f"contour scale {' '.join(rest)} is not implemented: {', '.join(scales)} are"
-        settings["scale"] = rest[0].lower()
-        settings["method"] = scales[rest[0].lower()]
-        controller.apply_contours(settings)
-        return None
-
-    if first == "mode":
-        wanted = rest[0].lower() if rest else ""
-        if wanted not in ("minmax", "zscale", "zmax", "user"):
-            return "mode takes minmax, zscale, zmax or user"
-        problem = _contour_mode(window, settings, wanted)
-        if problem:
-            return problem
-        controller.apply_contours(settings)
-        return None
-
-    if first == "scope":
-        if not rest or rest[0].lower() not in ("local", "global"):
-            return "scope takes local or global"
-        if rest[0].lower() == "global":
-            return "global contour limits are not implemented; contours are per frame"
-        settings["scope"] = "local"
         return None
 
     if first in _CONTOUR_KEYS:
@@ -752,69 +719,31 @@ def _contour(window, args: list[str]) -> str | None:
             return f"contour {first} needs a value"
         key = _CONTOUR_KEYS[first]
         value: object = " ".join(rest)
-        if key in ("line_width", "num_levels", "smooth_sigma"):
+        if key in ("line_width", "num_levels", "smoothness"):
             try:
-                value = float(rest[0]) if key != "num_levels" else int(float(rest[0]))
+                value = float(rest[0]) if key == "line_width" else max(1, int(float(rest[0])))
             except ValueError:
                 return f"contour {first} takes a number"
+        elif key == "contour_method":
+            value = str(rest[0]).lower()
+            if value not in ("block", "smooth"):
+                return "method takes block or smooth"
+        elif key == "scale":
+            value = normalize_scale(rest[0])
+        elif key == "mode":
+            value = normalize_mode(rest[0])
+            # DS9's `ContourModeDialog`: the limits come from the new mode.
+            if value != "user":
+                settings.pop("limits", None)
+        elif key == "scope":
+            value = "global" if str(rest[0]).lower() == "global" else "local"
         settings[key] = value
-        if key == "smooth_sigma":
-            settings["smooth"] = float(settings["smooth_sigma"]) > 1
-        if key == "num_levels":
-            # A number of levels means generated ones, not a fixed list.
-            _uncustom(settings)
+        if key in _CONTOUR_GENERATORS:
+            settings.pop("levels", None)
         controller.apply_contours(settings)
         return None
 
     return f"contour does not take {first}"
-
-
-def _custom_levels(settings: dict, values: list[float]) -> None:
-    """Fix the contours at a list of levels, as the dialog's Custom does."""
-    settings["levels"] = list(values)
-    settings["custom_levels"] = list(values)
-    settings["num_levels"] = len(values)
-    if settings.get("method") != "Custom":
-        settings["scale_method"] = settings.get("method", "Linear")
-    settings["method"] = "Custom"
-
-
-def _uncustom(settings: dict) -> None:
-    """Go back to generated levels, in whatever scale was chosen before."""
-    if settings.get("method") == "Custom":
-        settings["method"] = settings.get("scale_method", "Linear")
-
-
-def _contour_mode(window, settings: dict, mode: str) -> str | None:
-    """DS9's `contour mode`: where the level limits come from."""
-    import numpy as np
-
-    settings["mode"] = mode
-    _uncustom(settings)
-    if mode == "user":
-        return None
-    if mode == "minmax":
-        settings.pop("min_level", None)
-        settings.pop("max_level", None)
-        settings.pop("limits", None)
-        return None
-    frame = window.frame_manager.current_frame
-    data = getattr(frame, "image_data", None) if frame is not None else None
-    if data is None:
-        return "no image to take contour limits from"
-    if mode == "zscale":
-        from ...rendering.scale_algorithms import compute_zscale_limits
-
-        low, high = compute_zscale_limits(np.asarray(data, dtype=np.float32))
-    else:
-        # zmax: zscale's low, the data's maximum.
-        from ...rendering.scale_algorithms import compute_zscale_limits
-
-        low, _high = compute_zscale_limits(np.asarray(data, dtype=np.float32))
-        high = float(np.nanmax(data))
-    settings["min_level"], settings["max_level"] = float(low), float(high)
-    settings["limits"] = (float(low), float(high))
-    return None
 
 
 def _contour_style(window, words: list[str]) -> str | None:
@@ -868,7 +797,8 @@ def _contour_levels_file(window, path: str, write: bool) -> str | None:
     if not values:
         return f"{path} holds no levels"
     settings = _contour_settings(window)
-    _custom_levels(settings, values)
+    settings["levels"] = values
+    settings["num_levels"] = len(values)
     window.analysis.apply_contours(settings)
     return None
 
