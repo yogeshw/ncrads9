@@ -1328,7 +1328,8 @@ milestone checked what each one *does*, and compared every DS9 dialog against ou
 Still open, in rough order of what a DS9 user would notice:
 
 - [ ] DS9 `.bck` backups cannot be restored (ours are JSON).
-- [ ] RGB dialog lacks DS9's Lock and Align menus; 3D movies are not made.
+- [x] RGB dialog Lock menu and `rgb lock <what> yes|no`: Scale, Scale and Limits and Colorbar
+      are shared between channels. Still open: the Align menu (channels align by pixel), 3D movies.
 - [ ] The VO dialog has no site checklist; Plot Tool lacks the Canvas menu; Header has no
       Find/Print; Prism's plot lacks error columns.
 - [ ] Regions are not rotated between image and sky when north is not up; `wcsa`–`wcsz` in

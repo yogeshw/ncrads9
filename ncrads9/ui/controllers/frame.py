@@ -978,6 +978,7 @@ class FrameController(Controller):
         dialog.setWindowFlag(Qt.WindowType.Window, True)
         dialog.setWindowTitle(frame_type.upper())
         layout = QVBoxLayout(dialog)
+        layout.setMenuBar(self._rgb_menus(dialog, frame))
 
         channel_group = QGroupBox("Current Channel", dialog)
         channel_layout = QHBoxLayout(channel_group)
@@ -1305,6 +1306,7 @@ class FrameController(Controller):
             frame.rgb_channel_z2[channel] = self.window.z2
             frame.rgb_channel_contrast[channel] = contrast
             frame.rgb_channel_brightness[channel] = brightness
+            self._apply_rgb_locks(frame, channel)
         frame.colormap = self.window.current_colormap
         frame.scale = self.window.current_scale
         frame.invert_colormap = self.window.invert_colormap
@@ -1320,6 +1322,70 @@ class FrameController(Controller):
             pan_center = self.window.display.cpu_pan_center()
             if pan_center is not None:
                 frame.pan_x, frame.pan_y = pan_center
+
+    def _rgb_menus(self, dialog, frame: Frame):
+        """DS9's RGB dialog menus: File (Close) and Lock."""
+        from PyQt6.QtGui import QAction
+        from PyQt6.QtWidgets import QMenuBar
+
+        from ...frames.frame import RGB_LOCKS
+
+        labels = {
+            "wcs": "WCS",
+            "crop": "Crop",
+            "slice": "Slice",
+            "bin": "Bin",
+            "axes": "Axes Order",
+            "scale": "Scale",
+            "scalelimits": "Scale and Limits",
+            "colorbar": "Colorbar",
+            "block": "Block",
+            "smooth": "Smooth",
+        }
+        bar = QMenuBar(dialog)
+        file_menu = bar.addMenu("&File")
+        close = QAction("Close", dialog)
+        close.triggered.connect(dialog.close)
+        file_menu.addAction(close)
+        lock_menu = bar.addMenu("&Lock")
+        dialog.lock_actions = {}
+        for name in RGB_LOCKS:
+            action = QAction(labels[name], dialog, checkable=True)
+            action.setChecked(bool(frame.rgb_locks.get(name)))
+            action.toggled.connect(lambda on, key=name: self.set_rgb_lock(key, on, frame))
+            lock_menu.addAction(action)
+            dialog.lock_actions[name] = action
+        return bar
+
+    def set_rgb_lock(self, name: str, enabled: bool, frame: Frame | None = None) -> None:
+        """Lock or free one setting across a colour frame's channels."""
+        frame = frame or self.frames.current_frame
+        if frame is None or frame.rgb_locks is None:
+            return
+        frame.rgb_locks[name] = bool(enabled)
+        if enabled and frame is self.frames.current_frame:
+            self.persist_view_state()
+            self.window.display.display()
+
+    @staticmethod
+    def _apply_rgb_locks(frame: Frame, channel: str) -> None:
+        """Copy the current channel's locked settings to the other two.
+
+        DS9's RGB Lock: with Scale locked, choosing log for red makes green
+        and blue log too; Scale and Limits shares the clip limits as well,
+        and Colorbar the contrast and bias.
+        """
+        locks = frame.rgb_locks or {}
+        shared: list[dict] = []
+        if locks.get("scale") or locks.get("scalelimits"):
+            shared.append(frame.rgb_channel_scale)
+        if locks.get("scalelimits"):
+            shared += [frame.rgb_channel_z1, frame.rgb_channel_z2]
+        if locks.get("colorbar"):
+            shared += [frame.rgb_channel_contrast, frame.rgb_channel_brightness]
+        for table in shared:
+            for other in table:
+                table[other] = table[channel]
 
     def apply_view_state(self, frame: Frame) -> None:
         """Apply stored display settings from the frame."""

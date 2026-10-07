@@ -39,6 +39,20 @@ from ..core.image_data import ImageData
 from ..rendering.scale_algorithms import ScaleAlgorithm
 from .crop import CropRegion
 
+#: The RGB dialog's Lock entries, by DS9's names (`rgb.tcl`).
+RGB_LOCKS: tuple[str, ...] = (
+    "wcs",
+    "crop",
+    "slice",
+    "bin",
+    "axes",
+    "scale",
+    "scalelimits",
+    "colorbar",
+    "block",
+    "smooth",
+)
+
 
 @dataclass
 class Frame:
@@ -119,6 +133,11 @@ class Frame:
     frame_type: str = "base"
     rgb_channels: dict[str, np.ndarray | None] = None
     rgb_view: dict[str, bool] = None
+    #: DS9's RGB dialog Lock menu: which settings the three channels share.
+    #: Scale, Scale and Limits and Colorbar are copied between channels;
+    #: the others name geometry the channels already share here, since
+    #: they are held on one pixel grid.
+    rgb_locks: dict[str, bool] = None
     rgb_source_frame_ids: dict[str, int | None] = None
     rgb_current_channel: str = "red"
     rgb_channel_scale: dict[str, ScaleAlgorithm] = None
@@ -159,6 +178,8 @@ class Frame:
             self.rgb_channel_contrast = {"red": 1.0, "green": 1.0, "blue": 1.0}
         if self.rgb_channel_brightness is None:
             self.rgb_channel_brightness = {"red": 0.0, "green": 0.0, "blue": 0.0}
+        if self.rgb_locks is None:
+            self.rgb_locks = dict.fromkeys(RGB_LOCKS, False)
 
     def wcs_for(self, key: str = "") -> object | None:
         """The handler for one of the frame's WCS descriptions.

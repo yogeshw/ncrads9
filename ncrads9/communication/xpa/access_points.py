@@ -4411,6 +4411,10 @@ def _as_region_file(text: str) -> str:
     return "\n".join(lines)
 
 
+#: DS9's spellings of the RGB locks, to the names the frame keeps.
+_RGB_LOCK_NAMES = {"limits": "scalelimits", "axesorder": "axes", "axes": "axes"}
+
+
 def _colour_frame_text(window, args: list[str]) -> str:
     """`xpaget ds9 rgb channel|system|view <c>|lock <what>`."""
     frame = window.frame_manager.current_frame
@@ -4421,7 +4425,9 @@ def _colour_frame_text(window, args: list[str]) -> str:
     if words[0] == "system":
         return "image"
     if words[0] == "lock":
-        return NO
+        locks = getattr(frame, "rgb_locks", None) or {}
+        name = _RGB_LOCK_NAMES.get(words[1], words[1]) if len(words) > 1 else ""
+        return on_off(bool(locks.get(name)))
     if words[0] == "view" and len(words) > 1 and frame is not None and getattr(frame, "rgb_channels", None):
         key = _channel_keys(window, frame).get(words[1], words[1])
         return on_off(frame.rgb_view.get(key, True))
@@ -4487,9 +4493,19 @@ def _colour_frame(window, args: list[str], kind: str) -> str | None:
         )
 
     if first == "lock":
-        # DS9's `rgb lock scale yes` ties the three channels' settings
-        # together; the channels here carry no lock of their own.
-        return f"locking {kind} channels together is not implemented"
+        # DS9's `rgb lock scale yes`: the three channels share a setting.
+        from ...frames.frame import RGB_LOCKS
+
+        if not rest:
+            return f"{kind} lock takes one of {', '.join(RGB_LOCKS)}"
+        name = _RGB_LOCK_NAMES.get(rest[0].lower(), rest[0].lower())
+        if name not in RGB_LOCKS:
+            return f"{rest[0]} is not something a {kind} frame locks"
+        wanted = as_bool(rest[1]) if len(rest) > 1 else True
+        if wanted is None:
+            return f"{rest[1]} is not yes or no"
+        window.frame_controller.set_rgb_lock(name, wanted)
+        return None
 
     if first in channels:
         return controller.set_channel(first)
