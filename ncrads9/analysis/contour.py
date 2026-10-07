@@ -254,6 +254,10 @@ def _paths(data: NDArray[np.floating], level: float) -> list[NDArray[np.floating
     a real tracer, because a contour that is quietly wrong is worse in a
     measuring tool than one that is missing.
     """
+    if data.ndim != 2 or min(data.shape) < 2:
+        # Nothing to trace between: a frame blocked down to a single row or
+        # pixel has no contours, which is not an error.
+        return []
     try:
         from skimage import measure
     except ImportError:

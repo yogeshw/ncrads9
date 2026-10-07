@@ -185,8 +185,18 @@ def test_the_factor_sets_the_image_size(events, factor, expected):
 def test_the_buffer_size_caps_the_image(events, rows):
     image = bin_table(events, settings=BinSettings(factor=1, buffer_size=128))
     assert image.data.shape == (128, 128)
-    # Capping regroups rather than discarding.
-    assert image.data.sum() == pytest.approx(rows)
+    # As DS9: the factor is kept and the buffer shows the middle of the
+    # data, rather than all of it regrouped at a coarser factor.
+    assert 0 < image.data.sum() < rows
+
+
+def test_binning_about_a_centre(events):
+    data = events.data
+    x, y = float(np.median(data["X"])), float(np.median(data["Y"]))
+    about = bin_table(events, settings=BinSettings(factor=1, buffer_size=16, center=(x, y)))
+    assert about.data.shape == (16, 16)
+    near = (np.abs(data["X"] - x) < 8) & (np.abs(data["Y"] - y) < 8)
+    assert about.data.sum() == pytest.approx(near.sum(), abs=near.sum() * 0.2 + 2)
 
 
 def test_the_buffer_sizes_are_ds9s():
@@ -607,3 +617,21 @@ def test_the_depth_setting_is_recorded_but_not_yet_a_third_axis(events):
     """DS9 can bin into a cube; this cannot, and says so rather than lying."""
     image = bin_table(events, spec=BinSpec(("X", "Y", "PHA")), settings=BinSettings(depth=8))
     assert image.data.ndim == 2
+
+
+def test_the_parameters_dialog_bins_about_a_centre_and_stays_open(main_window, qapp):
+    """DS9's Bin Center and Apply, in a modeless window."""
+    main_window.display.load_fits(str(EVENTS))
+    main_window.bin.show_dialog()
+    qapp.processEvents()
+    dialog = main_window._open_windows["BinDialog"]
+    assert not dialog.isModal()
+    centre = main_window.bin.centre()
+    assert centre is not None
+    dialog.set_centre((centre[0] + 10, centre[1] - 10), automatic=False)
+    dialog.apply()
+    assert main_window.bin_settings.center == pytest.approx((centre[0] + 10, centre[1] - 10))
+    dialog.set_centre(None, automatic=True)
+    dialog.apply()
+    assert main_window.bin_settings.center is None
+    dialog.close()

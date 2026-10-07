@@ -226,13 +226,13 @@ class VerticalGraph(QWidget):
         self._graph_widget.update()
 
     def set_method(self, method: str) -> None:
-        """Average or sum a thick cut, DS9's `graph method`.
+        """Average, sum or take the median of a thick cut, DS9's `graph method`.
 
         Raises:
             ValueError: If the method is neither.
         """
-        if method not in ("average", "sum"):
-            raise ValueError(f"a cut is averaged or summed, not {method!r}")
+        if method not in ("average", "sum", "median"):
+            raise ValueError(f"a cut is averaged, summed or the median, not {method!r}")
         self.settings.method = method
         self._redraw()
 

@@ -39,7 +39,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 #: What a thick cut does with the rows it covers. DS9's `graph method`.
-Method = Literal["average", "sum"]
+Method = Literal["average", "sum", "median"]
 
 #: DS9's default panel size, in pixels, and the range its dialog allows.
 DEFAULT_SIZE = 150
@@ -131,6 +131,8 @@ def cut(
             warnings.simplefilter("ignore", RuntimeWarning)
             if settings.method == "sum":
                 return np.asarray(np.nansum(values, axis=across), dtype=np.float64)
+            if settings.method == "median":
+                return np.asarray(np.nanmedian(values, axis=across), dtype=np.float64)
             reduced = np.nanmean(values, axis=across)
     return np.asarray(reduced, dtype=np.float64)
 

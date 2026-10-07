@@ -127,6 +127,9 @@ class BinSettings:
     #: A row filter, in the syntax `core/file_spec.py` parses out of a
     #: specification's brackets.
     filter: str = ""
+    #: DS9's Bin Center, in column units: the point the image is centred
+    #: on. None is DS9's "or center of data".
+    center: tuple[float, float] | None = None
 
     def with_factor(self, factor: float) -> BinSettings:
         """A copy at a different bin factor.
@@ -231,13 +234,33 @@ def bin_edges(
     Returns:
         The bin edges, at least two of them.
     """
+    return _edges(extent, settings, None)
+
+
+def _edges(
+    extent: tuple[float, float],
+    settings: BinSettings,
+    centre: float | None,
+) -> NDArray[np.floating]:
+    """`bin_edges`, about a chosen centre if there is one.
+
+    With no centre and room in the buffer, the grid covers the whole
+    extent. Otherwise it is DS9's: bins one factor wide, as many as the
+    buffer holds, centred on the Bin Center -- or on the middle of the data
+    -- so a buffer too small for the data shows part of it at the factor
+    asked for, rather than all of it at a coarser one.
+    """
     low, high = extent
     span = high - low + 1.0
     factor = max(float(settings.factor), 1e-9)
-    count = max(1, int(round(span / factor)))
-    count = min(count, max(1, int(settings.buffer_size)))
-    step = span / count
-    return (low - 0.5) + np.arange(count + 1, dtype=np.float64) * step
+    wanted = max(1, int(round(span / factor)))
+    buffer = max(1, int(settings.buffer_size))
+    if centre is None and wanted <= buffer:
+        step = span / wanted
+        return (low - 0.5) + np.arange(wanted + 1, dtype=np.float64) * step
+    count = min(wanted, buffer) if centre is None else buffer
+    middle = (low + high) / 2.0 if centre is None else float(centre)
+    return middle - count * factor / 2.0 + np.arange(count + 1, dtype=np.float64) * factor
 
 
 def apply_filter(
@@ -338,9 +361,10 @@ def bin_table(
         if weights is not None:
             weights = weights[mask]
 
+    centres = settings.center if settings.center is not None else (None, None)
     edges = [
-        bin_edges(column_extent(hdu, name, column), settings)
-        for name, column in zip(axes, values, strict=True)
+        _edges(column_extent(hdu, name, column), settings, centre)
+        for name, column, centre in zip(axes, values, centres, strict=True)
     ]
     # numpy accepts explicit bin edges, but its stubs type `bins` as only a
     # count or a sequence of counts, so the pair has to be cast.

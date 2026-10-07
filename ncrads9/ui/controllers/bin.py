@@ -35,12 +35,19 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtGui import QAction, QKeySequence
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
-    QDialogButtonBox,
-    QFormLayout,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
     QLineEdit,
+    QMenuBar,
+    QPushButton,
     QSpinBox,
     QVBoxLayout,
 )
@@ -52,6 +59,7 @@ from ...core.bin_table import (
     BinSettings,
     BinTableError,
     bin_table,
+    column_extent,
     column_names,
 )
 from ...core.file_spec import BinSpec
@@ -245,86 +253,188 @@ class BinController(Controller):
 
     # -- parameters dialog ---------------------------------------------------
 
+    def centre(self) -> tuple[float, float] | None:
+        """Where the binned image is centred, in column units.
+
+        The Bin Center if one was given, otherwise the middle of the data,
+        which is what DS9 reports for "or center of data".
+        """
+        if self.settings.center is not None:
+            return self.settings.center
+        table = self.table_hdu()
+        if table is None:
+            return None
+        try:
+            extents = [column_extent(table, name) for name in self.columns.columns[:2]]
+        except Exception:
+            return None
+        return tuple((low + high) / 2.0 for low, high in extents)
+
+    def column_ranges(self) -> dict[str, tuple[float, float]]:
+        """Each column's extent, for the dialog's Min and Max."""
+        table = self.table_hdu()
+        if table is None:
+            return {}
+        ranges = {}
+        for name in self.available_columns():
+            try:
+                ranges[name] = column_extent(table, name)
+            except Exception:
+                continue
+        return ranges
+
+    # -- parameters dialog ---------------------------------------------------
+
     def show_dialog(self) -> None:
-        """Show DS9's Binning Parameters dialog."""
+        """Show DS9's Binning Parameters window, modeless."""
         columns = self.available_columns()
         if not columns:
             self.status("The current frame is not a binned table", 3000)
             return
 
-        dialog = BinDialog(columns, self.columns, self.settings, self.window)
-        if not dialog.exec():
-            return
-        self.window.bin_spec = dialog.bin_spec()
-        self.window.bin_settings = dialog.settings()
+        dialog = BinDialog(columns, self.columns, self.settings, self.window, ranges=self.column_ranges())
+        dialog.set_centre(self.centre(), self.settings.center is None)
+        dialog.applied.connect(self.apply_dialog)
+        self.show_window(dialog)
+
+    def apply_dialog(self, spec: BinSpec, settings: BinSettings) -> None:
+        """Bin with what the dialog holds."""
+        self.window.bin_spec = spec
+        self.window.bin_settings = settings
         self.sync()
         self.rebin()
 
 
 class BinDialog(QDialog):
-    """DS9's Binning Parameters dialog.
+    """DS9's Binning Parameters window (`BinDialog`, `bin.tcl`).
+
+    File (Apply, Clear Filter, Close), Method, Bin and Buffer menus -- the
+    last three the main window's own actions -- over Bin Columns with each
+    column's Min and Max, Bin Center with "or center of data", Bin Filter
+    and Bin 3rd Column, and Apply, Clear Filter and Close. Modeless, as
+    DS9's is: it used to be OK/Cancel and block the image it binned.
 
     Args:
         columns: The table's column names, to choose the axes from.
         spec: The columns currently binned on.
-        settings: The current function, factor, buffer size, depth and filter.
-        parent: Optional parent widget.
+        settings: The current function, factor, buffer size, depth, filter
+            and centre.
+        parent: The main window, or nothing.
+        ranges: Each column's extent, shown as its Min and Max.
     """
+
+    #: Apply: the columns and settings to bin with.
+    applied = pyqtSignal(object, object)
 
     #: The label standing for "no third column: count the rows".
     NO_DEPTH_COLUMN = "(count rows)"
 
-    def __init__(self, columns, spec: BinSpec, settings: BinSettings, parent=None) -> None:
+    def __init__(self, columns, spec: BinSpec, settings: BinSettings, parent=None, ranges=None) -> None:
+        from ..dialogs.modeless import make_modeless
+
         super().__init__(parent)
         self.setWindowTitle("Binning Parameters")
+        make_modeless(self)
         self._columns = tuple(columns)
+        self._ranges = dict(ranges or {})
+        self._settings = settings
 
         layout = QVBoxLayout(self)
-        form = QFormLayout()
-        layout.addLayout(form)
+        layout.setMenuBar(self._build_menus(getattr(parent, "menu_bar", None)))
 
+        cols = QGroupBox("Bin Columns")
+        grid = QGridLayout(cols)
+        for column, title in enumerate(("Column", "Bin", "Min", "Max")):
+            grid.addWidget(QLabel(title), 0, column + 1)
         self._x = self._column_box(spec.columns[0] if spec.columns else "")
-        form.addRow("X column:", self._x)
         self._y = self._column_box(spec.columns[1] if len(spec.columns) > 1 else "")
-        form.addRow("Y column:", self._y)
+        self._factor_x = QLineEdit(f"{settings.factor:g}")
+        self._factor_y = QLineEdit(f"{settings.factor:g}")
+        self._range_labels = {}
+        for row, (label, box, factor) in enumerate((("x", self._x, self._factor_x), ("y", self._y, self._factor_y)), 1):
+            grid.addWidget(QLabel(label), row, 0)
+            grid.addWidget(box, row, 1)
+            grid.addWidget(factor, row, 2)
+            low, high = QLabel(), QLabel()
+            grid.addWidget(low, row, 3)
+            grid.addWidget(high, row, 4)
+            self._range_labels[box] = (low, high)
+            box.currentTextChanged.connect(lambda _text, b=box: self._show_range(b))
+            self._show_range(box)
+        layout.addWidget(cols)
 
+        centre = QGroupBox("Bin Center")
+        centre_row = QHBoxLayout(centre)
+        self._centre_x = QLineEdit()
+        self._centre_y = QLineEdit()
+        self._auto_centre = QCheckBox("or center of data")
+        self._auto_centre.toggled.connect(lambda on: (self._centre_x.setEnabled(not on), self._centre_y.setEnabled(not on)))
+        for widget in (self._centre_x, self._centre_y, self._auto_centre):
+            centre_row.addWidget(widget)
+        layout.addWidget(centre)
+        self.set_centre(settings.center, settings.center is None)
+
+        filter_group = QGroupBox("Bin Filter")
+        filter_row = QHBoxLayout(filter_group)
+        self._filter = QLineEdit(settings.filter)
+        self._filter.setPlaceholderText("pha>5&&ccd_id==3")
+        filter_row.addWidget(self._filter)
+        layout.addWidget(filter_group)
+
+        third = QGroupBox("Bin 3rd Column")
+        third_grid = QGridLayout(third)
+        third_grid.addWidget(QLabel("Column"), 0, 0)
+        third_grid.addWidget(QLabel("Depth"), 0, 1)
         self._depth_column = QComboBox()
         self._depth_column.addItem(self.NO_DEPTH_COLUMN)
         self._depth_column.addItems(self._columns)
         if len(spec.columns) > 2:
             self._depth_column.setCurrentText(spec.columns[2].upper())
-        form.addRow("Bin values of:", self._depth_column)
-
-        self._function = QComboBox()
-        self._function.addItems([function.value for function in BinFunction])
-        self._function.setCurrentText(settings.function.value)
-        form.addRow("Function:", self._function)
-
-        self._factor = QComboBox()
-        self._factor.addItems([f"{factor:g}" for factor in BIN_FACTORS])
-        self._factor.setCurrentText(f"{settings.factor:g}")
-        form.addRow("Bin factor:", self._factor)
-
-        self._buffer = QComboBox()
-        self._buffer.addItems([str(size) for size in BUFFER_SIZES])
-        self._buffer.setCurrentText(str(settings.buffer_size))
-        form.addRow("Buffer size:", self._buffer)
-
         self._depth = QSpinBox()
         self._depth.setRange(1, MAX_DEPTH)
         self._depth.setValue(max(1, settings.depth))
-        form.addRow("Depth:", self._depth)
+        third_grid.addWidget(self._depth_column, 1, 0)
+        third_grid.addWidget(self._depth, 1, 1)
+        layout.addWidget(third)
 
-        self._filter = QLineEdit(settings.filter)
-        self._filter.setPlaceholderText("pha>5&&ccd_id==3")
-        form.addRow("Filter:", self._filter)
+        self.message = QLabel()
+        layout.addWidget(self.message)
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        buttons = QHBoxLayout()
+        for label, slot in (("Apply", self.apply), ("Clear Filter", self.clear_filter), ("Close", self.close)):
+            button = QPushButton(label)
+            button.clicked.connect(lambda _checked=False, s=slot: s())
+            buttons.addWidget(button)
+        layout.addLayout(buttons)
+
+    def _build_menus(self, menu) -> QMenuBar:
+        bar = QMenuBar(self)
+        file_menu = bar.addMenu("&File")
+        for label, slot in (("Apply", self.apply), ("Clear Filter", self.clear_filter), (None, None), ("Close", self.close)):
+            if label is None:
+                file_menu.addSeparator()
+                continue
+            action = QAction(label, self)
+            if label == "Close":
+                action.setShortcut(QKeySequence(QKeySequence.StandardKey.Close))
+            action.triggered.connect(lambda _checked=False, s=slot: s())
+            file_menu.addAction(action)
+        if menu is not None:
+            # The main window's own Bin actions, shared rather than copied.
+            method = bar.addMenu("&Method")
+            for action in getattr(menu, "bin_function_actions", {}).values():
+                method.addAction(action)
+            bin_menu = bar.addMenu("&Bin")
+            for name in ("action_bin_in", "action_bin_out", "action_bin_fit"):
+                if hasattr(menu, name):
+                    bin_menu.addAction(getattr(menu, name))
+            bin_menu.addSeparator()
+            for action in getattr(menu, "bin_factor_actions", {}).values():
+                bin_menu.addAction(action)
+            buffer = bar.addMenu("B&uffer")
+            for action in getattr(menu, "bin_buffer_actions", {}).values():
+                buffer.addAction(action)
+        return bar
 
     def _column_box(self, current: str) -> QComboBox:
         """A combo listing the table's columns, `current` selected."""
@@ -335,6 +445,23 @@ class BinDialog(QDialog):
             box.setCurrentText(wanted)
         return box
 
+    def _show_range(self, box: QComboBox) -> None:
+        low, high = self._ranges.get(box.currentText(), (None, None))
+        labels = self._range_labels.get(box)
+        if labels is None:
+            return
+        labels[0].setText("" if low is None else f"{low:g}")
+        labels[1].setText("" if high is None else f"{high:g}")
+
+    def set_centre(self, centre: tuple[float, float] | None, automatic: bool) -> None:
+        """Show the Bin Center, and whether it is the middle of the data."""
+        if centre is not None:
+            self._centre_x.setText(f"{centre[0]:g}")
+            self._centre_y.setText(f"{centre[1]:g}")
+        self._auto_centre.setChecked(automatic)
+        self._centre_x.setEnabled(not automatic)
+        self._centre_y.setEnabled(not automatic)
+
     def bin_spec(self) -> BinSpec:
         """The columns the user chose."""
         columns = [self._x.currentText(), self._y.currentText()]
@@ -343,12 +470,46 @@ class BinDialog(QDialog):
             columns.append(depth)
         return BinSpec(columns=tuple(columns))
 
-    def settings(self) -> BinSettings:
-        """The parameters the user chose."""
-        return BinSettings(
-            function=BinFunction(self._function.currentText()),
-            factor=float(self._factor.currentText()),
-            buffer_size=int(self._buffer.currentText()),
+    def settings(self) -> BinSettings | None:
+        """The parameters the user chose, or None (and a message) if unusable."""
+        try:
+            fx, fy = float(self._factor_x.text()), float(self._factor_y.text())
+        except ValueError:
+            self.message.setText("The bin factors are numbers.")
+            return None
+        if fx != fy:
+            self.message.setText("Binning x and y by different factors is not supported.")
+            return None
+        if fx <= 0:
+            self.message.setText("A bin factor is positive.")
+            return None
+        centre = None
+        if not self._auto_centre.isChecked():
+            try:
+                centre = (float(self._centre_x.text()), float(self._centre_y.text()))
+            except ValueError:
+                self.message.setText("The bin center is two numbers, or the center of data.")
+                return None
+        self.message.clear()
+        # The Method and Buffer menus are the main window's and change its
+        # settings directly, so those are the ones to build on.
+        base = getattr(self.parent(), "bin_settings", None) or self._settings
+        return replace(
+            base,
+            factor=fx,
             depth=int(self._depth.value()),
             filter=self._filter.text().strip(),
+            center=centre,
         )
+
+    def apply(self) -> None:
+        """DS9's Apply."""
+        settings = self.settings()
+        if settings is not None:
+            self._settings = settings
+            self.applied.emit(self.bin_spec(), settings)
+
+    def clear_filter(self) -> None:
+        """DS9's Clear Filter: bin every row again."""
+        self._filter.clear()
+        self.apply()
