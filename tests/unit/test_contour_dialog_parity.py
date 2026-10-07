@@ -364,3 +364,13 @@ def test_xpa_convert_makes_polygons(window):
     _contour(window, ["levels", "50"])
     assert _contour(window, ["convert"]) is None
     assert frame.regions
+
+
+def test_an_image_too_small_to_contour_has_no_contours():
+    """Block 64 on a 64-pixel image left one pixel, and contouring it raised."""
+    import numpy as np
+
+    from ncrads9.analysis.contour import _paths
+
+    assert _paths(np.ones((1, 1)), 0.5) == []
+    assert _paths(np.ones((1, 5)), 0.5) == []
