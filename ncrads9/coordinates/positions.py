@@ -102,6 +102,17 @@ def _physical(frame: Any):
     return PhysicalTransform() if header is None else PhysicalTransform.from_header(header)
 
 
+def _frame(sky: str):
+    """DS9's sky frame name as an astropy frame: `ecliptic` is not one of
+    astropy's names, and FK4 and FK5 take DS9's equinoxes."""
+    from .ds9_coords import _astropy_frame
+
+    try:
+        return _astropy_frame(str(sky).lower())
+    except KeyError:
+        return sky
+
+
 def _sky_coord(first: str, second: str, sky: str):
     """A SkyCoord from two words in degrees or sexagesimal."""
     from astropy import units as u
@@ -112,8 +123,8 @@ def _sky_coord(first: str, second: str, sky: str):
         # Equatorial longitudes in sexagesimal are hours; DS9 writes the
         # galactic and ecliptic ones in degrees.
         lon_unit = u.hourangle if sky in ("fk4", "fk5", "icrs") else u.deg
-        return SkyCoord(first, second, unit=(lon_unit, u.deg), frame=sky)
-    return SkyCoord(float(first) * u.deg, float(second) * u.deg, frame=sky)
+        return SkyCoord(first, second, unit=(lon_unit, u.deg), frame=_frame(sky))
+    return SkyCoord(float(first) * u.deg, float(second) * u.deg, frame=_frame(sky))
 
 
 def to_image(frame: Any, first: str, second: str, system: str, sky: str = "fk5") -> tuple[float, float]:
@@ -166,7 +177,7 @@ def from_image(
     world = handler.wcs.pixel_to_world(x - 1.0, y - 1.0)
     if not hasattr(world, "transform_to"):
         return f"{x:.{digits}g} {y:.{digits}g}"
-    world = world.transform_to(sky)
+    world = world.transform_to(_frame(sky))
     spherical = world.spherical
     if sky_format == "sexagesimal":
         if sky in ("fk4", "fk5", "icrs"):

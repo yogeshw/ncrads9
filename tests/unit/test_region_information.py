@@ -224,29 +224,30 @@ def test_delete_is_refused_when_the_region_forbids_it(qapp):
 def test_without_a_wcs_only_the_pixel_systems_are_offered(qapp):
     dialog = RegionDialog(_parse("circle(50,50,20)"))
     assert dialog.systems() == PIXEL_SYSTEMS
-    assert not dialog._format.isEnabled()
+    assert not dialog._coord.actions_by_value["degrees"].isEnabled()
 
 
 def test_with_a_wcs_every_sky_frame_is_offered(qapp, wcs):
     dialog = RegionDialog(_parse("circle(50,50,20)"), wcs)
     assert set(dialog.systems()) > set(PIXEL_SYSTEMS)
-    assert "galactic" in dialog.systems()
+    assert "wcs" in dialog.systems()
+    assert "galactic" in dialog._coord.actions_by_value
 
 
 def test_switching_to_a_sky_frame_restates_the_position(qapp, wcs):
     dialog = RegionDialog(_parse("circle(50,50,20)"), wcs)
     in_pixels = dialog._editors["center"].text()
-    dialog._system.setCurrentText("fk5")
-    assert dialog._format.isEnabled()
+    dialog._coord.set_system("wcs", notify=True)
+    assert dialog._coord.actions_by_value["degrees"].isEnabled()
     assert dialog._editors["center"].text() != in_pixels
     assert ":" in dialog._editors["center"].text()
 
 
 def test_degrees_and_sexagesimal_differ(qapp, wcs):
     dialog = RegionDialog(_parse("circle(50,50,20)"), wcs)
-    dialog._system.setCurrentText("fk5")
+    dialog._coord.set_system("wcs", notify=True)
     sexagesimal = dialog._editors["center"].text()
-    dialog._format.setCurrentText("degrees")
+    dialog._coord.set_sky_format("degrees", notify=True)
     assert dialog._editors["center"].text() != sexagesimal
     assert ":" not in dialog._editors["center"].text()
 
@@ -254,7 +255,7 @@ def test_degrees_and_sexagesimal_differ(qapp, wcs):
 def test_a_sky_position_round_trips_back_to_the_same_pixel(qapp, wcs):
     """Shown in fk5 and applied unchanged, the region must not move."""
     dialog = RegionDialog(_parse("circle(50,50,20)"), wcs)
-    dialog._system.setCurrentText("fk5")
+    dialog._coord.set_system("wcs", notify=True)
     dialog.apply()
     assert dialog.region.center[0] == pytest.approx(50.0, abs=0.01)
     assert dialog.region.center[1] == pytest.approx(50.0, abs=0.01)

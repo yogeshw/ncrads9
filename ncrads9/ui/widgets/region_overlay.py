@@ -212,9 +212,11 @@ class RegionOverlay(QWidget):
         #: the host viewer, for the same reason `pick_handler` is: only this
         #: overlay takes mouse events.
         self.illustrate_handler = None
-        #: Called with "begin" when a region is grabbed and "finish" when
-        #: it is let go, so the controller can record the move for undo. A
-        #: drag spans two events, which a context manager cannot.
+        #: Called with "begin" when a region is grabbed, "move" at every
+        #: step of the drag and "finish" when it is let go, so the
+        #: controller can record the move for undo -- a drag spans two
+        #: events, which a context manager cannot -- and keep whatever
+        #: watches the region up to date while it moves.
         self.edit_notifier = None
         #: Called with an image position on the next press, once, when an
         #: interactive examine is waiting for a click. Returns True to
@@ -730,7 +732,7 @@ class RegionOverlay(QWidget):
         return bool(handler(phase, event.position(), button))
 
     def _notify_edit(self, phase: str) -> None:
-        """Tell the controller a region edit started or finished."""
+        """Tell the controller a region edit started, moved or finished."""
         if self.edit_notifier is not None:
             self.edit_notifier(phase)
 
@@ -881,11 +883,13 @@ class RegionOverlay(QWidget):
 
             if self.rotating:
                 self._rotate_to(img_point)
+                self._notify_edit("move")
                 self.update()
                 event.accept()
                 return
             if self.dragging_handle is not None:
                 self._drag_handle(self.dragging_handle, img_point)
+                self._notify_edit("move")
                 self.update()
                 event.accept()
                 return
@@ -900,6 +904,9 @@ class RegionOverlay(QWidget):
                     img_point.y() - self.drag_start.y(),
                 )
                 self.drag_start = img_point
+                # Every step of the drag, not only its end: the dialogs and
+                # plots watching the region follow it live, as DS9's do.
+                self._notify_edit("move")
                 self.update()
             event.accept()
             return

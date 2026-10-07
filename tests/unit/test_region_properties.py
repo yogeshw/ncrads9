@@ -465,6 +465,10 @@ def test_saving_reports_what_a_format_cannot_hold(main_window, tmp_path, monkeyp
         "getSaveFileName",
         staticmethod(lambda *a, **k: (str(path), "CIAO region files (*.reg)")),
     )
+    from ncrads9.ui.dialogs.region_file_dialog import RegionFileDialog
+
+    # DS9's save dialog follows the chooser, starting on the filter's format.
+    monkeypatch.setattr(RegionFileDialog, "exec", lambda self: 1)
     main_window.region.save_regions()
     assert "cannot hold line" in main_window.status_bar.currentMessage()
     assert "line(" not in path.read_text()

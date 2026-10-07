@@ -461,7 +461,7 @@ class RegionRenderer:
                 painter.drawPolyline(QPolygonF([to_widget(x, y) for x, y in region.points]))
 
         elif isinstance(region, Annulus):
-            for radius in (region.inner_radius, region.outer_radius):
+            for radius in region.radii:
                 painter.drawEllipse(
                     to_widget(*region.center), *self._radii(region.center, radius, radius, to_widget)
                 )
