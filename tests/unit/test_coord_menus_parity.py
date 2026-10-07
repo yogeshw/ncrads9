@@ -22,7 +22,7 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
-from ncrads9.communication.xpa import positions
+from ncrads9.coordinates import positions
 from ncrads9.core.cube_handler import CubeHandler
 from ncrads9.ui.widgets.coord_menu_button import CoordEntry, CoordMenuButton, DistMenuButton
 

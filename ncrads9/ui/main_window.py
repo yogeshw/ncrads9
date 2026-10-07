@@ -493,9 +493,7 @@ class MainWindow(QMainWindow):
 
     def _apply_background_color(self, color_hex: str) -> None:
         """Apply background color to the viewer."""
-        # Both viewer backends expose set_background_color, so this does not
-        # depend on which one is active. (This was previously an if/elif whose
-        # two branches were identical, making the GPU test dead.)
+        # Both viewer backends expose set_background_color.
         if hasattr(self.image_viewer, "set_background_color"):
             self.image_viewer.set_background_color(color_hex)
 
@@ -561,10 +559,7 @@ class MainWindow(QMainWindow):
         if self.frame_controller.select_tile_at(x, y):
             self.display.display_tiled()
             self.frame_controller.update_title()
-            self.statusBar().showMessage(
-                f"Selected frame {self.frame_manager.current_frame.frame_id}",
-                1500,
-            )
+            self.statusBar().showMessage(f"Selected frame {self.frame_manager.current_frame.frame_id}", 1500)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Handle keyboard panning with arrow keys."""

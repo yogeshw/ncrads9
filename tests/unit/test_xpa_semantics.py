@@ -429,7 +429,8 @@ def test_contour_settings_reach_the_levels(xpa, window):
     assert _get(xpa, "contour method") == "smooth"
     _ok(xpa, "contour scale linear")
     assert _get(xpa, "contour scale") == "linear"
-    _refused(xpa, "contour log exp 100")
+    _ok(xpa, "contour log exp 100")
+    assert _get(xpa, "contour log exp") == "100"
 
 
 def test_magnifier_zoom(xpa, window):

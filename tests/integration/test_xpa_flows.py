@@ -253,7 +253,8 @@ def test_a_script_that_asks_for_nonsense_is_told_so(xpa, window, image):
     for command in (
         "wibble on",
         "scale sideways",
-        "frame 99",
+        # `frame 99` is not here: DS9 makes Frame 99 when asked for it.
+        "frame sideways",
         "region load /nonesuch/x.reg",
         "contour nlevels lots",
         "savefits",

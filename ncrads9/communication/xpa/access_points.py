@@ -593,7 +593,7 @@ def _contour_text(window, args: list[str]) -> str:
             limits = (min(window._contour_levels), max(window._contour_levels))
         return f"{float(limits[0]):g} {float(limits[1]):g}" if limits else ""
     if what == "log":
-        return str(settings.get("log_exp", 1000))
+        return f"{float(settings.get('log_exp', 1000)):g}"
     if what in _CONTOUR_KEYS:
         return str(settings.get(_CONTOUR_KEYS[what], ""))
     return on_off(window.menu_bar.action_contours.isChecked())
@@ -680,8 +680,11 @@ def _contour(window, args: list[str]) -> str | None:
         return None
 
     if first == "levels":
+        # DS9's own example braces the list -- `contour levels {1 2 3}` --
+        # which arrives as `{1`, `2`, `3}`.
+        rest = [word.strip("{}\"'") for word in " ".join(rest).replace(",", " ").split()]
         try:
-            values = [float(word) for word in rest]
+            values = [float(word) for word in rest if word]
         except ValueError:
             return "levels takes numbers"
         if not values:
