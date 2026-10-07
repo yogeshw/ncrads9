@@ -22,11 +22,6 @@ wcs fk4 sexagesimal` -- one grammar, read and written here, so that every
 point taking a position agrees on what it means. Image coordinates count
 from one with a pixel's centre on the whole number, as FITS and DS9 do.
 
-It began in the XPA package, but the dialogs read and write the same
-positions -- the Pan Zoom Rotate dialog's Pan row is `pan to` typed by
-hand -- so it lives with the other coordinate code, where both can reach
-it without the dialogs importing the XPA server.
-
 Author: Yogesh Wadadekar
 """
 
@@ -79,6 +74,12 @@ def wcs_handler(frame: Any, system: str):
         return None
     if system in ("wcs", ""):
         return getattr(frame, "wcs_handler", None)
+    # A real frame caches its alternates; building an astropy WCS on every
+    # call is far too slow for a dialog that follows the crosshair.
+    cached = getattr(frame, "wcs_for", None)
+    if callable(cached):
+        handler = cached(system)
+        return handler if getattr(handler, "is_valid", False) else None
     from ..core.wcs_handler import WCSHandler
 
     header = getattr(frame, "header", None)
@@ -92,20 +93,6 @@ def wcs_handler(frame: Any, system: str):
     except Exception:
         return None
     return handler if getattr(handler, "is_valid", False) else None
-
-
-def has_system(frame: Any, system: str) -> bool:
-    """Whether a frame can express positions in a system.
-
-    Image, physical, amplifier and detector always can -- the last three
-    fall back to image when a header says nothing. A WCS system needs a
-    celestial WCS under that key, which is DS9's `has wcs <system>`.
-    """
-    system = system.lower()
-    if system in ("image", "physical", "amplifier", "detector"):
-        return True
-    handler = wcs_handler(frame, system)
-    return handler is not None and bool(getattr(handler, "is_valid", True))
 
 
 def _physical(frame: Any):
@@ -152,20 +139,33 @@ def to_image(frame: Any, first: str, second: str, system: str, sky: str = "fk5")
     return float(x) + 1.0, float(y) + 1.0
 
 
-def from_image(frame: Any, x: float, y: float, system: str, sky: str = "fk5", sky_format: str = "degrees") -> str:
-    """Write an image position (from one) in any of DS9's systems."""
+def from_image(
+    frame: Any,
+    x: float,
+    y: float,
+    system: str,
+    sky: str = "fk5",
+    sky_format: str = "degrees",
+    digits: int = 8,
+) -> str:
+    """Write an image position (from one) in any of DS9's systems.
+
+    Args:
+        digits: Significant digits of a number; the dialogs ask for DS9's
+            ten for degrees, so a value read back lands on the same pixel.
+    """
     system = system.lower()
     if system == "image":
-        return f"{x:.8g} {y:.8g}"
+        return f"{x:.{digits}g} {y:.{digits}g}"
     if system in ("physical", "amplifier", "detector"):
         px, py = _physical(frame).image_to_physical(x, y)
-        return f"{px:.8g} {py:.8g}"
+        return f"{px:.{digits}g} {py:.{digits}g}"
     handler = wcs_handler(frame, system)
     if handler is None:
-        return f"{x:.8g} {y:.8g}"
+        return f"{x:.{digits}g} {y:.{digits}g}"
     world = handler.wcs.pixel_to_world(x - 1.0, y - 1.0)
     if not hasattr(world, "transform_to"):
-        return f"{x:.8g} {y:.8g}"
+        return f"{x:.{digits}g} {y:.{digits}g}"
     world = world.transform_to(sky)
     spherical = world.spherical
     if sky_format == "sexagesimal":
@@ -175,4 +175,81 @@ def from_image(frame: Any, x: float, y: float, system: str, sky: str = "fk5", sk
             lon = spherical.lon.to_string(unit="deg", sep=":", precision=3, pad=True)
         lat = spherical.lat.to_string(unit="deg", sep=":", precision=3, alwayssign=True, pad=True)
         return f"{lon} {lat}"
-    return f"{spherical.lon.deg:.8g} {spherical.lat.deg:.8g}"
+    return f"{spherical.lon.deg:.{digits}g} {spherical.lat.deg:.{digits}g}"
+
+
+#: The units DS9 writes a WCS distance in, as degrees per unit.
+DISTANCE_FORMATS: dict[str, float] = {"degrees": 1.0, "arcmin": 1.0 / 60.0, "arcsec": 1.0 / 3600.0}
+
+
+def has_system(frame: Any, system: str) -> bool:
+    """Whether a frame can express positions in a system.
+
+    The pixel systems always can; a WCS only when the frame carries it.
+    """
+    system = system.lower()
+    if system in ("image", "physical", "amplifier", "detector"):
+        return True
+    return wcs_handler(frame, system) is not None
+
+
+def _pixel_scales(frame: Any, system: str) -> tuple[float, float]:
+    """Degrees per image pixel along x and y in a WCS.
+
+    Raises:
+        ValueError: If the frame has no such WCS.
+    """
+    handler = wcs_handler(frame, system)
+    if handler is None:
+        raise ValueError(f"the frame has no {system} coordinates")
+    import numpy as np
+
+    scales = handler.wcs.proj_plane_pixel_scales()
+    values = [abs(float(getattr(scale, "value", scale))) for scale in scales]
+    if len(values) < 2 or not all(np.isfinite(values)) or 0.0 in values:
+        raise ValueError(f"the {system} coordinates have no pixel scale")
+    return values[0], values[1]
+
+
+def distance_to_image(
+    frame: Any, width: float, height: float, system: str, distance_format: str = "degrees"
+) -> tuple[float, float]:
+    """A width and height in any of DS9's systems, as image pixels.
+
+    DS9's `DistMenuButton`: image and physical are pixels, a WCS is an angle
+    in degrees, arcminutes or arcseconds.
+
+    Raises:
+        ValueError: If the frame has no WCS to measure the angle with.
+    """
+    system = system.lower()
+    if system == "image":
+        return float(width), float(height)
+    if system in ("physical", "amplifier", "detector"):
+        transform = _physical(frame)
+        return abs(float(width) * transform.ltm1), abs(float(height) * transform.ltm2)
+    per_unit = DISTANCE_FORMATS.get(distance_format, 1.0)
+    scale_x, scale_y = _pixel_scales(frame, system)
+    return float(width) * per_unit / scale_x, float(height) * per_unit / scale_y
+
+
+def distance_from_image(
+    frame: Any, width: float, height: float, system: str, distance_format: str = "degrees"
+) -> tuple[float, float]:
+    """An image-pixel width and height in any of DS9's systems.
+
+    Falls back to pixels when the frame has no such WCS, as `from_image`
+    falls back for a position.
+    """
+    system = system.lower()
+    if system == "image":
+        return float(width), float(height)
+    if system in ("physical", "amplifier", "detector"):
+        transform = _physical(frame)
+        return abs(float(width) / transform.ltm1), abs(float(height) / transform.ltm2)
+    try:
+        scale_x, scale_y = _pixel_scales(frame, system)
+    except ValueError:
+        return float(width), float(height)
+    per_unit = DISTANCE_FORMATS.get(distance_format, 1.0)
+    return float(width) * scale_x / per_unit, float(height) * scale_y / per_unit

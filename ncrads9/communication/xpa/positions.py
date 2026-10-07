@@ -29,6 +29,8 @@ from ...coordinates.positions import (  # noqa: F401
     SYSTEMS,
     _physical,
     _sky_coord,
+    distance_from_image,
+    distance_to_image,
     from_image,
     has_system,
     is_system,

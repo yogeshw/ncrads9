@@ -279,10 +279,29 @@ class CubeHandler:
             dtype=self._data.dtype,
         )
 
+    def _slice_scale(self, axis: int, key: str = "") -> tuple[float, float, float, str] | None:
+        """CRVAL, CDELT, CRPIX and CUNIT of one axis in one WCS description.
+
+        Args:
+            axis: The FITS axis.
+            key: "" for the primary WCS, "A".."Z" for an alternate.
+        """
+        if self._header is None:
+            return None
+        key = key.strip().upper()
+        crval = self._header.get(f"CRVAL{axis}{key}")
+        cdelt = self._header.get(f"CDELT{axis}{key}", self._header.get(f"CD{axis}_{axis}{key}"))
+        crpix = self._header.get(f"CRPIX{axis}{key}", 1.0)
+        if crval is None or cdelt is None:
+            return None
+        unit = str(self._header.get(f"CUNIT{axis}{key}", "")).strip()
+        return float(crval), float(cdelt), float(crpix), unit
+
     def slice_coordinate(
         self,
         channel: int,
         order: AxisOrder | str = AxisOrder(),
+        key: str = "",
     ) -> tuple[float, str] | None:
         """The world coordinate of one slice, and its unit.
 
@@ -292,23 +311,64 @@ class CubeHandler:
         Args:
             channel: The slice index, from zero.
             order: The axis order.
+            key: Which WCS description, "" or "A".."Z" (DS9's `wcsa`..).
 
         Returns:
             (value, unit), or None when the header carries no scale for that
             axis.
         """
-        if self._header is None:
-            return None
-        axis = AxisOrder.parse(order).z
-        crval = self._header.get(f"CRVAL{axis}")
-        cdelt = self._header.get(f"CDELT{axis}", self._header.get(f"CD{axis}_{axis}"))
-        crpix = self._header.get(f"CRPIX{axis}", 1.0)
-        if crval is None or cdelt is None:
-            return None
-        unit = str(self._header.get(f"CUNIT{axis}", "")).strip()
         # FITS pixels count from one.
-        value = float(crval) + (channel + 1 - float(crpix)) * float(cdelt)
-        return value, unit
+        return self.image_to_world_z(channel + 1, order, key)
+
+    def image_to_world_z(
+        self,
+        z: float,
+        order: AxisOrder | str = AxisOrder(),
+        key: str = "",
+    ) -> tuple[float, str] | None:
+        """A slice-axis image coordinate (from one) as a world value and unit."""
+        scale = self._slice_scale(AxisOrder.parse(order).z, key)
+        if scale is None:
+            return None
+        crval, cdelt, crpix, unit = scale
+        return crval + (float(z) - crpix) * cdelt, unit
+
+    def world_to_image_z(
+        self,
+        value: float,
+        order: AxisOrder | str = AxisOrder(),
+        key: str = "",
+    ) -> float | None:
+        """A world value of the slice axis as an image coordinate from one.
+
+        DS9's `get fits slice to image`. None when the header has no scale
+        for the axis, or a zero one.
+        """
+        scale = self._slice_scale(AxisOrder.parse(order).z, key)
+        if scale is None or scale[1] == 0.0:
+            return None
+        crval, cdelt, crpix, _unit = scale
+        return crpix + (float(value) - crval) / cdelt
+
+    def slice_from_world(
+        self,
+        value: float,
+        order: AxisOrder | str = AxisOrder(),
+        key: str = "",
+    ) -> int | None:
+        """The slice (from zero) nearest a world value, clamped to the cube."""
+        z = self.world_to_image_z(value, order, key)
+        if z is None or not np.isfinite(z):
+            return None
+        depth = self.depth(order)
+        return max(0, min(int(round(z)) - 1, depth - 1))
+
+    def slice_axis_name(self, order: AxisOrder | str = AxisOrder(), key: str = "") -> str:
+        """The slice axis's CTYPE in a WCS description, or "" without one."""
+        if self._header is None:
+            return ""
+        axis = AxisOrder.parse(order).z
+        return str(self._header.get(f"CTYPE{axis}{key.strip().upper()}", "")).strip()
 
     def get_channel_wcs(self, channel: int) -> WCS | None:
         """A 2D WCS for one slice of the default order.

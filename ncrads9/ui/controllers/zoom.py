@@ -585,9 +585,9 @@ class ZoomController(Controller):
             return
 
         button = dialog.coord_button
-        if not positions.has_system(frame, button.system):
-            button.set_system("physical")
-        button.set_available(lambda system: positions.has_system(frame, system))
+        # Greys out the WCSs the frame lacks, and falls back to physical
+        # when the chosen one is among them -- DS9's `AdjustCoordSystem`.
+        button.adjust_to_frame(frame)
 
         x, y = self._view_centre(frame)
         try:

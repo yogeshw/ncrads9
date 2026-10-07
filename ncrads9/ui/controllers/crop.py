@@ -214,6 +214,20 @@ class CropController(Controller):
 
     # -- cubes -------------------------------------------------------------------------
 
+    def cube(self, frame=None):
+        """A `CubeHandler` over the frame's data when it is a cube, else None.
+
+        What the dialog's 3D row reads the slice axis's WCS from.
+        """
+        controller = getattr(self.window, "frame_controller", None)
+        target = frame if frame is not None else self.frame
+        if controller is None or target is None:
+            return None
+        try:
+            return controller.cube_handler(target)
+        except Exception:
+            return None
+
     def set_slice_range(self, low: float | None, high: float | None) -> None:
         """DS9's `crop 3d`: the slices of a cube worth displaying.
 
@@ -226,6 +240,8 @@ class CropController(Controller):
         if low is None or high is None:
             frame.crop_z = None
             self.status("3D crop reset", 2000)
-            return
-        frame.crop_z = (min(float(low), float(high)), max(float(low), float(high)))
-        self.status(f"3D crop: slices {frame.crop_z[0]:g} to {frame.crop_z[1]:g}", 2000)
+        else:
+            frame.crop_z = (min(float(low), float(high)), max(float(low), float(high)))
+            self.status(f"3D crop: slices {frame.crop_z[0]:g} to {frame.crop_z[1]:g}", 2000)
+        if self._dialog is not None:
+            self._dialog.reload()

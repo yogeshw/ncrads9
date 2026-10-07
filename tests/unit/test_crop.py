@@ -362,6 +362,10 @@ def dialog(main_window):
     main_window.menu_bar.action_crop_parameters.trigger()
     made = main_window.crop._dialog
     assert made is not None
+    # DS9 starts the dialog in WCS; these tests type pixels.
+    made.center_system.set_system("image")
+    made.size_system.set_system("image")
+    made.reload()
     yield made
     made.close()
 

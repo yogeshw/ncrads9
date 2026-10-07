@@ -28,6 +28,11 @@ number and no axis-order support, and nothing ever constructed it. It is now a
 dialog, as DS9 has it, and speaks `core.cube_handler.AxisOrder` so the axis
 numbers mean what they mean in the FITS header and in DS9's own menu.
 
+DS9's dialog also has a coordinate menu (`cube.tcl:401`, `CoordMenu ... 2`):
+WCS, the alternates `wcsa`..`wcsz`, or image. In a WCS the slice axis's
+world value is shown in an entry, and typing one there and pressing Return
+jumps to the nearest slice (`CubeApplyWCS`).
+
 The dialog holds no cube of its own: it reports what the user asked for and
 the Frame controller does it, so a cube can be stepped from the dialog, the
 menu or an XPA `cube` command (M8) through one path.
@@ -55,6 +60,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ...core.cube_handler import AXIS_ORDERS, AxisOrder
+from ..widgets.coord_menu_button import CoordEntry, CoordMenuButton
 
 #: DS9's default interval between slices, in seconds.
 DEFAULT_INTERVAL = 0.5
@@ -77,6 +83,10 @@ class CubePanel(QDialog):
     axis_order_changed: pyqtSignal = pyqtSignal(str)
     #: True to start walking the slices, False to stop.
     play_changed: pyqtSignal = pyqtSignal(bool)
+    #: A world value of the slice axis typed into the WCS entry, as text.
+    coordinate_requested: pyqtSignal = pyqtSignal(str)
+    #: The coordinate menu changed: `wcs`, `wcsa`.. or `image`.
+    system_changed: pyqtSignal = pyqtSignal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -124,6 +134,20 @@ class CubePanel(QDialog):
 
         self._coordinate_label = QLabel("")
         grid.addWidget(self._coordinate_label, 1, 2, 1, 2)
+
+        coordinates = QHBoxLayout()
+        #: DS9's `cube system`: the slice axis in WCS or image.
+        self.system_button = CoordMenuButton(self, other=2, sky=False, sky_format=False)
+        self.system_button.changed.connect(self._on_system)
+        coordinates.addWidget(self.system_button)
+        #: DS9's `dcube(vcoord)`: the slice axis's CTYPE, or "image".
+        self._axis_label = QLabel("image")
+        coordinates.addWidget(self._axis_label)
+        self._wcs_entry = CoordEntry()
+        self._wcs_entry.setToolTip("Type a world value of the slice axis and press Return")
+        self._wcs_entry.returnPressed.connect(self._on_wcs_entry)
+        coordinates.addWidget(self._wcs_entry, 1)
+        grid.addLayout(coordinates, 3, 0, 1, 4)
 
         transport = QHBoxLayout()
         for text, tip, handler in (
@@ -236,6 +260,28 @@ class CubePanel(QDialog):
         """Show the slice's world coordinate beside the slider."""
         self._coordinate_label.setText(text)
 
+    def set_wcs_value(self, text: str) -> None:
+        """Show the slice's world value in the WCS entry."""
+        self._wcs_entry.setText(text)
+
+    def set_axis_name(self, text: str) -> None:
+        """Label the WCS entry with the slice axis's name."""
+        self._axis_label.setText(text or self.coord_system)
+
+    def adjust_systems(self, available) -> None:
+        """Grey out the WCSs the cube's slice axis lacks, falling back to image.
+
+        Args:
+            available: Whether a system (`wcs`, `wcsa`..) has a slice scale.
+        """
+        self.system_button.adjust(available, fallback="image", celestial=lambda _name: False)
+        self._wcs_entry.setVisible(self.coord_system != "image")
+
+    @property
+    def coord_system(self) -> str:
+        """The coordinate menu's system: `wcs`, `wcsa`.. or `image`."""
+        return self.system_button.system
+
     @property
     def slice_index(self) -> int:
         """The slice on screen, from zero."""
@@ -308,6 +354,17 @@ class CubePanel(QDialog):
             return
         self._order = AxisOrder.parse(text)
         self.axis_order_changed.emit(text)
+
+    def _on_system(self) -> None:
+        self._wcs_entry.setVisible(self.coord_system != "image")
+        self.system_changed.emit(self.coord_system)
+
+    def _on_wcs_entry(self) -> None:
+        text = self._wcs_entry.text().strip()
+        if text:
+            # DS9's CubeApplyWCS stops the movie first.
+            self.set_playing(False)
+            self.coordinate_requested.emit(text)
 
     def closeEvent(self, event) -> None:
         """Stop walking when the dialog closes, so no timer is left running."""

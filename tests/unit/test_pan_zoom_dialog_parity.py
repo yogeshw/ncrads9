@@ -76,7 +76,7 @@ def test_fields_are_seeded_from_the_frame(window):
     assert float(dialog.rotate_edit.text()) == pytest.approx(90.0)
     # No WCS: DS9's default system, wcs, falls back to physical.
     assert dialog.coord_button.system == "physical"
-    assert not dialog.coord_button.system_actions["wcs"].isEnabled()
+    assert not dialog.coord_button.actions_by_value["wcs"].isEnabled()
     x, y = window.zoom.pan_position()
     assert float(dialog.pan_x_edit.text()) == pytest.approx(x, abs=1.0)
     assert float(dialog.pan_y_edit.text()) == pytest.approx(y, abs=1.0)
@@ -87,9 +87,9 @@ def test_pan_to_a_sexagesimal_wcs_position(window):
     _load(window, size=1000, with_wcs=True)
     dialog = _open(window)
     assert dialog.coord_button.system == "wcs"
-    assert dialog.coord_button.text() == "FK5"
+    assert dialog.coord_button.text() == "fk5"
 
-    dialog.coord_button.format_actions["sexagesimal"].trigger()
+    dialog.coord_button.actions_by_value["sexagesimal"].trigger()
     assert ":" in dialog.pan_x_edit.text()
 
     frame = window.frame_manager.current_frame

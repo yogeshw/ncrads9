@@ -22,6 +22,12 @@ like. The position is editable, which is the reason DS9's dialog exists:
 typing a coordinate is how you put the crosshair somewhere exactly, and a
 crosshair you can only drag is a crosshair you cannot place.
 
+The position row is DS9's (`crosshair.tcl:177`): two entries and a
+coordinate menu button, so the crosshair can be read and placed in WCS (any
+of `wcs`, `wcsa`..`wcsz`, in any sky frame and format), image, physical,
+amplifier or detector coordinates. The dialog follows the crosshair while it
+is open, as DS9's `UpdateCrosshairDialog` does.
+
 What it replaced: two `QInputDialog` prompts, the first asking whether the
 crosshair should be on.
 
@@ -36,9 +42,9 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QPushButton,
     QSlider,
@@ -46,13 +52,12 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ...coordinates import positions
 from ..controllers.crosshair import COLORS
+from ..widgets.coord_menu_button import CoordEntry, CoordMenuButton
 
 #: The longest crosshair arm the dialog offers, in pixels.
 MAX_SIZE = 200
-
-#: The largest image coordinate it offers.
-MAX_COORDINATE = 100000.0
 
 
 class CrosshairDialog(QDialog):
@@ -76,21 +81,23 @@ class CrosshairDialog(QDialog):
 
         place = QGroupBox("Position")
         form = QFormLayout(place)
-        self._x = QDoubleSpinBox()
-        self._x.setRange(0.0, MAX_COORDINATE)
-        self._x.setDecimals(3)
-        form.addRow("Image x:", self._x)
-        self._y = QDoubleSpinBox()
-        self._y.setRange(0.0, MAX_COORDINATE)
-        self._y.setDecimals(3)
-        form.addRow("Image y:", self._y)
+        row = QHBoxLayout()
+        self._x = CoordEntry()
+        self._y = CoordEntry()
+        #: DS9's `crosshair system sky skyformat`.
+        self.system = CoordMenuButton(self, other=1)
+        self.system.changed.connect(self.reload)
+        row.addWidget(self._x)
+        row.addWidget(self._y)
+        row.addWidget(self.system)
+        form.addRow("Crosshair:", row)
 
         self._sky = QLabel()
         form.addRow("WCS:", self._sky)
         self._value = QLabel()
         form.addRow("Value:", self._value)
 
-        move = QPushButton("Move Crosshair Here")
+        move = QPushButton("Apply")
         move.clicked.connect(self.apply_position)
         form.addRow("", move)
         centre = QPushButton("Centre")
@@ -136,10 +143,27 @@ class CrosshairDialog(QDialog):
             self._size.setValue(int(self.controller.size))
             self._lock.setChecked(self.controller.locked)
 
+            frame = self.controller.frame
+            if frame is not None and getattr(frame, "image_data", None) is not None:
+                self.system.adjust_to_frame(frame)
+            else:
+                self.system.reset()
             placed = self.controller.position()
-            if placed is not None:
-                self._x.setValue(placed[0])
-                self._y.setValue(placed[1])
+            if placed is None:
+                self._x.clear()
+                self._y.clear()
+            else:
+                words = positions.from_image(
+                    frame,
+                    placed[0],
+                    placed[1],
+                    self.system.system,
+                    self.system.sky,
+                    self.system.sky_format,
+                    digits=10,
+                ).split()
+                self._x.setText(words[0] if words else "")
+                self._y.setText(words[1] if len(words) > 1 else "")
         finally:
             for widget in (self._show, self._x, self._y, self._color, self._size, self._lock):
                 widget.blockSignals(False)
@@ -169,10 +193,26 @@ class CrosshairDialog(QDialog):
             return
         self._sky.setText(f"{float(longitude):.6f} {float(latitude):.6f}")
 
-    def apply_position(self) -> None:
-        """Move the crosshair to the typed coordinates."""
-        self.controller.move_to(self._x.value(), self._y.value())
+    def apply_position(self) -> bool:
+        """Move the crosshair to the typed coordinates, in the menu's system.
+
+        Returns:
+            Whether they could be read.
+        """
+        try:
+            x, y = positions.to_image(
+                self.controller.frame,
+                self._x.text().strip(),
+                self._y.text().strip(),
+                self.system.system,
+                self.system.sky,
+            )
+        except (ValueError, TypeError) as exc:
+            self._sky.setText(f"Cannot apply: {exc}")
+            return False
+        self.controller.move_to(x, y)
         self.reload()
+        return True
 
     def _centre(self) -> None:
         """Put it in the middle of the frame."""

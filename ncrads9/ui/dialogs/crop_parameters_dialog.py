@@ -17,7 +17,11 @@
 """
 DS9's Crop Parameters dialog: a centre, a size, and a slice range.
 
-Laid out as DS9's is (`crop.tcl:82`), with the same Apply, Reset and Close.
+Laid out as DS9's is (`crop.tcl:82`), with the same Apply, Reset and Close,
+and the same three menu buttons: the centre in any coordinate system, the
+size in pixels or an angle, and the 3D range in image slices or the slice
+axis's world coordinate. Changing a menu rewrites the current crop in the
+new system, as DS9's `UpdateCropDialog` does.
 
 Author: Yogesh Wadadekar
 """
@@ -27,16 +31,18 @@ from __future__ import annotations
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QDialog,
-    QDoubleSpinBox,
-    QFormLayout,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QVBoxLayout,
 )
 
-#: How large a crop the spin boxes allow, which is larger than any image.
-LIMIT = 1_000_000.0
+from ...coordinates import positions
+from ..widgets.coord_menu_button import CoordEntry, CoordMenuButton, DistMenuButton
+
+#: Entry width in characters, DS9's `-width 14`.
+ENTRY_WIDTH = 14
 
 
 class CropParametersDialog(QDialog):
@@ -52,39 +58,39 @@ class CropParametersDialog(QDialog):
         self._controller = controller
         self.setWindowTitle("Crop Parameters")
         self.setWindowModality(Qt.WindowModality.NonModal)
-        self.setMinimumWidth(360)
+        self.setMinimumWidth(420)
         self._build()
         self.reload()
 
     def _build(self) -> None:
         """Lay the dialog out."""
         layout = QVBoxLayout(self)
-        form = QFormLayout()
+        grid = QGridLayout()
 
-        self._center_x = self._number()
-        self._center_y = self._number()
-        centre = QHBoxLayout()
-        centre.addWidget(self._center_x)
-        centre.addWidget(self._center_y)
-        form.addRow("Center:", centre)
+        self._center_x = self._entry()
+        self._center_y = self._entry()
+        #: DS9's `crop system sky skyformat`.
+        self.center_system = CoordMenuButton(self, other=1)
+        self._row(grid, 0, "Center", self._center_x, self._center_y, self.center_system)
 
-        self._width = self._number(minimum=1.0, value=100.0)
-        self._height = self._number(minimum=1.0, value=100.0)
-        size = QHBoxLayout()
-        size.addWidget(self._width)
-        size.addWidget(self._height)
-        form.addRow("Size:", size)
+        self._width = self._entry()
+        self._height = self._entry()
+        #: DS9's `crop dcoord dformat`.
+        self.size_system = DistMenuButton(self)
+        self._row(grid, 1, "Size", self._width, self._height, self.size_system)
 
         # DS9 shows the 3d row only for a cube; ours is always there and says
         # so, because the row is where you learn the feature exists.
-        self._z_low = self._number(minimum=0.0, value=0.0)
-        self._z_high = self._number(minimum=0.0, value=0.0)
-        slices = QHBoxLayout()
-        slices.addWidget(self._z_low)
-        slices.addWidget(self._z_high)
-        form.addRow("3D slices:", slices)
+        self._z_low = self._entry()
+        self._z_high = self._entry()
+        #: DS9's `crop rcoord`: image slices or the slice axis's WCS.
+        self.range_system = CoordMenuButton(self, other=2, sky=False, sky_format=False)
+        self._row(grid, 2, "3D", self._z_low, self._z_high, self.range_system)
 
-        layout.addLayout(form)
+        for button in (self.center_system, self.size_system, self.range_system):
+            button.changed.connect(self.reload)
+
+        layout.addLayout(grid)
 
         self._summary = QLabel()
         self._summary.setWordWrap(True)
@@ -104,26 +110,64 @@ class CropParametersDialog(QDialog):
             self.buttons[name] = button
         layout.addLayout(buttons)
 
-    def _number(
-        self,
-        minimum: float = -LIMIT,
-        value: float = 0.0,
-    ) -> QDoubleSpinBox:
+    @staticmethod
+    def _entry() -> CoordEntry:
         """One of the dialog's coordinate boxes."""
-        box = QDoubleSpinBox()
-        box.setRange(minimum, LIMIT)
-        box.setDecimals(3)
-        box.setValue(value)
-        return box
+        entry = CoordEntry()
+        entry.setMinimumWidth(entry.fontMetrics().averageCharWidth() * ENTRY_WIDTH)
+        return entry
+
+    @staticmethod
+    def _row(grid: QGridLayout, row: int, title: str, first, second, menu) -> None:
+        grid.addWidget(QLabel(title), row, 0)
+        grid.addWidget(first, row, 1)
+        grid.addWidget(second, row, 2)
+        grid.addWidget(menu, row, 3)
 
     # -- what it shows ---------------------------------------------------------
 
+    def _cube(self):
+        """The current frame's cube handler, or None."""
+        cube = getattr(self._controller, "cube", None)
+        return cube() if callable(cube) else None
+
+    def _range_key(self) -> str:
+        """The WCS letter of the 3D menu's system, "" for the primary."""
+        return self.range_system.system[3:]
+
+    def _adjust_menus(self, frame) -> None:
+        """Grey out the WCSs the frame lacks, and fall back as DS9 does."""
+        if frame is None or getattr(frame, "image_data", None) is None:
+            for button in (self.center_system, self.size_system, self.range_system):
+                button.reset()
+            return
+        self.center_system.adjust_to_frame(frame)
+        self.size_system.adjust_to_frame(frame)
+        cube = self._cube()
+        order = getattr(frame, "axis_order", "123")
+
+        def has_3d(system: str) -> bool:
+            return cube is not None and cube.image_to_world_z(1, order, system[3:]) is not None
+
+        self.range_system.adjust(has_3d, fallback="image", celestial=lambda _name: False)
+
     def reload(self) -> None:
-        """Fill the dialog in from the frame."""
+        """Fill the dialog in from the frame, in the chosen systems."""
+        frame = self._controller.frame
+        self._adjust_menus(frame)
         shape = self._controller.shape()
         crop = self._controller.region()
         if shape is None:
             self._summary.setText("No image loaded.")
+            for entry in (
+                self._center_x,
+                self._center_y,
+                self._width,
+                self._height,
+                self._z_low,
+                self._z_high,
+            ):
+                entry.clear()
             return
 
         if crop is None:
@@ -135,42 +179,90 @@ class CropParametersDialog(QDialog):
             width, height = crop.width, crop.height
             self._summary.setText(f"Cropped to {width:g} x {height:g} pixels of {shape[1]} x {shape[0]}.")
 
-        frame = self._controller.frame
+        centre = self.center_system
+        words = positions.from_image(
+            frame, center_x, center_y, centre.system, centre.sky, centre.sky_format, digits=10
+        ).split()
+        self._center_x.setText(words[0] if words else "")
+        self._center_y.setText(words[1] if len(words) > 1 else "")
+
+        size = self.size_system
+        shown_w, shown_h = positions.distance_from_image(
+            frame, width, height, size.system, size.distance_format
+        )
+        self._width.setValue(shown_w)
+        self._height.setValue(shown_h)
+
         z_range = getattr(frame, "crop_z", None) if frame is not None else None
-        for box, value in (
-            (self._center_x, center_x),
-            (self._center_y, center_y),
-            (self._width, width),
-            (self._height, height),
-            (self._z_low, z_range[0] if z_range else 0.0),
-            (self._z_high, z_range[1] if z_range else 0.0),
-        ):
-            # Blocked, because setValue emits and a reload that emitted would
-            # change the crop it is reporting.
-            box.blockSignals(True)
-            box.setValue(float(value))
-            box.blockSignals(False)
+        if self.range_system.system == "image":
+            low, high = z_range if z_range else (0.0, 0.0)
+            self._z_low.setValue(low)
+            self._z_high.setValue(high)
+        elif z_range:
+            self._z_low.setValue(self._z_to_world(z_range[0]))
+            self._z_high.setValue(self._z_to_world(z_range[1]))
+        else:
+            # No slice crop: empty, so Apply leaves it that way.
+            self._z_low.clear()
+            self._z_high.clear()
+
+    def _z_to_world(self, z: float) -> float:
+        cube = self._cube()
+        order = getattr(self._controller.frame, "axis_order", "123")
+        world = cube.image_to_world_z(z, order, self._range_key()) if cube is not None else None
+        return z if world is None else world[0]
+
+    def _z_to_image(self, value: float) -> float:
+        cube = self._cube()
+        order = getattr(self._controller.frame, "axis_order", "123")
+        z = cube.world_to_image_z(value, order, self._range_key()) if cube is not None else None
+        if z is None:
+            raise ValueError(f"the cube has no {self.range_system.system} slice coordinates")
+        return z
 
     # -- what its buttons do ----------------------------------------------------
 
-    def apply_crop(self) -> None:
-        """Crop to the typed centre and size."""
+    def apply_crop(self) -> bool:
+        """Crop to the typed centre and size, read in the chosen systems.
+
+        Returns:
+            Whether the typed values could be read.
+        """
         from ...frames.crop import CropRegion
 
+        frame = self._controller.frame
         # Every box is read before anything is applied: applying refills the
         # dialog from the frame, which would otherwise wipe the row that has
         # not been read yet.
-        wanted = CropRegion.from_center(
-            self._center_x.value(),
-            self._center_y.value(),
-            self._width.value(),
-            self._height.value(),
-        )
-        low, high = self._z_low.value(), self._z_high.value()
+        try:
+            centre = self.center_system
+            center_x, center_y = positions.to_image(
+                frame, self._center_x.text().strip(), self._center_y.text().strip(), centre.system, centre.sky
+            )
+            size = self.size_system
+            width, height = positions.distance_to_image(
+                frame, self._width.value(), self._height.value(), size.system, size.distance_format
+            )
+            z_range = self._typed_range()
+        except (ValueError, TypeError) as exc:
+            self._summary.setText(f"Cannot apply: {exc}")
+            return False
 
+        wanted = CropRegion.from_center(center_x, center_y, width, height)
         self._controller.set_region(wanted)
-        self._controller.set_slice_range(*(None, None) if low == high == 0.0 else (low, high))
+        self._controller.set_slice_range(*z_range)
         self.reload()
+        return True
+
+    def _typed_range(self) -> tuple[float | None, float | None]:
+        """The 3D row as image slices; (None, None) for no slice crop."""
+        low_text, high_text = self._z_low.text().strip(), self._z_high.text().strip()
+        if not low_text or not high_text:
+            return None, None
+        low, high = float(low_text), float(high_text)
+        if self.range_system.system == "image":
+            return (None, None) if low == high == 0.0 else (low, high)
+        return self._z_to_image(low), self._z_to_image(high)
 
     def reset_crop(self) -> None:
         """Go back to displaying the whole image."""
