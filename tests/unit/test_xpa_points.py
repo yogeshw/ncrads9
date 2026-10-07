@@ -342,7 +342,9 @@ def test_minmax_parameters(xpa, main_window):
     assert _set(xpa, "minmax", "interval", "5")["status"] == "ok"
     assert main_window.scale_limits.sample_increment == 5
     assert _set(xpa, "minmax", "rescan")["status"] == "ok"
-    assert "mode scan" in _get(xpa, "minmax")["result"]
+    # DS9's bare `xpaget ds9 minmax` answers the mode alone.
+    assert _get(xpa, "minmax")["result"] == "scan"
+    assert _get(xpa, "minmax", "interval")["result"] == "5"
     assert _set(xpa, "minmax", "wibble")["status"] == "error"
 
 
@@ -567,7 +569,8 @@ def test_the_illustrate_point(xpa, main_window, tmp_path):
     assert len(main_window.illustrate.layer) == 1
 
     assert _set(xpa, "illustrate", "show", "no")["status"] == "ok"
-    assert _get(xpa, "illustrate")["result"] == "no"
+    # DS9's bare read answers the illustrations themselves; `show` the flag.
+    assert _get(xpa, "illustrate", "show")["result"] == "no"
     assert _set(xpa, "illustrate", "wibble")["status"] == "error"
 
 
@@ -1021,7 +1024,9 @@ def test_the_thread_count_is_set(xpa, main_window):
 
 def test_precision_takes_ds9s_six_numbers_positionally(xpa, main_window):
     assert _set(xpa, "precision", "9", "10", "4", "3", "5", "6")["status"] == "ok"
-    assert _get(xpa, "precision")["result"] == "9 10 4 3 5 6"
+    # Read back as DS9's nine: the six land in their old slots, and the
+    # length and angle precisions keep DS9's defaults.
+    assert _get(xpa, "precision")["result"] == "9 10 4 3 8 7 5 6 8"
     assert main_window.preferences.get("precision_hms") == 4
 
 
@@ -1048,8 +1053,11 @@ def test_the_data_point_can_keep_the_coordinates(xpa):
 
 def test_the_data_point_takes_an_optional_sky_frame(xpa):
     """DS9's grammar puts the sky frame between the system and the numbers,
-    where it is optional; the geometry has to be found either way."""
-    assert _get(xpa, "data", "wcs", "fk5", "3", "3", "2", "2")["result"].count("\n") == 3
+    where it is optional. The numbers are then degrees, so on this frame,
+    which has no WCS, there is nothing to read them through -- which is an
+    error, not a box of pixels taken as if the degrees were pixels.
+    `test_xpa_semantics` reads a WCS box on a frame that has one."""
+    assert _get(xpa, "data", "wcs", "fk5", "3", "3", "2", "2")["status"] == "error"
 
 
 def test_the_data_point_clips_to_the_image(xpa):
@@ -1244,10 +1252,12 @@ def test_the_region_point_selects(xpa, main_window, tmp_path):
     assert _set(xpa, "region", "select", "sideways")["status"] == "error"
 
 
-def test_the_region_point_reports_what_the_wcs_menu_owns(xpa):
-    """`region system` is a window-wide setting in ours, and saying which
-    menu owns it beats a silent no-op."""
-    assert "WCS menu" in _set(xpa, "region", "system", "wcs")["message"]
+def test_the_region_point_sets_its_own_output_system(xpa):
+    """`region system` is DS9's `marker(system)`: how a listing is written.
+    It used to be refused as the WCS menu's; it is the region point's own."""
+    assert _set(xpa, "region", "system", "image")["status"] == "ok"
+    assert _get(xpa, "region", "system")["result"] == "image"
+    assert _set(xpa, "region", "system", "nowhere")["status"] == "error"
 
 
 def test_the_colour_frame_points_make_frames(xpa, main_window):

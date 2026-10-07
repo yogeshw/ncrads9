@@ -605,10 +605,37 @@ class RegionParser:
             return None
 
         try:
-            return builder(self, [self._to_number(value) for value in params], properties, common)
+            region = builder(
+                self,
+                [self._parameter(index, value) for index, value in enumerate(params)],
+                properties,
+                common,
+            )
         except (IndexError, ValueError, TypeError):
             # A shape whose numbers cannot be read is skipped, not fatal.
             return None
+        # Which system the numbers are in, so a caller with a frame can put
+        # them into image coordinates (`region_coords.place`). Recorded per
+        # region because a file may switch systems between lines.
+        region.coord_system = self._coordinate_system.value
+        return region
+
+    def _parameter(self, index: int, value: str) -> float:
+        """One parameter, reading a sexagesimal position as DS9 does.
+
+        DS9 writes positions first, two at a time, so a sexagesimal value
+        at an even index is a longitude -- in hours for an equatorial frame
+        -- and one at an odd index a latitude, in degrees. `13:29:52.8`
+        used to make the whole region unreadable.
+        """
+        text = str(value).strip()
+        if ":" not in text and not re.fullmatch(r"[+-]?\d+[hd]\d+m[\d.]+s", text):
+            return self._to_number(text)
+        from ..coordinates.ds9_coords import parse_angle
+
+        system = self._coordinate_system.value
+        hours = index % 2 == 0 and system in ("fk4", "fk5", "icrs", "wcs", "wcs0")
+        return parse_angle(text, hours=hours)
 
     # -- one builder per shape -----------------------------------------------
     #

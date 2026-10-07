@@ -39,6 +39,7 @@ Author: Yogesh Wadadekar
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -215,6 +216,128 @@ def _resolve(window, path: str):
     return found
 
 
+# -- reads that take a key -----------------------------------------------------------
+#
+# A good third of DS9's reads name the one setting they want -- `xpaget ds9
+# minmax interval`, `xpaget ds9 tile grid gap`, `xpaget ds9 lock crop`.
+# Without a `query` the table answered every one of those with the point's
+# bare read: the whole listing, or worse a single unrelated value, which a
+# script cannot tell from a right answer.
+
+
+def _keyed(
+    table: Callable[[Any], dict[str, str]], bare: str | None = None
+) -> Callable[[Any, list[str]], str]:
+    """A read that answers one key out of a table of settings.
+
+    Args:
+        table: Called with the window; maps each key DS9 names -- `grid
+            gap`, several words where DS9 has several -- to its answer.
+        bare: The key a read with no arguments answers. None answers with
+            every key and value, one per line.
+    """
+
+    def ask(window, args: list[str]) -> str:
+        values = table(window)
+        words = [str(word).lower() for word in args]
+        if not words:
+            if bare is not None:
+                return values[bare]
+            return "\n".join(f"{key} {value}" for key, value in values.items() if key)
+        for count in range(len(words), 0, -1):
+            key = " ".join(words[:count])
+            if key in values:
+                return values[key]
+        # Raised rather than returned: the dispatcher turns it into an
+        # error reply, and an error is what an unknown key deserves.
+        raise ValueError(f"there is no {' '.join(words)} to read")
+
+    return ask
+
+
+def _minmax_table(window) -> dict[str, str]:
+    settings = window.scale.settings
+    return {
+        "mode": str(getattr(settings.method, "value", settings.method)),
+        "interval": str(settings.sample_increment),
+    }
+
+
+def _zscale_table(window) -> dict[str, str]:
+    settings = window.scale.settings
+    return {
+        "contrast": f"{settings.contrast:g}",
+        "sample": str(settings.samples),
+        "line": str(settings.samples_per_line),
+    }
+
+
+def _preserve_table(window) -> dict[str, str]:
+    table = {name: on_off(value) for name, value in sorted(window._preserve.items())}
+    # DS9 still parses `preserve scale`, and always answers no.
+    table.setdefault("scale", NO)
+    return table
+
+
+def _pagesetup_table(window) -> dict[str, str]:
+    page = window.file.print_settings.page
+    return {"orient": page.orientation.value, "scale": f"{page.scale:g}", "size": page.paper_size.value}
+
+
+#: DS9's lock and match names, where ours differ.
+_LOCK_NAMES = {"scalelimits": "scale_limits", "axes": "axes_order", "axis": "axes_order"}
+
+
+def _lock_table(window) -> dict[str, str]:
+    table = dict(getattr(window, "_frame_lock_scope", {}))
+    flags = getattr(window, "_frame_lock_flags", {})
+    table.update({name: on_off(value) for name, value in flags.items()})
+    for theirs, ours in _LOCK_NAMES.items():
+        if ours in flags:
+            table[theirs] = on_off(flags[ours])
+    return table
+
+
+def _blink_table(window, mode: str) -> dict[str, str]:
+    milliseconds = window._blink_timer.interval() if mode == "blink" else window._fade_interval_ms
+    return {"": on_off(window._frame_display_mode == mode), "interval": f"{milliseconds / 1000:g}"}
+
+
+def _tile_table(window) -> dict[str, str]:
+    settings = window.frame_controller.tile_settings
+    return {
+        "": on_off(window._frame_display_mode == "tile"),
+        "mode": str(window._tile_arrangement_mode),
+        "grid mode": "manual" if settings.manual else "automatic",
+        "grid direction": str(settings.direction),
+        "grid layout": f"{settings.columns} {settings.rows}",
+        "grid gap": str(settings.gap),
+    }
+
+
+def _view_table(window) -> dict[str, str]:
+    from ...ui.layout.view_state import INFO_FIELDS, PANEL_NAMES
+
+    state = window.view_state
+    table = {"layout": state.layout.value}
+    table.update({name: on_off(getattr(state, name)) for name in PANEL_NAMES})
+    table["graph horizontal"] = on_off(state.graph_horizontal)
+    table["graph vertical"] = on_off(state.graph_vertical)
+    for name in INFO_FIELDS:
+        table[name] = on_off(state.info_fields.get(name, False))
+    table["units"] = table["bunit"]
+    for suffix in "abcdefghijklmnopqrstuvwxyz":
+        table[f"wcs{suffix}"] = table[f"wcs_{suffix}"]
+    entry = getattr(getattr(window.view, "info_panel", None), "keyword_entry", None)
+    table["keyvalue"] = entry.text() if entry is not None else ""
+    frame = window.frame_manager.current_frame
+    shown = getattr(frame, "rgb_view", None) if frame is not None else None
+    if shown and getattr(frame, "rgb_channels", None):
+        for name, key in _channel_keys(window, frame).items():
+            table[f"{frame.frame_type} {name}"] = on_off(shown.get(key, True))
+    return table
+
+
 # -- (a) display -------------------------------------------------------------------
 #
 # DS9's own grouping, as TODO lists it: what the data looks like on the
@@ -224,12 +347,14 @@ DISPLAY_POINTS: tuple[AccessPoint, ...] = (
     AccessPoint(
         "zscale",
         get=lambda window: _zscale_text(window),
+        query=_keyed(_zscale_table),
         set=lambda window, args: _zscale(window, args),
         summary="the zscale parameters: contrast, sample, line",
     ),
     AccessPoint(
         "minmax",
-        get=lambda window: _minmax_text(window),
+        get=lambda window: _minmax_table(window)["mode"],
+        query=_keyed(_minmax_table, bare="mode"),
         set=lambda window, args: _minmax(window, args),
         summary="how min/max is found: scan, sample, datamin or irafmin",
     ),
@@ -241,18 +366,29 @@ DISPLAY_POINTS: tuple[AccessPoint, ...] = (
     AccessPoint(
         "block",
         get=read("frame_manager.current_frame.block_factor"),
+        query=_keyed(
+            lambda window: {
+                "": str(getattr(window.frame_manager.current_frame, "block_factor", 1)),
+                "lock": on_off(window.frame_controller.block_is_locked()),
+            },
+            bare="",
+        ),
         set=lambda window, args: _block(window, args),
         summary="the block factor, or in, out, to fit, match, lock",
     ),
     AccessPoint(
         "smooth",
-        *flag("menu_bar.action_smooth.isChecked", "analysis.set_smooth"),
-        summary="whether the display is smoothed",
+        get=lambda window: on_off(window.menu_bar.action_smooth.isChecked()),
+        query=_keyed(lambda window: _smooth_table(window), bare=""),
+        set=lambda window, args: _smooth(window, args),
+        summary="the smoothing: yes|no, function, radius, sigma, angle, lock",
     ),
     AccessPoint(
         "grid",
-        *flag("analysis.grid_config.visible", "analysis.set_grid"),
-        summary="whether the coordinate grid is drawn",
+        get=lambda window: on_off(window.analysis.grid_config.visible),
+        query=_keyed(lambda window: _grid_table(window), bare=""),
+        set=lambda window, args: _grid(window, args),
+        summary="the coordinate grid and its parameters",
     ),
     AccessPoint(
         "contour",
@@ -282,13 +418,21 @@ DISPLAY_POINTS: tuple[AccessPoint, ...] = (
     AccessPoint(
         "crop",
         get=lambda window: _crop_text(window),
+        query=lambda window, args: _crop_text(window, args),
         set=lambda window, args: _crop(window, args),
         summary="the crop: centre and size, or `reset`",
     ),
     AccessPoint(
         "magnifier",
         get=lambda window: on_off(window.menu_bar.action_view_magnifier.isChecked()),
-        set=lambda window, args: _panel(window, args, "magnifier"),
+        query=_keyed(
+            lambda window: {
+                "": on_off(window.menu_bar.action_view_magnifier.isChecked()),
+                "zoom": str(window.magnifier_panel._zoom_factor),
+            },
+            bare="",
+        ),
+        set=lambda window, args: _magnifier(window, args),
         summary="whether the magnifier is shown",
     ),
     AccessPoint(
@@ -300,6 +444,7 @@ DISPLAY_POINTS: tuple[AccessPoint, ...] = (
     AccessPoint(
         "mask",
         get=lambda window: on_off(getattr(window.analysis, "mask_layer", None) is not None),
+        query=_keyed(lambda window: _mask_table(window), bare=""),
         set=lambda window, args: _mask(window, args),
         summary="the mask: a file to load, or `clear`",
     ),
@@ -318,18 +463,21 @@ FRAME_POINTS: tuple[AccessPoint, ...] = (
     AccessPoint(
         "tile",
         get=lambda window: on_off(window._frame_display_mode == "tile"),
+        query=_keyed(_tile_table, bare=""),
         set=lambda window, args: _tile(window, args),
         summary="tile the frames, or `tile mode grid|column|row`",
     ),
     AccessPoint(
         "blink",
         get=lambda window: on_off(window._frame_display_mode == "blink"),
+        query=_keyed(lambda window: _blink_table(window, "blink"), bare=""),
         set=lambda window, args: _blink(window, args, "blink"),
         summary="blink the frames, or `blink interval <seconds>`",
     ),
     AccessPoint(
         "fade",
         get=lambda window: on_off(window._frame_display_mode == "fade"),
+        query=_keyed(lambda window: _blink_table(window, "fade"), bare=""),
         set=lambda window, args: _blink(window, args, "fade"),
         summary="fade between the frames, or `fade interval <seconds>`",
     ),
@@ -362,13 +510,15 @@ FRAME_POINTS: tuple[AccessPoint, ...] = (
     AccessPoint(
         "cube",
         get=read("frame_manager.current_frame.slice_index", lambda value: str(int(value or 0) + 1)),
+        query=_keyed(lambda window: _cube_table(window), bare=""),
         aliases=("datacube",),
-        set=lambda window, args: _slice(window, args),
+        set=lambda window, args: _cube(window, args),
         summary="which slice of a cube is shown",
     ),
     AccessPoint(
         "lock",
         get=lambda window: _lock_text(window),
+        query=_keyed(_lock_table),
         set=lambda window, args: _lock(window, args),
         summary="lock a scope across frames: frame, crosshair, crop, slice, ...",
     ),
@@ -428,7 +578,20 @@ def _contour_text(window, args: list[str]) -> str:
     if what == "dash":
         return on_off(str(settings.get("line_style", "Solid")).lower() != "solid")
     if what == "smooth":
-        return str(settings.get("smooth_sigma", 1))
+        return f"{float(settings.get('smooth_sigma', 1)):g}"
+    if what == "limits":
+        limits = settings.get("limits")
+        if not limits:
+            return ""
+        return " ".join(f"{float(value):g}" for value in limits)
+    if what == "method":
+        return str(settings.get("contour_method", "block")).lower()
+    if what == "scale":
+        return str(settings.get("scale", "linear"))
+    if what == "mode":
+        return str(settings.get("mode", "minmax"))
+    if what == "scope":
+        return str(settings.get("scope", "local"))
     if what == "width":
         return f"{float(settings.get('line_width', 1)):g}"
     if what == "nlevels":
@@ -514,14 +677,16 @@ def _contour(window, args: list[str]) -> str | None:
         return None
 
     if first == "levels":
+        # DS9's own example braces the list -- `contour levels {1 2 3}` --
+        # which arrives as `{1`, `2`, `3}`.
+        rest = [word.strip("{}\"'") for word in " ".join(rest).replace(",", " ").split()]
         try:
-            values = [float(word) for word in rest]
+            values = [float(word) for word in rest if word]
         except ValueError:
             return "levels takes numbers"
         if not values:
             return "at least one level is needed"
-        settings["levels"] = values
-        settings["num_levels"] = len(values)
+        _custom_levels(settings, values)
         controller.apply_contours(settings)
         return None
 
@@ -529,19 +694,57 @@ def _contour(window, args: list[str]) -> str | None:
         if len(rest) < 2:
             return "limits takes a low and a high"
         try:
-            settings["limits"] = (float(rest[0]), float(rest[1]))
+            low, high = float(rest[0]), float(rest[1])
         except ValueError:
             return "limits takes two numbers"
+        # The keys the level generator reads; `limits` alone was read by
+        # nothing, so the limits never reached a contour.
+        settings["limits"] = (low, high)
+        settings["min_level"], settings["max_level"] = low, high
+        settings["mode"] = "user"
+        _uncustom(settings)
         controller.apply_contours(settings)
         return None
 
     if first == "log":
-        # `contour log exp 1000`.
-        try:
-            settings["log_exp"] = float(rest[-1])
-        except (IndexError, ValueError):
-            return "log takes an exponent"
+        # `contour log exp 1000`: DS9's log scale takes an exponent; the
+        # level generator here spaces log levels by powers of ten.
+        return "the contour log exponent is not implemented"
+
+    if first == "method":
+        if not rest or rest[0].lower() not in ("block", "smooth"):
+            return "method takes block or smooth"
+        # The tracer's method. `method` in the settings is the level
+        # *scale*, so writing this there turned every scale into linear.
+        settings["contour_method"] = rest[0].lower()
         controller.apply_contours(settings)
+        return None
+
+    if first == "scale":
+        scales = {"linear": "Linear", "log": "Logarithmic", "sqrt": "Square Root"}
+        if not rest or rest[0].lower() not in scales:
+            return f"contour scale {' '.join(rest)} is not implemented: {', '.join(scales)} are"
+        settings["scale"] = rest[0].lower()
+        settings["method"] = scales[rest[0].lower()]
+        controller.apply_contours(settings)
+        return None
+
+    if first == "mode":
+        wanted = rest[0].lower() if rest else ""
+        if wanted not in ("minmax", "zscale", "zmax", "user"):
+            return "mode takes minmax, zscale, zmax or user"
+        problem = _contour_mode(window, settings, wanted)
+        if problem:
+            return problem
+        controller.apply_contours(settings)
+        return None
+
+    if first == "scope":
+        if not rest or rest[0].lower() not in ("local", "global"):
+            return "scope takes local or global"
+        if rest[0].lower() == "global":
+            return "global contour limits are not implemented; contours are per frame"
+        settings["scope"] = "local"
         return None
 
     if first in _CONTOUR_KEYS:
@@ -554,15 +757,64 @@ def _contour(window, args: list[str]) -> str | None:
                 value = float(rest[0]) if key != "num_levels" else int(float(rest[0]))
             except ValueError:
                 return f"contour {first} takes a number"
-        elif key == "method":
-            value = str(rest[0]).capitalize()
         settings[key] = value
         if key == "smooth_sigma":
             settings["smooth"] = float(settings["smooth_sigma"]) > 1
+        if key == "num_levels":
+            # A number of levels means generated ones, not a fixed list.
+            _uncustom(settings)
         controller.apply_contours(settings)
         return None
 
     return f"contour does not take {first}"
+
+
+def _custom_levels(settings: dict, values: list[float]) -> None:
+    """Fix the contours at a list of levels, as the dialog's Custom does."""
+    settings["levels"] = list(values)
+    settings["custom_levels"] = list(values)
+    settings["num_levels"] = len(values)
+    if settings.get("method") != "Custom":
+        settings["scale_method"] = settings.get("method", "Linear")
+    settings["method"] = "Custom"
+
+
+def _uncustom(settings: dict) -> None:
+    """Go back to generated levels, in whatever scale was chosen before."""
+    if settings.get("method") == "Custom":
+        settings["method"] = settings.get("scale_method", "Linear")
+
+
+def _contour_mode(window, settings: dict, mode: str) -> str | None:
+    """DS9's `contour mode`: where the level limits come from."""
+    import numpy as np
+
+    settings["mode"] = mode
+    _uncustom(settings)
+    if mode == "user":
+        return None
+    if mode == "minmax":
+        settings.pop("min_level", None)
+        settings.pop("max_level", None)
+        settings.pop("limits", None)
+        return None
+    frame = window.frame_manager.current_frame
+    data = getattr(frame, "image_data", None) if frame is not None else None
+    if data is None:
+        return "no image to take contour limits from"
+    if mode == "zscale":
+        from ...rendering.scale_algorithms import compute_zscale_limits
+
+        low, high = compute_zscale_limits(np.asarray(data, dtype=np.float32))
+    else:
+        # zmax: zscale's low, the data's maximum.
+        from ...rendering.scale_algorithms import compute_zscale_limits
+
+        low, _high = compute_zscale_limits(np.asarray(data, dtype=np.float32))
+        high = float(np.nanmax(data))
+    settings["min_level"], settings["max_level"] = float(low), float(high)
+    settings["limits"] = (float(low), float(high))
+    return None
 
 
 def _contour_style(window, words: list[str]) -> str | None:
@@ -616,9 +868,250 @@ def _contour_levels_file(window, path: str, write: bool) -> str | None:
     if not values:
         return f"{path} holds no levels"
     settings = _contour_settings(window)
-    settings["levels"] = values
-    settings["num_levels"] = len(values)
+    _custom_levels(settings, values)
     window.analysis.apply_contours(settings)
+    return None
+
+
+def _smooth_table(window) -> dict[str, str]:
+    """DS9's smoothing settings, from ours.
+
+    DS9 gives a kernel a radius, and ours a size across: a radius of r is
+    a kernel 2r + 1 pixels wide.
+    """
+    settings = window._smooth_settings
+    kernel = str(settings.get("kernel_type", "Gaussian")).lower()
+    function = "elliptic" if kernel == "gaussian" and settings.get("elliptical") else kernel
+    radius = max(1, (int(settings.get("kernel_size", 5)) - 1) // 2)
+    sigma = float(settings.get("sigma", 2.0))
+    return {
+        "": on_off(window.menu_bar.action_smooth.isChecked()),
+        "lock": on_off(window.frame_controller.is_locked("smooth")),
+        "function": function,
+        "radius": str(radius),
+        "radiusminor": str(int(settings.get("minor_radius", radius))),
+        "sigma": f"{sigma:g}",
+        "sigmaminor": f"{float(settings.get('minor_sigma', sigma)):g}",
+        "angle": f"{float(settings.get('position_angle', 0.0)):g}",
+    }
+
+
+def _smooth(window, args: list[str]) -> str | None:
+    """DS9's `smooth`: `[yes|no]`, `open|close`, `match`, `lock yes|no`,
+    `function boxcar|tophat|gaussian|elliptic`, `radius <n>`, `radiusminor
+    <n>`, `sigma <n>`, `sigmaminor <n>` and `angle <deg>`.
+
+    Every word but yes and no used to be refused as "not yes or no".
+    """
+    words = [str(word).lower() for word in args]
+    analysis = window.analysis
+    if not words:
+        analysis.set_smooth(True)
+        return None
+    first, rest = words[0], words[1:]
+    wanted = as_bool(first)
+    if wanted is not None:
+        analysis.set_smooth(wanted)
+        return None
+    if first == "open":
+        analysis.show_smooth_dialog()
+        return None
+    if first == "close":
+        return None
+    if first == "match":
+        window.frame_controller.match_smooth()
+        return None
+    if first == "lock":
+        return _lock(window, ["smooth", *rest])
+
+    settings = dict(window._smooth_settings)
+    if first == "function":
+        kernels = {"boxcar": "Boxcar", "tophat": "Tophat", "gaussian": "Gaussian", "elliptic": "Gaussian"}
+        if not rest or rest[0] not in kernels:
+            return f"function takes one of {', '.join(kernels)}"
+        settings["kernel_type"] = kernels[rest[0]]
+        settings["elliptical"] = rest[0] == "elliptic"
+    elif first in ("radius", "radiusminor", "sigma", "sigmaminor", "angle"):
+        try:
+            value = float(rest[0])
+        except (IndexError, ValueError):
+            return f"smooth {first} takes a number"
+        if first == "radius":
+            radius = max(1, int(value))
+            settings["kernel_size"] = 2 * radius + 1
+            settings["major_radius"] = radius
+        elif first == "radiusminor":
+            settings["minor_radius"] = max(1, int(value))
+        elif first == "sigma":
+            settings["sigma"] = value
+            settings["major_sigma"] = value
+        elif first == "sigmaminor":
+            settings["minor_sigma"] = value
+        else:
+            settings["position_angle"] = value
+    else:
+        return f"smooth does not take {first}"
+
+    window._smooth_settings = settings
+    if window.menu_bar.action_smooth.isChecked():
+        window.display.display()
+    return None
+
+
+def _grid_table(window) -> dict[str, str]:
+    """DS9's grid settings, as `xpaget ds9 grid <what>` answers them."""
+    config = window.analysis.grid_config
+    table = {
+        "": on_off(config.visible),
+        "type": config.grid_type.value,
+        "system": config.system,
+        "sky": config.sky,
+        "skyformat": config.sky_format,
+        "format1": config.x_format,
+        "format2": config.y_format,
+        "axes type": config.axes_placement.value,
+        "numerics type": config.numerics_placement.value,
+        "numerics vertical": on_off(config.vertical_text),
+        "title text": config.title,
+        "labels text1": config.x_title,
+        "labels text2": config.y_title,
+    }
+    for name, element in config.elements.items():
+        table[name] = on_off(element.show)
+        table[f"{name} color"] = element.color
+        table[f"{name} width"] = str(element.width)
+        table[f"{name} dash"] = on_off(element.style != "solid")
+        table[f"{name} font"] = element.font
+        table[f"{name} fontsize"] = str(element.font_size)
+        table[f"{name} fontweight"] = element.font_weight
+        table[f"{name} fontslant"] = element.font_slant
+    return table
+
+
+def _grid(window, args: list[str]) -> str | None:
+    """DS9's `grid`: `[yes|no]`, `type`, `system`, `sky`, `skyformat`,
+    `format1|format2`, `<element> [yes|no]`, `<element> color|width|dash|
+    font|fontsize|fontweight|fontslant <value>`, `axes|numerics type`,
+    `numerics vertical`, `title|labels text`, `reset`, `load`, `save`,
+    `open|close`.
+
+    Everything but yes and no used to be refused as "not yes or no".
+    """
+    from dataclasses import replace
+
+    from ...grid.grid_config import ELEMENTS, GridConfig, GridType, Placement
+
+    words = [str(word) for word in args]
+    analysis = window.analysis
+    if not words:
+        analysis.set_grid(True)
+        return None
+    first, rest = words[0].lower(), words[1:]
+    wanted = as_bool(first)
+    if wanted is not None:
+        analysis.set_grid(wanted)
+        return None
+    if first == "open":
+        analysis.show_grid_dialog()
+        return None
+    if first == "close":
+        return None
+
+    config = analysis.grid_config.copy()
+    value = rest[0] if rest else ""
+    if first == "load":
+        if not rest:
+            return "a grid file is needed"
+        try:
+            loaded = GridConfig.load(rest[0])
+        except (OSError, ValueError) as exc:
+            return f"cannot read {rest[0]}: {exc}"
+        analysis.apply_grid_settings(replace(loaded, visible=config.visible))
+        return None
+    if first == "save":
+        if not rest:
+            return "a file to write is needed"
+        try:
+            config.save(rest[0])
+        except OSError as exc:
+            return f"cannot write {rest[0]}: {exc}"
+        return None
+    if first == "reset":
+        config = replace(GridConfig(), visible=config.visible)
+    elif first == "type" and not rest:
+        return "type takes analysis or publication"
+    elif first == "type":
+        try:
+            config.grid_type = GridType(value.lower())
+        except ValueError:
+            return f"{value} is not analysis or publication"
+    elif first in ("system", "sky", "skyformat"):
+        if not rest:
+            return f"grid {first} needs a value"
+        field = {"system": "system", "sky": "sky", "skyformat": "sky_format"}[first]
+        setattr(config, field, value.lower())
+    elif first in ("format1", "format2"):
+        setattr(config, "x_format" if first == "format1" else "y_format", " ".join(rest))
+    elif first in ELEMENTS:
+        problem = _grid_element(config, first, [word.lower() for word in rest], rest, Placement)
+        if problem:
+            return problem
+    else:
+        return f"grid does not take {first}"
+    analysis.apply_grid_settings(config)
+    return None
+
+
+def _grid_element(config, name: str, words: list[str], raw: list[str], placement) -> str | None:
+    """One element's part of `grid`: `axes color red`, `numerics type ...`."""
+    element = config.elements[name]
+    if not words:
+        element.show = True
+        return None
+    what = words[0]
+    shown = as_bool(what)
+    if shown is not None:
+        element.show = shown
+        return None
+    value = words[1] if len(words) > 1 else ""
+    if not value:
+        return f"grid {name} {what} needs a value"
+    if what == "color":
+        element.color = value
+    elif what in ("width", "fontsize"):
+        try:
+            number = int(float(value))
+        except ValueError:
+            return f"grid {name} {what} takes a number"
+        setattr(element, "width" if what == "width" else "font_size", number)
+    elif what == "dash":
+        dashed = as_bool(value)
+        if dashed is None:
+            return f"grid {name} dash takes yes or no"
+        element.style = "dashed" if dashed else "solid"
+    elif what in ("font", "fontweight", "fontslant"):
+        setattr(
+            element, {"font": "font", "fontweight": "font_weight", "fontslant": "font_slant"}[what], value
+        )
+    elif what == "type" and name in ("axes", "numerics"):
+        try:
+            chosen = placement(value)
+        except ValueError:
+            return f"{value} is not interior or exterior"
+        setattr(config, f"{name}_placement", chosen)
+    elif what == "vertical" and name == "numerics":
+        flag = as_bool(value)
+        if flag is None:
+            return "grid numerics vertical takes yes or no"
+        config.vertical_text = flag
+    elif what == "text" and name == "title":
+        config.title = " ".join(raw[1:])
+    elif what in ("text1", "text2") and name == "labels":
+        setattr(config, "x_title" if what == "text1" else "y_title", " ".join(raw[1:]))
+    else:
+        # The gaps, the axes origin and the default-title switches: DS9's
+        # AST grid has them, ours lays itself out without them.
+        return f"grid {name} {what} is not implemented"
     return None
 
 
@@ -642,6 +1135,8 @@ def _rotate(window, args: list[str]) -> str | None:
     if not args:
         return "an angle is needed"
     words = [str(word).lower() for word in args]
+    if words[0] in ("open", "close"):
+        return _pan_zoom_dialog(window, words[0])
     absolute = words[0] == "to"
     numbers = words[1:] if absolute else words
     if not numbers:
@@ -656,62 +1151,258 @@ def _rotate(window, args: list[str]) -> str | None:
     return None
 
 
-def _crop_text(window) -> str:
-    """The crop as DS9 reports it: centre then size, or the whole image."""
+def _crop_text(window, args: list[str] | None = None) -> str:
+    """The crop as DS9 reports it: centre then size, in the system asked for.
+
+    `xpaget ds9 crop`, `xpaget ds9 crop wcs galactic sexagesimal arcsec`,
+    `xpaget ds9 crop lock`. The arguments used to be ignored, so a script
+    asking for the crop in degrees got pixels back.
+    """
+    from ...coordinates import ds9_coords
+
+    words = [str(word).lower() for word in (args or [])]
+    if words and words[0] == "lock":
+        return str(getattr(window, "_frame_lock_scope", {}).get("crop", "none"))
+    if words and words[0] == "3d":
+        frame = window.frame_manager.current_frame
+        span = getattr(frame, "crop_z", None) if frame is not None else None
+        return "" if span is None else f"{span[0]:g} {span[1]:g}"
+
     crop = window.crop.region()
     if crop is None:
         shape = window.crop.shape()
         if shape is None:
             return "0 0 0 0"
-        return f"{shape[1] / 2:g} {shape[0] / 2:g} {shape[1]:g} {shape[0]:g}"
-    centre = crop.center
-    return f"{centre[0]:g} {centre[1]:g} {crop.width:g} {crop.height:g}"
+        # The whole image: its centre, in FITS coordinates, and its size.
+        x, y, width, height = (shape[1] + 1) / 2, (shape[0] + 1) / 2, float(shape[1]), float(shape[0])
+    else:
+        (x, y), width, height = crop.center, crop.width, crop.height
+
+    _values, system, sky, _format, unit = ds9_coords.split_system(words)
+    centre = _position_text(window, x, y, words)
+    frame = window.frame_manager.current_frame
+    try:
+        sizes = [ds9_coords.image_length_to(frame, value, system, unit) for value in (width, height)]
+    except ds9_coords.CoordinateError:
+        sizes = [width, height]
+        system = "image"
+    if ds9_coords.is_sky_system(system):
+        digits = {"degrees": 7, "arcmin": 5, "arcsec": 3}[unit or "degrees"]
+        size_text = " ".join(f"{value:.{digits}f}" for value in sizes)
+    else:
+        size_text = " ".join(f"{value:g}" for value in sizes)
+    return f"{centre} {size_text}"
 
 
 def _crop(window, args: list[str]) -> str | None:
-    """`crop <x> <y> <w> <h>`, or `crop reset`."""
-    if not args:
+    """DS9's `crop`: `<x> <y> <width> <height> [<coordsys>] [<skyframe>]
+    [degrees|arcmin|arcsec]`, `match <coordsys>`, `lock <coordsys>|none`,
+    `reset`, `3d <zmin> <zmax> [<coordsys>]`, `open` and `close`.
+
+    The position and size are read in the system named; they used to be
+    taken as image pixels whatever it was.
+    """
+    from ...coordinates import ds9_coords
+
+    words = [str(word) for word in args]
+    if not words:
         return "a centre and a size are needed"
-    if str(args[0]).lower() == "reset":
+    first = words[0].lower()
+    rest = [word.lower() for word in words[1:]]
+
+    if first == "reset":
         window.crop.reset()
         return None
-    if len(args) < 4:
+    if first == "open":
+        window.crop.show_dialog()
+        return None
+    if first == "close":
+        dialog = getattr(window.crop, "_dialog", None)
+        if dialog is not None:
+            dialog.close()
+        return None
+    if first == "match":
+        window.crop.match(rest[0] if rest else "wcs")
+        return None
+    if first == "lock":
+        window.frame_controller.set_lock_scope("crop", rest[0] if rest else "wcs")
+        return None
+    if first == "3d":
+        if len(rest) < 2:
+            return "a lowest and a highest slice are needed"
+        try:
+            low, high = float(rest[0]), float(rest[1])
+        except ValueError:
+            return "the slice range has to be two numbers"
+        window.crop.set_slice_range(low, high)
+        return None
+
+    values, system, sky, _format, unit = ds9_coords.split_system(words)
+    if len(values) < 4:
         return "a centre and a size are needed"
+    centre = _image_position(window, [*values[:2], system, sky])
+    if isinstance(centre, str):
+        return centre
+    frame = window.frame_manager.current_frame
     try:
-        x, y, width, height = (float(value) for value in args[:4])
+        width, height = (
+            ds9_coords.length_to_image(frame, float(value), system, unit) for value in values[2:4]
+        )
     except ValueError:
-        return "the centre and size have to be numbers"
+        return "the size has to be two numbers"
     from ...frames.crop import CropRegion
 
-    window.crop.set_region(CropRegion.from_center(x, y, width, height))
+    if not window.crop.set_region(CropRegion.from_center(centre[0], centre[1], width, height)):
+        return "that crop falls outside the image, or is too small"
     return None
 
 
+def _mask_table(window) -> dict[str, str]:
+    """DS9's mask settings, as `xpaget ds9 mask <what>` answers them."""
+    settings = window.analysis.mask_settings
+    return {
+        "": on_off(getattr(window.analysis, "mask_layer", None) is not None),
+        "color": settings.color,
+        "mark": settings.mode.value,
+        "range": f"{settings.low:g} {settings.high:g}",
+        "transparency": f"{settings.transparency:g}",
+        "blend": settings.blend.value,
+        "system": "image",
+    }
+
+
 def _mask(window, args: list[str]) -> str | None:
-    """`mask <file>` loads one; `mask clear` removes it."""
-    if not args:
-        return "a mask file or `clear` is needed"
-    if str(args[0]).lower() == "clear":
-        window.analysis.clear_mask()
+    """DS9's `mask`: `load <file>`, `clear`, `color <c>`, `mark zero|nonzero|
+    nan|nonnan|range`, `range <low> <high>`, `transparency <n>`, `blend
+    source|screen|darken|lighten`, `system <coordsys>`, `open|close`, and a
+    bare file name, which loads it.
+
+    Every word but `clear` used to be taken for a file name -- `mask load
+    foo.fits` tried to open a file called `load`.
+    """
+    from dataclasses import replace
+
+    from ...analysis.mask import BlendMode, MaskMode
+
+    words = [str(word) for word in args]
+    if not words:
+        return "a mask file or a mask setting is needed"
+    analysis = window.analysis
+    first, rest = words[0].lower(), words[1:]
+
+    if first == "clear":
+        analysis.clear_mask()
         return None
-    return None if window.analysis.load_mask(str(args[0])) else "the mask could not be loaded"
+    if first == "open":
+        analysis.show_mask_dialog()
+        return None
+    if first == "close":
+        return None
+    if first == "load":
+        if not rest:
+            return "a mask file is needed"
+        return None if analysis.load_mask(rest[-1]) else f"{rest[-1]} could not be loaded as a mask"
+
+    settings = analysis.mask_settings
+    value = rest[0].lower() if rest else ""
+    if first == "color":
+        if not value:
+            return "a colour is needed"
+        settings = replace(settings, color=value)
+    elif first == "mark":
+        try:
+            settings = replace(settings, mode=MaskMode(value))
+        except ValueError:
+            return "mark takes zero, nonzero, nan, nonnan or range"
+    elif first == "range":
+        try:
+            settings = replace(settings, low=float(rest[0]), high=float(rest[1]))
+        except (IndexError, ValueError):
+            return "range takes a low and a high"
+    elif first == "transparency":
+        try:
+            settings = replace(settings, transparency=max(0.0, min(100.0, float(value))))
+        except ValueError:
+            return "transparency takes a number from 0 to 100"
+    elif first == "blend":
+        try:
+            settings = replace(settings, blend=BlendMode(value))
+        except ValueError:
+            return "blend takes source, screen, darken or lighten"
+    elif first == "system":
+        # Ours lines a mask up with the image pixel for pixel; DS9 can
+        # align it through the WCS instead, which is not implemented.
+        if value == "image":
+            return None
+        if value in ("wcs", "physical") or value.startswith("wcs"):
+            return f"aligning a mask in {value} coordinates is not implemented; masks align by image pixel"
+        return f"{rest[0] if rest else ''} is not a coordinate system"
+    else:
+        return None if analysis.load_mask(words[-1]) else f"{words[-1]} could not be loaded as a mask"
+
+    analysis.mask_settings = settings
+    if getattr(analysis, "mask_layer", None) is not None:
+        window.display.display()
+    return None
 
 
 def _tile(window, args: list[str]) -> str | None:
-    """`tile`, `tile yes|no`, or `tile mode grid|column|row`."""
+    """DS9's `tile`: `[yes|no]`, `mode grid|column|row`, `grid`, `row`,
+    `column`, and `grid mode|direction|layout|gap ...`.
+
+    `tile column`, `tile row` and every `tile grid ...` used to answer ok
+    and change nothing but the display mode.
+    """
+    from dataclasses import replace
+
     words = [str(word).lower() for word in args]
+    controller = window.frame_controller
+    arrangements = ("grid", "column", "row")
+
     if words and words[0] == "mode":
-        if len(words) < 2:
+        if len(words) < 2 or words[1] not in arrangements:
             return "grid, column or row is needed"
-        window.frame_controller.set_tile_arrangement(words[1])
+        words = words[1:]
+    if words and words[0] in arrangements and (words[0] != "grid" or len(words) == 1):
+        controller.set_tile_arrangement(words[0])
         # DS9's `tile mode` says how to tile, which implies tiling.
-        window.frame_controller.set_display_mode("tile")
+        controller.set_display_mode("tile")
         return None
+
+    if words and words[0] == "grid":
+        what, rest = (words[1], words[2:]) if len(words) > 1 else ("", [])
+        settings = controller.tile_settings
+        if what == "mode":
+            if not rest or rest[0] not in ("automatic", "manual"):
+                return "grid mode takes automatic or manual"
+            settings = replace(settings, manual=rest[0] == "manual")
+        elif what == "direction":
+            if not rest or rest[0] not in ("x", "y"):
+                return "grid direction takes x or y"
+            settings = replace(settings, direction=rest[0])
+        elif what == "layout":
+            try:
+                columns, rows = int(float(rest[0])), int(float(rest[1]))
+            except (IndexError, ValueError):
+                return "grid layout takes a number of columns and of rows"
+            if columns < 1 or rows < 1:
+                return "grid layout needs at least one column and one row"
+            # A layout is only used by a manual grid, which DS9 implies.
+            settings = replace(settings, columns=columns, rows=rows, manual=True)
+        elif what == "gap":
+            try:
+                settings = replace(settings, gap=max(0, int(float(rest[0]))))
+            except (IndexError, ValueError):
+                return "grid gap takes a number of pixels"
+        else:
+            return f"tile grid does not take {what}"
+        controller.apply_tile_settings(settings)
+        return None
+
     wanted = as_bool(words[0]) if words else True
-    if wanted is False:
-        window.frame_controller.set_display_mode("single")
-        return None
-    window.frame_controller.set_display_mode("tile")
+    if wanted is None:
+        return f"tile does not take {words[0]}"
+    controller.set_display_mode("tile" if wanted else "single")
     return None
 
 
@@ -733,7 +1424,13 @@ def _blink(window, args: list[str], mode: str) -> str | None:
         setter(int(seconds * 1000))
         return None
     wanted = as_bool(words[0]) if words else True
+    if wanted is None:
+        return f"{mode} does not take {words[0]}"
     window.frame_controller.set_display_mode(mode if wanted else "single")
+    if wanted and window._frame_display_mode != mode:
+        # The controller falls back to single with fewer than two frames
+        # showing; saying ok to that would be a blink that never blinks.
+        return f"{mode} needs at least two frames to show"
     return None
 
 
@@ -747,6 +1444,100 @@ def _slice(window, args: list[str]) -> str | None:
         return f"{args[0]} is not a slice number"
     window.frame_controller.set_slice(wanted - 1)
     return None
+
+
+def _cube_table(window) -> dict[str, str]:
+    """DS9's cube settings, as `xpaget ds9 cube <what>` answers them."""
+    frame = window.frame_manager.current_frame
+    panel = window.cube_dialog
+    current = str(int(getattr(frame, "slice_index", 0) or 0) + 1)
+    return {
+        "": current,
+        "image": current,
+        "interval": f"{panel.interval_seconds:g}",
+        "lock": str(getattr(window, "_frame_lock_scope", {}).get("slice", "none")),
+        "order": str(getattr(frame, "axis_order", "123") or "123"),
+        "axes lock": on_off(window.frame_controller.is_locked("axes_order")),
+        "axis": "3",
+    }
+
+
+def _cube(window, args: list[str]) -> str | None:
+    """DS9's `cube`: `[]`, `play|stop|next|prev|first|last`, `<slice>
+    [<coordsys>]`, `interval <s>`, `match <coordsys>`, `lock <coordsys>|none`,
+    `order <123..321>`, `axes lock [yes|no]`, `axis <n>`, `open|close`.
+
+    Only a slice number used to be understood; every other word was
+    refused as "not a slice number".
+    """
+    words = [str(word).lower() for word in args]
+    controller = window.frame_controller
+    panel = window.cube_dialog
+    if not words or words[0] == "open":
+        controller.show_cube_dialog()
+        return None
+    first, rest = words[0], words[1:]
+    if first == "close":
+        panel.close()
+        return None
+
+    handler = controller.cube_handler()
+    frame = window.frame_manager.current_frame
+    if first in ("play", "stop"):
+        if handler is None:
+            return "the current frame holds no data cube"
+        panel.set_playing(first == "play")
+        return None
+    if first in ("next", "prev", "first", "last"):
+        if handler is None or frame is None:
+            return "the current frame holds no data cube"
+        depth = handler.depth(frame.axis_order)
+        current = int(frame.slice_index or 0)
+        wanted = {
+            "next": (current + 1) % depth,
+            "prev": (current - 1) % depth,
+            "first": 0,
+            "last": depth - 1,
+        }[first]
+        controller.set_slice(wanted)
+        return None
+    if first == "interval":
+        try:
+            seconds = float(rest[0])
+        except (IndexError, ValueError):
+            return "interval takes a number of seconds"
+        panel._interval.setValue(seconds)
+        return None
+    if first == "match":
+        controller.match_slice(rest[0] if rest else "wcs")
+        return None
+    if first == "lock":
+        return _lock(window, ["slice", *(rest or ["wcs"])])
+    if first == "order":
+        if not rest:
+            return "order takes one of 123, 132, 213, 231, 312, 321"
+        if handler is None:
+            return "the current frame holds no data cube"
+        try:
+            from ...core.cube_handler import AxisOrder
+
+            AxisOrder.parse(rest[0])
+        except Exception:
+            return f"{rest[0]} is not an axis order"
+        controller.set_axis_order(rest[0])
+        return None
+    if first == "axes":
+        if not rest or rest[0] != "lock":
+            return "axes takes lock"
+        return _lock(window, ["axes", *rest[1:]])
+    if first == "axis":
+        if rest and rest[0] == "3":
+            return None
+        return "only the third axis can be stepped through; a fourth is not implemented"
+
+    if rest and rest[0] not in ("image",):
+        return f"a slice in {rest[0]} coordinates is not implemented; give the slice number (image)"
+    return _slice(window, [first])
 
 
 def _lock_text(window) -> str:
@@ -763,6 +1554,9 @@ def _lock(window, args: list[str]) -> str | None:
     if not args:
         return "a scope is needed"
     scope = str(args[0]).lower()
+    # DS9 says `scalelimits` and `axes`; the flags are `scale_limits` and
+    # `axes_order`, and the DS9 spelling used to be refused.
+    scope = _LOCK_NAMES.get(scope, scope)
     rest = [str(word).lower() for word in args[1:]]
 
     if scope in getattr(window, "_frame_lock_scope", {}):
@@ -771,7 +1565,9 @@ def _lock(window, args: list[str]) -> str | None:
         return None
     if scope in getattr(window, "_frame_lock_flags", {}):
         wanted = as_bool(rest[0]) if rest else True
-        window.frame_controller.set_lock_flag(scope, bool(wanted))
+        if wanted is None:
+            return f"lock {args[0]} takes yes or no"
+        window.frame_controller.set_lock_flag(scope, wanted)
         return None
     return f"{args[0]} is not something that locks"
 
@@ -796,6 +1592,11 @@ def _match(window, args: list[str]) -> str | None:
     if scope == "3d":
         window.frame_3d.match()
         return None
+    if scope.startswith("slice"):
+        # DS9's own example runs the system on: `match slicewcs`.
+        controller.match_slice(system if len(args) > 1 else (scope[5:] or "wcs"))
+        return None
+    scope = _LOCK_NAMES.get(scope, scope)
     matcher = getattr(controller, f"match_{scope}", None)
     if matcher is None:
         return f"{args[0]} is not something that matches"
@@ -878,6 +1679,10 @@ def _block(window, args: list[str]) -> str | None:
     if not words:
         return "a block factor is needed"
 
+    if words[0] in ("open", "close"):
+        # Our Block Parameters is a modal question, which would hold the
+        # XPA reply until somebody answered it; DS9's is a modeless window.
+        return "the block dialog is modal here; set the factor with `block <n>`"
     if words[0] == "in":
         analysis.block_in()
         return None
@@ -900,12 +1705,21 @@ def _block(window, args: list[str]) -> str | None:
         words = words[1:]
 
     try:
-        # DS9 takes one factor or two; ours blocks both axes alike, so the
-        # first is what counts and a second is accepted and ignored.
-        factor = int(float(words[0]))
+        factors = [int(float(word)) for word in words[:2]]
     except ValueError:
-        return f"{words[0]} is not a block factor"
-    analysis.set_block(factor)
+        return f"{' '.join(words[:2])} is not a block factor"
+    if len(factors) == 2 and factors[0] != factors[1]:
+        # DS9 can block the two axes differently; ours blocks both alike,
+        # and taking the first while answering ok was a quiet half-truth.
+        return "blocking the two axes by different factors is not implemented"
+    analysis.set_block(factors[0])
+    return None
+
+
+def _pan_zoom_dialog(window, word: str) -> str | None:
+    """`rotate|orient open|close`: DS9's Pan Zoom Rotate Parameters."""
+    if word == "open":
+        window.zoom.show_pan_zoom_rotate_dialog()
     return None
 
 
@@ -932,7 +1746,8 @@ TOOL_POINTS: tuple[AccessPoint, ...] = (
     ),
     AccessPoint(
         "illustrate",
-        get=lambda window: on_off(window.illustrate.layer.visible),
+        get=lambda window: illustrate_file_text(window),
+        query=_keyed(lambda window: _illustrate_table(window), bare=""),
         set=lambda window, args: _illustrate(window, args),
         summary="the illustrate layer: show, open, save, list, delete",
     ),
@@ -979,6 +1794,7 @@ APP_POINTS: tuple[AccessPoint, ...] = (
     AccessPoint(
         "preserve",
         get=lambda window: _preserve_text(window),
+        query=_keyed(_preserve_table),
         set=lambda window, args: _preserve(window, args),
         summary="what survives a load: pan, regions",
     ),
@@ -1010,6 +1826,7 @@ APP_POINTS: tuple[AccessPoint, ...] = (
     AccessPoint(
         "pagesetup",
         get=lambda window: _pagesetup_text(window),
+        query=_keyed(_pagesetup_table),
         set=lambda window, args: _pagesetup(window, args),
         summary="the page: orient, scale, size",
     ),
@@ -1041,8 +1858,8 @@ APP_POINTS: tuple[AccessPoint, ...] = (
     ),
     AccessPoint(
         "header",
-        set=lambda window, _args: window.file.show_header(),
-        summary="show the FITS header",
+        set=lambda window, args: _header(window, args),
+        summary="show, close or save a FITS header",
     ),
     AccessPoint(
         "movie",
@@ -1111,33 +1928,151 @@ def _nameserver(window, args: list[str]) -> str | None:
     return window.analysis.resolve_name(name)
 
 
-def _illustrate(window, args: list[str]) -> str | None:
-    """`illustrate show|open|save|list|delete`."""
-    if not args:
-        return "a command is needed"
-    word = str(args[0]).lower()
-    controller = window.illustrate
-    rest = [str(value) for value in args[1:]]
+def _illustrate_table(window) -> dict[str, str]:
+    """DS9's illustrate settings, as `xpaget ds9 illustrate <what>` answers."""
+    layer = window.illustrate.layer
+    return {
+        "": illustrate_file_text(window),
+        "shape": str(layer.shape),
+        "color": str(layer.style.color),
+        "fill": on_off(layer.style.fill),
+        "width": str(layer.style.width),
+        "dash": on_off(layer.style.dash),
+        "show": on_off(layer.visible),
+    }
 
+
+def illustrate_file_text(window) -> str:
+    """Every illustration, as an illustrate file holds them."""
+    from ...illustrate import illustrate_file
+
+    return illustrate_file.serialise(list(window.illustrate.layer.elements))
+
+
+def _illustrate(window, args: list[str]) -> str | None:
+    """DS9's `illustrate`: `open|close`, `shape`, `color`, `fill`, `width`,
+    `dash`, `move front|back`, `select all|none|invert|front|back`, `save
+    [select|all] <file>`, `list [select|all|close]`, `delete [all|select]`,
+    `[load] <file>`, `show yes|no`, `command <line>`, `undo`, `cut`, `copy`,
+    `paste`.
+    """
+    words = [str(word) for word in args]
+    controller = window.illustrate
+    if not words:
+        return "a command or a file is needed"
+    word = words[0].lower()
+    rest = words[1:]
+    lowered = [value.lower() for value in rest]
+    layer = controller.layer
+
+    if word == "open" and not rest:
+        controller.show_dialog()
+        return None
+    if word == "close":
+        return None
+    if word == "open":
+        # Not DS9's grammar, but this point took `open <file>` before it
+        # took DS9's `load <file>`, and scripts may say it.
+        word = "load"
     if word == "show":
-        wanted = as_bool(rest[0]) if rest else True
-        controller.set_visible(bool(wanted))
+        wanted = as_bool(lowered[0]) if lowered else True
+        if wanted is None:
+            return "show takes yes or no"
+        controller.set_visible(wanted)
         return None
-    if word in ("open", "load"):
+    if word == "shape":
+        shapes = ("circle", "ellipse", "box", "polygon", "line", "text", "image")
+        if not lowered or lowered[0] not in shapes:
+            return f"shape takes one of {', '.join(shapes)}"
+        controller.set_shape(lowered[0])
+        return None
+    if word == "color":
         if not rest:
-            return "a file is needed"
-        return None if controller.load(rest[0]) else f"could not read {rest[0]}"
+            return "a colour is needed"
+        controller.set_color(lowered[0])
+        return None
+    if word == "width":
+        try:
+            controller.set_width(int(float(rest[0])))
+        except (IndexError, ValueError):
+            return "width takes a number"
+        return None
+    if word in ("fill", "dash"):
+        wanted = as_bool(lowered[0]) if lowered else None
+        if wanted is None:
+            return f"{word} takes yes or no"
+        setattr(layer.style, word, wanted)
+        for element in layer.selection():
+            setattr(element.style, word, wanted)
+        controller.refresh()
+        return None
+    if word == "move":
+        if not lowered or lowered[0] not in ("front", "back"):
+            return "move takes front or back"
+        (controller.move_to_front if lowered[0] == "front" else controller.move_to_back)()
+        return None
+    if word == "select":
+        actions = {
+            "all": controller.select_all,
+            "none": controller.select_none,
+            "invert": controller.invert_selection,
+            "front": controller.select_front,
+            "back": controller.select_back,
+        }
+        if not lowered or lowered[0] not in actions:
+            return f"select takes one of {', '.join(actions)}"
+        actions[lowered[0]]()
+        return None
     if word == "save":
-        if not rest:
+        selected = bool(lowered) and lowered[0] == "select"
+        paths = rest[1:] if lowered and lowered[0] in ("select", "all") else rest
+        if not paths:
             return "a file is needed"
-        return None if controller.save(rest[0]) else f"could not write {rest[0]}"
+        chosen = layer.selection() if selected else layer.elements
+        if not chosen:
+            return "there are no illustrations to save"
+        return (
+            None
+            if (controller.save_selection if selected else controller.save)(paths[0])
+            else (f"could not write {paths[0]}")
+        )
     if word == "list":
-        controller.list_all()
+        if lowered and lowered[0] == "close":
+            return None
+        (controller.list_selection if lowered and lowered[0] == "select" else controller.list_all)()
         return None
-    if word in ("delete", "deleteall"):
-        controller.delete_all()
+    if word == "delete":
+        if lowered and lowered[0] == "select":
+            controller.delete_selection()
+        else:
+            controller.delete_all()
         return None
-    return f"{args[0]} is not an illustrate command"
+    if word in ("undo", "cut", "copy", "paste"):
+        if word == "undo":
+            return "illustrate undo is not implemented"
+        {"cut": controller.cut_selection, "copy": controller.copy_selection, "paste": controller.paste}[
+            word
+        ]()
+        return None
+    if word == "command":
+        from ...illustrate import illustrate_file
+
+        elements = illustrate_file.parse(" ".join(rest).strip("{}"))
+        if not elements:
+            return f"nothing in {' '.join(rest)!r} was an illustration"
+        for element in elements:
+            layer.add(element)
+        controller.refresh()
+        return None
+    path = rest[0] if word == "load" and rest else words[0]
+    if word == "load" and not rest:
+        return "a file is needed"
+    from pathlib import Path
+
+    if not Path(path).is_file():
+        return f"there is no illustrate file at {path}"
+    controller.load(path)
+    return None
 
 
 def _size(window, args: list[str], which: str) -> str | None:
@@ -1177,9 +2112,12 @@ def _iconify(window, args: list[str]) -> str | None:
 
 def _nan(window, args: list[str]) -> str | None:
     """`nan <colour>`: what a blank pixel is painted."""
-    if not args:
+    words = [str(word) for word in args]
+    if words and words[0].lower() == "color":
+        words = words[1:]
+    if not words:
         return "a colour is needed"
-    window.nan_color = str(args[0])
+    window.nan_color = words[0]
     window.display.display()
     return None
 
@@ -1223,21 +2161,16 @@ def _cursor_text(window) -> str:
 def _crosshair_text(window, args: list[str]) -> str:
     """Where the crosshair is, in whichever system was asked for.
 
-    `xpaget ds9 crosshair image`, `xpaget ds9 crosshair wcs fk5 degrees`.
-    Without this the arguments were ignored and the answer came back in
-    image pixels whatever was asked, which a script cannot tell from a
-    right answer.
+    `xpaget ds9 crosshair image`, `xpaget ds9 crosshair wcs fk5 degrees`,
+    and `xpaget ds9 crosshair lock`, which answers the lock's system.
     """
+    words = [str(word).lower() for word in args]
+    if words and words[0] == "lock":
+        return str(getattr(window, "_frame_lock_scope", {}).get("crosshair", "none"))
     placed = window.crosshair.position()
     if placed is None:
         return "0 0"
-    words = [str(word).lower() for word in args]
-    if not words or words[0] in ("image", "physical", "amplifier", "detector"):
-        return f"{placed[0]:g} {placed[1]:g}"
-
-    sky = next((word for word in words if word in SKY_FRAMES), "fk5")
-    sky_format = "sexagesimal" if "sexagesimal" in words else "degrees"
-    return window.iis.coordinate(placed[0], placed[1], words[0], sky, sky_format)
+    return _position_text(window, placed[0], placed[1], words)
 
 
 def _cursor(window, args: list[str]) -> str | None:
@@ -1377,6 +2310,70 @@ def _one_file(window, args: list[str], path: str, what: str) -> str | None:
     return None if target(str(args[0])) else f"{what} failed"
 
 
+def _header(window, args: list[str]) -> str | None:
+    """DS9's `header [<ext>]`, `header close [<ext>]`, `header save [<ext>]
+    <file>`.
+
+    The extension counts from one, as DS9's does. `header save` used to
+    answer ok and write nothing, and `header 2` showed the frame's own.
+    """
+    words = [str(word) for word in args]
+    handler = window.fits_handler
+    if handler is None:
+        return "no FITS file is loaded"
+    first = words[0].lower() if words else ""
+
+    def extension(word: str | None) -> int | None:
+        if word is None:
+            return None
+        number = int(float(word))
+        if number < 1:
+            raise ValueError(word)
+        return number - 1
+
+    if first == "close":
+        from PyQt6.QtWidgets import QApplication
+
+        from ...ui.dialogs.header_dialog import HeaderDialog
+
+        for widget in QApplication.topLevelWidgets():
+            if isinstance(widget, HeaderDialog):
+                widget.close()
+        return None
+    if first == "save":
+        rest = words[1:]
+        if not rest:
+            return "a file to write is needed"
+        try:
+            index = extension(rest[0]) if len(rest) > 1 else None
+        except ValueError:
+            return f"{rest[0]} is not an extension number"
+        if index is None:
+            index = getattr(window.frame_manager.current_frame, "hdu_index", None) or 0
+        try:
+            header = handler.get_header(index)
+        except Exception as exc:
+            return f"there is no header {index + 1}: {exc}"
+        from pathlib import Path
+
+        try:
+            Path(rest[-1]).write_text(header.tostring(sep="\n", endcard=True, padding=False) + "\n")
+        except OSError as exc:
+            return f"cannot write {rest[-1]}: {exc}"
+        return None
+    try:
+        index = extension(words[0]) if words else None
+    except ValueError:
+        return f"{words[0]} is not an extension number"
+    if index is not None:
+        try:
+            handler.get_header(index)
+        except Exception:
+            return f"there is no header {index + 1}"
+    window.file.show_header(index)
+    return None
+
+
 def _movie(window, args: list[str]) -> str | None:
     """`movie <file>`, or `movie slice|frame <file>`."""
     words = [str(word) for word in args]
@@ -1462,6 +2459,29 @@ def _panel(window, args: list[str], name: str) -> str | None:
     return None
 
 
+def _magnifier(window, args: list[str]) -> str | None:
+    """DS9's `magnifier`: `yes|no`, `zoom <n>`, `color`, `cursor`, `region`.
+
+    The zoom used to be refused as "not yes, no, open or close"; the
+    colour, cursor and region overlays are not drawn on our magnifier at
+    all, so those say so.
+    """
+    words = [str(word).lower() for word in args]
+    if words and words[0] == "zoom":
+        try:
+            zoom = int(float(words[1]))
+        except (IndexError, ValueError):
+            return "magnifier zoom takes a number"
+        spin = window.magnifier_panel._zoom_spinbox
+        if not spin.minimum() <= zoom <= spin.maximum():
+            return f"magnifier zoom runs from {spin.minimum()} to {spin.maximum()}"
+        spin.setValue(zoom)
+        return None
+    if words and words[0] in ("color", "cursor", "region"):
+        return f"the magnifier has no {words[0]} overlay to set"
+    return _panel(window, args, "magnifier")
+
+
 def _pixel_table(window, args: list[str]) -> str | None:
     """`pixeltable [yes|no|open|close]`."""
     words = [str(word).lower() for word in args]
@@ -1502,6 +2522,8 @@ def _orient(window, args: list[str]) -> str | None:
     if not args:
         return "none, x, y or xy is needed"
     wanted = str(args[0]).lower()
+    if wanted in ("open", "close"):
+        return _pan_zoom_dialog(window, wanted)
     if wanted not in ("none", "x", "y", "xy"):
         return f"{args[0]} is not an orientation"
     window.zoom.set_orientation(wanted)
@@ -1675,7 +2697,12 @@ TOOL_WINDOW_POINTS: tuple[AccessPoint, ...] = (
         set=lambda window, args: _samp(window, args),
         summary="SAMP: connect, disconnect, broadcast, hub start|stop",
     ),
-    AccessPoint("prefs", set=_show_window("edit.show_preferences"), summary="the preferences dialog"),
+    AccessPoint(
+        "prefs",
+        query=lambda window, args: _prefs_text(window, args),
+        set=lambda window, args: _prefs(window, args),
+        summary="the preferences: bg and nan colour, precision, theme, threads",
+    ),
     AccessPoint("about", get=lambda window: _about(window), summary="what this is"),
     AccessPoint("version", get=lambda window: _version(window), summary="the version"),
 )
@@ -1691,7 +2718,13 @@ def _export(window, args: list[str]) -> str | None:
         if words[0].lower().endswith("array")
         else words[0].lower()
     )
-    return None if window.file.export_file(kind, words[1]) else f"{words[1]} could not be written"
+    # DS9's trailing word: `big|little|native` for the array kinds, a
+    # quality or a compression for the pictures, which are not settable.
+    order = {"big": True, "little": False, "native": sys.byteorder == "big"}
+    big_endian = order.get(words[2].lower()) if len(words) > 2 else None
+    if big_endian is None and (kind in ("array", "nrrd", "envi") or kind.endswith("_array")):
+        big_endian = order["native"]
+    return None if window.file.export_file(kind, words[1], big_endian) else f"{words[1]} could not be written"
 
 
 def _url(window, args: list[str]) -> str | None:
@@ -1952,7 +2985,7 @@ REMAINING_POINTS: tuple[AccessPoint, ...] = (
     ),
     AccessPoint(
         "background",
-        get=read("preferences.get", lambda _value: ""),
+        get=lambda window: str(window.preferences.get("background_color", "#000000")),
         set=lambda window, args: _background(window, args),
         aliases=("bg",),
         summary="the colour behind the image",
@@ -1966,6 +2999,17 @@ REMAINING_POINTS: tuple[AccessPoint, ...] = (
     AccessPoint(
         "graph",
         get=lambda window: _graph_text(window),
+        query=_keyed(
+            lambda window: {
+                "": _graph_text(window),
+                "grid": on_off(window.horizontal_graph.settings.grid),
+                "log": on_off(window.horizontal_graph.settings.log),
+                "method": str(window.horizontal_graph.settings.method),
+                "size": str(window.horizontal_graph.settings.size),
+                "thickness": str(window.horizontal_graph.settings.thickness),
+            },
+            bare="",
+        ),
         set=lambda window, args: _graph(window, args),
         summary="the cut graphs: grid, log, method, size, thickness",
     ),
@@ -1977,7 +3021,7 @@ REMAINING_POINTS: tuple[AccessPoint, ...] = (
     ),
     AccessPoint(
         "theme",
-        get=read("preferences.get", lambda _value: ""),
+        get=lambda window: str(window.preferences.get("theme", "System")).lower(),
         set=lambda window, args: _theme(window, args),
         summary="the application's theme",
     ),
@@ -2001,6 +3045,7 @@ REMAINING_POINTS: tuple[AccessPoint, ...] = (
     AccessPoint(
         "view",
         get=lambda window: _view_text(window),
+        query=_keyed(_view_table),
         set=lambda window, args: _view(window, args),
         summary="the panels and the layout",
     ),
@@ -2030,6 +3075,7 @@ REMAINING_POINTS: tuple[AccessPoint, ...] = (
     AccessPoint(
         "region",
         get=lambda window: _region_text(window),
+        query=lambda window, args: _region_text(window, args),
         set=lambda window, args: _region(window, args),
         aliases=("regions",),
         summary="the regions: load, save, list, delete, colour, shape",
@@ -2037,18 +3083,21 @@ REMAINING_POINTS: tuple[AccessPoint, ...] = (
     AccessPoint(
         "rgb",
         get=lambda window: str(getattr(window.frame_manager.current_frame, "rgb_current_channel", "")),
+        query=lambda window, args: _colour_frame_text(window, args),
         set=lambda window, args: _colour_frame(window, args, "rgb"),
         summary="the RGB frame and its channel",
     ),
     AccessPoint(
         "hsv",
         get=lambda window: str(getattr(window.frame_manager.current_frame, "rgb_current_channel", "")),
+        query=lambda window, args: _colour_frame_text(window, args),
         set=lambda window, args: _colour_frame(window, args, "hsv"),
         summary="the HSV frame and its channel",
     ),
     AccessPoint(
         "hls",
         get=lambda window: str(getattr(window.frame_manager.current_frame, "rgb_current_channel", "")),
+        query=lambda window, args: _colour_frame_text(window, args),
         set=lambda window, args: _colour_frame(window, args, "hls"),
         summary="the HLS frame and its channel",
     ),
@@ -2060,6 +3109,7 @@ REMAINING_POINTS: tuple[AccessPoint, ...] = (
     AccessPoint(
         "bin",
         get=lambda window: _bin_text(window),
+        query=_keyed(lambda window: _bin_table(window)),
         set=lambda window, args: _bin(window, args),
         summary="binning a table into an image",
     ),
@@ -2076,6 +3126,7 @@ REMAINING_POINTS: tuple[AccessPoint, ...] = (
     AccessPoint(
         "pspagesetup",
         get=lambda window: _pagesetup_text(window),
+        query=_keyed(_pagesetup_table),
         set=lambda window, args: _pagesetup(window, args),
         summary="the page, as DS9's PostScript name for it",
     ),
@@ -2153,9 +3204,13 @@ def _analysis(window, args: list[str]) -> str | None:
 
 def _background(window, args: list[str]) -> str | None:
     """DS9's `bg`: what is painted behind the image."""
-    if not args:
+    words = [str(word) for word in args]
+    # DS9's `bg color red` as well as `bg red`.
+    if words and words[0].lower() == "color":
+        words = words[1:]
+    if not words:
         return "a colour is needed"
-    colour = str(args[0])
+    colour = words[0]
     window.preferences.set("background_color", colour)
     window._apply_background_color(colour)
     return None
@@ -2164,10 +3219,15 @@ def _background(window, args: list[str]) -> str | None:
 def _data(window, args: list[str]) -> str:
     """DS9's `data`: a box of values, with or without their coordinates.
 
-    `data <coordsys> [<skyframe>] <x> <y> <width> <height> [yes|no]`, where
-    the trailing flag strips the coordinates and leaves the values.
+    `data <coordsys> [<skyframe>] <x> <y> <width> <height> [yes|no]`: the
+    lower-left corner and the size in that system -- degrees for a WCS one
+    -- and the trailing flag strips the coordinates, leaving the values.
+    The system used to be ignored, so a box in `fk5` read degrees as
+    pixels and came back empty.
     """
     import numpy as np
+
+    from ...coordinates import ds9_coords
 
     frame = window.frame_manager.current_frame
     image = getattr(frame, "image_data", None) if frame is not None else None
@@ -2175,26 +3235,29 @@ def _data(window, args: list[str]) -> str:
         return ""
 
     words = [str(word) for word in args]
-    # The coordinate system and the sky frame are words, the geometry
-    # numbers; splitting on that is simpler than knowing every system's
-    # name, and it is what makes the optional sky frame optional.
-    numbers: list[float] = []
     strip = True
-    for word in words:
-        try:
-            numbers.append(float(word))
-        except ValueError:
-            flag = as_bool(word)
-            if flag is not None and len(numbers) >= 4:
-                strip = flag
-    if len(numbers) < 4:
-        return ""
+    if words and as_bool(words[-1]) is not None and not _is_number(words[-1]):
+        strip = bool(as_bool(words[-1]))
+        words = words[:-1]
+    values, system, sky, _format, _unit = ds9_coords.split_system(words)
+    if not any(ds9_coords.is_system(word) or word.lower() in ds9_coords.SKY_FRAMES for word in words):
+        system = "image"
+    if len(values) < 4:
+        raise ValueError("data needs a corner, a width and a height")
 
-    x, y, width, height = numbers[:4]
-    # DS9 gives the lower-left corner in FITS coordinates, which count
-    # from one at the centre of the first pixel.
-    left = int(round(x)) - 1
-    bottom = int(round(y)) - 1
+    corner = _image_position(window, [*values[:2], system, sky])
+    if isinstance(corner, str):
+        raise ValueError(corner)
+    try:
+        width, height = (
+            ds9_coords.length_to_image(frame, float(value), system, "degrees") for value in values[2:4]
+        )
+    except ValueError as exc:
+        raise ValueError("the width and height have to be numbers") from exc
+
+    # DS9 counts the box in whole pixels from the corner pixel.
+    left = int(round(corner[0])) - 1
+    bottom = int(round(corner[1])) - 1
     right = left + max(1, int(round(width)))
     top = bottom + max(1, int(round(height)))
     left, bottom = max(0, left), max(0, bottom)
@@ -2209,9 +3272,22 @@ def _data(window, args: list[str]) -> str:
         for column_index, value in enumerate(row):
             if strip:
                 lines.append(f"{value:g}")
+                continue
+            x, y = left + column_index + 1, bottom + row_index + 1
+            if system == "image":
+                where = f"{x} {y}"
             else:
-                lines.append(f"{left + column_index + 1} {bottom + row_index + 1} {value:g}")
+                where = _position_text(window, x, y, [system, sky])
+            lines.append(f"{where} {value:g}")
     return "\n".join(lines)
+
+
+def _is_number(word: str) -> bool:
+    try:
+        float(word)
+    except ValueError:
+        return False
+    return True
 
 
 def _graph_text(window) -> str:
@@ -2282,35 +3358,45 @@ def _graph(window, args: list[str]) -> str | None:
     return f"graph does not take {first}"
 
 
+#: DS9's nine precisions, in the order `precision` and `prefs precision`
+#: take them, with DS9's defaults (`pds9(prec,*)` in `ds9/library/ds9.tcl`).
+_PRECISIONS: tuple[tuple[str, int], ...] = (
+    ("linear", 8),
+    ("degrees", 7),
+    ("hms", 4),
+    ("dms", 3),
+    ("len_linear", 8),
+    ("len_degrees", 7),
+    ("arcmin", 5),
+    ("arcsec", 3),
+    ("angle", 8),
+)
+
+#: The six-number form this point took before it took DS9's nine.
+_LEGACY_PRECISIONS = ("linear", "degrees", "hms", "dms", "arcmin", "arcsec")
+
+
 def _precision_text(window) -> str:
-    """DS9's `precision`: the digit counts, in its own order."""
+    """DS9's `precision`: the nine digit counts, in its own order."""
     store = window.preferences
-    return " ".join(
-        str(store.get(f"precision_{name}", default))
-        for name, default in (
-            ("linear", 8),
-            ("degrees", 8),
-            ("hms", 3),
-            ("dms", 2),
-            ("arcmin", 3),
-            ("arcsec", 3),
-        )
-    )
+    return " ".join(str(store.get(f"precision_{name}", default)) for name, default in _PRECISIONS)
 
 
 def _precision(window, args: list[str]) -> str | None:
     """DS9's `precision`: how many digits a coordinate is written to.
 
-    DS9 takes its six numbers positionally -- linear, degrees, hms, dms,
-    arcmin, arcsec -- and a `<name> <value>` pair is accepted too, which
-    is a good deal easier to write by hand.
+    DS9 takes nine numbers positionally -- linear, degrees, hms, dms, then
+    the length precisions linear, degrees, arcmin and arcsec, and the angle
+    one. This took six, in a different order, so DS9's own example put
+    its length precisions into the arcmin and arcsec slots. Six numbers are
+    still read the old way, and a `<name> <value>` pair is accepted too.
     """
-    order = ("linear", "degrees", "hms", "dms", "arcmin", "arcsec")
+    names = [name for name, _default in _PRECISIONS]
     words = [str(word) for word in args]
     if not words:
         return "precision needs a number"
 
-    if words[0].lower() in order:
+    if words[0].lower() in names:
         if len(words) < 2:
             return f"precision {words[0]} needs a number"
         try:
@@ -2324,9 +3410,106 @@ def _precision(window, args: list[str]) -> str | None:
         values = [int(float(word)) for word in words]
     except ValueError:
         return "precision takes numbers, or a name and a number"
-    for name, value in zip(order, values, strict=False):
+    if len(values) == len(_LEGACY_PRECISIONS):
+        order: tuple[str, ...] | list[str] = _LEGACY_PRECISIONS
+    elif len(values) == len(names):
+        order = names
+    else:
+        return f"precision takes {len(names)} numbers, not {len(values)}"
+    for name, value in zip(order, values, strict=True):
         window.preferences.set(f"precision_{name}", value)
     return None
+
+
+def _prefs_text(window, args: list[str]) -> str:
+    """DS9's `xpaget ds9 prefs ...`: one preference, as DS9 answers it."""
+    store = window.preferences
+    words = [str(word).lower() for word in args if str(word).lower() != "color"]
+    if not words:
+        raise ValueError("prefs needs the name of a preference to read")
+    first = words[0]
+    if first == "has":
+        # `prefs has bg color`: whether the background colour is in use.
+        # Ours always is.
+        return YES
+    if first in ("bg", "background", "bgcolor"):
+        return str(store.get("background_color", "#000000"))
+    if first in ("nan", "nancolor"):
+        return str(window.nan_color)
+    if first == "precision":
+        return _precision_text(window)
+    if first == "auto":
+        if words[-1] == "interval":
+            return str(store.get("autosave_interval", 5))
+        return on_off(store.get("autosave", True))
+    if first == "theme":
+        return str(store.get("theme", "System")).lower()
+    if first == "threads":
+        return str(store.get("worker_threads", 4))
+    if first in ("irafalign", "iraf"):
+        return NO
+    raise ValueError(f"prefs has no {first} to read")
+
+
+def _prefs(window, args: list[str]) -> str | None:
+    """DS9's `prefs`: the dialog, and the handful of preferences it sets.
+
+    `open`, `close`, `save`, `clear`, `bg color <colour>`, `nan color
+    <colour>`, `precision <nine numbers>`, `auto recovery yes|no`, `auto
+    recovery interval <n>`, `theme <theme>`, `threads <n>`, `irafalign
+    yes|no`. Every one of these used to open the dialog and answer ok.
+    """
+    words = [str(word) for word in args]
+    if not words or words[0].lower() == "open":
+        window.edit.show_preferences()
+        return None
+    first = words[0].lower()
+    rest = [word for word in words[1:] if word.lower() != "color"]
+
+    if first == "close":
+        return None
+    if first == "save":
+        window.preferences.save()
+        return None
+    if first == "clear":
+        window.preferences.reset()
+        window.edit.apply_preferences(window.edit.preferences_dict(), persist=False, show_message=False)
+        return None
+    if first in ("bg", "background", "bgcolor"):
+        if not rest:
+            return "a colour is needed"
+        if as_bool(rest[0]) is not None:
+            return "the background colour is always in use here; give a colour"
+        return _background(window, rest)
+    if first in ("nan", "nancolor"):
+        if not rest:
+            return "a colour is needed"
+        window.preferences.set("nan_color", rest[0])
+        return _nan(window, rest)
+    if first == "precision":
+        return _precision(window, rest)
+    if first == "auto":
+        rest = [word for word in rest if word.lower() != "recovery"]
+        if rest and rest[0].lower() == "interval":
+            try:
+                window.preferences.set("autosave_interval", max(1, int(float(rest[1]))))
+            except (IndexError, ValueError):
+                return "auto recovery interval takes a number of minutes"
+            return None
+        wanted = as_bool(rest[0]) if rest else None
+        if wanted is None:
+            return "auto recovery takes yes or no"
+        window.preferences.set("autosave", wanted)
+        return None
+    if first == "theme":
+        return _theme(window, rest)
+    if first == "threads":
+        return _threads(window, rest)
+    if first in ("irafalign", "iraf"):
+        # DS9's IRAF alignment flips a frame to match IRAF's display; there
+        # is nothing here for the flag to act on.
+        return "IRAF alignment is not implemented"
+    return f"prefs does not take {words[0]}"
 
 
 def _theme(window, args: list[str]) -> str | None:
@@ -2646,84 +3829,265 @@ def _savefits(window, args: list[str]) -> str | None:
     return window.file.save_fits_to(str(args[0]))
 
 
-def _region_text(window) -> str:
-    """What `xpaget ds9 regions` answers: the regions, as DS9 writes them."""
-    return window.region.listing()
+#: DS9's `-option value` words, on both a read and a write of `regions`.
+_REGION_OPTIONS = ("-format", "-system", "-sky", "-skyformat", "-strip", "-prop", "-group", "-delim", "-wcs")
+
+#: DS9's region property names and the attributes that hold them.
+_REGION_FLAGS = {
+    "fixed": "fixed",
+    "edit": "can_edit",
+    "move": "can_move",
+    "rotate": "can_rotate",
+    "delete": "can_delete",
+    "dash": "dash",
+    "fill": "fill",
+}
+
+
+def _region_options(words: list[str]) -> tuple[list[str], dict[str, str]]:
+    """Split DS9's `-format ds9 -system wcs ...` off a `regions` command.
+
+    Returns:
+        The words that are left, and the options by name without the dash.
+    """
+    rest: list[str] = []
+    options: dict[str, str] = {}
+    index = 0
+    while index < len(words):
+        word = words[index]
+        if word.lower() in _REGION_OPTIONS:
+            name = word.lower().lstrip("-")
+            if name == "prop" and index + 2 < len(words):
+                options[f"prop {words[index + 1].lower()}"] = words[index + 2]
+                index += 3
+                continue
+            options[name] = words[index + 1] if index + 1 < len(words) else ""
+            index += 2
+            continue
+        rest.append(word)
+        index += 1
+    return rest, options
+
+
+def _listing_options(options: dict[str, str]) -> dict[str, object]:
+    """What `RegionController.render` takes, out of DS9's options."""
+    found: dict[str, object] = {}
+    if "format" in options:
+        found["region_format"] = options["format"].lower()
+    if "system" in options:
+        found["system"] = options["system"].lower()
+    if "sky" in options:
+        found["sky"] = options["sky"].lower()
+    if "skyformat" in options:
+        found["skyformat"] = options["skyformat"].lower()
+    if "strip" in options:
+        found["strip"] = as_bool(options["strip"]) is True
+    return found
+
+
+def _region_subset(window, options: dict[str, str], extra: str | None = None) -> list:
+    """The regions a read or a save names: all, or by property or group."""
+    controller = window.region
+    regions = list(controller._regions())
+    wanted = dict(options)
+    if extra:
+        wanted[f"prop {extra}"] = "1"
+    for key, value in wanted.items():
+        if key.startswith("prop "):
+            name = key[5:]
+            on = as_bool(value) is not False
+            regions = [region for region in regions if _region_property(region, name) == on]
+    group = options.get("group")
+    if group:
+        regions = [region for region in regions if group in (region.tags or [])]
+    return regions
+
+
+def _region_property(region, name: str) -> bool:
+    """One of DS9's region properties, as true or false."""
+    if name in ("select", "selected"):
+        return bool(getattr(region, "selected", False))
+    if name == "include":
+        return bool(region.include)
+    if name == "exclude":
+        return not region.include
+    if name == "source":
+        return bool(region.source)
+    if name == "background":
+        return not region.source
+    attribute = _REGION_FLAGS.get(name, name)
+    return bool(getattr(region, attribute, False))
+
+
+def _region_text(window, args: list[str] | None = None) -> str:
+    """What `xpaget ds9 regions [...]` answers.
+
+    The regions, in the format and system asked for -- `-format ds9
+    -system wcs -sky fk5 -skyformat sexagesimal`, defaulting to what
+    `regions format|system|sky|skyformat` last set -- or one setting by
+    name: `xpaget ds9 regions color`. Every argument used to be ignored,
+    so each of those answered with the same listing.
+    """
+    words, options = _region_options([str(word) for word in (args or [])])
+    controller = window.region
+    first = words[0].lower() if words else ""
+    settings = controller.output_settings()
+
+    if first in ("source", "background", "include", "exclude", "selected", "select"):
+        regions = _region_subset(window, options, first)
+        return controller.render(regions, **_listing_options(options))
+    if first and first != "list":
+        return _region_setting(window, first, [word.lower() for word in words[1:]], settings)
+
+    regions = _region_subset(window, options)
+    return controller.render(regions, **_listing_options(options))
+
+
+def _region_setting(window, what: str, rest: list[str], settings: dict) -> str:
+    """One region setting, by DS9's name for it."""
+    controller = window.region
+    defaults = controller.defaults
+    overlay = getattr(window.image_viewer, "region_overlay", None)
+    font = str(defaults.get("font", "helvetica 10 normal roman")).split()
+    if what == "format":
+        return str(settings["region_format"])
+    if what in ("system", "sky", "skyformat"):
+        return str(settings[what])
+    if what == "strip":
+        return on_off(settings["strip"])
+    if what == "color":
+        return str(defaults.get("color", "green"))
+    if what == "width":
+        return str(defaults.get("width", 1))
+    if what == "font":
+        return str(defaults.get("font_family", font[0]))
+    if what == "fontsize":
+        return str(defaults.get("font_size", font[1] if len(font) > 1 else 10))
+    if what == "fontweight":
+        return font[2] if len(font) > 2 else "normal"
+    if what == "fontslant":
+        return font[3] if len(font) > 3 else "roman"
+    if what in _REGION_FLAGS:
+        attribute = _REGION_FLAGS[what]
+        return on_off(defaults.get(attribute, attribute.startswith("can_")))
+    if what == "shape":
+        mode = getattr(overlay, "mode", None)
+        return str(getattr(mode, "value", mode) or "none")
+    if what == "show":
+        return on_off(overlay is not None and not overlay.isHidden())
+    if what == "showtext":
+        renderer = getattr(overlay, "renderer", None)
+        return on_off(getattr(renderer, "show_labels", True))
+    if what == "epsilon":
+        return str(window.preferences.get("region_epsilon", 3))
+    if what == "centroid":
+        if rest and rest[0] == "radius":
+            return f"{controller.centroid_radius:g}"
+        if rest and rest[0] == "iteration":
+            return str(controller.centroid_iterations)
+        return on_off(controller.auto_centroid)
+    if what == "groups":
+        from ...regions import group_manager
+
+        return " ".join(group_manager.group_names(controller._regions()))
+    raise ValueError(f"regions has no {what} to read")
 
 
 def _region(window, args: list[str]) -> str | None:
-    """DS9's `region`, the useful part of a very long grammar.
+    """DS9's `regions`, the grammar in `ds9/parsers/regionparser.tac`.
 
-    `[<filename>] [load [all] <file>] [save [select] <file>] [list]
-    [delete [select]] [select all|none|invert] [show yes|no] [showtext
-    yes|no] [shape <shape>] [color <color>] [width <n>] [format <format>]
-    [move front|back] [centroid] [group new] [template <file>]`. The rest
-    -- the per-group commands, the marker command language -- is left to
-    the Region menu, where it has a dialog of its own.
+    `[<file>]`, `load [all] <file>`, `save [select] <file>`, `list [select|
+    close]`, `delete [select]`, `delete load <file>`, `select all|none|
+    invert|front|back`, `move front|back`, `show|showtext yes|no`, `format`,
+    `system`, `sky`, `skyformat`, `strip`, `shape`, `color`, `width`,
+    `dash`, `fill`, `font`, `fontsize`, `fontweight`, `fontslant`, the
+    property flags, `include|exclude|source|background`, `centroid [auto
+    yes|no] [radius|iteration <n>]`, `epsilon`, `command`, `composite`,
+    `dissolve`, `template`, `group ...`, `copy`, `cut`, `paste`, `undo`,
+    `open|close`, and the `-format|-system|-sky ...` options before a file.
     """
     from ...regions.region_formats import RegionFormat
 
     controller = window.region
-    words = [str(word) for word in args]
+    words, options = _region_options([str(word) for word in args])
     if not words:
+        if options:
+            # `regions -format ds9 -system wcs` with no file: DS9 takes the
+            # options as the new defaults.
+            return _region_defaults(window, _listing_options(options))
         return "region needs a file or a command"
 
     first = words[0].lower()
     rest = words[1:]
+    lowered = [word.lower() for word in rest]
 
     if first == "load":
-        # `load all <file>` loads into every frame; ours loads into the
-        # current one and says so rather than pretending.
-        append = bool(rest) and rest[0].lower() == "all"
-        paths = rest[1:] if append else rest
+        every = bool(lowered) and lowered[0] == "all"
+        paths = rest[1:] if every else rest
         if not paths:
             return "a region file is needed"
-        return controller.load_file(paths[0], append=False)
+        return _region_load(window, paths, options, every)
 
     if first == "save":
-        selected = bool(rest) and rest[0].lower() == "select"
+        selected = bool(lowered) and lowered[0] == "select"
         paths = rest[1:] if selected else rest
         if not paths:
             return "a file to save to is needed"
-        return controller.save_file(paths[0], selected_only=selected)
+        regions = _region_subset(window, options, "select" if selected else None)
+        if not regions:
+            return "No regions to save"
+        try:
+            text = controller.render(regions, **_listing_options(options))
+            from pathlib import Path
+
+            Path(paths[0]).write_text(text + "\n", encoding="utf-8")
+        except (OSError, ValueError) as exc:
+            return f"Error saving regions: {exc}"
+        return None
 
     if first == "list":
-        selected = bool(rest) and rest[0].lower() == "select"
+        if lowered and lowered[0] == "close":
+            return None
+        selected = bool(lowered) and lowered[0] == "select"
         controller._show_listing(
             controller.selection() if selected else controller._regions(),
             "Selected Regions" if selected else "Regions",
+            modal=False,
         )
         return None
 
     if first == "delete":
-        if rest and rest[0].lower() == "select":
+        if lowered and as_bool(lowered[0]) is not None:
+            return _region_flag(window, "delete", lowered[0])
+        if lowered and lowered[0] == "select":
             controller.delete_selection()
             return None
-        if rest and rest[0].lower() == "load":
-            # DS9's `delete load <file>`: clear, then load.
+        if lowered and lowered[0] == "load":
+            if len(rest) < 2:
+                return "a region file is needed"
             controller.clear_regions()
-            return controller.load_file(rest[1]) if len(rest) > 1 else "a region file is needed"
+            return _region_load(window, rest[1:], options, False)
         controller.clear_regions()
         return None
 
     if first == "select":
-        which = rest[0].lower() if rest else "all"
+        which = lowered[0] if lowered else "all"
         if which in ("all", "none", "invert"):
             getattr(controller, f"select_{which}")()
             return None
         if which in ("front", "back"):
-            getattr(controller, f"bring_{which}" if which == "front" else "send_back")()
+            getattr(controller, "bring_front" if which == "front" else "send_back")()
             return None
         return "select takes all, none, invert, front or back"
 
     if first == "move":
-        if not rest or rest[0].lower() not in ("front", "back"):
+        if not lowered or lowered[0] not in ("front", "back"):
             return "move takes front or back"
-        getattr(controller, f"move_{rest[0].lower()}")()
+        getattr(controller, f"move_{lowered[0]}")()
         return None
 
     if first in ("show", "showtext"):
-        wanted = as_bool(rest[0]) if rest else None
+        wanted = as_bool(lowered[0]) if lowered else None
         if wanted is None:
             return f"{first} takes yes or no"
         if first == "show":
@@ -2735,66 +4099,94 @@ def _region(window, args: list[str]) -> str | None:
     if first == "shape":
         if not rest:
             return "a shape is needed"
-        controller.set_shape(rest[0].lower())
+        from ...ui.widgets.region_overlay import RegionMode
+
+        shape = " ".join(lowered)
+        if not shape.endswith("point") and shape not in {mode.value for mode in RegionMode}:
+            return f"{' '.join(rest)} is not a region shape"
+        controller.set_shape(shape)
         return None
 
     if first == "color":
         if not rest:
             return "a colour is needed"
-        controller.set_color(rest[0].lower())
+        controller.set_color(lowered[0])
         return None
 
-    if first == "width":
+    if first in ("width", "fontsize"):
         try:
-            controller.set_width(int(float(rest[0])))
+            value = int(float(rest[0]))
         except (IndexError, ValueError):
-            return "width takes a number"
-        return None
-
-    if first == "fontsize":
-        try:
-            controller.set_font_size(int(float(rest[0])))
-        except (IndexError, ValueError):
-            return "fontsize takes a number"
+            return f"{first} takes a number"
+        (controller.set_width if first == "width" else controller.set_font_size)(value)
         return None
 
     if first == "font":
         if not rest:
             return "a font is needed"
-        controller.set_font_family(rest[0].lower())
+        controller.set_font_family(lowered[0])
+        return None
+
+    if first in ("fontweight", "fontslant"):
+        allowed = ("normal", "bold") if first == "fontweight" else ("roman", "italic")
+        if not lowered or lowered[0] not in allowed:
+            return f"{first} takes {' or '.join(allowed)}"
+        font = str(controller.defaults.get("font", "helvetica 10 normal roman")).split()
+        font += ["helvetica", "10", "normal", "roman"][len(font) :]
+        font[2 if first == "fontweight" else 3] = lowered[0]
+        controller._apply("font", " ".join(font[:4]), f"Region font: {' '.join(font[:4])}")
+        return None
+
+    if first in _REGION_FLAGS:
+        return _region_flag(window, first, lowered[0] if lowered else "yes")
+
+    if first in ("include", "exclude", "source", "background"):
+        attribute = "include" if first in ("include", "exclude") else "source"
+        controller._apply(attribute, first in ("include", "source"), f"Region {first}")
         return None
 
     if first == "format":
         if not rest:
             return "a format is needed"
         try:
-            window.preferences.set("region_format", RegionFormat(rest[0].lower()).value)
+            window.preferences.set("region_format", RegionFormat(lowered[0]).value)
         except ValueError:
             return f"{rest[0]} is not a region format"
         return None
 
-    if first in ("system", "sky", "skyformat"):
-        # The coordinate system a listing is written in is the window's,
-        # which the WCS menu owns; pointing at it beats a silent no-op.
-        return f"region {first} follows the WCS menu, which sets it for the whole window"
+    if first in ("system", "sky", "skyformat", "strip"):
+        if not rest:
+            return f"region {first} needs a value"
+        return _region_defaults(window, _listing_options({first: rest[0]}))
 
     if first == "centroid":
-        if rest and rest[0].lower() == "auto":
-            wanted = as_bool(rest[1]) if len(rest) > 1 else True
+        if lowered and lowered[0] == "auto":
+            wanted = as_bool(lowered[1]) if len(lowered) > 1 else True
             if wanted is None:
                 return "centroid auto takes yes or no"
             controller.set_auto_centroid(wanted)
             return None
+        if lowered and lowered[0] in ("radius", "iteration"):
+            try:
+                value = float(lowered[1])
+            except (IndexError, ValueError):
+                return f"centroid {lowered[0]} takes a number"
+            if lowered[0] == "radius":
+                controller.centroid_radius = value
+            else:
+                controller.centroid_iterations = max(1, int(value))
+            return None
         controller.centroid()
         return None
 
-    if first == "group" and rest and rest[-1].lower() == "new":
-        controller.new_group()
-        return None
+    if first == "group":
+        return _region_group(window, rest)
 
     if first == "template":
         if not rest:
             return "a template file is needed"
+        if len(lowered) > 1 and lowered[1] == "at":
+            return "placing a template at a position is not implemented; it goes at the image centre"
         controller.load_template(rest[0])
         return None
 
@@ -2821,18 +4213,202 @@ def _region(window, args: list[str]) -> str | None:
         # region file uses, which the parser already reads.
         return _region_command(window, " ".join(rest))
 
+    if first in ("copy", "cut", "paste", "undo"):
+        if first == "undo":
+            window.undo.undo()
+        else:
+            getattr(window.edit, first)()
+        return None
+
+    if first in ("open", "close"):
+        if first == "open":
+            controller._show_listing(controller._regions(), "Regions", modal=False)
+        return None
+
+    if first == "analysis":
+        return "region analysis from XPA is not implemented; use the region's Analysis menu"
+
+    if first in ("groups", "selected"):
+        return f"region {first} is something to read, not to set"
+
     # A bare word is a file to load, which is DS9's first form.
-    return controller.load_file(words[0])
+    return _region_load(window, words, options, False)
+
+
+def _region_defaults(window, settings: dict[str, object]) -> str | None:
+    """Set how regions are written: `regions system wcs`, `-format xy`."""
+    from ...coordinates import ds9_coords
+    from ...regions.region_formats import RegionFormat
+
+    controller = window.region
+    if "region_format" in settings:
+        try:
+            window.preferences.set("region_format", RegionFormat(str(settings["region_format"])).value)
+        except ValueError:
+            return f"{settings['region_format']} is not a region format"
+    system = settings.get("system")
+    if system is not None:
+        if not ds9_coords.is_system(str(system)):
+            return f"{system} is not a coordinate system"
+        controller.output["system"] = system
+    sky = settings.get("sky")
+    if sky is not None:
+        if sky not in ds9_coords.SKY_FRAMES:
+            return f"{sky} is not a sky frame"
+        controller.output["sky"] = sky
+    sky_format = settings.get("skyformat")
+    if sky_format is not None:
+        if sky_format not in ("degrees", "sexagesimal"):
+            return f"{sky_format} is not degrees or sexagesimal"
+        controller.output["skyformat"] = sky_format
+    if "strip" in settings:
+        controller.output["strip"] = bool(settings["strip"])
+    return None
+
+
+def _region_flag(window, name: str, value: str) -> str | None:
+    """One of DS9's yes/no region properties: `dash yes`, `edit no`."""
+    wanted = as_bool(value)
+    if wanted is None:
+        return f"{name} takes yes or no"
+    window.region.set_property(_REGION_FLAGS[name], wanted)
+    return None
+
+
+def _region_load(window, paths: list[str], options: dict[str, str], every: bool) -> str | None:
+    """Load region files, adding to what is there, as DS9's `load` does.
+
+    `load '*.reg'` is expanded here, DS9 doing its own globbing; `load
+    all` loads into every frame; `-format`, `-system` and `-sky` say what
+    a file that does not declare them is written in.
+    """
+    import glob
+    from pathlib import Path
+
+    from ...coordinates.ds9_coords import CoordinateError
+    from ...regions import region_coords
+    from ...regions.region_parser import RegionParser
+
+    files: list[str] = []
+    for path in paths:
+        found = sorted(glob.glob(path)) if any(char in path for char in "*?[") else [path]
+        if not found:
+            return f"no region file matches {path}"
+        files.extend(found)
+
+    system = options.get("system", "").lower()
+    sky = options.get("sky", "").lower()
+    lead = ""
+    if sky:
+        lead = sky
+    elif system:
+        lead = system
+    frames = list(window.frame_manager.frames) if every else [window.frame_manager.current_frame]
+    frames = [frame for frame in frames if frame is not None]
+    if not frames:
+        return "No frame to load regions into"
+
+    for path in files:
+        try:
+            text = Path(path).read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            return f"Error loading regions: {exc}"
+        if options.get("format", "").lower() == "xy":
+            text = "\n".join(
+                f"point({','.join(line.split()[:2])})" for line in text.splitlines() if line.split()
+            )
+        if lead:
+            text = f"{lead}\n{text}"
+        for frame in frames:
+            try:
+                regions = region_coords.place(RegionParser().parse_string(text), frame)
+            except CoordinateError as exc:
+                return f"Error loading regions from {path}: {exc}"
+            except Exception as exc:
+                return f"Error loading regions: {exc}"
+            with window.undo.regions("Load Regions"):
+                frame.regions = [*frame.regions, *regions]
+    window.region.show_frame_regions(window.frame_manager.current_frame)
+    return None
+
+
+def _region_group(window, words: list[str]) -> str | None:
+    """DS9's `regions group ...`: `new`, `<tag> new|select|delete|cut|copy|
+    color <c>|font <f>|move <dx> <dy>|movefront|moveback|property <p>
+    yes|no|update`."""
+    from ...regions import group_manager
+
+    controller = window.region
+    frame = window.frame_manager.current_frame
+    if frame is None:
+        return "no frame"
+    regions = frame.regions
+    lowered = [word.lower() for word in words]
+    if not words:
+        return "group needs new or a group name"
+    if lowered[0] == "new":
+        # DS9 names a new group itself; ours asked in a dialog, which an
+        # XPA caller can never answer.
+        chosen = controller.selection_only()
+        if not chosen:
+            return "select the regions to group first"
+        group_manager.create(chosen, group_manager.default_name(regions))
+        controller.refresh_overlay()
+        return None
+
+    tag, action, rest = words[0], (lowered[1] if len(words) > 1 else ""), words[2:]
+    members = group_manager.regions_in(regions, tag)
+    if action == "new":
+        chosen = controller.selection_only()
+        if not chosen:
+            return "select the regions to group first"
+        group_manager.create(chosen, tag)
+    elif not members:
+        return f"there is no group {tag}"
+    elif action == "select":
+        group_manager.select(regions, tag)
+    elif action in ("delete", "cut"):
+        with window.undo.regions(f"Delete Group {tag}"):
+            frame.regions = [region for region in regions if region not in members]
+        controller.show_frame_regions(frame)
+    elif action == "color" and rest:
+        for region in members:
+            region.color = rest[0]
+    elif action == "move" and len(rest) >= 2:
+        try:
+            dx, dy = float(rest[0]), float(rest[1])
+        except ValueError:
+            return "group move takes two numbers"
+        for region in members:
+            region.move(dx, dy)
+    elif action in ("movefront", "moveback"):
+        others = [region for region in regions if region not in members]
+        frame.regions = [*others, *members] if action == "movefront" else [*members, *others]
+    elif action == "property" and len(rest) >= 2:
+        wanted = as_bool(rest[1])
+        attribute = _REGION_FLAGS.get(rest[0].lower())
+        if wanted is None or attribute is None:
+            return f"group property takes one of {', '.join(_REGION_FLAGS)} and yes or no"
+        for region in members:
+            setattr(region, attribute, wanted)
+    elif action == "update":
+        pass
+    else:
+        return f"group {action} is not implemented"
+    controller.refresh_overlay()
+    return None
 
 
 def _region_command(window, text: str) -> str | None:
     """Add regions written in DS9's own syntax, `region command ...`."""
-    from ...regions.region_parser import RegionParser
+    from ...coordinates.ds9_coords import CoordinateError
 
     if not text.strip():
         return "a region to add is needed"
     try:
-        regions = RegionParser().parse_string(_as_region_file(text))
+        regions = window.region.read(text=_as_region_file(text.strip().strip("{}")))
+    except CoordinateError as exc:
+        return f"could not place that region: {exc}"
     except Exception as exc:
         return f"could not read that region: {exc}"
     if not regions:
@@ -2900,6 +4476,23 @@ def _as_region_file(text: str) -> str:
     return "\n".join(lines)
 
 
+def _colour_frame_text(window, args: list[str]) -> str:
+    """`xpaget ds9 rgb channel|system|view <c>|lock <what>`."""
+    frame = window.frame_manager.current_frame
+    words = [str(word).lower() for word in args]
+    current = str(getattr(frame, "rgb_current_channel", "") or "")
+    if not words or words[0] == "channel":
+        return current
+    if words[0] == "system":
+        return "image"
+    if words[0] == "lock":
+        return NO
+    if words[0] == "view" and len(words) > 1 and frame is not None and getattr(frame, "rgb_channels", None):
+        key = _channel_keys(window, frame).get(words[1], words[1])
+        return on_off(frame.rgb_view.get(key, True))
+    raise ValueError(f"there is no {' '.join(words)} to read")
+
+
 def _colour_frame(window, args: list[str], kind: str) -> str | None:
     """DS9's `rgb`, `hsv` and `hls`: make such a frame, and pick a channel.
 
@@ -2937,7 +4530,6 @@ def _colour_frame(window, args: list[str], kind: str) -> str | None:
         if key is None:
             return f"{rest[0]} is not a channel: {', '.join(sorted(channels))}"
         return controller.set_channel(key)
-        return None
 
     if first == "view":
         if not rest:
@@ -2948,12 +4540,21 @@ def _colour_frame(window, args: list[str], kind: str) -> str | None:
         return _channel_view(window, rest[0].lower(), wanted)
 
     if first == "system":
+        # DS9 aligns the channels through this system. Ours are always
+        # aligned pixel for pixel, so only `image` is honest to accept;
+        # this used to set a frame lock called `wcs`, which does not exist.
         if not rest:
             return "system needs a coordinate system"
-        return _lock(window, ["wcs", rest[0]])
+        if rest[0].lower() == "image":
+            return None
+        return (
+            f"aligning {kind} channels in {rest[0]} coordinates is not implemented; they align by image pixel"
+        )
 
     if first == "lock":
-        return _lock(window, rest)
+        # DS9's `rgb lock scale yes` ties the three channels' settings
+        # together; the channels here carry no lock of their own.
+        return f"locking {kind} channels together is not implemented"
 
     if first in channels:
         return controller.set_channel(first)
@@ -2969,6 +4570,21 @@ def _bin_text(window) -> str:
         f"buffersize {settings.buffer_size} depth {settings.depth} "
         f"cols {' '.join(columns.columns)}"
     )
+
+
+def _bin_table(window) -> dict[str, str]:
+    """DS9's binning settings, as `xpaget ds9 bin <what>` answers them."""
+    settings = window.bin.settings
+    return {
+        "about": "center",
+        "buffersize": str(settings.buffer_size),
+        "cols": " ".join(window.bin.columns.columns),
+        "factor": f"{settings.factor:g} {settings.factor:g}",
+        "depth": str(settings.depth),
+        "filter": settings.filter,
+        "function": settings.function.value,
+        "lock": on_off(window.frame_controller.is_locked("bin")),
+    }
 
 
 def _bin(window, args: list[str]) -> str | None:
@@ -3011,9 +4627,14 @@ def _bin(window, args: list[str]) -> str | None:
 
     if first == "factor":
         try:
-            controller.set_factor(float(rest[0]))
-        except (IndexError, ValueError):
+            factors = [float(word) for word in rest[:2]]
+        except ValueError:
             return "factor takes a number"
+        if not factors:
+            return "factor takes a number"
+        if len(factors) == 2 and factors[0] != factors[1]:
+            return "binning the two axes by different factors is not implemented"
+        controller.set_factor(factors[0])
         return None
 
     if first == "buffersize":
@@ -3365,16 +4986,66 @@ def by_name() -> dict[str, AccessPoint]:
 
 
 def _crosshair(window, args: list[str]) -> str | None:
-    """`crosshair <x> <y>`, or `crosshair lock <system>|none`."""
+    """`crosshair <x> <y> [<coordsys> [<skyframe>]]`, `lock <coordsys>|none`
+    or `match <coordsys>`.
+
+    The position is read in the system named, as DS9 reads it: `crosshair
+    345 58.8 wcs fk5` used to put the crosshair at *pixel* (345, 58.8),
+    and a sexagesimal position was refused. DS9 also switches to crosshair
+    mode when the crosshair is set, which this now does too.
+    """
     words = [str(word) for word in args]
     if words and words[0].lower() == "lock":
         system = words[1].lower() if len(words) > 1 else "wcs"
-        window.crosshair.set_locked(system != "none", system)
+        # Through the frame lock, so `xpaget ds9 lock crosshair` agrees.
+        window.frame_controller.set_lock_scope("crosshair", system)
         return None
     if words and words[0].lower() == "match":
         window.crosshair.match(words[1].lower() if len(words) > 1 else "wcs")
         return None
-    return _cursor(window, words)
+    placed = _image_position(window, words)
+    if isinstance(placed, str):
+        return placed
+    if window.edit_mode != "crosshair":
+        window.edit.set_mode("crosshair")
+    window.crosshair.move_to(*placed)
+    return None
+
+
+def _image_position(window, words: list[str]) -> tuple[float, float] | str:
+    """`<x> <y> [<coordsys> [<skyframe>]]`, as FITS image coordinates.
+
+    Returns:
+        The position, or a message saying what was wrong with it.
+    """
+    from ...coordinates import ds9_coords
+
+    values, system, sky, _format, _unit = ds9_coords.split_system(words)
+    if len(values) < 2:
+        return "an x and a y are needed"
+    try:
+        a, b = ds9_coords.parse_position(values[0], values[1], system, sky)
+        return ds9_coords.to_image(window.frame_manager.current_frame, a, b, system, sky)
+    except ds9_coords.CoordinateError as exc:
+        return f"cannot place a {system} position: {exc}"
+    except ValueError:
+        return f"{values[0]} {values[1]} is not a position"
+
+
+def _position_text(window, x: float, y: float, words: list[str]) -> str:
+    """FITS image coordinates, in the system `words` names -- DS9's
+    `[<coordsys> [<skyframe>] [<skyformat>]]`, physical by default."""
+    from ...coordinates import ds9_coords
+
+    _values, system, sky, sky_format, _unit = ds9_coords.split_system(words)
+    frame = window.frame_manager.current_frame
+    try:
+        a, b = ds9_coords.from_image(frame, x, y, system, sky)
+    except ds9_coords.CoordinateError:
+        return f"{x:g} {y:g}"
+    if not ds9_coords.is_sky_system(system):
+        return f"{a:g} {b:g}"
+    return ds9_coords.format_position(a, b, "wcs", sky, sky_format)
 
 
 def _samp_text(window) -> str:

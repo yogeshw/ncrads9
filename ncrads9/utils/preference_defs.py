@@ -169,12 +169,16 @@ PREFERENCES: tuple[Preference, ...] = (
     _preference("data_directory", "General", "Data directory", "text", ""),
     _preference("export_directory", "General", "Export directory", "text", ""),
     # -- Precision (`PrefsDialogPrecision`) ---------------------------------
+    # DS9's nine precisions and its defaults (`pds9(prec,*)`, `ds9.tcl`).
     _preference("precision_linear", "Precision", "Linear", "int", 8, minimum=1, maximum=17),
-    _preference("precision_degrees", "Precision", "Degrees", "int", 8, minimum=1, maximum=17),
-    _preference("precision_hms", "Precision", "HMS", "int", 3, minimum=1, maximum=17),
-    _preference("precision_dms", "Precision", "DMS", "int", 2, minimum=1, maximum=17),
-    _preference("precision_arcmin", "Precision", "ArcMin", "int", 3, minimum=1, maximum=17),
+    _preference("precision_degrees", "Precision", "Degrees", "int", 7, minimum=1, maximum=17),
+    _preference("precision_hms", "Precision", "HMS", "int", 4, minimum=1, maximum=17),
+    _preference("precision_dms", "Precision", "DMS", "int", 3, minimum=1, maximum=17),
+    _preference("precision_len_linear", "Precision", "Length linear", "int", 8, minimum=1, maximum=17),
+    _preference("precision_len_degrees", "Precision", "Length degrees", "int", 7, minimum=1, maximum=17),
+    _preference("precision_arcmin", "Precision", "ArcMin", "int", 5, minimum=1, maximum=17),
     _preference("precision_arcsec", "Precision", "ArcSec", "int", 3, minimum=1, maximum=17),
+    _preference("precision_angle", "Precision", "Angle", "int", 8, minimum=1, maximum=17),
     # -- Startup (`PrefsDialogStartup`) -------------------------------------
     _preference(
         "startup_layout",

@@ -231,21 +231,24 @@ class IISController(Controller):
         sky: str = "fk5",
         sky_format: str = "degrees",
     ) -> str:
-        """One position, in whichever system was asked for."""
-        if system in ("image", "physical", "amplifier", "detector"):
+        """One position, in whichever system was asked for.
+
+        `x` and `y` are FITS image coordinates, counting from one. Through
+        `ds9_coords`, which knows the WCS counts from zero -- this fed the
+        one-based position straight in, so every sky answer was a pixel
+        off -- and which honours the sky frame and the physical system,
+        both of which this used to ignore.
+        """
+        from ...coordinates import ds9_coords
+
+        try:
+            a, b = ds9_coords.from_image(self.frame, x, y, system, sky)
+        except ds9_coords.CoordinateError:
+            # No WCS: the pixel position is the only answer there is.
             return f"{x:g} {y:g}"
-
-        handler = getattr(self.frame, "wcs_handler", None)
-        if handler is None or not getattr(handler, "is_valid", False):
-            return f"{x:g} {y:g}"
-        longitude, latitude = handler.pixel_to_world(x, y)
-
-        if sky_format.startswith("sex"):
-            from astropy.coordinates import SkyCoord
-
-            coordinate = SkyCoord(longitude, latitude, unit="deg", frame=sky.lower())
-            return coordinate.to_string("hmsdms", sep=":", precision=3)
-        return f"{longitude:.6f} {latitude:.6f}"
+        if not ds9_coords.is_sky_system(system):
+            return f"{a:g} {b:g}"
+        return ds9_coords.format_position(a, b, "wcs", sky, sky_format)
 
     def values(self, x: float, y: float, width: int = 1, height: int = 1) -> str:
         """The pixel values in a box about a position, as DS9's `data` does."""

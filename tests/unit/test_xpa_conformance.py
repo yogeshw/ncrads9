@@ -307,7 +307,7 @@ def test_the_corpus_covers_most_of_ds9s_points(corpus):
 #: Most of what is still refused is a feature we do not have rather than a
 #: bug -- DS9's own search windows, its per-column catalogue editing --
 #: and the report says which.
-ACCEPTED_FLOOR = 935
+ACCEPTED_FLOOR = 1037
 
 
 def test_the_number_accepted_does_not_fall(results, capsys):
