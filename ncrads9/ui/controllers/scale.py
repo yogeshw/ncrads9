@@ -156,6 +156,7 @@ class ScaleController(Controller):
         for name, action in menu.minmax_method_actions.items():
             action.setChecked(settings.method.value == name)
         menu.action_use_datasec.setChecked(settings.use_datasec)
+        self.refresh_dialog()
 
     @staticmethod
     def mode_key(settings: ScaleLimits) -> str:
@@ -486,44 +487,154 @@ class ScaleController(Controller):
     # -- parameters dialog ---------------------------------------------------
 
     def show_dialog(self) -> None:
-        """Show the Scale Parameters dialog."""
-        if self.window.image_data is None:
-            self.status("No image loaded")
-            return
+        """Show the Scale Parameters dialog.
 
+        It opens with or without an image, as DS9's does: its menus work
+        either way, and the plot fills in when an image is loaded.
+        """
         dialog = ScaleDialog(self.window)
         # Connect before showing, so the dialog's Apply button works.
         dialog.scale_changed.connect(self.apply_dialog_params)
         # Modeless, which is the point of an Apply button: adjust the
         # scale and watch the image change behind the dialog.
-        self.show_window(dialog)
+        shown = self.show_window(dialog)
+        if shown is not dialog:
+            shown.sync()
+
+    def open_dialog(self) -> ScaleDialog | None:
+        """The Scale Parameters dialog, if it is on screen."""
+        held = getattr(self.window, "_open_windows", None) or {}
+        dialog = held.get("ScaleDialog")
+        try:
+            if dialog is not None and dialog.isVisible():
+                return dialog
+        except RuntimeError:
+            # Its C++ side has been deleted.
+            held.pop("ScaleDialog", None)
+        return None
+
+    def refresh_dialog(self) -> None:
+        """Bring an open Scale Parameters dialog up to date.
+
+        Called after every redisplay, which is what every change of frame,
+        file, slice, transfer function or limits ends in -- so the dialog
+        never shows a previous frame's limits for Apply to put back.
+        """
+        dialog = self.open_dialog()
+        if dialog is not None:
+            dialog.sync()
 
     def apply_dialog_params(self, params: dict) -> None:
-        """Apply settings from the Scale Parameters dialog."""
-        scale_name = params.get("scale_function", "Linear")
-        if scale_name in DIALOG_SCALES:
-            self.window.current_scale = DIALOG_SCALES[scale_name]
+        """Apply settings from the Scale Parameters dialog.
 
-        if params.get("auto_limits", True):
-            self.window.scale_limits = replace(self.window.scale_limits, mode=LimitMode.MINMAX)
-            self.window.z1 = None
-            self.window.z2 = None
+        Every key is optional and only what is present changes: a dialog
+        that reports just its limits must not reset the transfer function,
+        the mode or the contrast on the way.
+
+        Args:
+            params: Any of `scale_function` (a menu key such as "log", or a
+                full name such as "Histogram Equalization"), `limit_mode`
+                (a Limits-menu key, or "percentile" with `percentile`),
+                `low` and `high` (User limits), `scope`, `minmax_method`,
+                `use_datasec`, `log_exponent` (or `exponent`),
+                `sample_increment`, `contrast` and `bias`. The older
+                `clip_algorithm`, `auto_limits`, `min_value` and
+                `max_value` keys are still understood.
+        """
+        changes: dict = {}
+        messages: list[str] = []
+
+        algorithm = self._dialog_algorithm(params.get("scale_function"))
+        if params.get("scale_function") is not None and algorithm is None:
+            self.status(f"Unknown scale: {params['scale_function']}", 3000)
+            return
+
+        settings = self.settings
+        mode_key = params.get("limit_mode", params.get("clip_algorithm"))
+        low = params.get("low", params.get("min_value"))
+        high = params.get("high", params.get("max_value"))
+        if params.get("auto_limits") is False:
+            mode_key = "user"
+        if mode_key is not None:
+            key = str(mode_key).strip().lower().replace(" ", "")
+            if key == "percentile":
+                key = f"{float(params.get('percentile', params.get('percentile_high', settings.percent))):g}"
+            if key == "user":
+                if low is not None and high is not None:
+                    low, high = sorted((float(low), float(high)))
+                    changes.update(user_low=low, user_high=high)
+                changes["mode"] = LimitMode.USER
+            elif key in LIMIT_MODES:
+                changes["mode"] = LIMIT_MODES[key]
+            else:
+                try:
+                    settings = settings.with_mode(LimitMode.PERCENT, float(key.rstrip("%")))
+                except ValueError as exc:
+                    self.status(f"Unsupported limits: {mode_key} ({exc})", 3000)
+                    return
+                changes.update(mode=LimitMode.PERCENT, percent=settings.percent)
+
+        for name, kind, field in (
+            ("scope", LimitScope, "scope"),
+            ("minmax_method", MinMaxMethod, "method"),
+        ):
+            if params.get(name) is not None:
+                try:
+                    changes[field] = kind(str(params[name]).lower())
+                except ValueError:
+                    self.status(f"Unknown {name.replace('_', ' ')}: {params[name]}", 3000)
+                    return
+        if params.get("use_datasec") is not None:
+            changes["use_datasec"] = bool(params["use_datasec"])
+        if params.get("sample_increment") is not None:
+            changes["sample_increment"] = int(params["sample_increment"])
+        exponent = params.get("log_exponent", params.get("exponent"))
+        if exponent is not None:
+            if not MIN_EXPONENT <= float(exponent) <= MAX_EXPONENT:
+                self.status(f"Log exponent must be between {MIN_EXPONENT} and {MAX_EXPONENT:g}", 3000)
+                return
+            changes["log_exponent"] = float(exponent)
+
+        if algorithm is not None:
+            self.window.current_scale = algorithm
+            if algorithm in BUTTON_LABELS:
+                self.window.button_bar.set_scale(BUTTON_LABELS[algorithm])
+            messages.append(f"Scale: {algorithm.name.lower()}")
+
+        if "contrast" in params or "bias" in params:
+            # Contrast and bias belong to the colour pipeline. The older
+            # dialog's sliders spanned 0-2 with 1.0 neutral for both.
+            contrast = float(params.get("contrast", 1.0))
+            brightness = float(params.get("bias", 1.0)) - 1.0
+            self.window.color.set_contrast_brightness(contrast, brightness)
+
+        if changes:
+            self.window.scale_limits = replace(self.window.scale_limits, **changes)
+            messages.append(f"Limits: {self.settings.describe()}")
+            self.sync()
+            # Recomputes the limits, redisplays and follows Frame -> Lock.
+            self.invalidate()
         else:
-            low = params.get("min_value")
-            high = params.get("max_value")
-            if low is not None and high is not None:
-                self.set_user_limits(low, high)
-
-        # The dialog's contrast slider spans 0-2 with 1.0 neutral; its bias
-        # slider spans the same range but means -1..+1 around zero.
-        contrast = params.get("contrast", 1.0)
-        brightness = params.get("bias", 1.0) - 1.0
-        # Contrast and bias belong to the colour pipeline.
-        self.window.color.set_contrast_brightness(contrast, brightness)
-
-        self.sync()
-        self.refresh()
+            self.sync()
+            self.refresh()
         self.window.frame_controller.persist_view_state()
-        self.status(
-            f"Scale: {scale_name}, Contrast: {contrast:.2f}, Brightness: {brightness:.2f}",
-        )
+        if algorithm is not None:
+            self.window.frame_controller.propagate("scale")
+        if messages:
+            self.status(", ".join(messages))
+
+    @staticmethod
+    def _dialog_algorithm(name: object) -> ScaleAlgorithm | None:
+        """An algorithm from a menu key or a dialog's spelled-out name."""
+        if name is None:
+            return None
+        text = str(name).strip()
+        if text in DIALOG_SCALES:
+            return DIALOG_SCALES[text]
+        key = text.lower()
+        if key in SCALE_ACTIONS:
+            return SCALE_ACTIONS[key]
+        for label, algorithm in DIALOG_SCALES.items():
+            if label.lower() == key:
+                return algorithm
+        return None
