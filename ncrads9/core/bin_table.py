@@ -120,6 +120,9 @@ class BinSettings:
     #: Column units per image pixel. DS9 allows fractions below one, which
     #: oversample; its menu offers only the integers of `BIN_FACTORS`.
     factor: float = 1.0
+    #: DS9's y bin factor, when it differs from x's (`bin factor 4 2`).
+    #: None means the same as `factor`.
+    factor_y: float | None = None
     #: The largest image either axis may have, DS9's `bin(buffersize)`.
     buffer_size: int = DEFAULT_BUFFER_SIZE
     #: Planes along a third column, DS9's `bin(depth)`.
@@ -131,6 +134,21 @@ class BinSettings:
     #: on. None is DS9's "or center of data".
     center: tuple[float, float] | None = None
 
+    @property
+    def factors(self) -> tuple[float, float]:
+        """The x and y bin factors."""
+        return (self.factor, self.factor if self.factor_y is None else self.factor_y)
+
+    def with_factors(self, x: float, y: float) -> BinSettings:
+        """A copy binning x and y by different factors.
+
+        Raises:
+            BinTableError: If either factor is not positive.
+        """
+        if x <= 0 or y <= 0:
+            raise BinTableError(f"bin factors must be positive, got {x} and {y}")
+        return replace(self, factor=float(x), factor_y=None if x == y else float(y))
+
     def with_factor(self, factor: float) -> BinSettings:
         """A copy at a different bin factor.
 
@@ -139,11 +157,13 @@ class BinSettings:
         """
         if factor <= 0:
             raise BinTableError(f"bin factor must be positive, got {factor}")
-        return replace(self, factor=float(factor))
+        return replace(self, factor=float(factor), factor_y=None)
 
     def describe(self) -> str:
         """How the settings read in the status bar."""
-        return f"{self.function.value}, bin {self.factor:g}, buffer {self.buffer_size}"
+        x, y = self.factors
+        shown = f"{x:g}" if x == y else f"{x:g}x{y:g}"
+        return f"{self.function.value}, bin {shown}, buffer {self.buffer_size}"
 
 
 def column_names(hdu: fits.hdu.base.ExtensionHDU) -> tuple[str, ...]:
@@ -241,6 +261,7 @@ def _edges(
     extent: tuple[float, float],
     settings: BinSettings,
     centre: float | None,
+    factor: float | None = None,
 ) -> NDArray[np.floating]:
     """`bin_edges`, about a chosen centre if there is one.
 
@@ -252,7 +273,7 @@ def _edges(
     """
     low, high = extent
     span = high - low + 1.0
-    factor = max(float(settings.factor), 1e-9)
+    factor = max(float(settings.factor if factor is None else factor), 1e-9)
     wanted = max(1, int(round(span / factor)))
     buffer = max(1, int(settings.buffer_size))
     if centre is None and wanted <= buffer:
@@ -363,8 +384,8 @@ def bin_table(
 
     centres = settings.center if settings.center is not None else (None, None)
     edges = [
-        _edges(column_extent(hdu, name, column), settings, centre)
-        for name, column, centre in zip(axes, values, centres, strict=True)
+        _edges(column_extent(hdu, name, column), settings, centre, factor)
+        for name, column, centre, factor in zip(axes, values, centres, settings.factors, strict=True)
     ]
     # numpy accepts explicit bin edges, but its stubs type `bins` as only a
     # count or a sequence of counts, so the pair has to be cast.

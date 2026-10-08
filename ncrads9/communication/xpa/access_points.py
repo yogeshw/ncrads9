@@ -4767,7 +4767,7 @@ def _bin_table(window) -> dict[str, str]:
         "about": "center",
         "buffersize": str(settings.buffer_size),
         "cols": " ".join(window.bin.columns.columns),
-        "factor": f"{settings.factor:g} {settings.factor:g}",
+        "factor": " ".join(f"{value:g}" for value in settings.factors),
         "depth": str(settings.depth),
         "filter": settings.filter,
         "function": settings.function.value,
@@ -4821,7 +4821,7 @@ def _bin(window, args: list[str]) -> str | None:
         if not factors:
             return "factor takes a number"
         if len(factors) == 2 and factors[0] != factors[1]:
-            return "binning the two axes by different factors is not implemented"
+            return controller.set_factors(factors[0], factors[1])
         controller.set_factor(factors[0])
         return None
 

@@ -635,3 +635,25 @@ def test_the_parameters_dialog_bins_about_a_centre_and_stays_open(main_window, q
     dialog.apply()
     assert main_window.bin_settings.center is None
     dialog.close()
+
+
+def test_x_and_y_can_be_binned_by_different_factors(events):
+    square = bin_table(events, settings=BinSettings(factor=2, buffer_size=4096))
+    oblong = bin_table(events, settings=BinSettings(factor=4, factor_y=2, buffer_size=4096))
+    assert oblong.data.shape[0] == square.data.shape[0]
+    assert oblong.data.shape[1] == pytest.approx(square.data.shape[1] / 2, abs=1)
+    assert oblong.data.sum() == pytest.approx(square.data.sum())
+    assert BinSettings(factor=4, factor_y=2).factors == (4.0, 2.0)
+    assert BinSettings(factor=4).factors == (4.0, 4.0)
+
+
+def test_xpa_bin_factor_takes_two(main_window):
+    from ncrads9.communication.xpa.xpa_commands import XPACommands
+
+    main_window.display.load_fits(str(EVENTS))
+    xpa = XPACommands(main_window)
+    assert xpa.handle("bin", {"args": ["factor", "4", "2"]})["status"] == "ok"
+    assert main_window.bin_settings.factors == (4.0, 2.0)
+    assert xpa.handle("bin", {"get": True, "args": ["factor"]})["result"] == "4 2"
+    xpa.handle("bin", {"args": ["factor", "8"]})
+    assert main_window.bin_settings.factors == (8.0, 8.0)

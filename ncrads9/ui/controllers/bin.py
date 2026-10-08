@@ -98,7 +98,7 @@ class BinController(Controller):
         for name, action in self.menu.bin_function_actions.items():
             action.setChecked(settings.function.value == name)
         for factor, action in self.menu.bin_factor_actions.items():
-            action.setChecked(float(factor) == settings.factor)
+            action.setChecked(settings.factors == (float(factor), float(factor)))
         for size, action in self.menu.bin_buffer_actions.items():
             action.setChecked(size == settings.buffer_size)
 
@@ -145,6 +145,19 @@ class BinController(Controller):
         self.sync()
         self.rebin()
         self.status(f"Bin factor: {settings.factor:g}")
+
+    def set_factors(self, x: float, y: float) -> str | None:
+        """Bin x and y by different factors, DS9's `bin factor 4 2`."""
+        try:
+            settings = self.settings.with_factors(x, y)
+        except BinTableError as exc:
+            self.status(str(exc), 3000)
+            return str(exc)
+        self.window.bin_settings = settings
+        self.sync()
+        self.rebin()
+        self.status(f"Bin factor: {x:g} x {y:g}")
+        return None
 
     def set_buffer_size(self, size: int) -> None:
         """Cap the binned image's dimensions."""
@@ -348,8 +361,8 @@ class BinDialog(QDialog):
             grid.addWidget(QLabel(title), 0, column + 1)
         self._x = self._column_box(spec.columns[0] if spec.columns else "")
         self._y = self._column_box(spec.columns[1] if len(spec.columns) > 1 else "")
-        self._factor_x = QLineEdit(f"{settings.factor:g}")
-        self._factor_y = QLineEdit(f"{settings.factor:g}")
+        self._factor_x = QLineEdit(f"{settings.factors[0]:g}")
+        self._factor_y = QLineEdit(f"{settings.factors[1]:g}")
         self._range_labels = {}
         for row, (label, box, factor) in enumerate((("x", self._x, self._factor_x), ("y", self._y, self._factor_y)), 1):
             grid.addWidget(QLabel(label), row, 0)
@@ -477,10 +490,7 @@ class BinDialog(QDialog):
         except ValueError:
             self.message.setText("The bin factors are numbers.")
             return None
-        if fx != fy:
-            self.message.setText("Binning x and y by different factors is not supported.")
-            return None
-        if fx <= 0:
+        if fx <= 0 or fy <= 0:
             self.message.setText("A bin factor is positive.")
             return None
         centre = None
@@ -497,6 +507,7 @@ class BinDialog(QDialog):
         return replace(
             base,
             factor=fx,
+            factor_y=None if fx == fy else fy,
             depth=int(self._depth.value()),
             filter=self._filter.text().strip(),
             center=centre,
