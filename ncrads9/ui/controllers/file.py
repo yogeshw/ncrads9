@@ -1112,17 +1112,30 @@ class FileController(Controller):
         handler = self.window.frame_controller.cube_handler(frame)
         depth = handler.depth(frame.axis_order) if handler is not None else 1
 
+        three_d = self.window.frame_3d.is_three_d(frame)
         if settings is None:
-            chosen = MovieDialog(self.window, is_cube=depth > 1).choose()
+            view = self.window.frame_3d.view(frame)
+            start = {
+                "az": (view.azimuth - 45, view.azimuth + 45),
+                "el": (view.elevation, view.elevation),
+                "sl": (frame.slice_index + 1, frame.slice_index + 1),
+                "zm": (frame.zoom or 1.0, frame.zoom or 1.0),
+            }
+            chosen = MovieDialog(self.window, is_cube=depth > 1, is_three_d=three_d, three_d=start).choose()
             if chosen is None:
                 return False
             settings = chosen
 
-        if settings.get("action") == "3d":
-            self.status("A 3D movie needs the 3D frame of M9-21", 3500)
-            return False
-
-        images = self._slice_images(depth) if settings.get("action") == "slice" else self._frame_images()
+        action = settings.get("action")
+        if action == "3d":
+            if not three_d:
+                self.status("A 3D movie turns a 3D frame; this frame is not one", 3500)
+                return False
+            images = self._three_d_images(frame, settings.get("three_d") or {})
+        elif action == "slice":
+            images = self._slice_images(depth)
+        else:
+            images = self._frame_images()
         if not images:
             self.status("Nothing to make a movie of")
             return False
@@ -1159,6 +1172,60 @@ class FileController(Controller):
 
         self.status(f"Wrote {len(images)} frame(s) to {Path(path).name}", 4000)
         return True
+
+    def _three_d_images(self, frame, params: dict) -> list:
+        """DS9's `Movie3d`: the cube turned, sliced and zoomed step by step.
+
+        `num` steps from each From to each To, inclusive of both ends, as
+        DS9 counts them; then the run again `times` more times, forwards
+        each time for Repeat and back and forth for Oscillate. The frame's
+        own view and slice are put back afterwards.
+        """
+        from ...frames.frame_3d import View3D
+
+        controller = self.window.frame_3d
+        count = max(1, int(params.get("num", 24)))
+
+        def span(key: str, default: float) -> tuple[float, float]:
+            low, high = params.get(key, (default, default))
+            return float(low), float(high)
+
+        az, el, sl, zm = span("az", 0.0), span("el", 0.0), span("sl", frame.slice_index + 1), span("zm", 1.0)
+        kept_view = controller.views.get(frame.frame_id)
+        kept_slice = frame.slice_index
+        scale = controller.view(frame).scale
+        steps = []
+        for step in range(count + 1):
+            t = step / count
+            steps.append(
+                (
+                    az[0] + t * (az[1] - az[0]),
+                    el[0] + t * (el[1] - el[0]),
+                    sl[0] + t * (sl[1] - sl[0]),
+                    zm[0] + t * (zm[1] - zm[0]),
+                )
+            )
+        sequence = []
+        for run in range(int(params.get("times", 0)) + 1):
+            backwards = params.get("repeat") == "oscillate" and run % 2 == 1
+            sequence += list(reversed(steps)) if backwards else steps
+
+        rendered = []
+        try:
+            for azimuth, elevation, slice_number, zoom in sequence:
+                controller.views[frame.frame_id] = View3D(azimuth=azimuth, elevation=elevation, scale=scale)
+                frame.slice_index = max(0, int(slice_number) - 1)
+                image = self.window.display.render_frame_rgb(frame)
+                if image is None:
+                    continue
+                rendered.append(_zoomed(image, zoom))
+        finally:
+            if kept_view is None:
+                controller.views.pop(frame.frame_id, None)
+            else:
+                controller.views[frame.frame_id] = kept_view
+            frame.slice_index = kept_slice
+        return movie.frames_of(rendered)
 
     def _frame_images(self) -> list:
         """One rendered image per active frame, for a frames movie."""
@@ -1307,3 +1374,14 @@ class FileController(Controller):
                 index=index,
             )
         )
+
+
+def _zoomed(image: np.ndarray, zoom: float) -> np.ndarray:
+    """A rendered picture at a zoom, by nearest pixel, as the canvas draws it."""
+    if abs(zoom - 1.0) < 1e-6 or zoom <= 0:
+        return image
+    from PIL import Image
+
+    height, width = image.shape[:2]
+    size = (max(1, round(width * zoom)), max(1, round(height * zoom)))
+    return np.asarray(Image.fromarray(np.ascontiguousarray(image)).resize(size, Image.Resampling.NEAREST))

@@ -2318,18 +2318,81 @@ def _header(window, args: list[str]) -> str | None:
 
 
 def _movie(window, args: list[str]) -> str | None:
-    """`movie <file>`, or `movie slice|frame <file>`."""
+    """DS9's `movie`.
+
+    `movie [slice|frame] [mpeg|gif [<delay>] [blink|fade]] <file>` and
+    `movie 3d [mpeg|gif [<delay>]] <file> [number <n>] [az from|to <deg>]
+    [el from|to <deg>] [slice from|to <n>] [zoom from|to <z>] [oscillate|
+    repeat <n>]`. The action defaults to slice, as DS9's does, and the type
+    to the file's suffix.
+    """
     words = [str(word) for word in args]
+    lowered = [word.lower() for word in words]
     if not words:
         return "a file is needed"
-    action = "frame"
-    if words[0].lower() in ("slice", "frame", "3d"):
-        action = words[0].lower()
-        words = words[1:]
+    action = "slice"
+    if lowered[0] in ("slice", "frame", "3d"):
+        action = lowered.pop(0)
+        words.pop(0)
+    kind = None
+    delay = 10
+    transition = "blink"
+    if lowered and lowered[0] in ("gif", "mpeg"):
+        kind = lowered.pop(0)
+        words.pop(0)
+        if lowered and lowered[0].isdigit():
+            delay = int(lowered.pop(0))
+            words.pop(0)
+        if lowered and lowered[0] in ("blink", "fade"):
+            transition = lowered.pop(0)
+            words.pop(0)
     if not words:
         return "a file is needed"
-    kind = "mpeg" if words[0].lower().endswith((".mpg", ".mp4", ".mpeg")) else "gif"
-    made = window.file.create_movie(words[0], {"type": kind, "action": action, "delay": 10})
+    path = words.pop(0)
+    lowered.pop(0)
+    if kind is None:
+        kind = "mpeg" if path.lower().endswith((".mpg", ".mp4", ".mpeg")) else "gif"
+
+    three_d: dict = {}
+    keys = {"az": "az", "el": "el", "slice": "sl", "zoom": "zm"}
+    try:
+        index = 0
+        while index < len(lowered):
+            word = lowered[index]
+            if word == "number":
+                three_d["num"] = int(float(lowered[index + 1]))
+                index += 2
+            elif word in keys and lowered[index + 1] in ("from", "to"):
+                low, high = three_d.get(keys[word], (None, None))
+                value = float(lowered[index + 2])
+                three_d[keys[word]] = (value, high) if lowered[index + 1] == "from" else (low, value)
+                index += 3
+            elif word in ("oscillate", "repeat"):
+                three_d["repeat"] = word
+                three_d["times"] = int(float(lowered[index + 1]))
+                index += 2
+            else:
+                return f"movie does not take {words[index]}"
+    except (IndexError, ValueError):
+        return "a movie option is missing its value"
+    if three_d and action != "3d":
+        return "those options are for a 3D movie"
+    if action == "3d":
+        frame = window.frame_manager.current_frame
+        view = window.frame_3d.view(frame)
+        defaults = {
+            "az": (view.azimuth - 45, view.azimuth + 45),
+            "el": (view.elevation, view.elevation),
+            "sl": ((frame.slice_index + 1) if frame else 1,) * 2,
+            "zm": (1.0, 1.0),
+        }
+        for key, (low, high) in defaults.items():
+            given = three_d.get(key, (None, None))
+            three_d[key] = (low if given[0] is None else given[0], high if given[1] is None else given[1])
+    made = window.file.create_movie(
+        path,
+        {"type": kind, "action": action, "delay": delay, "transition": transition, "three_d": three_d},
+    )
     return None if made else "the movie could not be written"
 
 
