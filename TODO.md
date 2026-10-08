@@ -1325,17 +1325,29 @@ milestone checked what each one *does*, and compared every DS9 dialog against ou
 - [x] **M10-6** `tests/unit/test_every_menu_action.py` chooses all ~850 menu entries on a loaded
       image and fails if any slot raises.
 
-Still open, in rough order of what a DS9 user would notice:
+The gaps this milestone first left open were then closed, one by one:
 
-- [ ] DS9 `.bck` backups cannot be restored (ours are JSON).
-- [x] RGB dialog Lock menu and `rgb lock <what> yes|no`: Scale, Scale and Limits and Colorbar
-      are shared between channels. Still open: the Align menu (channels align by pixel), 3D movies.
-- [ ] The VO dialog has no site checklist; Plot Tool lacks the Canvas menu; Header has no
-      Find/Print; Prism's plot lacks error columns.
-- [ ] Regions are not rotated between image and sky when north is not up; `wcsa`–`wcsz` in
-      region files are read as the primary WCS.
-- [ ] Zoom, block and bin take one factor for both axes; unequal x/y factors are refused.
-- [ ] Cube axes beyond the third are not offered.
+- [x] **M10-7** DS9 `.bck` backups are restored (`io/session/ds9_backup.py`): the Tcl is
+      split into words and each command DS9's Backup procedures write is translated into the
+      XPA command that does the same -- never evaluated. The magnifier gained DS9's cursor,
+      colour and region overlay on the way, and two frame-switching bugs were fixed (tiled
+      frames kept the previous frame's colours; swapping viewers wrote one frame's colours
+      into another).
+- [x] **M10-8** RGB Align (WCS, the alternates, image, physical; first channel loaded is the
+      key) and the RGB Lock menu; 3D movies with DS9's azimuth, elevation, slice and zoom ranges.
+- [x] **M10-9** The VO window of sites, the Plot Tool's Canvas menu (several graphs, layouts,
+      fonts, colours), Find and Print on the header window, Prism's error columns.
+- [x] **M10-10** Region angles converted between image and sky as DS9 converts them, and
+      `wcsa`..`wcsz` region files read and written.
+- [x] **M10-11** x and y zoomed, blocked and binned by different factors. Ellipses and boxes
+      are now drawn as mapped outlines, so they also turn with a rotated frame.
+- [x] **M10-12** Cube axes beyond the third: a slider each, and `cube axis`.
+
+Still different from DS9, deliberately or for now:
+
+- [ ] Writing a backup in DS9's own Tcl format (ours are JSON; DS9's are read).
+- [ ] An internal web browser and XPA-proxy VO connections (sites open in the system browser).
+- [ ] Amplifier and detector coordinates are treated as physical.
 
 ## Continuous
 
