@@ -600,8 +600,9 @@ class FileController(Controller):
             for key in ("NAXIS3", "NAXIS4", "CRVAL3", "CRPIX3", "CDELT3", "CTYPE3", "CUNIT3"):
                 header.pop(key, None)
 
-        if frame.block_factor and frame.block_factor != 1:
-            header["NCBLOCK"] = (frame.block_factor, "NCRADS9 display block factor")
+        if frame.block_factors != (1, 1):
+            x, y = frame.block_factors
+            header["NCBLOCK"] = (x if x == y else f"{x} {y}", "NCRADS9 display block factor")
         if frame.file_spec:
             # Only the bracket part: the path is already in the filename, and
             # a full specification would overrun a FITS card's 68 characters.

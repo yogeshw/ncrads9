@@ -533,11 +533,11 @@ class DisplayPipeline:
         readout, the regions and the panner in image pixels whatever the
         block is.
         """
-        factor = max(1, int(getattr(frame, "block_factor", 1)))
+        factor, factor_y = frame.block_factors if hasattr(frame, "block_factors") else (1, 1)
         for target in (self.viewer, getattr(self.viewer, "image_viewer", None)):
             setter = getattr(target, "set_block_factor", None)
             if setter is not None:
-                setter(factor)
+                setter(factor, factor_y)
 
     @staticmethod
     def downsample_for_preview(
@@ -655,7 +655,8 @@ class DisplayPipeline:
         source_y = viewer.get_image_size()[1] - 1 - source_top_y
         # Image pixels, as `map_image_to_display_coords` takes them back.
         block = max(1, int(getattr(viewer, "_block_factor", 1)))
-        return (float(source_x) * block, float(source_y) * block)
+        block_y = max(1, int(getattr(viewer, "_block_factor_y", block)))
+        return (float(source_x) * block, float(source_y) * block_y)
 
     def transform_preview(
         self,
@@ -1193,7 +1194,7 @@ class DisplayPipeline:
         # The crop comes first: it is expressed in the frame's own pixels, and
         # blanking before the block keeps its edge where the user drew it.
         image_data = blank_outside(image_data, getattr(frame, "crop", None))
-        image_data = block_image(image_data, getattr(frame, "block_factor", 1))
+        image_data = block_image(image_data, *frame.block_factors)
         if self.window.menu_bar.action_smooth.isChecked():
             return self.window.analysis.apply_smoothing(image_data)
         return image_data

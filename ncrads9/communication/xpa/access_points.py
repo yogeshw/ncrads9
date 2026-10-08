@@ -365,10 +365,10 @@ DISPLAY_POINTS: tuple[AccessPoint, ...] = (
     ),
     AccessPoint(
         "block",
-        get=read("frame_manager.current_frame.block_factor"),
+        get=lambda window: _block_text(window),
         query=_keyed(
             lambda window: {
-                "": str(getattr(window.frame_manager.current_frame, "block_factor", 1)),
+                "": _block_text(window),
                 "lock": on_off(window.frame_controller.block_is_locked()),
             },
             bare="",
@@ -1615,6 +1615,15 @@ def _minmax(window, args: list[str]) -> str | None:
     return f"{args[0]} is not a minmax setting"
 
 
+def _block_text(window) -> str:
+    """`xpaget ds9 block`: one factor, or x and y when they differ."""
+    frame = window.frame_manager.current_frame
+    if frame is None:
+        return "1"
+    x, y = frame.block_factors
+    return str(x) if x == y else f"{x} {y}"
+
+
 def _block(window, args: list[str]) -> str | None:
     """`block <n>`, `block to <n>`, `in`, `out`, `to fit`, `match`, `lock`."""
     analysis = window.analysis
@@ -1622,10 +1631,14 @@ def _block(window, args: list[str]) -> str | None:
     if not words:
         return "a block factor is needed"
 
-    if words[0] in ("open", "close"):
-        # Our Block Parameters is a modal question, which would hold the
-        # XPA reply until somebody answered it; DS9's is a modeless window.
-        return "the block dialog is modal here; set the factor with `block <n>`"
+    if words[0] == "open":
+        analysis.show_block_dialog()
+        return None
+    if words[0] == "close":
+        dialog = (getattr(window, "_open_windows", None) or {}).get("BlockDialog")
+        if dialog is not None:
+            dialog.close()
+        return None
     if words[0] == "in":
         analysis.block_in()
         return None
@@ -1651,11 +1664,9 @@ def _block(window, args: list[str]) -> str | None:
         factors = [int(float(word)) for word in words[:2]]
     except ValueError:
         return f"{' '.join(words[:2])} is not a block factor"
-    if len(factors) == 2 and factors[0] != factors[1]:
-        # DS9 can block the two axes differently; ours blocks both alike,
-        # and taking the first while answering ok was a quiet half-truth.
-        return "blocking the two axes by different factors is not implemented"
-    analysis.set_block(factors[0])
+    if not factors:
+        return "a block factor is needed"
+    analysis.set_block(factors[0], factors[1] if len(factors) == 2 else None)
     return None
 
 

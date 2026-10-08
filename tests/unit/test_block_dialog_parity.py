@@ -50,13 +50,15 @@ def test_apply_blocks_by_any_whole_factor(window, qapp):
     dialog.close()
 
 
-def test_unequal_factors_are_refused(window, qapp):
+def test_x_and_y_may_differ(window, qapp):
     dialog = _dialog(window, qapp)
     dialog.block_x.setText("2")
     dialog.block_y.setText("4")
     dialog.apply()
-    assert window.frame_manager.current_frame.block_factor == 1
-    assert "different" in dialog.message.text()
+    frame = window.frame_manager.current_frame
+    assert frame.block_factors == (2, 4)
+    assert frame.image_data.shape == (64, 64), "block is a display transform"
+    assert window.display.display_image_data(frame).shape == (16, 32)
     dialog.close()
 
 

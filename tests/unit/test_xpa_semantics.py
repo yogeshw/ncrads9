@@ -371,13 +371,17 @@ def test_lock_takes_and_reads_ds9s_names(xpa, window):
     _ok(xpa, "match slicewcs")
 
 
-def test_block_rejects_what_it_cannot_do(xpa, window):
+def test_block_grammar(xpa, window):
     _ok(xpa, "block 4")
     assert _frame(window).block_factor == 4
     _ok(xpa, "block 2 2")
     assert _get(xpa, "block") == "2"
-    _refused(xpa, "block 4 2")
-    assert _frame(window).block_factor == 2
+    # DS9 blocks x and y apart; so do we now.
+    _ok(xpa, "block 4 2")
+    assert _frame(window).block_factors == (4, 2)
+    assert _get(xpa, "block") == "4 2"
+    _ok(xpa, "block to 2")
+    assert _frame(window).block_factors == (2, 2)
     _ok(xpa, "block lock yes")
     assert _get(xpa, "block lock") == "yes"
 

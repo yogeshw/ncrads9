@@ -191,6 +191,8 @@ class RegionOverlay(QWidget):
         #: Image pixels per pixel of the array being drawn, under DS9's
         #: Block. Regions are stored in image pixels regardless.
         self.block_factor: int = 1
+        #: The y block factor, when it differs from x's.
+        self.block_factor_y: int | None = None
         self.rotation: float = 0.0
         self.flip_x: bool = False
         self.flip_y: bool = False
@@ -313,16 +315,18 @@ class RegionOverlay(QWidget):
             img_y = source_top_y
         img_x = source_x
         block = max(1, self.block_factor)
-        return QPointF(img_x * block, img_y * block)
+        return QPointF(img_x * block, img_y * self._block_y())
+
+    def _block_y(self) -> int:
+        return max(1, self.block_factor if self.block_factor_y is None else self.block_factor_y)
 
     def _image_to_widget_coords(self, image_point: QPointF) -> QPointF:
         """Convert image coordinates to widget coordinates.
 
         The inverse of `_widget_to_image_coords`, so Block is applied here.
         """
-        block = max(1, self.block_factor)
-        source_x = image_point.x() / block
-        source_y = image_point.y() / block
+        source_x = image_point.x() / max(1, self.block_factor)
+        source_y = image_point.y() / self._block_y()
         if self.image_height > 0:
             source_top_y = self.image_height - 1 - source_y
         else:

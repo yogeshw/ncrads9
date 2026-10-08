@@ -20,8 +20,7 @@ DS9's Block Parameters window (`BlockDialog`, `block.tcl`).
 File (Apply, Close) and Block menus over a Block row of two entries, x and
 y, with Apply and Close. The Block menu holds the main window's own Block
 In, Block Out, Block Fit and preset actions, so a tick in one is a tick in
-the other. NCRADS9 blocks both axes together, so two different factors
-are refused rather than half applied.
+the other. x and y may be blocked by different factors, as in DS9.
 
 Author: Yogesh Wadadekar
 """
@@ -53,10 +52,10 @@ class BlockDialog(QDialog):
         factor: The block factor in force.
     """
 
-    #: Apply: the factor to block by.
-    block_requested = pyqtSignal(int)
+    #: Apply: the x and y factors to block by.
+    block_requested = pyqtSignal(int, int)
 
-    def __init__(self, parent: Any | None = None, factor: int = 1) -> None:
+    def __init__(self, parent: Any | None = None, factor: int = 1, factor_y: int | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Block Parameters")
         make_modeless(self)
@@ -82,7 +81,7 @@ class BlockDialog(QDialog):
             button.clicked.connect(lambda _checked=False, s=slot: s())
             buttons.addWidget(button)
         layout.addLayout(buttons)
-        self.set_factor(factor)
+        self.set_factor(factor, factor_y)
 
     def _build_menus(self, menu) -> QMenuBar:
         bar = QMenuBar(self)
@@ -102,30 +101,27 @@ class BlockDialog(QDialog):
                 block_menu.addAction(action)
         return bar
 
-    def set_factor(self, factor: int) -> None:
-        """Show the factor in force."""
+    def set_factor(self, factor: int, factor_y: int | None = None) -> None:
+        """Show the factors in force."""
         self.block_x.setText(str(int(factor)))
-        self.block_y.setText(str(int(factor)))
+        self.block_y.setText(str(int(factor if factor_y is None else factor_y)))
         self.message.clear()
 
-    def factor(self) -> int | None:
-        """The factor typed, or None (and a message) if it cannot be used."""
+    def factors(self) -> tuple[int, int] | None:
+        """The factors typed, or None (and a message) if they cannot be used."""
         try:
             x, y = int(self.block_x.text()), int(self.block_y.text())
         except ValueError:
             self.message.setText("The block factors are whole numbers.")
             return None
-        if x != y:
-            self.message.setText("Blocking x and y by different factors is not supported.")
-            return None
-        if x < 1:
+        if x < 1 or y < 1:
             self.message.setText("A block factor is at least 1.")
             return None
         self.message.clear()
-        return x
+        return x, y
 
     def apply(self) -> None:
-        """DS9's Apply: block by the factor typed."""
-        factor = self.factor()
-        if factor is not None:
-            self.block_requested.emit(factor)
+        """DS9's Apply: block by the factors typed."""
+        factors = self.factors()
+        if factors is not None:
+            self.block_requested.emit(*factors)

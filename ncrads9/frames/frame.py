@@ -89,6 +89,9 @@ class Frame:
     #: full resolution and the render pipeline reduces a copy. Called
     #: `bin_factor` before M5, which conflated it with bin-table binning.
     block_factor: int = 1
+    #: DS9's y block factor, when it differs from x's (`block 4 2`). None
+    #: means the same as `block_factor`.
+    block_factor_y: int | None = None
     colormap: str = "grey"
     scale: ScaleAlgorithm = ScaleAlgorithm.LINEAR
     invert_colormap: bool = False
@@ -228,6 +231,12 @@ class Frame:
             self.rgb_headers[channel] = None
             self.rgb_channels[channel] = None
         self.rgb_key = None
+
+    @property
+    def block_factors(self) -> tuple[int, int]:
+        """The x and y block factors."""
+        x = max(1, int(self.block_factor))
+        return (x, x if self.block_factor_y is None else max(1, int(self.block_factor_y)))
 
     def wcs_for(self, key: str = "") -> object | None:
         """The handler for one of the frame's WCS descriptions.

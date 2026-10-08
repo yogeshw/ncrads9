@@ -67,6 +67,8 @@ class ImageViewer(QLabel):
         self._source_pixmap: QPixmap | None = None
         #: Image pixels per pixel of the shown array, under DS9's Block.
         self._block_factor: int = 1
+        #: DS9's y block factor, when it differs from x's.
+        self._block_factor_y: int = 1
         self._transform_cache_key: tuple[int, float, bool, bool] | None = None
         #: The zoom the displayed pixmap was scaled to, so an unchanged zoom
         #: does not rescale it on every repaint.
@@ -320,7 +322,7 @@ class ImageViewer(QLabel):
         """Convert a mouse event position to image pixel coordinates."""
         return self.map_widget_to_image_coords(event.position().x(), event.position().y())
 
-    def set_block_factor(self, factor: int) -> None:
+    def set_block_factor(self, factor: int, factor_y: int | None = None) -> None:
         """Say how many image pixels one pixel of the shown array holds.
 
         The widget works in the units of whatever array it was handed, so
@@ -330,6 +332,7 @@ class ImageViewer(QLabel):
         functions below.
         """
         self._block_factor = max(1, int(factor))
+        self._block_factor_y = max(1, int(factor if factor_y is None else factor_y))
 
     def map_widget_to_image_coords(self, x: float, y: float) -> tuple[int, int] | None:
         """Convert widget coordinates to source image coordinates.
@@ -348,9 +351,8 @@ class ImageViewer(QLabel):
         transform = self.get_view_transform()
         source_x, source_y = transform.display_to_source(display_x, display_y)
         if 0 <= source_x < self._source_pixmap.width() and 0 <= source_y < self._source_pixmap.height():
-            block = self._block_factor
-            img_x = int(source_x * block)
-            img_y = int((self._source_pixmap.height() - 1 - source_y) * block)
+            img_x = int(source_x * self._block_factor)
+            img_y = int((self._source_pixmap.height() - 1 - source_y) * self._block_factor_y)
             return (img_x, img_y)
         return None
 
@@ -361,7 +363,6 @@ class ImageViewer(QLabel):
         """
         if self._source_pixmap is None:
             return None
-        block = self._block_factor
-        source_x = float(x) / block
-        source_top_y = self._source_pixmap.height() - 1 - float(y) / block
+        source_x = float(x) / self._block_factor
+        source_top_y = self._source_pixmap.height() - 1 - float(y) / self._block_factor_y
         return self.get_view_transform().source_to_display(source_x, source_top_y)

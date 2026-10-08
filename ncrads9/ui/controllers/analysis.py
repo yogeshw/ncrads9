@@ -238,10 +238,10 @@ class AnalysisController(Controller):
         from ..dialogs.block_dialog import BlockDialog
 
         frame = self.frames.current_frame
-        current = getattr(frame, "block_factor", 1) if frame else 1
-        dialog = BlockDialog(self.window, int(current))
-        # Any whole factor, as DS9's dialog takes; the menu offers presets.
-        dialog.block_requested.connect(lambda factor: (self.set_block(factor), self.log_command(f"block {factor}")))
+        x, y = frame.block_factors if frame is not None else (1, 1)
+        dialog = BlockDialog(self.window, x, y)
+        # Any whole factors, as DS9's dialog takes; the menu offers presets.
+        dialog.block_requested.connect(lambda bx, by: (self.set_block(bx, by), self.log_command(f"block {bx} {by}")))
         self.show_window(dialog)
 
     def refresh_block_dialog(self) -> None:
@@ -251,7 +251,7 @@ class AnalysisController(Controller):
         if dialog is None or frame is None:
             return
         try:
-            dialog.set_factor(getattr(frame, "block_factor", 1))
+            dialog.set_factor(*frame.block_factors)
         except RuntimeError:
             # Already destroyed.
             pass
@@ -753,7 +753,7 @@ class AnalysisController(Controller):
         """
         self.sync_block_menu(factor)
 
-    def set_block(self, factor: int) -> None:
+    def set_block(self, factor: int, factor_y: int | None = None) -> None:
         """Set the display block factor for the current frame.
 
         Block reduces how much data is *drawn*, not what the frame holds:
@@ -773,6 +773,8 @@ class AnalysisController(Controller):
             return
 
         frame.block_factor = max(1, int(factor))
+        # DS9's `block 4 2`: y apart from x; None keeps the two together.
+        frame.block_factor_y = None if factor_y is None or int(factor_y) == frame.block_factor else max(1, int(factor_y))
         self.window.current_bin = frame.block_factor
         self.refresh_block_dialog()
         # Blocking averages pixels together, which narrows the distribution,
@@ -785,12 +787,14 @@ class AnalysisController(Controller):
         if self.window.frame_controller.block_is_locked():
             for other in self.frames.frames:
                 other.block_factor = frame.block_factor
+                other.block_factor_y = frame.block_factor_y
 
         self.sync_bin_menu(frame.block_factor)
         self.window.display.display()
         height, width = frame.image_data.shape[:2]
         self.status_bar.update_image_info(width, height)
-        self.status(f"Block: {frame.block_factor}x{frame.block_factor}", 2000)
+        bx, by = frame.block_factors
+        self.status(f"Block: {bx}x{by}", 2000)
 
     def set_bin(self, factor: int) -> None:
         """Set the display block factor. Kept for XPA and the older callers.
@@ -1225,7 +1229,7 @@ class AnalysisController(Controller):
         dash = str(settings.get("line_style", "Solid")).lower() != "solid"
         # Contours are traced on the displayed, possibly blocked, pixels;
         # regions live on the unblocked image.
-        block = max(1, int(getattr(frame, "block_factor", 1) or 1))
+        block, block_y = frame.block_factors
         made = []
         for level_paths in paths:
             for path in level_paths:
@@ -1238,7 +1242,7 @@ class AnalysisController(Controller):
                     points = points[:-1]
                 if points.shape[0] < 3:
                     continue
-                vertices = [(float(x) * block, float(y) * block) for x, y in points]
+                vertices = [(float(x) * block, float(y) * block_y) for x, y in points]
                 polygon = Polygon(vertices=vertices, color=color, width=width)
                 if dash:
                     polygon.dash = True

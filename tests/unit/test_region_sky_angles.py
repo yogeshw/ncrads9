@@ -98,7 +98,7 @@ def test_an_ellipse_round_trips_through_fk5_on_a_turned_image():
     back = region_coords.place(RegionParser().parse_string(text), frame)[0]
     assert back.angle == pytest.approx(12.0, abs=0.01)
     assert back.center[0] == pytest.approx(30.0, abs=1e-3)
-    written = [line for line in text.splitlines() if line.startswith("ellipse")][0]
+    written = next(line for line in text.splitlines() if line.startswith("ellipse"))
     assert float(written.rstrip(")").split(",")[-1]) != pytest.approx(12.0, abs=0.5)
 
 

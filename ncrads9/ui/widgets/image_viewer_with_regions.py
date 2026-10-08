@@ -123,15 +123,18 @@ class ImageViewerWithRegions(QWidget):
         self.image_viewer.clear_image()
         self._update_overlay_geometry()
 
-    def set_block_factor(self, factor: int) -> None:
-        """Pass DS9's Block factor to the viewer and its region overlay.
+    def set_block_factor(self, factor: int, factor_y: int | None = None) -> None:
+        """Pass DS9's Block factors to the viewer and its region overlay.
 
         Both map between widget and image coordinates, and both must agree on
-        how many image pixels one drawn pixel holds.
+        how many image pixels one drawn pixel holds, along each axis.
         """
         block = max(1, int(factor))
-        self.image_viewer.set_block_factor(block)
+        block_y = max(1, int(factor if factor_y is None else factor_y))
+        self.image_viewer.set_block_factor(block, block_y)
         self.region_overlay.block_factor = block
+        # Only when it differs, so the overlay's y follows its x otherwise.
+        self.region_overlay.block_factor_y = None if block_y == block else block_y
         self.region_overlay.update()
 
     def set_region_mode(self, mode: RegionMode) -> None:

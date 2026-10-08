@@ -49,6 +49,7 @@ from .base import Controller
 #: The frame fields that are plain values and restore by being set back.
 FRAME_FIELDS: tuple[str, ...] = (
     "block_factor",
+    "block_factor_y",
     "colormap",
     "invert_colormap",
     "z1",

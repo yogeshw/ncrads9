@@ -43,38 +43,42 @@ from numpy.typing import NDArray
 def block_image(
     data: NDArray[np.floating] | None,
     factor: int = 1,
+    factor_y: int | None = None,
 ) -> NDArray[np.floating] | None:
-    """Average `factor` by `factor` squares of pixels into one.
+    """Average `factor` by `factor_y` rectangles of pixels into one.
 
     Args:
         data: The image. A cube is blocked in its two image axes only, the
             others being left alone.
-        factor: Image pixels per output pixel along each axis. One, or
-            anything smaller, returns the input unchanged and uncopied.
+        factor: Image pixels per output pixel along x. One, or anything
+            smaller, returns the input unchanged and uncopied along x.
+        factor_y: The same along y, DS9's `block 4 2`; the x factor when
+            not given.
 
     Returns:
         The reduced image, or the input itself when there is nothing to do.
-        Any partial square at the top or right edge is dropped rather than
+        Any partial rectangle at the top or right edge is dropped rather than
         averaged over fewer pixels, which is what DS9 does; a factor larger
         than the image therefore returns the input rather than nothing.
 
     The average ignores NaN, so a blocked pixel overlapping blank data takes
     the mean of the real pixels rather than becoming blank itself.
     """
-    factor = int(factor)
-    if data is None or factor <= 1 or data.ndim < 2:
+    fx = max(1, int(factor))
+    fy = max(1, int(factor if factor_y is None else factor_y))
+    if data is None or (fx == 1 and fy == 1) or data.ndim < 2:
         return data
 
     height, width = data.shape[-2], data.shape[-1]
-    rows, columns = height // factor, width // factor
+    rows, columns = height // fy, width // fx
     if rows < 1 or columns < 1:
         return data
 
-    trimmed = data[..., : rows * factor, : columns * factor]
-    reshaped = trimmed.reshape(*trimmed.shape[:-2], rows, factor, columns, factor)
+    trimmed = data[..., : rows * fy, : columns * fx]
+    reshaped = trimmed.reshape(*trimmed.shape[:-2], rows, fy, columns, fx)
     with warnings.catch_warnings():
-        # A square that is entirely blank averages to NaN, which is the right
-        # answer; numpy warns about it, and the warning is not news.
+        # A rectangle that is entirely blank averages to NaN, which is the
+        # right answer; numpy warns about it, and the warning is not news.
         warnings.filterwarnings("ignore", "Mean of empty slice", RuntimeWarning)
         blocked = np.nanmean(reshaped, axis=(-3, -1))
     return np.asarray(blocked, dtype=np.float32)

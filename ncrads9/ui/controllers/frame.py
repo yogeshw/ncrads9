@@ -187,6 +187,7 @@ class FrameController(Controller):
     def reset_view_defaults(self, frame: Frame) -> None:
         """Reset a frame's display state to defaults."""
         frame.block_factor = 1
+        frame.block_factor_y = None
         frame.colormap = self.window._default_colormap
         frame.scale = ScaleAlgorithm.LINEAR
         frame.invert_colormap = False
@@ -1765,6 +1766,7 @@ class FrameController(Controller):
         for frame in self.frames.frames:
             if frame is not source:
                 frame.block_factor = source.block_factor
+                frame.block_factor_y = source.block_factor_y
         self.window.display.display()
         self.status(f"Matched frames (block {source.block_factor})", 2000)
 
