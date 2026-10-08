@@ -97,6 +97,7 @@ class HeaderDialog(QDialog):
     def _setup_ui(self) -> None:
         """Set up the dialog UI."""
         layout = QVBoxLayout(self)
+        layout.setMenuBar(self._build_menus())
 
         # Extension selector
         ext_layout = QHBoxLayout()
@@ -142,6 +143,85 @@ class HeaderDialog(QDialog):
         button_layout.addWidget(close_btn)
 
         layout.addLayout(button_layout)
+
+    def _build_menus(self):
+        """DS9's text window menus (`SimpleTextDialog`): File and Edit."""
+        from PyQt6.QtGui import QAction, QKeySequence
+        from PyQt6.QtWidgets import QMenuBar
+
+        bar = QMenuBar(self)
+
+        def add(menu, label: str, slot, key=None) -> QAction:
+            action = QAction(label, self)
+            if key is not None:
+                action.setShortcut(QKeySequence(key))
+            action.triggered.connect(lambda _checked=False: slot())
+            menu.addAction(action)
+            return action
+
+        file_menu = bar.addMenu("&File")
+        add(file_menu, "Save...", self._save_to_file, QKeySequence.StandardKey.Save)
+        file_menu.addSeparator()
+        add(file_menu, "Print...", self.print_header, QKeySequence.StandardKey.Print)
+        file_menu.addSeparator()
+        add(file_menu, "Close", self.close, QKeySequence.StandardKey.Close)
+
+        edit_menu = bar.addMenu("&Edit")
+        add(edit_menu, "Copy", self._copy_selection, QKeySequence.StandardKey.Copy)
+        edit_menu.addSeparator()
+        add(edit_menu, "Find...", self.ask_find, QKeySequence.StandardKey.Find)
+        add(edit_menu, "Find Next", self.find_next, QKeySequence.StandardKey.FindNext)
+        return bar
+
+    # -- find and print ------------------------------------------------------
+
+    def find(self, text: str) -> bool:
+        """DS9's Find: select the next occurrence after the cursor, wrapping.
+
+        Unlike the Search box, which filters the card list down, this keeps
+        every card on screen and moves to the match, as DS9's does.
+        """
+        self._find_text = text
+        return self.find_next()
+
+    def find_next(self) -> bool:
+        """DS9's Find Next: the occurrence after the last one found."""
+        text = getattr(self, "_find_text", "")
+        if not text:
+            return False
+        if self._header_text.find(text):
+            return True
+        # Wrap round to the top, as DS9's does.
+        cursor = self._header_text.textCursor()
+        cursor.movePosition(cursor.MoveOperation.Start)
+        self._header_text.setTextCursor(cursor)
+        return self._header_text.find(text)
+
+    def ask_find(self) -> None:
+        """Prompt for what to find."""
+        from PyQt6.QtWidgets import QInputDialog
+
+        text, ok = QInputDialog.getText(self, "Find", "Find:", text=getattr(self, "_find_text", ""))
+        if ok and text:
+            self.find(text)
+
+    def _copy_selection(self) -> None:
+        """Copy the selection, or the whole header when nothing is selected."""
+        if self._header_text.textCursor().hasSelection():
+            self._header_text.copy()
+        else:
+            self._copy_to_clipboard()
+
+    def print_header(self, printer=None) -> bool:
+        """DS9's Print: the header on paper, in its fixed-width font."""
+        from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
+
+        if printer is None:
+            printer = QPrinter()
+            if QPrintDialog(printer, self).exec() != QPrintDialog.DialogCode.Accepted:
+                return False
+        self._header_text.document().print(printer)
+        return True
 
     def _populate_header(self) -> None:
         """Populate the header text display.
