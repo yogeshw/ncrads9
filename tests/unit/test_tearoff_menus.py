@@ -361,9 +361,11 @@ def test_a_menu_bar_kept_in_a_layout_is_found(window, qapp):
 
 
 def test_a_window_with_no_menus_is_harmless(window, qapp):
-    from ncrads9.ui.dialogs.header_dialog import HeaderDialog
+    # The header window used to be the example; it has DS9's File and
+    # Edit menus now, so a bare window stands in.
+    from PyQt6.QtWidgets import QDialog
 
-    header = HeaderDialog(None, window)
+    header = QDialog(window)
     header.show()
     qapp.processEvents()
     assert list(tearoff.menus(header)) == []

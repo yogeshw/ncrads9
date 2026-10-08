@@ -578,9 +578,9 @@ def test_a_slice_movie_puts_the_slice_back(main_window, tmp_path):
     assert main_window.frame_manager.current_frame.slice_index == 2
 
 
-def test_a_3d_movie_says_which_milestone_it_needs(main_window, tmp_path):
+def test_a_3d_movie_needs_a_3d_frame(main_window, tmp_path):
     assert main_window.file.create_movie(str(tmp_path / "m.gif"), {"type": "gif", "action": "3d"}) is False
-    assert "M9-21" in main_window.status_bar.currentMessage()
+    assert "3D frame" in main_window.status_bar.currentMessage()
 
 
 def test_a_movie_of_an_empty_frame_is_refused(main_window, tmp_path):
@@ -634,5 +634,7 @@ def test_the_dialogs_settings_are_what_the_movie_takes(main_window):
     dialog = MovieDialog(main_window)
     dialog._fade.setChecked(True)
     settings = dialog.settings()
+    three_d = settings.pop("three_d")
     assert settings == {"type": "gif", "action": "frame", "transition": "fade", "delay": 10}
+    assert three_d["num"] > 0 and three_d["repeat"] == "repeat"
     dialog.close()
