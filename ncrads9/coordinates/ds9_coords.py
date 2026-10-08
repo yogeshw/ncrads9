@@ -103,12 +103,28 @@ def physical_of(frame) -> PhysicalTransform:
     return PhysicalTransform() if header is None else PhysicalTransform.from_header(header)
 
 
-def wcs_of(frame):
-    """A frame's usable WCS handler, or None."""
-    handler = getattr(frame, "wcs_handler", None) if frame is not None else None
+def wcs_of(frame, system: str = "wcs"):
+    """A frame's usable WCS handler for a system, or None.
+
+    `wcs` is the primary description; `wcsa`..`wcsz` the alternates, which
+    the frame builds and caches (`Frame.wcs_for`).
+    """
+    if frame is None:
+        return None
+    system = str(system or "wcs").lower()
+    if system not in ("wcs", "") and len(system) == 4 and system.startswith("wcs") and hasattr(frame, "wcs_for"):
+        handler = frame.wcs_for(system)
+    else:
+        handler = getattr(frame, "wcs_handler", None)
     if handler is None or not getattr(handler, "is_valid", False):
         return None
     return handler
+
+
+def _wcs_name(system: str) -> str:
+    """The WCS a system names: itself for `wcsa`..`wcsz`, else the primary."""
+    system = str(system).lower()
+    return system if len(system) == 4 and system.startswith("wcs") and system[3].isalpha() else "wcs"
 
 
 def _astropy_frame(name: str):
@@ -185,9 +201,9 @@ def to_image(frame, a: float, b: float, system: str = "image", sky: str = "fk5")
         return physical_of(frame).physical_to_image(float(a), float(b))
     if system in PIXEL_SYSTEMS:
         return (float(a), float(b))
-    handler = wcs_of(frame)
+    handler = wcs_of(frame, _wcs_name(system))
     if handler is None:
-        raise CoordinateError("the frame has no WCS")
+        raise CoordinateError(f"the frame has no {_wcs_name(system)}")
     longitude, latitude = _convert_sky(float(a), float(b), str(sky).lower(), _native_name(handler))
     x, y = handler.world_to_pixel(longitude, latitude)
     return (float(x) + 1.0, float(y) + 1.0)
@@ -208,9 +224,9 @@ def from_image(frame, x: float, y: float, system: str = "image", sky: str = "fk5
         return physical_of(frame).image_to_physical(float(x), float(y))
     if system in PIXEL_SYSTEMS:
         return (float(x), float(y))
-    handler = wcs_of(frame)
+    handler = wcs_of(frame, _wcs_name(system))
     if handler is None:
-        raise CoordinateError("the frame has no WCS")
+        raise CoordinateError(f"the frame has no {_wcs_name(system)}")
     longitude, latitude = handler.pixel_to_world(float(x) - 1.0, float(y) - 1.0)
     return _convert_sky(float(longitude), float(latitude), _native_name(handler), str(sky).lower())
 
@@ -331,13 +347,13 @@ def _linear(value: float, significant: int) -> str:
 # -- lengths -------------------------------------------------------------------------
 
 
-def pixel_scale(frame) -> float:
+def pixel_scale(frame, system: str = "wcs") -> float:
     """How many degrees one image pixel spans, on average over both axes.
 
     Raises:
         CoordinateError: If the frame has no WCS.
     """
-    handler = wcs_of(frame)
+    handler = wcs_of(frame, _wcs_name(system))
     if handler is None:
         raise CoordinateError("the frame has no WCS")
     from astropy.wcs.utils import proj_plane_pixel_scales
@@ -357,7 +373,7 @@ def length_to_image(frame, value: float, system: str = "image", unit: str | None
     system = str(system).lower()
     if is_sky_system(system):
         degrees = float(value) * ANGLE_UNITS.get(unit or "degrees", 1.0)
-        return degrees / pixel_scale(frame)
+        return degrees / pixel_scale(frame, system)
     if system == "physical":
         transform = physical_of(frame)
         return float(value) * abs(transform.ltm1)
@@ -368,9 +384,74 @@ def image_length_to(frame, value: float, system: str = "image", unit: str | None
     """A length in image pixels, in some other system: the inverse of the above."""
     system = str(system).lower()
     if is_sky_system(system):
-        degrees = float(value) * pixel_scale(frame)
+        degrees = float(value) * pixel_scale(frame, system)
         return degrees / ANGLE_UNITS.get(unit or "degrees", 1.0)
     if system == "physical":
         transform = physical_of(frame)
         return float(value) / abs(transform.ltm1)
     return float(value)
+
+
+# -- angles ------------------------------------------------------------------------
+
+
+def _sky_axes(frame, x: float, y: float, system: str, sky: str) -> tuple[float, bool]:
+    """Where west points in the image at a position, and the sky's handedness.
+
+    Returns:
+        The image angle of the local west direction in the sky frame, in
+        degrees, and whether the sky is seen the usual way round -- east
+        to the left of north, as on a normal astronomical image.
+    """
+    step = 1.0 / 3600.0
+    lon, lat = from_image(frame, x, y, system, sky)
+    scale = max(math.cos(math.radians(lat)), 1e-6)
+    north = to_image(frame, lon, min(lat + step, 90.0), system, sky)
+    west = to_image(frame, lon - step / scale, lat, system, sky)
+    wx, wy = west[0] - x, west[1] - y
+    nx, ny = north[0] - x, north[1] - y
+    return math.degrees(math.atan2(wy, wx)), (wx * ny - wy * nx) > 0
+
+
+def sky_is_usual(frame, x: float, y: float, system: str, sky: str) -> bool:
+    """Whether east is to the left of north at a position, as on a normal image."""
+    try:
+        return _sky_axes(frame, x, y, system, sky)[1]
+    except CoordinateError:
+        return True
+
+
+def image_angle_to(frame, angle: float, x: float, y: float, system: str = "image", sky: str = "fk5") -> float:
+    """A region's angle on the image, as DS9 writes it in a system.
+
+    In image and physical coordinates the angle is measured from the x
+    axis, as on the image. In a sky system DS9 measures it from the local
+    west direction towards north (`Base::mapAngleFromRef`), which for an
+    image with north up and east left is the same thing; for a turned image
+    the turn is taken out, and for one with east to the right the sense is
+    reversed.
+
+    Args:
+        angle: Degrees, on the image.
+        x, y: Where the region is, in image coordinates: the sky turns
+            across a wide field.
+    """
+    if not is_sky_system(system) and system not in SKY_FRAMES:
+        return float(angle) % 360.0
+    try:
+        west, usual = _sky_axes(frame, x, y, system, sky)
+    except CoordinateError:
+        return float(angle) % 360.0
+    turned = float(angle) - west
+    return (turned if usual else -turned) % 360.0
+
+
+def angle_to_image(frame, angle: float, x: float, y: float, system: str = "image", sky: str = "fk5") -> float:
+    """The inverse of `image_angle_to`: an angle written in a system, on the image."""
+    if not is_sky_system(system) and system not in SKY_FRAMES:
+        return float(angle) % 360.0
+    try:
+        west, usual = _sky_axes(frame, x, y, system, sky)
+    except CoordinateError:
+        return float(angle) % 360.0
+    return ((float(angle) if usual else -float(angle)) + west) % 360.0

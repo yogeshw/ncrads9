@@ -65,6 +65,10 @@ class RegionFormat(Enum):
     XY = "xy"
 
 
+#: DS9's alternate WCS descriptions, `wcsa` to `wcsz`.
+_ALTERNATE_WCS = re.compile(r"wcs[a-z]")
+
+
 class CoordinateSystem(Enum):
     """Supported coordinate systems."""
 
@@ -219,6 +223,9 @@ class RegionParser:
         regions: list[BaseRegion] = []
         self._composite = None
         self._relative = False
+        #: DS9's `wcs`..`wcsz`: which WCS description a sky frame refers to.
+        #: `wcsa;fk5;circle(...)` is the `a` description in FK5.
+        self._wcs_system = "wcs"
         lines = content.strip().split("\n")
 
         for raw in lines:
@@ -367,7 +374,8 @@ class RegionParser:
     def _is_coordinate_system(self, line: str) -> bool:
         """Check if a line specifies a coordinate system."""
         coord_systems = [cs.value for cs in CoordinateSystem]
-        return line.lower().strip() in coord_systems
+        name = line.lower().strip()
+        return name in coord_systems or _ALTERNATE_WCS.fullmatch(name) is not None
 
     def _parse_coordinate_system(self, line: str) -> None:
         """Parse the coordinate system from a line.
@@ -380,6 +388,11 @@ class RegionParser:
         name = line.lower().strip()
         if name == CoordinateSystem.WCS0.value:
             self._relative = True
+        if _ALTERNATE_WCS.fullmatch(name) or name == CoordinateSystem.WCS.value:
+            # A WCS description, named: the sky frames that follow are its.
+            self._wcs_system = name
+            self._coordinate_system = CoordinateSystem.WCS
+            return
         try:
             self._coordinate_system = CoordinateSystem(name)
         except ValueError:
@@ -618,6 +631,7 @@ class RegionParser:
         # them into image coordinates (`region_coords.place`). Recorded per
         # region because a file may switch systems between lines.
         region.coord_system = self._coordinate_system.value
+        region.wcs_system = getattr(self, "_wcs_system", "wcs")
         return region
 
     def _parameter(self, index: int, value: str) -> float:
