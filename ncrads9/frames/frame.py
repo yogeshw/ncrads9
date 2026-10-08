@@ -138,6 +138,15 @@ class Frame:
     #: the others name geometry the channels already share here, since
     #: they are held on one pixel grid.
     rgb_locks: dict[str, bool] = None
+    #: DS9's RGB Align: the channels as loaded, each one's header, the key
+    #: channel the others are mapped onto (the first loaded), the system
+    #: they are aligned through, and the system actually used -- image, if
+    #: a channel lacks the WCS asked for. `rgb_channels` holds the result.
+    rgb_raw: dict[str, np.ndarray | None] = None
+    rgb_headers: dict[str, object] = None
+    rgb_key: str | None = None
+    rgb_system: str = "wcs"
+    rgb_system_used: str = "wcs"
     rgb_source_frame_ids: dict[str, int | None] = None
     rgb_current_channel: str = "red"
     rgb_channel_scale: dict[str, ScaleAlgorithm] = None
@@ -180,6 +189,45 @@ class Frame:
             self.rgb_channel_brightness = {"red": 0.0, "green": 0.0, "blue": 0.0}
         if self.rgb_locks is None:
             self.rgb_locks = dict.fromkeys(RGB_LOCKS, False)
+        if self.rgb_raw is None:
+            self.rgb_raw = {"red": None, "green": None, "blue": None}
+        if self.rgb_headers is None:
+            self.rgb_headers = {"red": None, "green": None, "blue": None}
+
+    def set_rgb_channel(self, channel: str, data: np.ndarray | None, header: object = None) -> None:
+        """Put data in one colour channel, and align the channels again.
+
+        The first channel to receive data becomes the key, as in DS9.
+        """
+        self.rgb_raw[channel] = data
+        self.rgb_headers[channel] = header if data is not None else None
+        if data is None and self.rgb_key == channel:
+            self.rgb_key = None
+        if self.rgb_key is None and data is not None:
+            self.rgb_key = channel
+        self.realign_rgb()
+
+    def set_rgb_system(self, system: str) -> str:
+        """Choose DS9's Align system; returns the one actually used."""
+        self.rgb_system = system.lower()
+        self.realign_rgb()
+        return self.rgb_system_used
+
+    def realign_rgb(self) -> None:
+        """Map every channel onto the key channel's grid (`rgb_align`)."""
+        from .rgb_align import align
+
+        aligned, used = align(self.rgb_raw, self.rgb_headers, self.rgb_key, self.rgb_system)
+        self.rgb_channels.update(aligned)
+        self.rgb_system_used = used
+
+    def clear_rgb_channels(self) -> None:
+        """Empty every channel."""
+        for channel in ("red", "green", "blue"):
+            self.rgb_raw[channel] = None
+            self.rgb_headers[channel] = None
+            self.rgb_channels[channel] = None
+        self.rgb_key = None
 
     def wcs_for(self, key: str = "") -> object | None:
         """The handler for one of the frame's WCS descriptions.

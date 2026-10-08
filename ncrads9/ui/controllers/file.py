@@ -376,7 +376,7 @@ class FileController(Controller):
             return
 
         for channel, image in channels.items():
-            frame.rgb_channels[channel] = image.data
+            frame.set_rgb_channel(channel, image.data, image.header)
             frame.rgb_source_frame_ids[channel] = None
         frame.filepath = spec.path
         frame.file_spec = str(spec) if spec.has_specification else None

@@ -345,7 +345,7 @@ class FrameController(Controller):
         frame.fits_handler = None
         frame.image_data = None
         frame.original_image_data = None
-        frame.rgb_channels = {"red": None, "green": None, "blue": None}
+        frame.clear_rgb_channels()
         frame.rgb_source_frame_ids = {"red": None, "green": None, "blue": None}
         frame.rgb_view = {"red": True, "green": True, "blue": True}
         frame.rgb_current_channel = "red"
@@ -1359,6 +1359,30 @@ class FrameController(Controller):
         close = QAction("Close", dialog)
         close.triggered.connect(dialog.close)
         file_menu.addAction(close)
+        # DS9's Align menu (`CoordMenu ... rgb system 1`): WCS, the
+        # alternate WCSs, then the pixel systems.
+        from PyQt6.QtGui import QActionGroup
+
+        align_menu = bar.addMenu("&Align")
+        group = QActionGroup(dialog)
+        dialog.align_actions = {}
+
+        def add_system(menu, value: str, label: str) -> None:
+            action = QAction(label, dialog, checkable=True)
+            action.setChecked(frame.rgb_system == value)
+            action.triggered.connect(lambda _checked=False, v=value: self.set_rgb_system(v, frame))
+            group.addAction(action)
+            menu.addAction(action)
+            dialog.align_actions[value] = action
+
+        add_system(align_menu, "wcs", "WCS")
+        multiple = align_menu.addMenu("Multiple WCS")
+        for letter in "abcdefghijklmnopqrstuvwxyz":
+            add_system(multiple, f"wcs{letter}", f"WCS {letter}")
+        align_menu.addSeparator()
+        for value in ("image", "physical", "amplifier", "detector"):
+            add_system(align_menu, value, value.title())
+
         lock_menu = bar.addMenu("&Lock")
         dialog.lock_actions = {}
         for name in RGB_LOCKS:
@@ -1368,6 +1392,23 @@ class FrameController(Controller):
             lock_menu.addAction(action)
             dialog.lock_actions[name] = action
         return bar
+
+    def set_rgb_system(self, system: str, frame: Frame | None = None) -> str | None:
+        """DS9's RGB Align: register the channels through one system.
+
+        Returns:
+            None, or a note when a WCS was asked for and a channel lacks it,
+            so the channels fell back to pixel alignment as DS9's do.
+        """
+        frame = frame or self.frames.current_frame
+        if frame is None or frame.frame_type not in ("rgb", "hsv", "hls"):
+            return "the current frame is not a colour frame"
+        used = frame.set_rgb_system(system)
+        if frame is self.frames.current_frame and frame.has_data:
+            self.window.display.display()
+        if used != system.lower():
+            self.status(f"A channel has no {system}; aligned by image instead", 3000)
+        return None
 
     def set_rgb_lock(self, name: str, enabled: bool, frame: Frame | None = None) -> None:
         """Lock or free one setting across a colour frame's channels."""

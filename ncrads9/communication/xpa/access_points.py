@@ -4454,7 +4454,7 @@ def _colour_frame_text(window, args: list[str]) -> str:
     if not words or words[0] == "channel":
         return current
     if words[0] == "system":
-        return "image"
+        return str(getattr(frame, "rgb_system", "wcs"))
     if words[0] == "lock":
         locks = getattr(frame, "rgb_locks", None) or {}
         name = _RGB_LOCK_NAMES.get(words[1], words[1]) if len(words) > 1 else ""
@@ -4512,16 +4512,18 @@ def _colour_frame(window, args: list[str], kind: str) -> str | None:
         return _channel_view(window, rest[0].lower(), wanted)
 
     if first == "system":
-        # DS9 aligns the channels through this system. Ours are always
-        # aligned pixel for pixel, so only `image` is honest to accept;
-        # this used to set a frame lock called `wcs`, which does not exist.
+        # DS9's Align menu: the channels are mapped onto the key channel
+        # through this system (`frames/rgb_align.py`).
         if not rest:
             return "system needs a coordinate system"
-        if rest[0].lower() == "image":
-            return None
-        return (
-            f"aligning {kind} channels in {rest[0]} coordinates is not implemented; they align by image pixel"
-        )
+        system = rest[0].lower()
+        from ...frames.rgb_align import PIXEL_SYSTEMS
+
+        if system not in PIXEL_SYSTEMS and not (
+            system == "wcs" or (len(system) == 4 and system.startswith("wcs") and system[3].isalpha())
+        ):
+            return f"{rest[0]} is not a coordinate system"
+        return window.frame_controller.set_rgb_system(system)
 
     if first == "lock":
         # DS9's `rgb lock scale yes`: the three channels share a setting.

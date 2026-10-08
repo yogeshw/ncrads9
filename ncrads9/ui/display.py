@@ -268,7 +268,7 @@ class DisplayPipeline:
             if channel not in frame.rgb_channels:
                 continue
             if source_index is None:
-                frame.rgb_channels[channel] = None
+                frame.set_rgb_channel(channel, None)
                 frame.rgb_source_frame_ids[channel] = None
                 continue
             if source_index < 0 or source_index >= len(self.frames.frames):
@@ -277,7 +277,7 @@ class DisplayPipeline:
             source_data = source_frame.image_data
             if source_data is None or source_data.ndim != 2:
                 continue
-            frame.rgb_channels[channel] = np.array(source_data, copy=True)
+            frame.set_rgb_channel(channel, np.array(source_data, copy=True), source_frame.header)
             frame.rgb_source_frame_ids[channel] = source_frame.frame_id
         self.sync_rgb_scalar_view(frame)
 
@@ -386,7 +386,7 @@ class DisplayPipeline:
         frame.image = image
         if frame.frame_type == "rgb":
             channel = frame.rgb_current_channel if frame.rgb_current_channel in frame.rgb_channels else "red"
-            frame.rgb_channels[channel] = np.array(image_data, copy=True)
+            frame.set_rgb_channel(channel, np.array(image_data, copy=True), header)
             frame.rgb_source_frame_ids[channel] = None
             self.sync_rgb_scalar_view(frame)
         else:
