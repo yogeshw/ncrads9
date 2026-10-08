@@ -377,8 +377,16 @@ class ViewController(Controller):
         return PhysicalTransform() if header is None else PhysicalTransform.from_header(header)
 
     def _zoom(self) -> float:
-        """The viewer's current zoom, or 1.0 if it does not report one."""
-        return float(getattr(self.viewer, "zoom_factor", 1.0) or 1.0)
+        """The current frame's zoom: the viewer's, or the frame's own when tiled.
+
+        It read a `zoom_factor` neither viewer has, so the panel said 1
+        whatever the zoom was.
+        """
+        frame = self.frames.current_frame
+        if self.window._frame_display_mode == "tile" and frame is not None:
+            return float(frame.zoom or 1.0)
+        getter = getattr(self.viewer, "get_zoom", None)
+        return float(getter()) if getter is not None else 1.0
 
     def magnifier_regions(self):
         """What the magnifier's region overlay draws: the current frame's

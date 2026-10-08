@@ -81,6 +81,9 @@ class ZoomController(Controller):
         preset and claiming a value the frame does not have. Qt needs the group
         made non-exclusive to clear every button.
         """
+        # The info panel's Frame row shows the zoom.
+        if hasattr(self.window, "view"):
+            self.window.view.refresh_info()
         frame = self.frame
         self.refresh_pan_zoom_dialog()
         if frame is None:
@@ -112,8 +115,12 @@ class ZoomController(Controller):
 
     # -- zoom ----------------------------------------------------------------
 
-    def set_zoom(self, zoom: float) -> None:
-        """Set an explicit zoom level.
+    def set_zoom(self, zoom: float, zoom_y: float | None = None) -> None:
+        """Set an explicit zoom level, or x and y zooms apart.
+
+        Args:
+            zoom: The zoom along x -- and along y, unless `zoom_y` is given.
+            zoom_y: DS9's second zoom, `zoom 2 4`: y's own.
 
         In tile mode this zooms the *current frame within its tile*, not the
         whole composite: the tiled view is one image, so zooming the viewer
@@ -127,14 +134,25 @@ class ZoomController(Controller):
         frame = self.frame
         if frame is not None:
             frame.zoom_fit = False
+        aspect = 1.0 if zoom_y is None else float(zoom_y) / float(zoom)
         with self.window.undo.view("Zoom"):
             self.viewer.zoom_to(zoom)
+            if hasattr(self.viewer, "set_aspect"):
+                self.viewer.set_aspect(aspect)
             self.status_bar.update_zoom(self.viewer.get_zoom())
             self.window.frame_controller.persist_view_state()
         self.sync()
         self.window.frame_controller.apply_locks()
         self.update_panner_rect()
-        self.status(f"Zoom {self.viewer.get_zoom():.5g}", 1000)
+        shown = f"{self.viewer.get_zoom():.5g}"
+        if aspect != 1.0:
+            shown += f" x {self.viewer.get_zoom() * aspect:.5g}"
+        self.status(f"Zoom {shown}", 1000)
+
+    def zooms(self) -> tuple[float, float]:
+        """The current frame's x and y zooms."""
+        zoom = float(self.viewer.get_zoom())
+        return zoom, zoom * _aspect_of(self.viewer)
 
     def _set_tile_zoom(self, zoom: float) -> None:
         """Zoom the current frame inside its tile (a factor over fitting)."""
@@ -172,11 +190,11 @@ class ZoomController(Controller):
 
     def zoom_in(self) -> None:
         """Zoom in one step."""
-        self.set_zoom(self._zoom_base() * ZOOM_STEP)
+        self.set_zoom(self._zoom_base() * ZOOM_STEP, self._zoom_base() * ZOOM_STEP * _aspect_of(self.viewer))
 
     def zoom_out(self) -> None:
         """Zoom out one step."""
-        self.set_zoom(self._zoom_base() / ZOOM_STEP)
+        self.set_zoom(self._zoom_base() / ZOOM_STEP, self._zoom_base() / ZOOM_STEP * _aspect_of(self.viewer))
 
     def zoom_actual(self) -> None:
         """Zoom to 1:1."""
@@ -191,6 +209,9 @@ class ZoomController(Controller):
         if self.window._frame_display_mode == "tile":
             self._set_tile_zoom(1.0)
             return
+        if hasattr(self.viewer, "set_aspect"):
+            # Fitting fits both axes alike, as DS9's does.
+            self.viewer.set_aspect(1.0)
         self.viewer.zoom_fit(self.window._effective_viewport_size())
         # Now following the window: a resize refits until the user picks a zoom.
         frame = self.frame
@@ -221,6 +242,9 @@ class ZoomController(Controller):
         frame = self.frame
         if frame is None or not getattr(frame, "zoom_fit", False):
             return
+        if hasattr(self.viewer, "set_aspect"):
+            # Fitting fits both axes alike, as DS9's does.
+            self.viewer.set_aspect(1.0)
         self.viewer.zoom_fit(self.window._effective_viewport_size())
         self.status_bar.update_zoom(self.viewer.get_zoom())
         self.window.frame_controller.persist_view_state()
@@ -332,9 +356,10 @@ class ZoomController(Controller):
             return
         size = viewport_size if viewport_size is not None else self.window.scroll_area.viewport().size()
         zoom = self.viewer.get_zoom()
+        zoom_y = zoom * _aspect_of(self.viewer)
         display_x, display_y = display
         self.window.scroll_area.horizontalScrollBar().setValue(int(display_x * zoom - size.width() / 2))
-        self.window.scroll_area.verticalScrollBar().setValue(int(display_y * zoom - size.height() / 2))
+        self.window.scroll_area.verticalScrollBar().setValue(int(display_y * zoom_y - size.height() / 2))
 
     def center_image(self) -> None:
         """Centre the image in the viewport."""
@@ -516,6 +541,9 @@ class ZoomController(Controller):
             frame.align_wcs = bool(params["align"])
             self.menu.action_zoom_align.setChecked(frame.align_wcs)
         self.viewer.zoom_to(zoom)
+        if hasattr(self.viewer, "set_aspect"):
+            zoom_y = float(params.get("zoom_y") or zoom)
+            self.viewer.set_aspect(max(MIN_DIALOG_ZOOM, zoom_y) / zoom)
         frame.rotation = normalize_rotation(float(params["rotation"]))
         self.window.display.apply_view_transform(frame)
         self.refresh()
@@ -600,4 +628,11 @@ class ZoomController(Controller):
             text = f"{x:.8g} {y:.8g}"
         words = text.split()
         zoom = self.viewer.get_zoom() if not self.window._tile_mode_enabled else frame.zoom
-        dialog.set_values(zoom=zoom, rotation=frame.rotation, pan=(words[0], words[1]))
+        aspect = _aspect_of(self.viewer) if not self.window._tile_mode_enabled else frame.zoom_aspect
+        dialog.set_values(zoom=zoom, zoom_y=zoom * aspect, rotation=frame.rotation, pan=(words[0], words[1]))
+
+
+def _aspect_of(viewer) -> float:
+    """A viewer's y zoom over its x zoom, 1 for one that does not keep one."""
+    getter = getattr(viewer, "get_aspect", None)
+    return float(getter()) if getter is not None else 1.0

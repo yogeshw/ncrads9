@@ -102,6 +102,8 @@ class Frame:
     z1: float | None = None
     z2: float | None = None
     zoom: float = 1.0
+    #: The y zoom over the x zoom: DS9's `zoom 2 4` is zoom 2, aspect 2.
+    zoom_aspect: float = 1.0
     #: Whether the zoom is following the window: set when the frame is fitted
     #: (on load, or by Zoom Fit) and cleared the moment the user picks a zoom
     #: of their own. While set, resizing the window refits the frame, so the

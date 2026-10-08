@@ -235,6 +235,15 @@ class GLImageViewerWithRegions(QWidget):
         self._contrast_scale = 1.0
         self._brightness_offset = 0.0
 
+    def get_aspect(self) -> float:
+        """The y zoom over the x zoom."""
+        return self.gl_canvas.aspect
+
+    def set_aspect(self, aspect: float) -> None:
+        """Zoom y apart from x, DS9's `zoom 2 4`: y's zoom is x's times this."""
+        self.gl_canvas.aspect = aspect
+        self._update_overlay_transform()
+
     def set_pan(self, pan_x: float, pan_y: float) -> None:
         self.gl_canvas._pan_x = pan_x
         self.gl_canvas._pan_y = pan_y
@@ -350,6 +359,7 @@ class GLImageViewerWithRegions(QWidget):
             rotation=self._rotation,
             flip_x=self._flip_x,
             flip_y=self._flip_y,
+            aspect=self.gl_canvas.aspect,
         )
         self.contour_overlay.set_zoom(
             self.gl_canvas.zoom,
@@ -359,6 +369,7 @@ class GLImageViewerWithRegions(QWidget):
             rotation=self._rotation,
             flip_x=self._flip_x,
             flip_y=self._flip_y,
+            aspect=self.gl_canvas.aspect,
         )
         self.catalog_overlay.set_zoom(
             self.gl_canvas.zoom,
@@ -368,4 +379,5 @@ class GLImageViewerWithRegions(QWidget):
             rotation=self._rotation,
             flip_x=self._flip_x,
             flip_y=self._flip_y,
+            aspect=self.gl_canvas.aspect,
         )

@@ -787,7 +787,12 @@ class XPACommands:
         return float(word)
 
     def _zoom_text(self) -> str:
+        """One zoom, or x and y when they differ, as DS9 answers."""
         zoom = self.viewer.image_viewer.get_zoom()
+        getter = getattr(self.viewer.image_viewer, "get_aspect", None)
+        aspect = float(getter()) if getter is not None else 1.0
+        if abs(aspect - 1.0) > 1e-9:
+            return f"{zoom:.6g} {zoom * aspect:.6g}"
         return f"{zoom:.6g}"
 
     def _read_zoom(self, args: list[str]) -> dict[str, Any]:
@@ -800,11 +805,9 @@ class XPACommands:
     def _handle_zoom(self, params: dict[str, Any]) -> dict[str, Any]:
         """DS9's `zoom`.
 
-        `zoom <value>` and `zoom to <value>` set the zoom absolutely, `zoom
-        to fit` fits, `zoom in` and `zoom out` step, `zoom open|close`
-        shows the Pan Zoom Rotate window. DS9's two-value form zooms x and
-        y apart; NCRADS9 zooms both axes together, so two different
-        values are refused rather than half applied.
+        `zoom <value>` and `zoom to <value>` set the zoom absolutely, two
+        values zoom x and y apart, `zoom to fit` fits, `zoom in` and `zoom
+        out` step, `zoom open|close` shows the Pan Zoom Rotate window.
         """
         viewer_error = self._require_viewer()
         if viewer_error:
@@ -836,11 +839,13 @@ class XPACommands:
                 values = [self._zoom_value(word) for word in words[:2]]
             except (ValueError, ZeroDivisionError):
                 return {"status": "error", "message": f"{' '.join(words)} is not a zoom"}
-            if len(values) == 2 and abs(values[0] - values[1]) > 1e-9:
-                return {"status": "error", "message": "zooming x and y apart is not supported"}
-            if values[0] <= 0:
+            if min(values) <= 0:
                 return {"status": "error", "message": "a zoom has to be positive"}
-            zoom.set_zoom(values[0])
+            if len(values) == 2 and abs(values[0] - values[1]) > 1e-9:
+                # DS9's `zoom 2 4`: x and y apart.
+                zoom.set_zoom(values[0], values[1])
+            else:
+                zoom.set_zoom(values[0])
         return {"status": "ok", "result": self._zoom_text()}
 
     def _close_window(self, name: str) -> None:

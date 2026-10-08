@@ -69,6 +69,8 @@ class ImageViewer(QLabel):
         self._block_factor: int = 1
         #: DS9's y block factor, when it differs from x's.
         self._block_factor_y: int = 1
+        #: The y zoom over the x zoom (DS9's `zoom 2 4`).
+        self._aspect: float = 1.0
         self._transform_cache_key: tuple[int, float, bool, bool] | None = None
         #: The zoom the displayed pixmap was scaled to, so an unchanged zoom
         #: does not rescale it on every repaint.
@@ -154,8 +156,11 @@ class ImageViewer(QLabel):
         if self._pixmap is None:
             return
 
-        scaled_size = self._pixmap.size() * self._zoom
-        scaled_key = (int(self._pixmap.cacheKey()), float(self._zoom))
+        scaled_size = QSize(
+            max(1, round(self._pixmap.width() * self._zoom)),
+            max(1, round(self._pixmap.height() * self._zoom * self._aspect)),
+        )
+        scaled_key = (int(self._pixmap.cacheKey()), float(self._zoom), float(self._aspect))
         if scaled_key != self._scaled_cache_key or self._scaled_pixmap is None:
             self._scaled_pixmap = self._pixmap.scaled(
                 scaled_size,
@@ -180,6 +185,15 @@ class ImageViewer(QLabel):
     def zoom_out(self) -> None:
         """Zoom out by 20%."""
         self.zoom_to(self._zoom / 1.2)
+
+    def get_aspect(self) -> float:
+        """The y zoom over the x zoom."""
+        return self._aspect
+
+    def set_aspect(self, aspect: float) -> None:
+        """Zoom y apart from x: y's zoom is x's times this."""
+        self._aspect = max(1e-3, float(aspect))
+        self._update_display()
 
     def zoom_to(self, zoom: float) -> None:
         """Set specific zoom level.
@@ -347,7 +361,7 @@ class ImageViewer(QLabel):
         x_offset = (label_rect.width() - pixmap_rect.width()) / 2
         y_offset = (label_rect.height() - pixmap_rect.height()) / 2
         display_x = (x - x_offset) / self._zoom
-        display_y = (y - y_offset) / self._zoom
+        display_y = (y - y_offset) / (self._zoom * self._aspect)
         transform = self.get_view_transform()
         source_x, source_y = transform.display_to_source(display_x, display_y)
         if 0 <= source_x < self._source_pixmap.width() and 0 <= source_y < self._source_pixmap.height():

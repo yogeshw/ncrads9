@@ -23,9 +23,7 @@ you typed back. The Pan row is a position in any of DS9's coordinate
 systems, chosen with the button beside it, so `13:29:52.7 +47:11:43`
 in FK5 is as good as an image pixel.
 
-DS9 keeps separate x and y zooms; NCRADS9 zooms both axes together, so
-the dialog shows both fields, as DS9 lays them out, and refuses a pair
-that differ rather than silently applying one of them.
+The Zoom row has DS9's two fields, x and y, which may differ.
 
 The menus are DS9's: File, Edit, Pan, Zoom, Orientation and Rotate. The
 last four hold the main window's own Zoom-menu actions -- one QAction can
@@ -174,10 +172,12 @@ class PanZoomRotateDialog(QDialog):
 
     # -- values --------------------------------------------------------------
 
-    def set_values(self, *, zoom: float, rotation: float, pan: tuple[str, str]) -> None:
-        """Show a frame's zoom, rotation and pan (already in the Pan system)."""
+    def set_values(
+        self, *, zoom: float, rotation: float, pan: tuple[str, str], zoom_y: float | None = None
+    ) -> None:
+        """Show a frame's zooms, rotation and pan (already in the Pan system)."""
         self.zoom_x_edit.setText(f"{zoom:.8g}")
-        self.zoom_y_edit.setText(f"{zoom:.8g}")
+        self.zoom_y_edit.setText(f"{zoom if zoom_y is None else zoom_y:.8g}")
         self.rotate_edit.setText(f"{rotation:.8g}")
         self.pan_x_edit.setText(pan[0])
         self.pan_y_edit.setText(pan[1])
@@ -203,13 +203,11 @@ class PanZoomRotateDialog(QDialog):
         if zoom_x <= 0 or zoom_y <= 0:
             self.warn("Zoom must be greater than zero.")
             return
-        if abs(zoom_x - zoom_y) > 1e-9 * max(abs(zoom_x), abs(zoom_y)):
-            self.warn("NCRADS9 zooms both axes together: the x and y zooms must be equal.")
-            return
         pan = (self.pan_x_edit.text().strip(), self.pan_y_edit.text().strip())
         self.parameters_changed.emit(
             {
                 "zoom": zoom_x,
+                "zoom_y": zoom_y,
                 "rotation": rotation,
                 "pan": pan if all(pan) else None,
                 "system": self.coord_button.system,

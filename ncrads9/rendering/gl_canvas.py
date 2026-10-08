@@ -60,6 +60,8 @@ class GLCanvas(QOpenGLWidget):
         """
         super().__init__(parent)
         self._zoom: float = 1.0
+        #: DS9's y zoom over its x zoom: 1 unless the axes are zoomed apart.
+        self._aspect: float = 1.0
         self._pan_x: float = 0.0
         self._pan_y: float = 0.0
         self._last_mouse_pos: QPointF | None = None
@@ -87,6 +89,16 @@ class GLCanvas(QOpenGLWidget):
         """Set zoom level with bounds checking."""
         self._zoom = max(self._min_zoom, min(self._max_zoom, value))
         self.zoom_changed.emit(self._zoom)
+        self.update()
+
+    @property
+    def aspect(self) -> float:
+        """The y zoom over the x zoom."""
+        return self._aspect
+
+    @aspect.setter
+    def aspect(self, value: float) -> None:
+        self._aspect = max(1e-3, float(value))
         self.update()
 
     @property
@@ -215,7 +227,7 @@ class GLCanvas(QOpenGLWidget):
         center_x = self.width() / 2.0
         center_y = self.height() / 2.0
         img_x = (screen_x - center_x) / self._zoom + self._pan_x
-        img_y = (center_y - screen_y) / self._zoom + self._pan_y
+        img_y = (center_y - screen_y) / (self._zoom * self._aspect) + self._pan_y
         return (img_x, img_y)
 
     def image_to_screen(self, img_x: float, img_y: float) -> tuple[float, float]:
@@ -232,7 +244,7 @@ class GLCanvas(QOpenGLWidget):
         center_x = self.width() / 2.0
         center_y = self.height() / 2.0
         screen_x = (img_x - self._pan_x) * self._zoom + center_x
-        screen_y = center_y - (img_y - self._pan_y) * self._zoom
+        screen_y = center_y - (img_y - self._pan_y) * self._zoom * self._aspect
         return (screen_x, screen_y)
 
     def initializeGL(self) -> None:
@@ -261,7 +273,7 @@ class GLCanvas(QOpenGLWidget):
             return
 
         view_w = self.width() / self._zoom
-        view_h = self.height() / self._zoom
+        view_h = self.height() / (self._zoom * self._aspect)
         viewport_x = self._pan_x - view_w / 2
         viewport_y = self._pan_y - view_h / 2
 
@@ -332,7 +344,7 @@ class GLCanvas(QOpenGLWidget):
         # Handle panning
         if self._last_mouse_pos is not None:
             dx = (pos.x() - self._last_mouse_pos.x()) / self._zoom
-            dy = (pos.y() - self._last_mouse_pos.y()) / self._zoom
+            dy = (pos.y() - self._last_mouse_pos.y()) / (self._zoom * self._aspect)
             self._pan_x -= dx
             self._pan_y += dy
             self._last_mouse_pos = pos

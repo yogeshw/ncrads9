@@ -30,6 +30,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from astropy.io import fits
+from PyQt6.QtCore import QPointF
 
 from ncrads9.communication.xpa.xpa_commands import XPACommands
 
@@ -114,9 +115,9 @@ def test_zoom_in_and_out_step_from_the_current_zoom(xpa):
     assert float(_get(xpa, "zoom")) == pytest.approx(2.0)
 
 
-def test_zoom_x_and_y_apart_is_refused_rather_than_half_done(xpa):
+def test_a_bad_zoom_is_refused(xpa):
     _set(xpa, "zoom to 2")
-    assert _set(xpa, "zoom 2 4")["status"] == "error"
+    assert _set(xpa, "zoom 2 -1")["status"] == "error"
     assert float(_get(xpa, "zoom")) == pytest.approx(2.0)
 
 
@@ -403,3 +404,31 @@ def test_the_cpu_viewer_scrolls_when_zoomed_past_the_window(window, qapp):
         qapp.processEvents()
     assert window.scroll_area.horizontalScrollBar().maximum() > 0
     assert window.scroll_area.verticalScrollBar().maximum() > 0
+
+
+# -- x and y zoomed apart --------------------------------------------------------
+
+
+def test_zoom_x_and_y_apart(window, xpa, qapp):
+    window.show()
+    assert _set(xpa, "zoom to 2 4")["status"] == "ok"
+    assert _get(xpa, "zoom") == "2 4"
+    frame = window.frame_manager.current_frame
+    assert frame.zoom == pytest.approx(2) and frame.zoom_aspect == pytest.approx(2)
+    # A region's outline is twice as tall as it is wide on the screen.
+    overlay = window.image_viewer.region_overlay
+    origin = overlay._image_to_widget_coords(QPointF(30, 30))
+    corner = overlay._image_to_widget_coords(QPointF(31, 31))
+    assert abs(corner.y() - origin.y()) == pytest.approx(2 * abs(corner.x() - origin.x()), rel=1e-6)
+    # And a click maps back to the same pixel.
+    back = overlay._widget_to_image_coords(origin)
+    assert (back.x(), back.y()) == pytest.approx((30, 30), abs=1e-6)
+    _set(xpa, "zoom in")
+    assert window.frame_manager.current_frame.zoom_aspect == pytest.approx(2), "stepping keeps the ratio"
+    _set(xpa, "zoom to fit")
+    assert _get(xpa, "zoom").count(" ") == 0, "fitting zooms both alike"
+
+
+def test_the_info_panel_shows_the_zoom(window, xpa):
+    _set(xpa, "zoom to 4")
+    assert window.info_panel._values["zoom"].text() == "4"

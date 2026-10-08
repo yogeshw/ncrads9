@@ -231,6 +231,15 @@ class ImageViewerWithRegions(QWidget):
         """Get current zoom level."""
         return self.image_viewer.get_zoom()
 
+    def get_aspect(self) -> float:
+        """The y zoom over the x zoom."""
+        return self.image_viewer.get_aspect()
+
+    def set_aspect(self, aspect: float) -> None:
+        """Zoom y apart from x, DS9's `zoom 2 4`."""
+        self.image_viewer.set_aspect(aspect)
+        self._update_overlay_geometry()
+
     def get_contrast_brightness(self) -> tuple:
         """Get contrast/brightness values."""
         return self.image_viewer.get_contrast_brightness()
@@ -286,6 +295,7 @@ class ImageViewerWithRegions(QWidget):
                 rotation=self._rotation,
                 flip_x=self._flip_x,
                 flip_y=self._flip_y,
+                aspect=self.image_viewer.get_aspect(),
             )
             self.contour_overlay.set_zoom(
                 self.image_viewer.get_zoom(),
@@ -295,6 +305,7 @@ class ImageViewerWithRegions(QWidget):
                 rotation=self._rotation,
                 flip_x=self._flip_x,
                 flip_y=self._flip_y,
+                aspect=self.image_viewer.get_aspect(),
             )
             self.catalog_overlay.set_zoom(
                 self.image_viewer.get_zoom(),
@@ -304,6 +315,7 @@ class ImageViewerWithRegions(QWidget):
                 rotation=self._rotation,
                 flip_x=self._flip_x,
                 flip_y=self._flip_y,
+                aspect=self.image_viewer.get_aspect(),
             )
 
     def resizeEvent(self, event) -> None:

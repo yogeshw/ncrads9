@@ -110,7 +110,7 @@ def test_pan_to_a_sexagesimal_wcs_position(window):
     assert dialog.pan_x_edit.text().startswith(ra[:8])
 
 
-def test_unequal_zooms_are_refused(window, monkeypatch):
+def test_x_and_y_zooms_may_differ(window, monkeypatch):
     _load(window)
     dialog = _open(window)
     warnings = []
@@ -118,8 +118,9 @@ def test_unequal_zooms_are_refused(window, monkeypatch):
     dialog.zoom_x_edit.setText("2")
     dialog.zoom_y_edit.setText("4")
     dialog.apply_button.click()
-    assert warnings and "equal" in warnings[0]
-    assert window.frame_manager.current_frame.zoom != pytest.approx(4.0)
+    assert not warnings
+    frame = window.frame_manager.current_frame
+    assert frame.zoom == pytest.approx(2.0) and frame.zoom_aspect == pytest.approx(2.0)
 
 
 def test_fields_follow_zoom_rotation_and_frame_changes(window):

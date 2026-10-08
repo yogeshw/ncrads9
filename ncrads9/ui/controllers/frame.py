@@ -1329,6 +1329,8 @@ class FrameController(Controller):
             # mosaic's, and recording them would lose the frame's own.
             return
         frame.zoom = self.viewer.get_zoom()
+        if hasattr(self.viewer, "get_aspect"):
+            frame.zoom_aspect = float(self.viewer.get_aspect())
         if self.window.using_gpu_rendering and hasattr(self.viewer, "gl_canvas"):
             frame.pan_x, frame.pan_y = self.viewer.gl_canvas.pan_offset
         else:
@@ -1497,6 +1499,8 @@ class FrameController(Controller):
         """Put the frame's zoom and pan on the viewer."""
         if frame.zoom:
             self.viewer.zoom_to(frame.zoom)
+        if hasattr(self.viewer, "set_aspect"):
+            self.viewer.set_aspect(getattr(frame, "zoom_aspect", 1.0) or 1.0)
         if self.window.using_gpu_rendering and hasattr(self.viewer, "set_pan"):
             self.viewer.set_pan(frame.pan_x, frame.pan_y)
         elif hasattr(self.viewer, "image_viewer"):
@@ -1512,7 +1516,7 @@ class FrameController(Controller):
                     int(display_x * zoom - viewport.width() / 2)
                 )
                 self.window.scroll_area.verticalScrollBar().setValue(
-                    int(display_y * zoom - viewport.height() / 2)
+                    int(display_y * zoom * getattr(frame, "zoom_aspect", 1.0) - viewport.height() / 2)
                 )
         self.window.zoom.sync()
         # The WCS menu greys the alternate letters this frame's header lacks.

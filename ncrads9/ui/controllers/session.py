@@ -50,6 +50,7 @@ from .base import Controller
 FRAME_FIELDS: tuple[str, ...] = (
     "block_factor",
     "block_factor_y",
+    "zoom_aspect",
     "colormap",
     "invert_colormap",
     "z1",

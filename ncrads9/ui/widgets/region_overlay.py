@@ -185,6 +185,7 @@ class RegionOverlay(QWidget):
         self.current_points: list[QPointF] = []
         self.is_drawing: bool = False
         self.zoom: float = 1.0
+        self.aspect: float = 1.0
         self.image_offset: tuple[float, float] = (0, 0)
         self.image_width: int = 0
         self.image_height: int = 0
@@ -275,9 +276,12 @@ class RegionOverlay(QWidget):
         rotation: float = 0.0,
         flip_x: bool = False,
         flip_y: bool = False,
+        aspect: float = 1.0,
     ) -> None:
         """Update zoom and offset for coordinate transformation."""
         self.zoom = zoom
+        #: The y zoom over the x zoom (DS9's `zoom 2 4`).
+        self.aspect = aspect or 1.0
         self.image_offset = offset
         if image_width is not None:
             self.image_width = max(0, int(image_width))
@@ -307,7 +311,7 @@ class RegionOverlay(QWidget):
         quarter of the way into the image and move when the block changed.
         """
         display_x = (widget_point.x() - self.image_offset[0]) / self.zoom
-        display_y = (widget_point.y() - self.image_offset[1]) / self.zoom
+        display_y = (widget_point.y() - self.image_offset[1]) / (self.zoom * self.aspect)
         source_x, source_top_y = self._display_transform().display_to_source(display_x, display_y)
         if self.image_height > 0:
             img_y = self.image_height - 1 - source_top_y
@@ -336,7 +340,7 @@ class RegionOverlay(QWidget):
             source_top_y,
         )
         widget_x = display_x * self.zoom + self.image_offset[0]
-        widget_y = display_y * self.zoom + self.image_offset[1]
+        widget_y = display_y * self.zoom * self.aspect + self.image_offset[1]
         return QPointF(widget_x, widget_y)
 
     def _to_widget(self, x: float, y: float) -> QPointF:

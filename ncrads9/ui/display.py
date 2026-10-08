@@ -650,7 +650,8 @@ class DisplayPipeline:
             x_offset = (viewer.width() - pixmap.width()) / 2
             y_offset = (viewer.height() - pixmap.height()) / 2
         display_x = (centre.x() - x_offset) / zoom
-        display_y = (centre.y() - y_offset) / zoom
+        aspect = viewer.get_aspect() if hasattr(viewer, "get_aspect") else 1.0
+        display_y = (centre.y() - y_offset) / (zoom * aspect)
         source_x, source_top_y = viewer.get_view_transform().display_to_source(display_x, display_y)
         source_y = viewer.get_image_size()[1] - 1 - source_top_y
         # Image pixels, as `map_image_to_display_coords` takes them back.

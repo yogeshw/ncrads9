@@ -43,6 +43,8 @@ class OverlayTransformMixin:
     def init_transform(self) -> None:
         """Set the mapping to the identity. Call from `__init__`."""
         self._zoom: float = 1.0
+        #: The y zoom over the x zoom (DS9's `zoom 2 4`).
+        self._aspect: float = 1.0
         self._offset: tuple[float, float] = (0.0, 0.0)
         self._image_width: int = 0
         self._image_height: int = 0
@@ -59,9 +61,11 @@ class OverlayTransformMixin:
         rotation: float = 0.0,
         flip_x: bool = False,
         flip_y: bool = False,
+        aspect: float = 1.0,
     ) -> None:
         """Set the zoom, pan, rotation and flips the viewer is showing."""
         self._zoom = zoom
+        self._aspect = aspect or 1.0
         self._offset = offset
         if image_width is not None:
             self._image_width = max(0, int(image_width))
@@ -93,7 +97,7 @@ class OverlayTransformMixin:
         display_x, display_y = self._display_transform().source_to_display(x, source_top_y)
         return QPointF(
             display_x * self._zoom + self._offset[0],
-            display_y * self._zoom + self._offset[1],
+            display_y * self._zoom * self._aspect + self._offset[1],
         )
 
     def _widget_to_image(self, point: QPointF) -> QPointF:
@@ -103,7 +107,7 @@ class OverlayTransformMixin:
         symbol, for one.
         """
         display_x = (point.x() - self._offset[0]) / (self._zoom or 1.0)
-        display_y = (point.y() - self._offset[1]) / (self._zoom or 1.0)
+        display_y = (point.y() - self._offset[1]) / ((self._zoom or 1.0) * self._aspect)
         source_x, source_y = self._display_transform().display_to_source(display_x, display_y)
         image_y = (self._image_height - 1 - source_y) if self._image_height > 0 else source_y
         return QPointF(source_x, image_y)

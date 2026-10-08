@@ -537,6 +537,9 @@ class RegionRenderer:
         ry = math.hypot(along_y.x() - origin.x(), along_y.y() - origin.y())
         return rx, ry
 
+    #: Points around a drawn ellipse: smooth at any size a region is drawn.
+    ELLIPSE_STEPS = 96
+
     def _draw_rotated_ellipse(
         self,
         painter: QPainter,
@@ -546,17 +549,21 @@ class RegionRenderer:
         angle: float,
         to_widget: ToWidget,
     ) -> None:
-        """Draw an ellipse, rotating the painter when the shape is rotated."""
-        widget_center = to_widget(*center)
-        rx, ry = self._radii(center, semi_major, semi_minor, to_widget)
-        if angle:
-            painter.save()
-            painter.translate(widget_center)
-            painter.rotate(-angle)
-            painter.drawEllipse(QPointF(0, 0), rx, ry)
-            painter.restore()
-        else:
-            painter.drawEllipse(widget_center, rx, ry)
+        """Draw an ellipse as its outline mapped onto the widget.
+
+        Mapped point by point rather than drawn with the painter turned by
+        the region's angle: the view may itself be rotated or mirrored, or
+        zoomed differently in x and y, and only the mapping knows that. A
+        turned painter drew a region on a rotated frame unturned.
+        """
+        theta = math.radians(angle)
+        cos_t, sin_t = math.cos(theta), math.sin(theta)
+        points = []
+        for step in range(self.ELLIPSE_STEPS):
+            phi = 2.0 * math.pi * step / self.ELLIPSE_STEPS
+            dx, dy = semi_major * math.cos(phi), semi_minor * math.sin(phi)
+            points.append(to_widget(center[0] + dx * cos_t - dy * sin_t, center[1] + dx * sin_t + dy * cos_t))
+        painter.drawPolygon(QPolygonF(points))
 
     def _draw_rotated_box(
         self,
@@ -567,16 +574,15 @@ class RegionRenderer:
         angle: float,
         to_widget: ToWidget,
     ) -> None:
-        """Draw a box, rotating the painter when the shape is rotated."""
-        widget_center = to_widget(*center)
-        half_w, half_h = self._radii(center, width_box / 2.0, height_box / 2.0, to_widget)
-        rect = QRectF(-half_w, -half_h, half_w * 2, half_h * 2)
-        painter.save()
-        painter.translate(widget_center)
-        if angle:
-            painter.rotate(-angle)
-        painter.drawRect(rect)
-        painter.restore()
+        """Draw a box as its four corners mapped onto the widget."""
+        theta = math.radians(angle)
+        cos_t, sin_t = math.cos(theta), math.sin(theta)
+        half_w, half_h = width_box / 2.0, height_box / 2.0
+        corners = [(-half_w, -half_h), (half_w, -half_h), (half_w, half_h), (-half_w, half_h)]
+        points = [
+            to_widget(center[0] + dx * cos_t - dy * sin_t, center[1] + dx * sin_t + dy * cos_t) for dx, dy in corners
+        ]
+        painter.drawPolygon(QPolygonF(points))
 
     @staticmethod
     def _draw_point(painter: QPainter, region: Point, to_widget: ToWidget) -> None:
