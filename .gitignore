@@ -138,3 +138,4 @@ Thumbs.db
 *.fit
 *.fts
 !ncrads9/sampleimages/*.fits
+.claude/worktrees/
