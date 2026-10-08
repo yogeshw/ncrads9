@@ -35,6 +35,8 @@ Author: Yogesh Wadadekar
 
 from __future__ import annotations
 
+import math
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
@@ -85,6 +87,77 @@ IMAGE_FILTER = "PNG (*.png);;PDF (*.pdf);;SVG (*.svg);;EPS (*.eps)"
 BAR_WIDTH_FRACTION = 0.8
 
 
+#: DS9's canvas layouts.
+LAYOUTS: tuple[str, ...] = ("grid", "row", "column", "strip")
+
+#: The Canvas menu's font cascades: (element, label).
+FONT_ELEMENTS: tuple[tuple[str, str], ...] = (
+    ("title", "&Title"),
+    ("axes_title", "Axes T&itle"),
+    ("axes_number", "Axes &Number"),
+    ("legend_title", "Legend Titl&e"),
+    ("legend", "&Legend"),
+)
+
+#: DS9's font names, and the Qt-independent families matplotlib knows them by.
+FONT_FAMILIES: tuple[str, ...] = ("times", "helvetica", "courier")
+_MATPLOTLIB_FAMILIES = {"times": "serif", "helvetica": "sans-serif", "courier": "monospace"}
+
+#: DS9's font sizes.
+FONT_SIZES: tuple[int, ...] = (9, 10, 12, 14, 18, 24, 30, 36)
+
+#: The colours the Foreground, Background and Grid cascades offer.
+CANVAS_COLOURS: tuple[str, ...] = ("black", "white", "red", "green", "blue", "cyan", "magenta", "yellow", "gray")
+
+
+@dataclass
+class CanvasFont:
+    """One of the canvas's fonts, DS9's way."""
+
+    family: str = "helvetica"
+    size: int = 9
+    weight: str = "normal"
+    slant: str = "roman"
+
+    def apply(self, text) -> None:
+        """Put this font on a matplotlib text."""
+        text.set_family(_MATPLOTLIB_FAMILIES.get(self.family, "sans-serif"))
+        text.set_size(self.size)
+        text.set_weight(self.weight)
+        text.set_style("italic" if self.slant == "italic" else "normal")
+
+
+@dataclass
+class CanvasSettings:
+    """DS9's canvas: layout, fonts and colours shared by its graphs."""
+
+    layout: str = "grid"
+    #: DS9's Strip Parameters scale, a percentage: each graph below the
+    #: first takes 1/(int(100/scale) + n - 1) of the height (`plot.tcl`).
+    strip_scale: float = 50.0
+
+    def strip_heights(self, count: int) -> list[float]:
+        """Each graph's share of the height in a strip of `count`, as DS9 sizes them."""
+        fraction = self.strip_scale / 100.0
+        if not 0.0 < fraction <= 1.0:
+            fraction = 1.0
+        each = 1.0 / (int(1.0 / fraction) + count - 1)
+        return [1.0 - (count - 1) * each] + [each] * (count - 1)
+    fonts: dict[str, CanvasFont] = field(
+        default_factory=lambda: {
+            "title": CanvasFont(size=12),
+            "axes_title": CanvasFont(size=9),
+            "axes_number": CanvasFont(size=9),
+            "legend_title": CanvasFont(size=10),
+            "legend": CanvasFont(size=9),
+        }
+    )
+    theme_colors: bool = True
+    foreground: str = "black"
+    background: str = "white"
+    grid: str = "gray"
+
+
 class PlotWindow(QDialog):
     """A plot window with DS9's menus.
 
@@ -95,7 +168,11 @@ class PlotWindow(QDialog):
 
     def __init__(self, state: PlotState | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.state = state or PlotState()
+        #: DS9's canvas: the graphs it holds, which one the Graph and Data
+        #: menus act on, and the canvas-wide layout, fonts and colours.
+        self.graphs: list[PlotState] = [state or PlotState()]
+        self.current_graph = 0
+        self.canvas_settings = CanvasSettings()
         self.zoom_stack = ZoomStack()
         self.current_dataset = 0
         self._selector: RectangleSelector | None = None
@@ -115,6 +192,15 @@ class PlotWindow(QDialog):
         layout.addWidget(buttons)
 
         self.draw()
+
+    @property
+    def state(self) -> PlotState:
+        """The current graph: what the Graph and Data menus act on."""
+        return self.graphs[self.current_graph]
+
+    @state.setter
+    def state(self, value: PlotState) -> None:
+        self.graphs[self.current_graph] = value
 
     # -- menus ---------------------------------------------------------------
 
@@ -146,6 +232,9 @@ class PlotWindow(QDialog):
             action.triggered.connect(lambda _c=False, key=name: self.set_pointer_mode(key))
         self.actions_by_name["mode_pointer"].setChecked(True)
         self.pointer_mode = "pointer"
+
+        self.canvas_menu = bar.addMenu("&Canvas")
+        self._build_canvas_menu()
 
         graph_menu = bar.addMenu("&Graph")
         style_group = QActionGroup(self)
@@ -204,6 +293,153 @@ class PlotWindow(QDialog):
         self.data_menu = bar.addMenu("&Data")
         self._build_data_menu()
         return bar
+
+    def _build_canvas_menu(self) -> None:
+        """DS9's Canvas menu (`plotdialog.tcl`)."""
+        menu = self.canvas_menu
+        menu.clear()
+        settings = self.canvas_settings
+
+        select = menu.addMenu("&Select Graph")
+        group = QActionGroup(self)
+        for index, graph in enumerate(self.graphs):
+            label = graph.title or f"Graph {index + 1}"
+            action = self._add(select, f"select_graph_{index}", label, None, checkable=True)
+            action.setChecked(index == self.current_graph)
+            action.triggered.connect(lambda _c=False, i=index: self.select_graph(i))
+            group.addAction(action)
+        menu.addSeparator()
+        add = menu.addMenu("&Add Graph")
+        self._add(add, "add_graph_line", "&Line", lambda: self.add_graph(PlotStyle.LINE))
+        self._add(add, "add_graph_bar", "&Bar", lambda: self.add_graph(PlotStyle.BAR))
+        self._add(menu, "delete_graph", "&Delete Graph", self.delete_graph)
+        menu.addSeparator()
+
+        layout = menu.addMenu("La&yout")
+        layout_group = QActionGroup(self)
+        for name in LAYOUTS:
+            if name == "strip":
+                layout.addSeparator()
+            action = self._add(layout, f"layout_{name}", name.title(), None, checkable=True)
+            action.setChecked(settings.layout == name)
+            action.triggered.connect(lambda _c=False, key=name: self.set_layout(key))
+            layout_group.addAction(action)
+        layout.addSeparator()
+        self._add(layout, "strip_parameters", "Strip &Parameters...", self.edit_strip_parameters)
+        menu.addSeparator()
+
+        for element, label in FONT_ELEMENTS:
+            font_menu = menu.addMenu(label)
+            current = settings.fonts[element]
+            for kind, choices in (("family", FONT_FAMILIES), ("size", FONT_SIZES), ("weight", ("normal", "bold")), ("slant", ("roman", "italic"))):
+                kind_group = QActionGroup(self)
+                for choice in choices:
+                    action = self._add(
+                        font_menu, f"font_{element}_{kind}_{choice}", str(choice).title(), None, checkable=True
+                    )
+                    action.setChecked(getattr(current, kind) == choice)
+                    action.triggered.connect(lambda _c=False, e=element, k=kind, v=choice: self.set_font(e, **{k: v}))
+                    kind_group.addAction(action)
+                font_menu.addSeparator()
+        menu.addSeparator()
+        theme = self._add(menu, "theme_colors", "Use &Theme Colors", None, checkable=True)
+        theme.setChecked(settings.theme_colors)
+        theme.triggered.connect(lambda on: self.set_canvas_colour(theme_colors=on))
+        menu.addSeparator()
+        for key, label in (("foreground", "&Foreground"), ("background", "&Background"), ("grid", "&Grid")):
+            colour_menu = menu.addMenu(label)
+            colour_group = QActionGroup(self)
+            for colour in CANVAS_COLOURS:
+                action = self._add(colour_menu, f"{key}_{colour}", colour.title(), None, checkable=True)
+                action.setChecked(getattr(settings, key) == colour)
+                action.triggered.connect(lambda _c=False, k=key, v=colour: self.set_canvas_colour(**{k: v}))
+                colour_group.addAction(action)
+
+    # -- the canvas ------------------------------------------------------------
+
+    def select_graph(self, index: int) -> None:
+        """Make one graph the one the Graph and Data menus act on."""
+        if 0 <= index < len(self.graphs):
+            self.current_graph = index
+            self.current_dataset = 0
+            self.zoom_stack.reset()
+            self._sync_graph_menus()
+            self.draw()
+
+    def add_graph(self, style: PlotStyle = PlotStyle.LINE) -> PlotState:
+        """DS9's Add Graph: an empty graph after the others, made current."""
+        graph = PlotState()
+        graph.style = style
+        self.graphs.append(graph)
+        self._build_canvas_menu()
+        self.select_graph(len(self.graphs) - 1)
+        return graph
+
+    def delete_graph(self) -> bool:
+        """DS9's Delete Graph: the current one, unless it is the only one."""
+        if len(self.graphs) <= 1:
+            return False
+        del self.graphs[self.current_graph]
+        self.current_graph = min(self.current_graph, len(self.graphs) - 1)
+        self._build_canvas_menu()
+        self.select_graph(self.current_graph)
+        return True
+
+    def set_layout(self, layout: str) -> None:
+        """Grid, row, column or strip."""
+        if layout not in LAYOUTS:
+            raise ValueError(f"{layout} is not a layout")
+        self.canvas_settings.layout = layout
+        self.draw()
+
+    def edit_strip_parameters(self) -> None:
+        """DS9's Strip Parameters: the strip scale, as a percentage."""
+        scale, ok = QInputDialog.getDouble(
+            self, "Strip Parameters", "Scale (%):", self.canvas_settings.strip_scale, 1.0, 100.0, 1
+        )
+        if ok:
+            self.canvas_settings.strip_scale = scale
+            self.draw()
+
+    def set_font(self, element: str, **changes) -> None:
+        """Change one of the canvas fonts: family, size, weight or slant."""
+        font = self.canvas_settings.fonts[element]
+        for key, value in changes.items():
+            setattr(font, key, value)
+        self.draw()
+
+    def set_canvas_colour(self, **changes) -> None:
+        """Foreground, background, grid colour, or whether the theme's are used."""
+        for key, value in changes.items():
+            setattr(self.canvas_settings, key, value)
+        self.draw()
+
+    def _sync_graph_menus(self) -> None:
+        """Tick the Graph menu's entries for the graph now current."""
+        names = self.actions_by_name
+        for style in PlotStyle:
+            if f"style_{style.value}" in names:
+                names[f"style_{style.value}"].setChecked(style is self.state.style)
+        for axis_name in ("x", "y"):
+            axis = self._axis(axis_name)
+            for flag in ("log", "flip", "grid"):
+                names[f"{axis_name}_{flag}"].setChecked(getattr(axis, flag))
+            for choice in AxisFormat:
+                names[f"{axis_name}_format_{choice.value}"].setChecked(choice is axis.number_format)
+        names["legend_show"].setChecked(self.state.show_legend)
+        for position in LegendPosition:
+            names[f"legend_{position.value}"].setChecked(position is self.state.legend_position)
+        self._build_data_menu()
+        if f"select_graph_{self.current_graph}" in names:
+            names[f"select_graph_{self.current_graph}"].setChecked(True)
+
+    def _on_click(self, event) -> None:
+        """Clicking in a graph selects it, as in DS9."""
+        if event.inaxes is None or self.pointer_mode == "zoom":
+            return
+        axes = list(self._graph_axes)
+        if event.inaxes in axes and axes.index(event.inaxes) != self.current_graph:
+            self.select_graph(axes.index(event.inaxes))
 
     def _add(
         self,
@@ -382,8 +618,9 @@ class PlotWindow(QDialog):
             self._selector = None
         if self.pointer_mode != "zoom" or not self.figure.axes:
             return
+        axes = getattr(self, "_graph_axes", None) or self.figure.axes
         self._selector = RectangleSelector(
-            self.figure.axes[0],
+            axes[min(self.current_graph, len(axes) - 1)],
             self._on_zoom_box,
             useblit=False,
             button=[1],
@@ -581,33 +818,92 @@ class PlotWindow(QDialog):
     # -- drawing --------------------------------------------------------------------
 
     def draw(self) -> None:
-        """Redraw everything from the state."""
+        """Redraw every graph on the canvas, in the canvas's layout."""
         self.figure.clear()
-        axes = self.figure.add_subplot(111)
+        count = len(self.graphs)
+        layout = self.canvas_settings.layout
+        if layout == "row":
+            shape = (1, count)
+        elif layout in ("column", "strip"):
+            shape = (count, 1)
+        else:
+            columns = math.ceil(math.sqrt(count))
+            shape = (math.ceil(count / columns), columns)
+        if layout == "strip" and count > 1:
+            # DS9's strip: stacked graphs sharing one x axis, touching.
+            ratios = self.canvas_settings.strip_heights(count)
+            spec = self.figure.add_gridspec(count, 1, height_ratios=ratios, hspace=0.0)
+            self._graph_axes = []
+            for index in range(count):
+                share = self._graph_axes[0] if self._graph_axes else None
+                self._graph_axes.append(self.figure.add_subplot(spec[index, 0], sharex=share))
+            self.figure.set_tight_layout(False)
+        else:
+            self.figure.set_tight_layout(True)
+            self._graph_axes = [self.figure.add_subplot(*shape, index + 1) for index in range(count)]
 
-        for dataset in self.state.visible:
-            self._draw_dataset(axes, dataset)
-
-        axes.set_title(self.state.title)
-        axes.set_xlabel(self.state.x_axis.label)
-        axes.set_ylabel(self.state.y_axis.label)
-        self._apply_axis(axes, "x", self.state.x_axis)
-        self._apply_axis(axes, "y", self.state.y_axis)
-
-        if self.state.show_legend and self.state.visible:
-            axes.legend(
-                loc=self.state.legend_position.matplotlib,
-                title=self.state.legend_title or None,
-                fontsize="small",
-            )
+        for index, (axes, graph) in enumerate(zip(self._graph_axes, self.graphs, strict=True)):
+            self._draw_graph(axes, graph)
+            if layout == "strip" and index < count - 1:
+                axes.tick_params(labelbottom=False)
+                axes.set_xlabel("")
 
         self._install_selector()
         plot_theme.style_figure(self.figure, self)
+        self._apply_canvas_style()
+        if not hasattr(self, "_click_hooked"):
+            self.canvas.mpl_connect("button_press_event", self._on_click)
+            self._click_hooked = True
         self.canvas.draw_idle()
 
-    def _draw_dataset(self, axes, dataset: Dataset) -> None:
-        """Draw one curve in whichever style the plot is in."""
-        if self.state.style is PlotStyle.BAR:
+    def _draw_graph(self, axes, graph: PlotState) -> None:
+        """Draw one graph's datasets, titles, axes and legend."""
+        for dataset in graph.visible:
+            self._draw_dataset(axes, dataset, graph)
+
+        axes.set_title(graph.title)
+        axes.set_xlabel(graph.x_axis.label)
+        axes.set_ylabel(graph.y_axis.label)
+        self._apply_axis(axes, "x", graph.x_axis, graph)
+        self._apply_axis(axes, "y", graph.y_axis, graph)
+
+        if graph.show_legend and graph.visible:
+            axes.legend(
+                loc=graph.legend_position.matplotlib,
+                title=graph.legend_title or None,
+                fontsize="small",
+            )
+
+    def _apply_canvas_style(self) -> None:
+        """The canvas fonts, and its colours unless the theme's are used."""
+        settings = self.canvas_settings
+        for axes in self._graph_axes:
+            settings.fonts["title"].apply(axes.title)
+            settings.fonts["axes_title"].apply(axes.xaxis.label)
+            settings.fonts["axes_title"].apply(axes.yaxis.label)
+            for label in (*axes.get_xticklabels(), *axes.get_yticklabels()):
+                settings.fonts["axes_number"].apply(label)
+            legend = axes.get_legend()
+            if legend is not None:
+                settings.fonts["legend_title"].apply(legend.get_title())
+                for text in legend.get_texts():
+                    settings.fonts["legend"].apply(text)
+            if not settings.theme_colors:
+                axes.set_facecolor(settings.background)
+                axes.tick_params(colors=settings.foreground, which="both")
+                for spine in axes.spines.values():
+                    spine.set_color(settings.foreground)
+                for text in (axes.title, axes.xaxis.label, axes.yaxis.label):
+                    text.set_color(settings.foreground)
+                for line in (*axes.get_xgridlines(), *axes.get_ygridlines()):
+                    line.set_color(settings.grid)
+        if not settings.theme_colors:
+            self.figure.set_facecolor(settings.background)
+
+    def _draw_dataset(self, axes, dataset: Dataset, graph: PlotState | None = None) -> None:
+        """Draw one curve in whichever style its graph is in."""
+        graph = graph or self.state
+        if graph.style is PlotStyle.BAR:
             width = _bar_width(dataset.x)
             axes.bar(
                 dataset.x,
@@ -621,7 +917,7 @@ class PlotWindow(QDialog):
             )
             return
 
-        line_style = "none" if self.state.style is PlotStyle.SCATTER else "-"
+        line_style = "none" if graph.style is PlotStyle.SCATTER else "-"
         if dataset.x_error or dataset.y_error:
             axes.errorbar(
                 dataset.x,
@@ -649,13 +945,14 @@ class PlotWindow(QDialog):
             markersize=dataset.size,
         )
 
-    def _apply_axis(self, axes, name: str, axis: Axis) -> None:
+    def _apply_axis(self, axes, name: str, axis: Axis, graph: PlotState | None = None) -> None:
         """Put one axis's settings onto the drawn axes."""
+        graph = graph or self.state
         if axis.log:
             # A log axis needs positive data; matplotlib would draw nothing
             # and say nothing, so fall back rather than show an empty plot.
             values = [
-                value for dataset in self.state.visible for value in (dataset.x if name == "x" else dataset.y)
+                value for dataset in graph.visible for value in (dataset.x if name == "x" else dataset.y)
             ]
             if values and min(values) > 0:
                 getattr(axes, f"set_{name}scale")("log")
@@ -675,7 +972,7 @@ class PlotWindow(QDialog):
             formatter.set_powerlimits((0, 0))
             axis_object.set_major_formatter(formatter)
 
-        axes.grid(self.state.x_axis.grid or self.state.y_axis.grid, alpha=0.3)
+        axes.grid(graph.x_axis.grid or graph.y_axis.grid, alpha=0.3)
 
 
 def _bar_width(x: list[float]) -> float:

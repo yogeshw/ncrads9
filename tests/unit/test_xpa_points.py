@@ -1386,7 +1386,9 @@ def test_the_plot_point_says_when_there_is_no_plot(xpa):
 
 def test_the_plot_point_reports_what_it_cannot_do(xpa, main_window):
     _set(xpa, "plot", "line")
-    assert "one graph" in _set(xpa, "plot", "layout", "strip")["message"]
+    # A canvas holds several graphs now, so the layouts are real.
+    assert _set(xpa, "plot", "layout", "strip")["status"] == "ok"
+    assert _set(xpa, "plot", "layout", "sideways")["status"] == "error"
     assert _set(xpa, "plot", "wibble")["status"] == "error"
     for plot in main_window.analysis.plots():
         plot.close()

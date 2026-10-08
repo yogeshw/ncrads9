@@ -3136,6 +3136,7 @@ REMAINING_POINTS: tuple[AccessPoint, ...] = (
     AccessPoint(
         "plot",
         get=lambda window: _plot_text(window),
+        query=lambda window, args: _plot_query(window, args),
         set=lambda window, args: _plot(window, args),
         summary="the plot windows",
     ),
@@ -3784,6 +3785,27 @@ def _plot_text(window) -> str:
     )
 
 
+def _plot_query(window, args: list[str]) -> str:
+    """`xpaget ds9 plot [layout [strip scale]|current graph|background|font <e> <p>]`."""
+    words = [str(word).lower() for word in args]
+    if not words:
+        return _plot_text(window)
+    plot = window.analysis.current_plot()
+    if plot is None:
+        raise ValueError("no plot is open")
+    settings = plot.canvas_settings
+    if words[0] == "layout":
+        return f"{settings.strip_scale:g}" if words[1:3] == ["strip", "scale"] else settings.layout
+    if words[:2] == ["current", "graph"]:
+        return str(plot.current_graph + 1)
+    if words[0] == "background":
+        return settings.background
+    if words[0] == "font" and len(words) >= 3:
+        font = settings.fonts[_PLOT_FONT_ELEMENTS.get(words[1], "title")]
+        return str({"font": font.family, "size": font.size, "weight": font.weight, "slant": font.slant}.get(words[2], ""))
+    raise ValueError(f"there is no plot {' '.join(words)} to read")
+
+
 def _plot(window, args: list[str]) -> str | None:
     """DS9's `plot`: the plot windows.
 
@@ -3845,10 +3867,15 @@ def _plot(window, args: list[str]) -> str | None:
         if not rest:
             return "a plot to make current is needed"
         if rest[0].lower() in ("graph", "dataset"):
-            # One graph per window here, so `current graph` is a no-op;
-            # `current dataset <n>` picks which curve the rest acts on.
-            if rest[0].lower() == "dataset" and len(rest) > 1 and rest[1].isdigit():
-                plot.select_dataset(int(rest[1]) - 1)
+            if len(rest) < 2 or not rest[1].isdigit():
+                return f"current {rest[0]} takes a number"
+            index = int(rest[1]) - 1
+            if rest[0].lower() == "graph":
+                if not 0 <= index < len(plot.graphs):
+                    return f"there is no graph {rest[1]}"
+                plot.select_graph(index)
+            else:
+                plot.select_dataset(index)
             return None
         return None if controller.set_current_plot(rest[0]) else f"no plot called {rest[0]}"
     if first in ("stats", "list"):
@@ -3862,17 +3889,76 @@ def _plot(window, args: list[str]) -> str | None:
         plot.duplicate_dataset()
         return None
     if first == "delete":
+        if rest and rest[0].lower() == "graph":
+            return None if plot.delete_graph() else "the last graph cannot be deleted"
         if rest and rest[0].lower() == "dataset":
             plot.delete_dataset()
         return None
+    if first == "add":
+        if rest[:1] != ["graph"]:
+            return "plot add takes graph line|bar"
+        kind = rest[1].lower() if len(rest) > 1 else "line"
+        if kind not in ("line", "bar", "scatter"):
+            return f"{rest[1]} is not a kind of graph"
+        plot.add_graph(PlotStyle(kind))
+        return None
+    if first == "background":
+        if not rest:
+            return "background takes a colour"
+        plot.set_canvas_colour(theme_colors=False, background=rest[0].lower())
+        return None
+    if first == "font":
+        return _plot_font(plot, rest)
     if first == "print":
         plot.print_plot()
         return None
     if first == "layout":
-        # One graph per plot window, so DS9's grid/row/column/strip
-        # layouts have nothing to arrange.
-        return "this plot holds one graph, so it has no layout"
+        lowered = [word.lower() for word in rest]
+        if lowered[:2] == ["strip", "scale"]:
+            try:
+                plot.canvas_settings.strip_scale = float(rest[2])
+            except (IndexError, ValueError):
+                return "layout strip scale takes a percentage"
+            plot.draw()
+            return None
+        if not lowered or lowered[0] not in ("grid", "row", "column", "strip"):
+            return "layout takes grid, row, column or strip"
+        plot.set_layout(lowered[0])
+        return None
     return f"plot does not take {first}"
+
+
+#: `plot font <element>`: DS9's names for the canvas fonts.
+_PLOT_FONT_ELEMENTS = {
+    "title": "title",
+    "labels": "axes_title",
+    "textlab": "axes_title",
+    "numbers": "axes_number",
+    "numlab": "axes_number",
+    "legendtitle": "legend_title",
+    "legend": "legend",
+}
+
+
+def _plot_font(plot, words: list[str]) -> str | None:
+    """`plot font title|labels|numbers font|size|weight|slant <value>`."""
+    if len(words) < 3:
+        return "plot font takes an element, a property and a value"
+    element = _PLOT_FONT_ELEMENTS.get(words[0].lower())
+    if element is None:
+        return f"{words[0]} is not a plot font"
+    what, value = words[1].lower(), words[2].lower()
+    if what == "font" and value in ("times", "helvetica", "courier"):
+        plot.set_font(element, family=value)
+    elif what == "size" and value.isdigit():
+        plot.set_font(element, size=int(value))
+    elif what == "weight" and value in ("normal", "bold"):
+        plot.set_font(element, weight=value)
+    elif what == "slant" and value in ("roman", "italic"):
+        plot.set_font(element, slant=value)
+    else:
+        return f"plot font {words[1]} cannot be {words[2]}"
+    return None
 
 
 def _plot_load(plot, path: str, data_format: str) -> str | None:

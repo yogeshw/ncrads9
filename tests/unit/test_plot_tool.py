@@ -346,9 +346,9 @@ def window(qapp):
     plot.close()
 
 
-def test_the_window_has_ds9s_four_menus(window):
+def test_the_window_has_ds9s_five_menus(window):
     labels = [action.text() for action in window.layout().menuBar().actions()]
-    assert labels == ["&File", "&Edit", "&Graph", "&Data"]
+    assert labels == ["&File", "&Edit", "&Canvas", "&Graph", "&Data"]
 
 
 @pytest.mark.parametrize("style", list(PlotStyle))
