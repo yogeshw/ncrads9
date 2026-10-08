@@ -73,6 +73,14 @@ class VOController(Controller):
         #: How registry queries fetch. Replaced in tests; `None` is the
         #: real client.
         self.registry_fetcher = None
+        #: How the VO site list is fetched; replaced in tests.
+        self.site_fetcher = None
+        #: How a site's page is opened: the web browser.
+        self.site_opener = lambda url: QDesktopServices.openUrl(QUrl(url))
+        #: The sites connected to, by host, DS9's `xpaget ds9 vo`.
+        self.connected: set[str] = set()
+        #: DS9's `vo` settings that NCRADS9 keeps: the keep-alive delay.
+        self.delay = 15
         #: The registry browser, kept so it is not collected while shown.
         self._registry_dialog = None
 
@@ -99,9 +107,10 @@ class VOController(Controller):
             lambda _checked=False: self.window.catalog.query_footprints("fpcxc")
         )
         menu.action_analysis_vizier.triggered.connect(self.query_vizier_catalog)
-        # Catalog Tool is the catalog controller's alone. Virtual Observatory
-        # is DS9's list of VO services, which the registry browser is.
-        menu.action_virtual_observatory.triggered.connect(lambda _checked=False: self.show_registry())
+        # Catalog Tool is the catalog controller's alone. Analysis ->
+        # Virtual Observatory is DS9's window of VO sites; the registry
+        # browser stays on the VO menu.
+        menu.action_virtual_observatory.triggered.connect(lambda _checked=False: self.show_sites())
 
     def query_2mass_image(self) -> None:
         """Query 2MASS via SIAP and load image into new frame."""
@@ -178,6 +187,50 @@ class VOController(Controller):
         QDesktopServices.openUrl(QUrl(f"{CHANDRA_OBSID_URL}{obsid}"))
         self.status(f"Opened Chandra ObsId {obsid}")
         return obsid
+
+    # -- DS9's Virtual Observatory window -----------------------------------------
+
+    def show_sites(self):
+        """DS9's Analysis -> Virtual Observatory: the window of VO sites."""
+        from ..dialogs.vo_sites_dialog import VOSitesDialog
+
+        kwargs = {"fetch": self.site_fetcher} if self.site_fetcher is not None else {}
+        dialog = VOSitesDialog(self.window, **kwargs)
+        for index, site in enumerate(dialog.sites):
+            if site.host in self.connected:
+                dialog.boxes[index].blockSignals(True)
+                dialog.boxes[index].setChecked(True)
+                dialog.boxes[index].blockSignals(False)
+        return self.show_window(dialog)
+
+    def connect_site(self, name: str, connect: bool = True) -> str | None:
+        """DS9's `vo <site>`, `vo connect|disconnect <site>`.
+
+        A site is named by its host, its title or its web address, as the
+        list gives them; connecting opens its page in the web browser.
+        """
+        from ..dialogs.vo_sites_dialog import load_sites
+
+        fetch = self.site_fetcher
+        sites, _note = load_sites(fetch) if fetch is not None else load_sites()
+        wanted = name.lower()
+        site = next(
+            (
+                site
+                for site in sites
+                if wanted in (site.host.lower(), site.title.lower(), site.url.lower())
+                or site.host.lower().split(":")[0].startswith(wanted)
+            ),
+            None,
+        )
+        if site is None:
+            return f"there is no VO site called {name}"
+        if connect:
+            self.connected.add(site.host)
+            self.site_opener(site.url)
+        else:
+            self.connected.discard(site.host)
+        return None
 
     # -- the VO registry browser (M8-21) ---------------------------------------
 

@@ -2465,6 +2465,59 @@ def _panel(window, args: list[str], name: str) -> str | None:
     return None
 
 
+def _vo_text(window, args: list[str]) -> str:
+    """`xpaget ds9 vo [method|server|internal|delay|connect]`."""
+    from ...ui.dialogs.vo_sites_dialog import SITE_LISTS
+
+    what = str(args[0]).lower() if args else ""
+    return {
+        "": " ".join(sorted(window.vo.connected)),
+        "connect": " ".join(sorted(window.vo.connected)),
+        "method": "mime",
+        "server": SITE_LISTS[0],
+        "internal": "no",
+        "delay": str(window.vo.delay),
+    }.get(what, "")
+
+
+def _vo(window, args: list[str]) -> str | None:
+    """DS9's `vo`: `<site>`, `connect|disconnect <site>`, `method`,
+    `server`, `internal`, `delay`, `open|close`."""
+    words = [str(word) for word in args]
+    if not words or words[0].lower() == "open":
+        window.vo.show_sites()
+        return None
+    verb = words[0].lower()
+    rest = words[1:]
+    if verb == "close":
+        for widget in list((getattr(window, "_open_windows", {}) or {}).values()):
+            if type(widget).__name__ == "VOSitesDialog":
+                widget.close()
+        return None
+    if verb in ("connect", "disconnect"):
+        if not rest:
+            return f"vo {verb} names a site"
+        return window.vo.connect_site(rest[0], connect=verb == "connect")
+    if verb == "method":
+        # DS9's other method, xpa, connects through a remote XPA proxy,
+        # which NCRADS9 has no client for.
+        return None if rest[:1] == ["mime"] else "only the mime method is available; sites open in the web browser"
+    if verb == "internal":
+        wanted = as_bool(rest[0]) if rest else None
+        if wanted is None:
+            return "internal takes yes or no"
+        return None if not wanted else "there is no internal browser; sites open in the system web browser"
+    if verb == "server":
+        return "the site list is DS9's own and cannot be changed here" if rest else "server takes a URL"
+    if verb == "delay":
+        try:
+            window.vo.delay = int(rest[0])
+        except (IndexError, ValueError):
+            return "delay takes minutes"
+        return None
+    return window.vo.connect_site(words[0])
+
+
 def _panner(window, args: list[str]) -> str | None:
     """`panner [yes|no|open|close]` and `panner compass yes|no`."""
     words = [str(word).lower() for word in args]
@@ -2695,8 +2748,10 @@ TOOL_WINDOW_POINTS: tuple[AccessPoint, ...] = (
     ),
     AccessPoint(
         "vo",
-        set=_show_window("vo.show_registry"),
-        summary="the virtual observatory tool: the registry of services",
+        get=lambda window: " ".join(sorted(window.vo.connected)),
+        query=lambda window, args: _vo_text(window, args),
+        set=lambda window, args: _vo(window, args),
+        summary="DS9's VO sites: connect, disconnect, method, server, delay",
     ),
     AccessPoint(
         "shm",
