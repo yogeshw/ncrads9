@@ -217,23 +217,42 @@ class CubeHandler:
             return 0
         return int(self._data.shape[self._numpy_axis(AxisOrder.parse(order).z)])
 
+    def extra_axes(self, order: AxisOrder | str = AxisOrder()) -> list[tuple[int, int]]:
+        """The FITS axes beyond the three the order uses, and their lengths.
+
+        A four-dimensional file -- a spectral cube with Stokes planes, say --
+        has one; DS9's Cube dialog gives each its own slider.
+        """
+        if self._data is None:
+            return []
+        axes = AxisOrder.parse(order)
+        used = {axes.x, axes.y, axes.z}
+        return [
+            (axis, int(self._data.shape[self._numpy_axis(axis)]))
+            for axis in range(4, self._data.ndim + 1)
+            if axis not in used
+        ]
+
     def get_slice(
         self,
         channel: int,
         order: AxisOrder | str = AxisOrder(),
+        extra: dict[int, int] | None = None,
     ) -> NDArray[np.floating] | None:
-        """One 2D slice, laid out for display.
+        """One plane of the cube.
 
         Args:
-            channel: The slice index along the order's third axis, from zero.
+            channel: Which slice along the order's third axis, from zero.
             order: The axis order.
+            extra: For an array of more than three axes, the index along each
+                FITS axis from the fourth on; an axis not named is taken at
+                its first element.
 
         Returns:
-            The slice with the order's y axis down the rows and its x axis
-            across the columns, or None with no cube loaded.
+            The plane, as a 2D array with display x along its columns.
 
         Raises:
-            IndexError: If `channel` is outside the sliced axis.
+            IndexError: If `channel`, or an index in `extra`, is outside its axis.
         """
         if self._data is None:
             return None
@@ -243,15 +262,24 @@ class CubeHandler:
         if not 0 <= channel < depth:
             raise IndexError(f"slice {channel} outside 0..{depth - 1}")
 
-        plane = np.take(self._data, channel, axis=self._numpy_axis(axes.z))
-        # Any axes beyond the third are taken at their first element, which
-        # is what DS9 does with a four-dimensional file.
-        while plane.ndim > 2:
-            plane = plane[0]
+        extra = extra or {}
+        index: list[object] = []
+        for numpy_axis in range(self._data.ndim):
+            fits_axis = self._data.ndim - numpy_axis
+            if fits_axis == axes.z:
+                index.append(channel)
+            elif fits_axis in (axes.x, axes.y):
+                index.append(slice(None))
+            else:
+                length = self._data.shape[numpy_axis]
+                wanted = int(extra.get(fits_axis, 0))
+                if not 0 <= wanted < length:
+                    raise IndexError(f"axis {fits_axis} index {wanted} outside 0..{length - 1}")
+                index.append(wanted)
+        plane = self._data[tuple(index)]
 
-        # After the take, the two remaining axes are the other two FITS axes
-        # in descending FITS order. Transpose when the order wants them the
-        # other way round.
+        # The two remaining axes are the other two FITS axes in descending
+        # FITS order. Transpose when the order wants them the other way round.
         remaining = sorted((axes.x, axes.y), reverse=True)
         return plane.T if remaining[0] == axes.x else plane
 

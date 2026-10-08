@@ -71,6 +71,9 @@ class Frame:
     #: which FITS axes are display x, y and the slice axis. DS9 writes the
     #: order as three digits on its Cube dialog's Axis Order menu.
     slice_index: int = 0
+    #: For an array of more than three axes: the index along each FITS axis
+    #: from the fourth on, as DS9's Cube dialog has a slider for each.
+    axis_slices: dict[int, int] = None
     axis_order: str = "123"
     image_data: np.ndarray | None = None
     header: dict | None = None
@@ -172,6 +175,8 @@ class Frame:
     def __post_init__(self):
         if self.regions is None:
             self.regions = []
+        if self.axis_slices is None:
+            self.axis_slices = {}
         if self.rgb_channels is None:
             self.rgb_channels = {"red": None, "green": None, "blue": None}
         if self.rgb_view is None:

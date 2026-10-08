@@ -508,6 +508,7 @@ class FileController(Controller):
         data = image.data
         frame.slice_index = 0
         frame.axis_order = "123"
+        frame.axis_slices = {}
         if is_cube(data):
             plane = CubeHandler(data, image.header).get_slice(0)
             data = plane if plane is not None else data

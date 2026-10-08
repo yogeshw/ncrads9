@@ -749,6 +749,7 @@ class FrameController(Controller):
         dialog = self.window.cube_dialog
         dialog.set_axis_order(frame.axis_order, notify=False)
         dialog.set_depth(handler.depth(frame.axis_order), frame.slice_index)
+        dialog.set_extra_axes(self.cube_axes()[1:])
         self.update_cube_coordinate()
         dialog.show()
         dialog.raise_()
@@ -766,7 +767,7 @@ class FrameController(Controller):
 
         depth = handler.depth(frame.axis_order)
         wanted = max(0, min(int(slice_index), depth - 1))
-        plane = handler.get_slice(wanted, frame.axis_order)
+        plane = handler.get_slice(wanted, frame.axis_order, frame.axis_slices)
         if plane is None:
             return
 
@@ -784,6 +785,47 @@ class FrameController(Controller):
         self.window.z2 = None
         self.window.display.display()
         self.update_cube_coordinate()
+
+    def set_axis_slice(self, axis: int, index: int) -> str | None:
+        """Show one position along any axis of the current frame's cube.
+
+        Axis 3 -- or whichever the axis order slices -- is `set_slice`; an
+        axis from the fourth on is held in `frame.axis_slices` and the plane
+        on screen is cut again through it.
+
+        Args:
+            axis: The FITS axis, counting from one.
+            index: The position along it, from zero; clamped to the axis.
+
+        Returns:
+            None, or why the axis cannot be stepped.
+        """
+        handler = self.cube_handler()
+        frame = self.frames.current_frame
+        if handler is None or frame is None:
+            return "the current frame holds no data cube"
+        if axis == AxisOrder.parse(frame.axis_order).z:
+            self.set_slice(index)
+            return None
+        lengths = dict(handler.extra_axes(frame.axis_order))
+        if axis not in lengths:
+            return f"the cube has no axis {axis} to step"
+        frame.axis_slices[axis] = max(0, min(int(index), lengths[axis] - 1))
+        self.set_slice(frame.slice_index)
+        self.sync_cube_dialog()
+        return None
+
+    def cube_axes(self) -> list[tuple[int, int, int]]:
+        """Every steppable axis of the current cube: (axis, length, position)."""
+        handler = self.cube_handler()
+        frame = self.frames.current_frame
+        if handler is None or frame is None:
+            return []
+        z = AxisOrder.parse(frame.axis_order).z
+        steppable = [(z, handler.depth(frame.axis_order), frame.slice_index)]
+        for axis, length in handler.extra_axes(frame.axis_order):
+            steppable.append((axis, length, frame.axis_slices.get(axis, 0)))
+        return steppable
 
     def set_axis_order(self, order: str | AxisOrder) -> None:
         """Re-slice the current frame along a different axis.
@@ -888,10 +930,12 @@ class FrameController(Controller):
         frame = self.frames.current_frame
         if handler is None or frame is None:
             dialog.set_depth(1, 0)
+            dialog.set_extra_axes([])
             dialog.set_coordinate("")
             return
         dialog.set_axis_order(frame.axis_order, notify=False)
         dialog.set_depth(handler.depth(frame.axis_order), frame.slice_index)
+        dialog.set_extra_axes(self.cube_axes()[1:])
         self.update_cube_coordinate()
 
     @staticmethod
@@ -1652,7 +1696,11 @@ class FrameController(Controller):
                 continue
             depth = handler.depth(frame.axis_order)
             wanted = max(0, min(int(index), depth - 1))
-            plane = handler.get_slice(wanted, frame.axis_order)
+            # The axes beyond the third follow the source too, where they exist.
+            for axis, length in handler.extra_axes(frame.axis_order):
+                if axis in source.axis_slices:
+                    frame.axis_slices[axis] = min(source.axis_slices[axis], length - 1)
+            plane = handler.get_slice(wanted, frame.axis_order, frame.axis_slices)
             if plane is None:
                 continue
             frame.slice_index = wanted

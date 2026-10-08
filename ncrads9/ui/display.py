@@ -395,6 +395,7 @@ class DisplayPipeline:
             if is_cube(image_data):
                 frame.slice_index = 0
                 frame.axis_order = "123"
+                frame.axis_slices = {}
                 plane = CubeHandler(image_data, header).get_slice(0)
                 image_data = plane if plane is not None else image_data
             frame.image_data = image_data

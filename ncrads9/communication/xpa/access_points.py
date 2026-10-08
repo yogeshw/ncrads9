@@ -1401,8 +1401,18 @@ def _cube_table(window) -> dict[str, str]:
         "lock": str(getattr(window, "_frame_lock_scope", {}).get("slice", "none")),
         "order": str(getattr(frame, "axis_order", "123") or "123"),
         "axes lock": on_off(window.frame_controller.is_locked("axes_order")),
-        "axis": "3",
+        "axis": str(_cube_axis_state(window)[0]) if window.frame_controller.cube_handler() else "3",
     }
+
+
+def _cube_axis_state(window) -> tuple[int, int, int]:
+    """The axis `cube axis` chose, its length and position; the third by default."""
+    steppable = window.frame_controller.cube_axes()
+    wanted = getattr(window, "_cube_axis", None)
+    for axis, length, position in steppable:
+        if axis == wanted:
+            return axis, length, position
+    return steppable[0] if steppable else (3, 1, 0)
 
 
 def _cube(window, args: list[str]) -> str | None:
@@ -1434,16 +1444,15 @@ def _cube(window, args: list[str]) -> str | None:
     if first in ("next", "prev", "first", "last"):
         if handler is None or frame is None:
             return "the current frame holds no data cube"
-        depth = handler.depth(frame.axis_order)
-        current = int(frame.slice_index or 0)
+        # On the axis `cube axis` chose: the third, or one beyond it.
+        axis, depth, current = _cube_axis_state(window)
         wanted = {
             "next": (current + 1) % depth,
             "prev": (current - 1) % depth,
             "first": 0,
             "last": depth - 1,
         }[first]
-        controller.set_slice(wanted)
-        return None
+        return controller.set_axis_slice(axis, wanted)
     if first == "interval":
         try:
             seconds = float(rest[0])
@@ -1474,13 +1483,37 @@ def _cube(window, args: list[str]) -> str | None:
             return "axes takes lock"
         return _lock(window, ["axes", *rest[1:]])
     if first == "axis":
-        if rest and rest[0] == "3":
-            return None
-        return "only the third axis can be stepped through; a fourth is not implemented"
+        # DS9's `cube axis <n>`: which axis the slice commands step along.
+        if not rest or not rest[0].isdigit():
+            return "axis takes an axis number"
+        steppable = {axis for axis, _length, _position in controller.cube_axes()}
+        if int(rest[0]) not in steppable:
+            return f"the cube has no axis {rest[0]} to step; it has {', '.join(map(str, sorted(steppable)))}"
+        window._cube_axis = int(rest[0])
+        return None
 
-    if rest and rest[0] not in ("image",):
-        return f"a slice in {rest[0]} coordinates is not implemented; give the slice number (image)"
-    return _slice(window, [first])
+    axis, depth, _current = _cube_axis_state(window) if handler is not None else (3, 1, 0)
+    if rest and rest[0] != "image":
+        # `cube 4.4 wcs`: the slice nearest a world value of the slice axis.
+        if handler is None or frame is None:
+            return "the current frame holds no data cube"
+        key = rest[0][3:] if rest[0].startswith("wcs") else ""
+        try:
+            value = float(first)
+        except ValueError:
+            return f"{first} is not a coordinate"
+        wanted = handler.slice_from_world(value, frame.axis_order, key)
+        if wanted is None:
+            return f"the cube's slice axis has no {rest[0]} coordinates"
+        controller.set_slice(wanted)
+        return None
+    try:
+        number = int(float(first))
+    except ValueError:
+        return f"{first} is not a slice number"
+    if handler is None:
+        return _slice(window, [first])
+    return controller.set_axis_slice(axis, max(0, min(number - 1, depth - 1)))
 
 
 def _lock_text(window) -> str:

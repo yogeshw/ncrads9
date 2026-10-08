@@ -87,6 +87,8 @@ class CubePanel(QDialog):
     coordinate_requested: pyqtSignal = pyqtSignal(str)
     #: The coordinate menu changed: `wcs`, `wcsa`.. or `image`.
     system_changed: pyqtSignal = pyqtSignal(str)
+    #: A position chosen on one of the axes beyond the third: (axis, index).
+    axis_slice_changed: pyqtSignal = pyqtSignal(int, int)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -104,6 +106,12 @@ class CubePanel(QDialog):
 
         layout = QVBoxLayout(self)
         layout.addWidget(self._build_slice_group())
+        #: DS9 gives every axis from the fourth on a slider of its own.
+        self._extra_group = QGroupBox("Other Axes")
+        self._extra_layout = QGridLayout(self._extra_group)
+        self._extra_rows: dict[int, tuple[QSlider, QSpinBox, QLabel]] = {}
+        self._extra_group.setVisible(False)
+        layout.addWidget(self._extra_group)
         layout.addWidget(self._build_axis_group())
 
         box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -192,6 +200,45 @@ class CubePanel(QDialog):
         return group
 
     # -- state ---------------------------------------------------------------
+
+    def set_extra_axes(self, axes: list[tuple[int, int, int]]) -> None:
+        """Show a slider for each axis beyond the third: (axis, length, position)."""
+        wanted = {axis for axis, _length, _position in axes}
+        if wanted != set(self._extra_rows):
+            while self._extra_layout.count():
+                item = self._extra_layout.takeAt(0)
+                if item.widget() is not None:
+                    item.widget().deleteLater()
+            self._extra_rows = {}
+            for row, (axis, _length, _position) in enumerate(axes):
+                slider = QSlider(Qt.Orientation.Horizontal)
+                spinbox = QSpinBox()
+                label = QLabel()
+                slider.setMinimum(1)
+                spinbox.setMinimum(1)
+                slider.valueChanged.connect(lambda value, a=axis: self._on_extra(a, value))
+                spinbox.valueChanged.connect(lambda value, a=axis: self._on_extra(a, value))
+                self._extra_layout.addWidget(QLabel(f"Axis {axis}"), row, 0)
+                self._extra_layout.addWidget(slider, row, 1)
+                self._extra_layout.addWidget(spinbox, row, 2)
+                self._extra_layout.addWidget(label, row, 3)
+                self._extra_rows[axis] = (slider, spinbox, label)
+        self._updating = True
+        try:
+            for axis, length, position in axes:
+                slider, spinbox, label = self._extra_rows[axis]
+                for widget in (slider, spinbox):
+                    widget.setMaximum(max(1, length))
+                    widget.setValue(position + 1)
+                label.setText(f"of {length}")
+        finally:
+            self._updating = False
+        self._extra_group.setVisible(bool(axes))
+
+    def _on_extra(self, axis: int, value: int) -> None:
+        if self._updating:
+            return
+        self.axis_slice_changed.emit(axis, value - 1)
 
     def set_depth(self, depth: int, slice_index: int = 0) -> None:
         """Set how many slices there are, and which is shown.
