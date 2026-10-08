@@ -56,6 +56,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ...analysis.plot import dataset as dataset_module
 from ...analysis.plot.dataset import Dataset
 from ...analysis.plot.plot_state import PlotState, PlotStyle
 from ...catalogs import catalog_file
@@ -73,6 +74,7 @@ IMPORTS: tuple[tuple[str, str, catalog_file.CatalogFormat], ...] = (
 
 #: How many bins a new histogram has (`var(bar,num)`, `prism.tcl:83`).
 DEFAULT_BINS = 10
+
 
 
 class PrismDialog(QDialog):
@@ -571,11 +573,14 @@ class PrismDialog(QDialog):
         if len(names) < 2:
             QMessageBox.warning(self, "Prism", "Plotting needs two numeric columns.")
             return None
+        style: dict = {}
         if x_name is None or y_name is None:
             chosen = ColumnChooser(names, self, histogram=False).choose()
             if chosen is None:
                 return None
             x_name, y_name = chosen["x"], chosen["y"]
+            x_error, y_error = chosen.get("x_error"), chosen.get("y_error")
+            style = chosen.get("style", {})
 
         table = self._as_table()
         if table is None:
@@ -592,6 +597,8 @@ class PrismDialog(QDialog):
         for column, attribute in ((x_error, "x_error"), (y_error, "y_error")):
             if column and column in table.colnames:
                 setattr(dataset, attribute, [float(value) for value in table[column]])
+        for attribute, value in style.items():
+            setattr(dataset, attribute, value)
 
         state = PlotState(title=f"{y_name} vs {x_name}")
         state.x_axis.title = x_name
@@ -711,6 +718,14 @@ class PrismDialog(QDialog):
         return True
 
 
+#: The error-column choice meaning "no error bars".
+NO_COLUMN = "(none)"
+
+#: DS9's plot colours and shapes, as the plot model names them.
+PLOT_COLOURS: tuple[str, ...] = tuple(dataset_module.COLORS)
+PLOT_SHAPES: tuple[str, ...] = tuple(dataset_module.SHAPES)
+
+
 class ColumnChooser(QDialog):
     """Which columns to plot, and how many bins to put them in."""
 
@@ -744,6 +759,31 @@ class ColumnChooser(QDialog):
         self._bins.setValue(DEFAULT_BINS)
         if histogram:
             form.addRow("Bins:", self._bins)
+        else:
+            # DS9's Parameters: an error column for each axis, or none.
+            self._x_error = QComboBox()
+            self._y_error = QComboBox()
+            for box in (self._x_error, self._y_error):
+                box.addItem(NO_COLUMN)
+                box.addItems(names)
+            form.addRow("X Error Column:", self._x_error)
+            form.addRow("Y Error Column:", self._y_error)
+            # DS9's Properties: the curve's colour, width, shape and size.
+            self._colour = QComboBox()
+            self._colour.addItems(PLOT_COLOURS)
+            self._colour.setCurrentText(dataset_module.DEFAULT_COLOR if dataset_module.DEFAULT_COLOR in PLOT_COLOURS else PLOT_COLOURS[0])
+            self._width = QSpinBox()
+            self._width.setRange(1, 4)
+            self._width.setValue(dataset_module.DEFAULT_WIDTH)
+            self._shape = QComboBox()
+            self._shape.addItems(PLOT_SHAPES)
+            self._size = QSpinBox()
+            self._size.setRange(1, 20)
+            self._size.setValue(dataset_module.DEFAULT_SIZE)
+            form.addRow("Color:", self._colour)
+            form.addRow("Width:", self._width)
+            form.addRow("Shape:", self._shape)
+            form.addRow("Size:", self._size)
 
         layout.addLayout(form)
         buttons = QDialogButtonBox(
@@ -757,8 +797,18 @@ class ColumnChooser(QDialog):
         """Ask, and say what was chosen, or None if it was cancelled."""
         if self.exec() != QDialog.DialogCode.Accepted:
             return None
-        return {
+        chosen = {
             "x": self._x.currentText(),
             "y": self._y.currentText(),
             "bins": self._bins.value(),
         }
+        if not self._histogram:
+            for key, box in (("x_error", self._x_error), ("y_error", self._y_error)):
+                chosen[key] = None if box.currentText() == NO_COLUMN else box.currentText()
+            chosen["style"] = {
+                "color": self._colour.currentText(),
+                "width": self._width.value(),
+                "shape": self._shape.currentText(),
+                "size": self._size.value(),
+            }
+        return chosen
