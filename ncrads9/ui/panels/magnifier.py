@@ -21,9 +21,11 @@ Author: Yogesh Wadadekar
 """
 
 
+from collections.abc import Callable
+
 import numpy as np
 from numpy.typing import NDArray
-from PyQt6.QtCore import QPointF, Qt
+from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QHBoxLayout,
@@ -59,6 +61,20 @@ class MagnifierPanel(QWidget):
         self._current_image: NDArray[np.float64] | None = None
         self._source_image_size: tuple[int, int] | None = None
         self._cursor_pos: QPointF | None = None
+        #: DS9's `magnifier cursor`, `magnifier region` and `magnifier
+        #: color`: whether the pointer's pixel is outlined, whether the
+        #: frame's regions are drawn over the magnified data, and in what
+        #: colour the cursor is drawn.
+        self.cursor_visible: bool = True
+        self.regions_visible: bool = True
+        self.overlay_color: QColor = QColor("red")
+        #: Supplies the regions to draw and how to place them: a callable
+        #: returning (regions, to_display), where `to_display` takes a
+        #: region's coordinates to the display coordinates the cursor is
+        #: given in. Set by the main window; None draws no regions.
+        self.region_source: Callable[[], tuple[list, Callable[[float, float], tuple[float, float] | None]]] | None = (
+            None
+        )
 
         self._setup_ui()
 
@@ -121,6 +137,46 @@ class MagnifierPanel(QWidget):
         """
         self._cursor_pos = QPointF(x, y)
         self._update_magnifier()
+
+    def set_overlay(self, color: str | None = None, cursor: bool | None = None, regions: bool | None = None) -> None:
+        """Change DS9's magnifier settings, any of them, and redraw."""
+        if color is not None:
+            candidate = QColor(color)
+            if not candidate.isValid():
+                raise ValueError(f"{color} is not a colour")
+            self.overlay_color = candidate
+        if cursor is not None:
+            self.cursor_visible = bool(cursor)
+        if regions is not None:
+            self.regions_visible = bool(regions)
+        self._update_magnifier()
+
+    def _draw_regions(self, painter: QPainter, to_magnifier) -> None:
+        """Draw the frame's regions, through the canvas's own renderer."""
+        from ...regions.region_renderer import RegionRenderer
+
+        try:
+            regions, to_display = self.region_source()
+        except Exception:
+            return
+        if not regions:
+            return
+
+        def to_widget(x: float, y: float) -> QPointF:
+            place = to_display(x, y)
+            return QPointF(-1e6, -1e6) if place is None else to_magnifier(*place)
+
+        renderer = RegionRenderer(show_labels=False)
+        for region in regions:
+            selected = getattr(region, "selected", False)
+            # Selection handles are a canvas affordance, not data.
+            if selected:
+                region.selected = False
+            try:
+                renderer.render_region(painter, region, to_widget)
+            finally:
+                if selected:
+                    region.selected = True
 
     def _update_magnifier(self) -> None:
         """Update the magnified view."""
@@ -217,12 +273,24 @@ class MagnifierPanel(QWidget):
             Qt.TransformationMode.FastTransformation,
         )
 
-        # Draw crosshair
+        # One preview pixel is `scale` magnifier pixels; a display coordinate
+        # becomes a preview one through the downsampling ratio.
+        scale = pixmap.width() / max(1, x2 - x1)
+        ratio_x = (src_w - 1) / (source_w - 1) if source_w > 1 else 1.0
+        ratio_y = (src_h - 1) / (source_h - 1) if source_h > 1 else 1.0
+
+        def to_magnifier(display_x: float, display_y: float) -> QPointF:
+            # Display coordinates run along pixel edges, as the canvas's do.
+            return QPointF((display_x * ratio_x - x1) * scale, (display_y * ratio_y - y1) * scale)
+
         painter = QPainter(pixmap)
-        painter.setPen(QPen(QColor(255, 0, 0), 1))
-        center = pixmap.width() // 2
-        painter.drawLine(center, 0, center, pixmap.height())
-        painter.drawLine(0, center, pixmap.width(), center)
+        if self.regions_visible and self.region_source is not None:
+            self._draw_regions(painter, to_magnifier)
+        if self.cursor_visible:
+            # DS9 outlines the pixel under the pointer.
+            painter.setPen(QPen(self.overlay_color, 1))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(QRectF((x - x1) * scale, (y - y1) * scale, scale, scale))
         painter.end()
 
         self._magnifier_label.setPixmap(pixmap)

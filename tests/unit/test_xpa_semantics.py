@@ -437,7 +437,15 @@ def test_magnifier_zoom(xpa, window):
     _ok(xpa, "magnifier zoom 8")
     assert window.magnifier_panel._zoom_factor == 8
     assert _get(xpa, "magnifier zoom") == "8"
-    _refused(xpa, "magnifier color red")
+    _ok(xpa, "magnifier color red")
+    assert _get(xpa, "magnifier color") == "#ff0000"
+    _ok(xpa, "magnifier cursor no")
+    assert window.magnifier_panel.cursor_visible is False
+    _ok(xpa, "magnifier region no")
+    assert _get(xpa, "magnifier region") == "no"
+    _refused(xpa, "magnifier color nosuchcolour")
+    _ok(xpa, "panner compass no")
+    assert _get(xpa, "panner compass") == "no"
 
 
 def test_mask_grammar(xpa, window, tmp_path):

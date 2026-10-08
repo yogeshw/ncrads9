@@ -497,6 +497,14 @@ class FrameController(Controller):
         self.ensure_active_valid()
         self.window._tile_mode_enabled = self.window._frame_display_mode == "tile"
         if self.window._tile_mode_enabled:
+            # The window's colormap, scale and limits are the current
+            # frame's, in tile mode as in single: clicking a tile loads them,
+            # and going to a frame from the menu or XPA has to as well, or
+            # the next Color or Scale change lands on the frame's settings
+            # from the one before.
+            current = self.frames.current_frame
+            if current is not None and current.has_data:
+                self.apply_colour_state(current)
             if not self.window.display.display_tiled():
                 self.set_display_mode("single")
                 return
@@ -1312,10 +1320,14 @@ class FrameController(Controller):
         frame.invert_colormap = self.window.invert_colormap
         frame.z1 = self.window.z1
         frame.z2 = self.window.z2
-        frame.zoom = self.viewer.get_zoom()
         frame.contrast = contrast
         frame.brightness = brightness
         frame.rotation = normalize_rotation(frame.rotation)
+        if self.window._frame_display_mode == "tile":
+            # Tiled, the viewer shows the mosaic: its zoom and pan are the
+            # mosaic's, and recording them would lose the frame's own.
+            return
+        frame.zoom = self.viewer.get_zoom()
         if self.window.using_gpu_rendering and hasattr(self.viewer, "gl_canvas"):
             frame.pan_x, frame.pan_y = self.viewer.gl_canvas.pan_offset
         else:
@@ -1390,6 +1402,16 @@ class FrameController(Controller):
     def apply_view_state(self, frame: Frame) -> None:
         """Apply stored display settings from the frame."""
         self.window.display.apply_view_transform(frame)
+        self.apply_colour_state(frame)
+        self._apply_view_geometry(frame)
+
+    def apply_colour_state(self, frame: Frame) -> None:
+        """Make the frame's colormap, scale, limits and contrast the window's.
+
+        The part of a frame's view that the Color and Scale menus act on,
+        without its zoom and pan -- which, when frames are tiled, belong to
+        the mosaic rather than to the viewer.
+        """
         self.window.current_colormap = self.window.color.normalize_name(frame.colormap)
         self.window.invert_colormap = frame.invert_colormap
         if frame.frame_type == "rgb":
@@ -1428,6 +1450,9 @@ class FrameController(Controller):
             self.window.button_bar.set_scale(scale_name_map[self.window.current_scale])
         if frame.frame_type != "rgb":
             self.window.color.set_contrast_brightness(frame.contrast, frame.brightness)
+
+    def _apply_view_geometry(self, frame: Frame) -> None:
+        """Put the frame's zoom and pan on the viewer."""
         if frame.zoom:
             self.viewer.zoom_to(frame.zoom)
         if self.window.using_gpu_rendering and hasattr(self.viewer, "set_pan"):

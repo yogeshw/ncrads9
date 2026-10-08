@@ -285,6 +285,8 @@ class ZoomController(Controller):
         frame = self.require_frame()
         if frame is None:
             return
+        # Record the view as it stands: the change may swap the viewer.
+        self.window.frame_controller.persist_view_state()
         with self.window.undo.view("Orientation"):
             frame.flip_x, frame.flip_y = orientation_to_flags(orientation)
             self._reapply_transform(frame)
@@ -298,6 +300,8 @@ class ZoomController(Controller):
         frame = self.require_frame()
         if frame is None:
             return
+        # Record the view as it stands: the change may swap the viewer.
+        self.window.frame_controller.persist_view_state()
         with self.window.undo.view("Rotation"):
             frame.rotation = normalize_rotation(degrees)
             self._reapply_transform(frame)

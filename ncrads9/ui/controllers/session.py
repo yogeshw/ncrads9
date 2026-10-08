@@ -40,7 +40,7 @@ from PyQt6.QtWidgets import QFileDialog, QMessageBox
 from ...frames.crop import CropRegion
 from ...grid.grid_config import GridConfig
 from ...illustrate import illustrate_file
-from ...io.session import autosave, backup
+from ...io.session import autosave, backup, ds9_backup
 from ...regions.region_parser import RegionParser
 from ...regions.region_writer import RegionWriter
 from ...rendering.scale_algorithms import ScaleAlgorithm
@@ -292,6 +292,8 @@ class SessionController(Controller):
             path, _ = QFileDialog.getOpenFileName(self.window, "Restore Session", "", backup.FILE_FILTER)
         if not path:
             return False
+        if ds9_backup.is_ds9_backup(path):
+            return self.restore_ds9(path)
         try:
             state, arrays = backup.load(path)
         except backup.BackupError as exc:
@@ -300,6 +302,81 @@ class SessionController(Controller):
 
         restored = self.apply(state, arrays)
         message = f"Restored {restored} frame(s) from {Path(path).name}"
+        if self.problems:
+            message += f" -- {len(self.problems)} problem(s): {self.problems[0]}"
+        self.status(message, 5000 if self.problems else 3000)
+        return True
+
+    def restore_ds9(self, path: str) -> bool:
+        """Restore one of SAOImageDS9's own backups.
+
+        The backup is translated, not run (see `io/session/ds9_backup.py`),
+        and each command goes through XPA, frame by frame, in the order DS9
+        wrote it. What cannot be translated, or fails, is listed in
+        `problems` and the rest of the session is restored regardless.
+        """
+        from ...communication.xpa.xpa_commands import XPACommands
+        from ...frames.frame import Frame
+
+        try:
+            plan = ds9_backup.read(path)
+        except ds9_backup.DS9BackupError as exc:
+            self.status(f"Restore failed: {exc}", 4000)
+            return False
+
+        self.problems = [f"not restored: {line}" for line in plan.skipped]
+        xpa = XPACommands(self.window)
+        controller = self.window.frame_controller
+        frames = self.window.frame_manager
+        controller.delete_all()
+        created: set[int] = set()
+        current: int | None = None
+
+        def goto(frame_id: int) -> None:
+            nonlocal current
+            if current != frame_id:
+                xpa.handle("frame", {"args": [str(frame_id)]})
+                current = frame_id
+
+        for step in plan.steps:
+            if step.kind == "frame":
+                kind = step.words[0] if step.words else "base"
+                existing = next((index for index, f in enumerate(frames.frames) if f.frame_id == step.frame), None)
+                if existing is None:
+                    controller.new_frame_of_type(kind, frame_id=step.frame)
+                elif frames.frames[existing].frame_type != kind:
+                    # Delete All leaves a plain Frame 1; DS9's Frame 1 may
+                    # have been an RGB frame.
+                    cls = frames.FRAME_TYPES.get(kind, Frame)
+                    frames.frames[existing] = cls(frame_id=step.frame, frame_type=kind)
+                created.add(step.frame)
+                current = None
+                goto(step.frame)
+                continue
+            if step.frame is not None:
+                goto(step.frame)
+            if step.kind == "load" and not Path(step.words[-1].split("[")[0]).is_file():
+                # DS9 asks for a file it cannot find; a restore that stops
+                # to ask would hang a script, so it is reported instead.
+                self.problems.append(f"missing data file {step.words[-1]}")
+                continue
+            reply = xpa.handle(step.words[0], {"args": step.words[1:]})
+            if reply.get("status") != "ok":
+                self.problems.append(f"{' '.join(step.words)}: {reply.get('message', 'refused')}")
+
+        # Delete All's Frame 1, if the backup had no Frame 1 of its own.
+        if created and 1 not in created:
+            index = next((i for i, f in enumerate(frames.frames) if f.frame_id == 1), None)
+            if index is not None and frames.frames[index].image_data is None:
+                frames.goto_frame(index)
+                controller.delete_current()
+        if plan.notes:
+            self.window.notes.clear()
+            self.window.notes.append(plan.notes)
+        if plan.current_frame in created:
+            xpa.handle("frame", {"args": [str(plan.current_frame)]})
+
+        message = f"Restored {len(created)} frame(s) from DS9 backup {Path(path).name}"
         if self.problems:
             message += f" -- {len(self.problems)} problem(s): {self.problems[0]}"
         self.status(message, 5000 if self.problems else 3000)

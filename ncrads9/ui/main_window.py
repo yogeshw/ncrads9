@@ -441,6 +441,7 @@ class MainWindow(QMainWindow):
         self.panner_panel.pan_to.connect(self.zoom.on_panner_pan)
 
         self.magnifier_panel = MagnifierPanel(self)
+        self.magnifier_panel.region_source = lambda: self.view.magnifier_regions()
 
         self.horizontal_graph = HorizontalGraph(self)
         self.vertical_graph = VerticalGraph(self)

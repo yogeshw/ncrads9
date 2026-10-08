@@ -429,6 +429,9 @@ DISPLAY_POINTS: tuple[AccessPoint, ...] = (
             lambda window: {
                 "": on_off(window.menu_bar.action_view_magnifier.isChecked()),
                 "zoom": str(window.magnifier_panel._zoom_factor),
+                "color": window.magnifier_panel.overlay_color.name(),
+                "cursor": on_off(window.magnifier_panel.cursor_visible),
+                "region": on_off(window.magnifier_panel.regions_visible),
             },
             bare="",
         ),
@@ -438,7 +441,14 @@ DISPLAY_POINTS: tuple[AccessPoint, ...] = (
     AccessPoint(
         "panner",
         get=lambda window: on_off(window.menu_bar.action_view_panner.isChecked()),
-        set=lambda window, args: _panel(window, args, "panner"),
+        query=_keyed(
+            lambda window: {
+                "": on_off(window.menu_bar.action_view_panner.isChecked()),
+                "compass": on_off(window.panner_panel.compass_enabled),
+            },
+            bare="",
+        ),
+        set=lambda window, args: _panner(window, args),
         summary="whether the panner is shown",
     ),
     AccessPoint(
@@ -2392,13 +2402,21 @@ def _panel(window, args: list[str], name: str) -> str | None:
     return None
 
 
-def _magnifier(window, args: list[str]) -> str | None:
-    """DS9's `magnifier`: `yes|no`, `zoom <n>`, `color`, `cursor`, `region`.
+def _panner(window, args: list[str]) -> str | None:
+    """`panner [yes|no|open|close]` and `panner compass yes|no`."""
+    words = [str(word).lower() for word in args]
+    if words[:1] == ["compass"]:
+        wanted = as_bool(words[1]) if len(words) > 1 else True
+        if wanted is None:
+            return f"{args[1]} is not yes or no"
+        window.panner_panel.compass_enabled = wanted
+        window.panner_panel.update()
+        return None
+    return _panel(window, args, "panner")
 
-    The zoom used to be refused as "not yes, no, open or close"; the
-    colour, cursor and region overlays are not drawn on our magnifier at
-    all, so those say so.
-    """
+
+def _magnifier(window, args: list[str]) -> str | None:
+    """DS9's `magnifier`: `yes|no`, `zoom <n>`, `color`, `cursor`, `region`."""
     words = [str(word).lower() for word in args]
     if words and words[0] == "zoom":
         try:
@@ -2411,7 +2429,20 @@ def _magnifier(window, args: list[str]) -> str | None:
         spin.setValue(zoom)
         return None
     if words and words[0] in ("color", "cursor", "region"):
-        return f"the magnifier has no {words[0]} overlay to set"
+        if len(words) < 2:
+            return f"magnifier {words[0]} needs a value"
+        panel = window.magnifier_panel
+        if words[0] == "color":
+            try:
+                panel.set_overlay(color=words[1])
+            except ValueError as exc:
+                return str(exc)
+            return None
+        wanted = as_bool(words[1])
+        if wanted is None:
+            return f"{args[1]} is not yes or no"
+        panel.set_overlay(**{"cursor" if words[0] == "cursor" else "regions": wanted})
+        return None
     return _panel(window, args, "magnifier")
 
 

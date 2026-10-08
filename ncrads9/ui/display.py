@@ -602,11 +602,22 @@ class DisplayPipeline:
             self.viewer.set_view_transform(frame.rotation, frame.flip_x, frame.flip_y)
 
     def _switch_viewer(self, frame: Frame, use_gpu: bool) -> None:
-        """Change rendering backend, keeping the zoom and the pan."""
-        zoom = self.viewer.get_zoom() if hasattr(self.viewer, "get_zoom") else frame.zoom
-        self.window.frame_controller.persist_view_state()
+        """Change rendering backend, keeping the zoom, the pan and the contrast."""
+        # The frame's own record, not the viewer's: this runs while a frame's
+        # view is being applied, when the viewer and the window still hold
+        # the previous frame's -- persisting them here wrote that frame's
+        # colours into this one. Rotate and Orient record the live view
+        # before they change anything, so the record is current there too.
+        zoom = frame.zoom
         pan = (frame.pan_x, frame.pan_y)
+        # Taken before the rebuild, which redraws -- and records the new,
+        # neutral viewer's contrast into the frame -- before it returns.
+        contrast = (frame.contrast, frame.brightness)
         self.window._rebuild_image_viewer(use_gpu)
+        # Through the colour controller, which reaches the CPU viewer's inner
+        # widget as well as the GPU one.
+        self.window.color.set_contrast_brightness(*contrast)
+        frame.contrast, frame.brightness = contrast
         self.viewer.zoom_to(zoom)
         frame.zoom = zoom
         frame.pan_x, frame.pan_y = pan

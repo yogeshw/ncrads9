@@ -114,6 +114,9 @@ class PannerPanel(QWidget):
         self._north: tuple[float, float] | None = None
         self._east: tuple[float, float] | None = None
         self._show_compass: bool = True
+        #: DS9's `panner compass` preference: the user's choice, apart from
+        #: whether the frame has a WCS to draw a compass from at all.
+        self.compass_enabled: bool = True
 
         self._setup_ui()
 
@@ -185,7 +188,7 @@ class PannerPanel(QWidget):
         how the bug this had got through: the vectors were right and only
         the drawing was mirrored.
         """
-        if not self._show_compass or self._north is None or self._east is None:
+        if not (self._show_compass and self.compass_enabled) or self._north is None or self._east is None:
             return {}
 
         width, height = size
@@ -368,7 +371,7 @@ class PannerPanel(QWidget):
 
     def _paint_overlay(self, pixmap: QPixmap) -> None:
         """Draw the compass onto a thumbnail that has no view rectangle."""
-        if self._show_compass and self._north is not None and self._east is not None:
+        if self._show_compass and self.compass_enabled and self._north is not None and self._east is not None:
             painter = QPainter(pixmap)
             self._draw_compass(painter, (pixmap.width(), pixmap.height()))
             painter.end()

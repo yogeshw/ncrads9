@@ -379,3 +379,12 @@ class ViewController(Controller):
     def _zoom(self) -> float:
         """The viewer's current zoom, or 1.0 if it does not report one."""
         return float(getattr(self.viewer, "zoom_factor", 1.0) or 1.0)
+
+    def magnifier_regions(self):
+        """What the magnifier's region overlay draws: the current frame's
+        regions, and the mapping the cursor is given through."""
+        frame = self.frames.current_frame
+        viewer = getattr(self.window.image_viewer, "image_viewer", None)
+        if frame is None or viewer is None or not hasattr(viewer, "map_image_to_display_coords"):
+            return [], lambda _x, _y: None
+        return list(frame.regions or []), viewer.map_image_to_display_coords
