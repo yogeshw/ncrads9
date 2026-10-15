@@ -32,6 +32,8 @@ dependencies = [
     # The contour tracer. `ncrads9/analysis/contour.py` has one of its own
     # for when this is absent, and they agree; this one is faster.
     "scikit-image>=0.19",
+    # The histogram, plot and region-analysis windows draw with it.
+    "matplotlib>=3.5",
     "pillow>=9.0",
     "requests>=2.28",
 ]
@@ -41,9 +43,11 @@ dev = [
     "pytest",
     "pytest-qt",
     "pytest-cov",
-    "black",
-    "ruff",
-    "mypy",
+    # Pinned: CI installs fresh, and a new release of any of these restyles or
+    # re-flags code that has not changed, failing the build. Bump deliberately.
+    "black==25.1.0",
+    "ruff==0.16.6",
+    "mypy==2.3.1",
 ]
 
 [project.scripts]
