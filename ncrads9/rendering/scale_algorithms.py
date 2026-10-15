@@ -299,8 +299,11 @@ def scale_histogram_equalization(
     clipped = np.clip(data, vmin, vmax)
     flat = clipped.flatten()
 
-    # Compute histogram
-    hist, bin_edges = np.histogram(flat[np.isfinite(flat)], bins=num_bins)
+    # Compute histogram. In float64: numpy builds the edges in the data's
+    # dtype, and since 2.4 refuses a float32 range too narrow to hold
+    # num_bins distinct edges -- an image whose values differ only in the
+    # last few digits would otherwise fail to draw at all.
+    hist, bin_edges = np.histogram(flat[np.isfinite(flat)].astype(np.float64), bins=num_bins)
     cdf = hist.cumsum()
     if cdf.size == 0 or cdf[-1] == 0:
         return np.zeros_like(clipped, dtype=np.float32)

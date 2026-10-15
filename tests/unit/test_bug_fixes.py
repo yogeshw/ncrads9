@@ -51,6 +51,14 @@ def test_scale_histogram_equalization_all_nan_returns_zeros():
     assert np.array_equal(result, np.zeros_like(data, dtype=np.float32))
 
 
+def test_scale_histogram_equalization_narrow_float32_range():
+    # numpy 2.4 refuses 65536 float32 bin edges across a range this narrow.
+    data = np.array([[1000.0, 1000.0001]], dtype=np.float32)
+    result = scale_histogram_equalization(data, float(data.min()), float(data.max()))
+    assert result.dtype == np.float32
+    assert result[0, 0] < result[0, 1]
+
+
 def test_get_builtin_colormap_clamps_small_color_count():
     colormap = get_builtin_colormap("heat", n_colors=1)
     assert colormap is not None
