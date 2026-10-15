@@ -137,7 +137,7 @@ class HelpContentsDialog(QDialog):
         <h2>More Information</h2>
         <p>
             Project page:
-            <a href="https://github.com/ncra/ncrads9">https://github.com/ncra/ncrads9</a>
+            <a href="https://github.com/yogeshw/ncrads9">https://github.com/yogeshw/ncrads9</a>
         </p>
     </body>
     </html>

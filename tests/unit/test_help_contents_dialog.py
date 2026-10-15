@@ -8,4 +8,4 @@ def test_help_contents_mentions_current_zoom_and_large_image_features():
     assert "Pan Zoom Rotate Parameters" in html
     assert "Blink" in html
     assert "tiled GPU rendering" in html
-    assert "https://github.com/ncra/ncrads9" in html
+    assert "https://github.com/yogeshw/ncrads9" in html

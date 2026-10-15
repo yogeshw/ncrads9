@@ -92,13 +92,13 @@ whole of it; and some DS9 dialogs are modeless here where DS9 blocks.
 ## Installation
 
 ```bash
-pip install ncrads9
+pip install git+https://github.com/yogeshw/ncrads9.git
 ```
 
 Or from source:
 
 ```bash
-git clone https://github.com/ncra/ncrads9.git
+git clone https://github.com/yogeshw/ncrads9.git
 cd ncrads9
 pip install -e .
 ```
