@@ -311,7 +311,7 @@ class ContourGenerator:
         #: scaled back to the original image's coordinates.
         self._block = 1
 
-        working = np.asarray(data, dtype=np.float64)
+        working: NDArray[np.floating] = np.asarray(data, dtype=np.float64)
         if smooth is not None and smooth > 0:
             working = ndimage.gaussian_filter(working, sigma=smooth)
 
